@@ -25,3 +25,10 @@ La PR contiene ora `projectGeometricJ2000` per ottenere ascensione retta, declin
 È stato aggiunto un modulo originale per l'obliquità media, i quattro angoli Fukushima–Williams, la matrice di precessione/bias IAU 2006 e le coordinate geometriche **medie della data**. I **5 nuovi test locali** superati includono i nove valori della matrice di riferimento ERFA, non solo casi sintetici. L'errore massimo per elemento osservato è di circa 1,1×10⁻¹⁶.
 
 **Attenzione:** coordinate *medie* e coordinate *apparenti* non sono equivalenti. La nuova API non fornisce velocità nel sistema rotante della data perché è necessario considerare anche la derivata della matrice. Resta da realizzare e verificare la nutazione, l'aberrazione, le osservazioni topocentriche e il confronto con `.bsp` NASA autentici.
+
+
+## Nutazione IAU 2000B completa — checkpoint
+
+Implementati i **77 termini** della nutazione IAU 2000B con coordinate geometriche **vere della data**; aggiunta la composizione esplicita con la precessione IAU 2006 e la documentazione della licenza BSD dei coefficienti scientifici ERFA. Il benchmark matematico JavaScript riproduce i riferimenti ERFA con differenze dell'ordine di 10⁻²⁰ rad per le componenti e inferiori a 6×10⁻¹⁷ per la matrice.
+
+**Attenzione:** sono stati aggiunti 5 casi di test Node, non ancora eseguiti nell'intera suite. Le coordinate vere della data non sono ancora posizioni planetarie *apparenti*: le correzioni dell'osservatore e i test reali NASA sono ancora mancanti.

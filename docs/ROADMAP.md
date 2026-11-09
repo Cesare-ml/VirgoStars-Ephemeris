@@ -54,3 +54,12 @@ Before E3 can be considered validated, implement and independently test frame bi
 The original `src/precession.mjs` now implements bias+precession and **mean** equatorial/ecliptic-of-date geometric positional transforms. Five new local Node 22 tests passed. The numerical unit-test oracle is the published ERFA conformance suite (`pmat06` 9-element matrix, `obl06` mean obliquity) rather than only an internal synthetic numerical check. Worst observed element discrepancy approximately 1.1e-16 with a pass tolerance of 1e-14. The implementation is deliberately limited to 1800–2200 TT pending wider validation and omits velocities in rotating date frames to prevent false retrograde classifications.
 
 **Still blocked before E3 completion:** real NASA JPL SPK vectors, IAU nutation, aberration, proper apparent observer corrections, trusted lunar/planet models and full apparent-of-date rates.
+
+
+### E3 progress — full IAU 2000B short nutation
+
+The project branch now contains `src/nutation.mjs`, a full 77-term IAU 2000B lunar-solar series and the published planetary-bias offsets (not a 4-term approximation). It produces dPsi/dEpsilon, a mean-to-true equatorial nutation matrix and geometric `TRUE_EQUATORIAL_OF_DATE` / `TRUE_ECLIPTIC_OF_DATE` projections by combining with IAU 2006 P03 precession. Original JavaScript code is separated from the BSD-licensed ERFA scientific coefficient table in `src/data/` with retained copyright/license notes.
+
+**Independent mathematical benchmark:** at TT JD 2453736.5, the calculated two nutation components agree with ERFA nut00b within ~5e-20 rad, and the full 3×3 nutation matrix matches ERFA num00b at max absolute element difference ~5.6e-17 (using ERFA's IAU 2000 reference mean obliquity for that standalone matrix check). Five new Node tests are authored but **the complete Node suite has not been executed this checkpoint**.
+
+**Release remains blocked** by real official NASA SPK validation (#3), aberration, proper light-time/observer composition and date-frame derivatives. IAU 2006/2000B is a declared approximate combination, not the higher-accuracy 2006/2000A standard. No change to the strict APPARENT natal contract or production.

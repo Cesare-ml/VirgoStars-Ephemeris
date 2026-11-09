@@ -46,3 +46,10 @@ Official rules: https://naif.jpl.nasa.gov/naif/rules.html ; Swiss terms: https:/
 - [ ] Human legal review completed if commercial redistribution/licensing remains uncertain
 
 This document records technical intentions, not legal advice.
+
+
+## 77-term IAU 2000B scientific table added (2026-11-09)
+
+`src/data/iau2000b-terms.mjs` includes the published numerical 77-term nutation coefficients derived from the BSD-style ERFA `nut00b.c` reference, explicitly credited to NumFOCUS Foundation; see repository `THIRD_PARTY_NOTICES.md` and the full `third_party/ERFA_LICENSE.txt`. These numerical series data are third-party provenance even though the new VirgoStars `src/nutation.mjs` JavaScript evaluator is original source.
+
+Preserve full ERFA attribution and required BSD notices in both source and any binary/package distributions; the general MIT license does not automatically supersede them. No ERFA C source or runtime dependency is bundled and no Swiss code or compressed Swiss data has been copied.

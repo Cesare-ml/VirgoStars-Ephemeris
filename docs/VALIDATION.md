@@ -85,3 +85,12 @@ Mandatory gating tests for future astrology: compare RA/Dec, ecliptic-of-date lo
 - Matrix maximum absolute discrepancy in an independent offline calculation approximately 1.11e-16, compared with acceptance of 1e-14 per element. Also tested orthogonality, determinant, time variation, invalid TT epochs, incompatible frames, zero radius, pole singularity.
 - Github `src/precession.mjs` and `test/precession.test.mjs` blob SHAs matched the files actually executed locally.
 - **Scope of this validation:** matrix and mean-coordinate algebra only. It does NOT validate nutation, apparent positions, rates, real NASA kernels or a full natal chart. Prior synthetic 18/18 and 5/5 reports were from previous separate runs; no complete combined-suite rerun was conducted in this iteration.
+
+
+### IAU 2000B 77-term independent reference check — 2026-11-09
+
+- Original JS `iau2000bNutation` evaluated against ERFA `eraNut00b` numeric reference at TT JD 2400000.5+53736; the two residuals were about 4.57e-20 and 2.71e-20 radians.
+- The 3×3 mean-to-true nutation matrix was checked against ERFA `eraNum00b` using the matching IAU 2000 mean obliquity 0.4090791789404229916 radians; max absolute matrix-element residual approximately 5.60e-17.
+- Complete 77 coefficient rows were audited for 11 finite values each, with scientific provenance and original NumFOCUS/ERFA BSD license retained.
+- Five additional Node regression test cases were written to `test/nutation.test.mjs`, but **were not run as part of a complete `npm test`** in this development step; do not add them to a claimed passing test count.
+- The expected 2000B ~1 mas accuracy around 1995–2050 is a published model characteristic, not a measured local full JPL position/velocity accuracy. A true-of-date GEOMETRIC projection is not an APPARENT position.

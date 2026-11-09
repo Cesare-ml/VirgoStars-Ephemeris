@@ -62,3 +62,12 @@ No silently returning zeros, `NaN`, obsolete data, or a lower-precision model. A
 
 - `0.x`: experimental; all changes require regression fixtures.
 - `1.0`: documented behavior, documented supported date ranges/targets/frames, reproducible reference comparisons, compatibility/support policy, and offline packaging.
+
+
+## Experimental frame capability checkpoint — IAU 2000B (2026-11-09)
+
+Implemented separately as an **experimental** API: `iau2000bNutation`, `iau2000bNutationMatrix`, `iau2006With2000bTrueMatrix`, `projectGeometricTrueOfDate`. They accept TT Julian Date (initially 1900–2100) and geometric J2000 vectors, then provide **TRUE_EQUATORIAL_OF_DATE** and **TRUE_ECLIPTIC_OF_DATE**, with `corrections: GEOMETRIC`, `velocityKmPerSec:null` and explicit approximation warnings.
+
+No consumer must silently promote this result into `APPARENT/ECLIPTIC_OF_DATE`, nor infer a retrograde flag from a velocity omitted due to the changing frame. `astrological-functions` continues to reject it for natal positions. Independent ERFA nut00b/num00b numeric reference checks passed in the JS math evaluation; a full Node test-suite run and real NASA/Horizons parity remain outstanding.
+
+See `docs/IAU2000B_NUTATION.md` and `THIRD_PARTY_NOTICES.md` for scientific provenance and legal attribution.
