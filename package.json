@@ -3,7 +3,7 @@
   "version": "0.1.0-dev",
   "private": true,
   "type": "module",
-  "description": "Experimental independent NASA/JPL SPK Type 2 reader",
+  "description": "Experimental JS regression/reference modules for the canonical Rust engine",
   "exports": {
     ".": "./src/index.mjs"
   },
@@ -14,5 +14,5 @@
     "test": "node --test",
     "verify:horizons": "node scripts/compare-horizons.mjs"
   },
-  "license": "MIT"
+  "license": "CPAL-1.0"
 }

@@ -1,6 +1,6 @@
 # Architecture — astronomical engine (design v0, 2026-11-09)
 
-Status: **DESIGNED**; no implementation or released API. Goal: independent, testable, offline-capable astronomical calculations; not a reverse-engineered Swiss Ephemeris clone.
+Status: **Rust canonical architecture / experimental JavaScript reference code**; no validated release. Goal: independent, testable, offline-capable astronomical calculations; not a reverse-engineered Swiss Ephemeris clone.
 
 ## Boundaries
 
@@ -27,7 +27,7 @@ User / Astrological Functions / other clients
 
 ## Technical direction (proposal, not shipped)
 
-- **TypeScript** library with strongly typed input/output and no Angular or PostgreSQL dependency.
+- **Rust is the sole canonical astronomical core**, per [ADR-0001](ADR-0001-RUST-CORE-AND-BINDINGS.md), with thin WASM/TypeScript and Python PyO3 bindings; no Angular or PostgreSQL dependency. The existing JavaScript code is an experimental research prototype, not a parallel engine.
 - SPK/DAF reading layer: file summary, endian detection, segment descriptors, target/center IDs, validity intervals, supported SPK types (type 2 first; type 3 if required), Chebyshev evaluation and analytic derivatives. No silent unsupported-segment approximation.
 - Kernel catalog: immutable manifest with source URL, JPL solution, SHA-256, NAIF IDs, segment coverage, frame and required companion kernels; offline cache managed by caller, not hidden network calls.
 - Vector evaluation: explicit barycenter/planet-center chain composition; distinguish planetary system barycenters from physical planet centers. Earth/Moon paths require correct Earth-Moon barycenter and relative segments.
@@ -56,3 +56,8 @@ Web backend and Astrolabio should load **the same pinned, tested released packag
 - NAIF Generic Kernels: https://naif.jpl.nasa.gov/naif/data_generic.html
 - JPL Horizons: https://ssd.jpl.nasa.gov/horizons/
 - JPL DE440/DE441 overview: https://ssd.jpl.nasa.gov/doc/de440_de441.html
+
+
+## Main-branch reconciliation (2026-11-10)
+
+**ADR-0001 and root AGENTS.md govern.** The merged JS modules are experimental research/test implementations only. Any verified mathematics must be ported into the single canonical **Rust** engine; JavaScript and Python release packages must bind to Rust rather than duplicating astronomical algorithms. Root license is **CPAL-1.0**, with ERFA scientific table BSD attribution and separate NASA/JPL data conditions. No production switch or real-kernel validation has occurred.
