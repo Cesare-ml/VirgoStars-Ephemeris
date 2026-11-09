@@ -1,3 +1,5 @@
+> **Historical draft:** the Ephemeris project has since adopted an actual configured [CPAL-1.0 LICENSE](../LICENSE), with the same project URL and required Larger Works credit. Do not use this draft instead of the legally controlling LICENSE.
+
 # CPAL-1.0 Exhibit B — working configuration only (NOT a license)
 
 **DO NOT COPY THIS FILE TO `LICENSE`, `LICENSE.txt`, or a package's legal metadata.** This is only a proposal for legal and owner review; it does not grant reuse rights or modify the official CPAL text.
