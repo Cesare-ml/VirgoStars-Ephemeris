@@ -1,0 +1,13 @@
+[package]
+name = "virgostars-ephemeris-core"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+description = "Experimental, independent Rust numerical foundations for VirgoStars Ephemeris"
+publish = false
+
+[lib]
+name = "virgostars_ephemeris_core"
+path = "src/lib.rs"
+
+[dependencies]
