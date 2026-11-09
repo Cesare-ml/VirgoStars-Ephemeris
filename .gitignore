@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+# Astronomical data: download separately after rights and provenance review
+*.bsp
+*.bpc
+*.tls
+*.tpc
+*.tf
+*.tsc
+*.bc
+kernel-cache/
+data/kernels/
+# IDE and OS
+.DS_Store
+.vscode/

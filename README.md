@@ -8,7 +8,9 @@
 
 Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL SPK kernels with documented algorithms. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
 
-**Language decision:** The canonical astronomical core will be written in **Rust**, with thin WebAssembly/TypeScript and PyO3/maturin Python bindings so all consumers share the same algorithms. This is an accepted design, not an implemented release. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).\n\n**Separation of responsibilities:** `virgostars-ephemeris` handles time scales, kernel access, coordinates, physical/geometric corrections and eventually astronomical event primitives. `astrological-functions` handles zodiac/house methods, aspects, synodic phases, astrological events and application-facing chart models. VirgoStars production keeps using its current implementation until tested migration gates pass.
+**Language decision:** The canonical astronomical core will be written in **Rust**, with thin WebAssembly/TypeScript and PyO3/maturin Python bindings so all consumers share the same algorithms. This is an accepted design, not an implemented release. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).
+
+**Separation of responsibilities:** `virgostars-ephemeris` handles time scales, kernel access, coordinates, physical/geometric corrections and eventually astronomical event primitives. `astrological-functions` handles zodiac/house methods, aspects, synodic phases, astrological events and application-facing chart models. VirgoStars production keeps using its current implementation until tested migration gates pass.
 
 ## Read first
 
@@ -16,7 +18,8 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
 
-- [Architecture and boundaries](docs/ARCHITECTURE.md)\n- [Rust core, WebAssembly and Python bindings — ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
+- [Architecture and boundaries](docs/ARCHITECTURE.md)
+- [Rust core, WebAssembly and Python bindings — ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
@@ -45,3 +48,9 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 **License:** the original VirgoStars-Ephemeris source code is provided under the [Common Public Attribution License 1.0 (CPAL-1.0)](LICENSE), with completed Exhibits A and B. See [NOTICE](NOTICE) and [Licensing and visible credits](docs/LICENSING_AND_CREDITS.md). This license permits commercial use and redistribution, but requires preservation of notices and, where applicable, prominent *Powered by VirgoStars* attribution (including in Larger Works). It also has network-use source-availability obligations. A normal About/Credits link is encouraged but cannot automatically be assumed to satisfy the actual CPAL §14 launch/session display requirement.
 
 This project is not affiliated with or endorsed by NASA, JPL, NAIF, or Astrodienst. External dependencies and datasets retain their own terms.
+
+## Experimental SPK and coordinate reference prototypes (merged research)
+
+The repository also contains experimental standalone JavaScript SPK Type 2/3 parsing, IAU 2006 mean precession, 77-term IAU 2000B nutation, basic light-time and a manual Horizons comparator. These experimental modules are **research and regression fixtures, not the authoritative shipping engine**; Rust remains the sole canonical astronomical implementation per [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md), with future WASM/TypeScript and PyO3/Python bindings to the same Rust algorithms. The pre-existing classic DE441 JavaScript reader has the same experimental status. No Swiss source is used.
+
+**Release gates remain open:** these SPK modules have not been validated against an authentic official NASA `.bsp` nor compared numerically with matching Horizons data; apparent geocentric-of-date positions and consistent velocities are incomplete. JavaScript prototype tests are synthetic or independent ERFA formula checks, not production certification. The repository's **CPAL-1.0 LICENSE, NOTICE, visible attribution, and canonical AGENTS.md remain authoritative**; [ERFA/NumFOCUS scientific table notices](THIRD_PARTY_NOTICES.md) are separate. No npm/PyPI package or production/Astrolabio deployment is triggered by this merge.
