@@ -47,3 +47,10 @@ Additional original source and tests on PR #1:
 IERS Bulletin C 72, 6 July 2026, confirms TAI-UTC=37s effective from 2017 and NO leap second at end of December 2026: https://datacenter.iers.org/data/html/bulletinc-072.html . Earlier leap transitions: https://www.nist.gov/pml/time-and-frequency-division/time-realization/leap-seconds . Leap tables **must be refreshed** for dates starting 2027, and the prototype deliberately rejects those dates rather than silently applying a stale offset.
 
 The first release must still add authoritative leap second instant handling, robust TDB model, all required IAU frame conversions, independent tolerance measurements, non-Type-2/3 support as needed and real-kernel validation.
+
+
+## IAU 2006 mean-of-date checkpoint — same project phase
+
+Independent IAU 2006 P03 mean obliquity and Fukushima–Williams bias+precession angles have been implemented in `src/precession.mjs`, plus geometric mean equatorial/ecliptic-of-date projection. Five **additional** local Node 22 tests passed, including the full 3×3 matrix of published ERFA `pmat06` reference values and mean obliquity `obl06` (tolerance 1e-14; observed maximum matrix-element error ≈1.1e-16).
+
+Saved source/test hashes match the locally executed files. No full combined suite was rerun; historic counts 18 and 5 refer to distinct previous checkpoints. No real `de440s.bsp` has been validated. **No true/apparent coordinates or date-frame velocities are claimed.** Details: `docs/IAU2006_MEAN_PRECESSION.md`.

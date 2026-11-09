@@ -18,3 +18,10 @@ Documenti principali: [architettura](ARCHITECTURE.md), [contratti](API_CONTRACTS
 La PR contiene ora `projectGeometricJ2000` per ottenere ascensione retta, declinazione e longitudine/latitudine **eclittiche J2000 approssimate**, con velocità; `solveOneWayLightTime` calcola iterativamente un vettore al tempo di emissione. Sono passati **5 nuovi test locali**; i 18 precedenti appartengono al checkpoint precedente e non sono stati rieseguiti insieme in questo turno.
 
 **Non sono ancora posizioni astrologiche apparenti della data**: mancano le correzioni IAU complete e la validazione su kernel NASA reali. `astrological-functions` continuerà a rifiutare questi risultati come valori `APPARENT/ECLIPTIC_OF_DATE`.
+
+
+## Precessione IAU 2006 — controllo indipendente
+
+È stato aggiunto un modulo originale per l'obliquità media, i quattro angoli Fukushima–Williams, la matrice di precessione/bias IAU 2006 e le coordinate geometriche **medie della data**. I **5 nuovi test locali** superati includono i nove valori della matrice di riferimento ERFA, non solo casi sintetici. L'errore massimo per elemento osservato è di circa 1,1×10⁻¹⁶.
+
+**Attenzione:** coordinate *medie* e coordinate *apparenti* non sono equivalenti. La nuova API non fornisce velocità nel sistema rotante della data perché è necessario considerare anche la derivata della matrice. Resta da realizzare e verificare la nutazione, l'aberrazione, le osservazioni topocentriche e il confronto con `.bsp` NASA autentici.

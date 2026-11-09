@@ -76,3 +76,12 @@ Il modulo `tools/horizons.mjs` costruisce richieste ufficiali `VECTORS` a Horizo
 - **Do not summarize as 23/23 rerun:** only these five new tests were executed this turn, while the previous checkpoint recorded 18/18 earlier. A complete suite run is a separate next step.
 
 Mandatory gating tests for future astrology: compare RA/Dec, ecliptic-of-date longitude/latitude/velocity against matched NAIF/IAU/JPL reference settings and error budgets. Do not feed `projectGeometricJ2000` output to the natal-chart provider as `APPARENT`.
+
+
+### IAU 2006 independent numerical validation — local 2026-11-09
+
+- Executed command: `node --test test/precession.test.mjs` with Node.js 22.16.0, yielding **5 passed / 0 failed**.
+- Independent reference source: ERFA `t_erfa_c.c`, tests `eraObl06(2400000.5, 54388.0)` and `eraPmat06(2400000.5, 50123.9999)`; expected mean obliquity 0.4090749229387258204 rad and nine matrix coefficients reproduced in `test/precession.test.mjs`.
+- Matrix maximum absolute discrepancy in an independent offline calculation approximately 1.11e-16, compared with acceptance of 1e-14 per element. Also tested orthogonality, determinant, time variation, invalid TT epochs, incompatible frames, zero radius, pole singularity.
+- Github `src/precession.mjs` and `test/precession.test.mjs` blob SHAs matched the files actually executed locally.
+- **Scope of this validation:** matrix and mean-coordinate algebra only. It does NOT validate nutation, apparent positions, rates, real NASA kernels or a full natal chart. Prior synthetic 18/18 and 5/5 reports were from previous separate runs; no complete combined-suite rerun was conducted in this iteration.

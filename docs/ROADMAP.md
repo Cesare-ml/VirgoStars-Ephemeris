@@ -47,3 +47,10 @@ No Swiss Ephemeris code or runtime dependency; no code from private VirgoStars; 
 E3 now has an **experimental partial implementation**, not scientific validation: equatorial/approximate ecliptic J2000 coordinates and angular speeds from geometric vectors, and an optional one-way light-time-only retarded vector solver. Five new synthetic math tests passed in an isolated Node 22 workspace. This does **not** constitute precession/nutation to the date, aberration, true apparent positions or a VirgoStars chart-ready ephemeris. Real SPK/Horizons scientific comparison remains blocked. See `GEOMETRIC_COORDINATES_AND_LIGHTTIME.md`.
 
 Before E3 can be considered validated, implement and independently test frame bias, IAU precession/nutation, Earth observer/stellar aberration, light-time time-derivatives and a canonical ecliptic-of-date result with declared correction modes. Never re-label simple J2000 projections as apparent.
+
+
+### E3 update — independent IAU 2006 P03 numerical benchmark
+
+The original `src/precession.mjs` now implements bias+precession and **mean** equatorial/ecliptic-of-date geometric positional transforms. Five new local Node 22 tests passed. The numerical unit-test oracle is the published ERFA conformance suite (`pmat06` 9-element matrix, `obl06` mean obliquity) rather than only an internal synthetic numerical check. Worst observed element discrepancy approximately 1.1e-16 with a pass tolerance of 1e-14. The implementation is deliberately limited to 1800–2200 TT pending wider validation and omits velocities in rotating date frames to prevent false retrograde classifications.
+
+**Still blocked before E3 completion:** real NASA JPL SPK vectors, IAU nutation, aberration, proper apparent observer corrections, trusted lunar/planet models and full apparent-of-date rates.

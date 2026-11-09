@@ -63,3 +63,11 @@ The experimental `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` compa
 - See [geometric coordinates and light-time specification](docs/GEOMETRIC_COORDINATES_AND_LIGHTTIME.md).
 
 The strict `astrological-functions` natal provider must continue to **reject** these geometric/J2000 values until an accurate apparent Earth-centered ecliptic-of-date provider is implemented and validated.
+
+
+## Mean-of-date IAU 2006 bias+precession — new experimental step
+
+- `src/precession.mjs`: original implementation of the published IAU 2006 P03 Fukushima–Williams angle polynomials, mean obliquity, complete GCRS-to-mean-equator-of-date frame bias+precession matrix, and geometric **MEAN_ECLIPTIC_OF_DATE** projection.
+- Local Node 22: **5/5 new tests passed**, including independent numerical ERFA reference benchmarks for mean obliquity and *all nine* IAU 2006 matrix components (max measured element error about 1.1e-16; test limit 1e-14). The committed source/test Git blob SHA hashes match the locally tested files.
+- No nutation, aberration, topocentric corrections or proper rotating-date-frame velocity in this module. A mean ecliptic position is **NOT an apparent geocentric position**. The real NASA DE440s binary/Horizons comparison is still outstanding.
+- Details: [IAU 2006 mean precession numerical evidence](docs/IAU2006_MEAN_PRECESSION.md).
