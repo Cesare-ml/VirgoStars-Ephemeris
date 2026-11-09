@@ -1,6 +1,6 @@
 # VirgoStars Ephemeris
 
-**An independent, free/open-source astronomical ephemeris engine for astrology applications.**
+**A planned independent, free-of-charge open-source astronomical ephemeris engine for astrology applications.**
 
 **Status: DOCUMENTATION / DESIGN ONLY — no astronomical calculation engine is implemented or validated yet.** This public repository is the future source of truth for a clean-room implementation based on publicly distributed NASA/JPL ephemeris kernels. It is **not** a fork, translation, wrapper, or redistribution of Swiss Ephemeris.
 
@@ -15,7 +15,8 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
-- [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
+- [NASA/JPL kernels and legal provenance (planned)](docs/DATA_AND_LICENSING.md)
+- [Free-of-charge open-source and required attribution policy (draft)](docs/OPEN_SOURCE_AND_ATTRIBUTION_POLICY.md)
 - [Proposed public contracts](docs/API_CONTRACTS.md)
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Italian overview](docs/README.it.md)
@@ -28,7 +29,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [NAIF rules governing kernels and toolkit](https://naif.jpl.nasa.gov/naif/rules.html)
 - [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
 
-**Important:** NASA/JPL public data is not itself licensed under our repository's MIT license. Do not commit .bsp files or copy NAIF toolkit / Swiss Ephemeris code without a documented rights review. The SPK kernels' redistribution terms differ from those of the SPICE Toolkit.
+**Important:** NASA/JPL public data is not itself covered by any planned license for our own source code. Do not commit .bsp files or copy NAIF toolkit / Swiss Ephemeris code without a documented rights review. The SPK kernels' redistribution terms differ from those of the SPICE Toolkit.
 
 ## Project status
 
@@ -37,4 +38,4 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - No compatible API, npm package, numerical-parity claim, benchmarks, or production migration yet.
 - No GitHub Actions, automatic releases, or deployment configured.
 
-Our code is intended to be MIT-licensed as specified in [LICENSE](LICENSE); each external dependency and data source retains its own terms. This project is not affiliated with or endorsed by NASA, JPL, NAIF, or Astrodienst.
+**Licensing status (draft):** this public repository currently has no `LICENSE` file, so its visibility alone does not grant general reuse rights. The intended free, attribution-preserving license is being reviewed; see [free/open-source and attribution policy](docs/OPEN_SOURCE_AND_ATTRIBUTION_POLICY.md). Do not describe the project as already MIT/Apache-licensed until the owner authorizes and commits the actual license text. Each external dependency and dataset keeps its own terms. This project is not affiliated with or endorsed by NASA, JPL, NAIF, or Astrodienst.
