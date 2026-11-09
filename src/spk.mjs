@@ -133,6 +133,8 @@ export function evaluateType2(buffer, segment, et, format) {
   return Object.freeze({ positionKm: Object.freeze(positionKm), velocityKmPerSec: Object.freeze(velocityKmPerSec) });
 }
 
+import { evaluateType3 } from './spk3.mjs';
+
 /**
  * Resolve target minus center using segment chains leading to the same root.
  * Input et is TDB seconds from J2000 (JD 2451545.0), NOT UTC or TT seconds.
@@ -168,7 +170,9 @@ export function stateAtTdbSeconds(buffer, target, center, et) {
   const pos = [0, 0, 0], vel = [0, 0, 0];
   for (const [path, sign] of [[a, 1], [b, -1]]) {
     for (const s of path) {
-      const state = evaluateType2(buffer, s, et, spk.format);
+      const state = s.type === 2 ? evaluateType2(buffer, s, et, spk.format) :
+        s.type === 3 ? evaluateType3(buffer, s, et, spk.format) :
+        invalid('UNSUPPORTED_SPK_TYPE', `SPK type ${s.type} is not implemented`);
       for (let k = 0; k < 3; k++) {
         pos[k] += sign * state.positionKm[k];
         vel[k] += sign * state.velocityKmPerSec[k];

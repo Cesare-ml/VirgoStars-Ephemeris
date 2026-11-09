@@ -33,3 +33,17 @@ This utility reads the whole file into memory; start with modern compact SPKs an
 3. Implement real TDB/TT/UTC model with leap seconds; then time-dependent apparent/ecliptic-of-date coordinate transformations and observer corrections.
 4. Define per-feature tolerances, numerical provenance and license audits before exposing public stable API.
 5. Functions package remains separately staged and production VirgoStars/Astrolabio remain unchanged.
+
+## Further implementation checkpoint — 9 November 2026
+
+Additional original source and tests on PR #1:
+- `src/spk3.mjs`: SPK type-3 Chebyshev series for position and independently stored velocity; type 2 remains supported. The geometric state resolver now dispatches based on segment type.
+- `src/time.mjs`: explicit modern-era UTC -> TAI -> TT -> **approximate** TDB conversion, IERS Bulletin C 72 / NIST leap-second offsets (1972 through 2026), rejecting invalid dates, `:60` leap-second instants, out-of-range dates and implicit timezone strings.
+- `approximateGeometricStateFromUtc()`: optional adapter with full warning and time-model metadata, not a high-precision final time conversion.
+- `test/type3-time.test.mjs`: six additional tests on independent synthetic type-3 segments and time-scale boundary cases.
+
+**Actually executed in isolated Node 22 runtime:** Ephemeris `npm test`: **15 passed, 0 failed**. Functions remains 4/4 locally. Code has NOT been tested with an authentic NASA/JPL SPK: fetching `de440s.bsp` from the isolated environment failed. The precision of TDB approximation and SPK parsing requires an independent real-kernel/NAIF comparison.
+
+IERS Bulletin C 72, 6 July 2026, confirms TAI-UTC=37s effective from 2017 and NO leap second at end of December 2026: https://datacenter.iers.org/data/html/bulletinc-072.html . Earlier leap transitions: https://www.nist.gov/pml/time-and-frequency-division/time-realization/leap-seconds . Leap tables **must be refreshed** for dates starting 2027, and the prototype deliberately rejects those dates rather than silently applying a stale offset.
+
+The first release must still add authoritative leap second instant handling, robust TDB model, all required IAU frame conversions, independent tolerance measurements, non-Type-2/3 support as needed and real-kernel validation.
