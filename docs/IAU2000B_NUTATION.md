@@ -36,3 +36,10 @@ Only original JavaScript algorithms in `src/nutation.mjs` are proposed as MIT so
 No actual SPK binary validated with a NASA/Horizons reference (#3). No stellar aberration, gravitational deflection, full Earth orientation/topocentric parallax or correct date-frame longitude-rate model (#4). Strict `astrological-functions` natal provider must reject these geometric results as a source for `APPARENT/ECLIPTIC_OF_DATE`.
 
 No production switch, Astrolabio upgrade, GitHub Actions or npm publication.
+
+
+## Additional executed test evidence
+
+The exact committed source, coefficient table, precession dependency and five regression test cases were loaded from the pinned GitHub commit and executed in an isolated V8 JavaScript runtime with `node:test`/`assert`-equivalent adapters. Result: **5 test cases passed; zero failed**. Git SHA identities were confirmed for each new source/test file.
+
+This confirms the committed math and the authored regression logic run together; it is **not** an execution of the entire Node `npm test` suite or a check of real NASA binary data.
