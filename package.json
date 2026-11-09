@@ -1,0 +1,17 @@
+{
+  "name": "virgostars-ephemeris",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Experimental independent NASA/JPL SPK Type 2 reader",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
