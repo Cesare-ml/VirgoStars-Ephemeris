@@ -1,0 +1,13 @@
+# Rust builds and local tooling
+/target/
+**/target/
+*.rs.bk
+.DS_Store
+
+# User-supplied NASA/JPL kernels: never commit data without rights review
+*.bsp
+*.bpc
+*.tpc
+*.tls
+*.tf
+*.tsc
