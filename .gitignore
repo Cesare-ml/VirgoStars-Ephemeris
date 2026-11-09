@@ -6,6 +6,7 @@
 
 # User-supplied NASA/JPL kernels: never commit data without rights review
 *.bsp
+*.eph
 *.bpc
 *.tpc
 *.tls
