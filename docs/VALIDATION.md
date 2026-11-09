@@ -101,3 +101,23 @@ Mandatory gating tests for future astrology: compare RA/Dec, ecliptic-of-date lo
 After the new module was committed, the exact GitHub file blobs `src/nutation.mjs` (SHA `4cc712a0012a8928c513234ff1db5f73dc8117c0`), the 77-row data table and `test/nutation.test.mjs` were fetched by pinned commit `95a2a4f2498606b2c0f65d0404f35e64c8d5cefc`. Their JavaScript was evaluated in a standalone V8 isolate with minimal `node:test` and `node:assert` adapters and the committed IAU 2006 precession dependency. **All five nutation regression test cases PASSED (5/5, 0 failures)**, covering coefficients, ERFA nut00b and num00b reference values, geometric frame semantics, invalid epochs/inputs, and null date-frame rates.
 
 **Scope limitation:** this is execution of the actual committed mathematical test logic in V8, **not** a Node.js `npm test` run of the complete source tree. Do not label it as CI, Node test suite success or NASA kernel validation. On a local checkout, run `npm test` and record Node version, date and pass count as a separate validation receipt.
+
+
+### Whole authored Ephemeris test logic: 33/33 in V8 (9 November 2026)
+
+All seven existing test files were independently fetched with their production source files from the current GitHub PR branch, and their actual JavaScript bodies executed in a V8 isolate with adapters for Node's `node:test`, `node:assert/strict`, Buffer binary reads/writes (DataView), and URL query parsing. There were **33 passing test cases, zero failures**:
+
+| File | Tests executed and passed |
+|---|---:|
+| test/spk.test.mjs | 5 |
+| test/type3-time.test.mjs | 6 |
+| test/analytic.test.mjs | 4 |
+| test/coordinates-lighttime.test.mjs | 5 |
+| test/horizons-tools.test.mjs | 3 |
+| test/precession.test.mjs | 5 |
+| test/nutation.test.mjs | 5 |
+| **Total** | **33** |
+
+This confirms the authored test logic in a JavaScript engine against current GitHub sources, but the V8 adapters are not the Node standard library and the test files were evaluated without their original ESM import statements. **This is NOT evidence that `npm test` completed in Node, NOT a GitHub Actions/CI execution, and NOT a proof that authentic NASA/JPL kernels are handled correctly.**
+
+Next: clone PR branch in an independent Node >=20 environment, run `npm test` unmodified, record Node version, exit code and exact commit SHA; then run `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` with real JPL files and independent vector comparisons. Keep these gates separate.

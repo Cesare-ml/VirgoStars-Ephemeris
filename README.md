@@ -78,3 +78,10 @@ The [77-term IAU 2000B nutation module](docs/IAU2000B_NUTATION.md) now calculate
 
 
 **Additional validation:** the five newly authored IAU 2000B test cases were subsequently executed against the exact pinned GitHub code in a V8 JS isolate: **5/5 passed**. This is not a complete Node `npm test` run. Authentic NASA SPK scientific comparison remains a separate release gate.
+
+
+## Cross-module regression checkpoint
+
+On 9 November 2026, **all 33 authored test cases across seven Ephemeris test files passed** when their exact GitHub source and test modules were evaluated in an isolated JavaScript V8 runtime with minimal adapters for Node's `Buffer`, URL parsing and `node:test`/`assert`. Test sets: SPK (5), Type3/time (6), Analytic Lite (4), J2000 geometry/light-time (5), Horizons tool (3), IAU 2006 precession (5), IAU 2000B nutation (5).
+
+**Important qualification:** this is not a Node.js `npm test` run on a cloned checkout; the adapter environment can differ from Node. It is also not an official NASA SPK/Horizons numerical comparison. Both remain separate release gates.

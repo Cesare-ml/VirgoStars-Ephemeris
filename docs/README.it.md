@@ -32,3 +32,10 @@ La PR contiene ora `projectGeometricJ2000` per ottenere ascensione retta, declin
 Implementati i **77 termini** della nutazione IAU 2000B con coordinate geometriche **vere della data**; aggiunta la composizione esplicita con la precessione IAU 2006 e la documentazione della licenza BSD dei coefficienti scientifici ERFA. Il benchmark matematico JavaScript riproduce i riferimenti ERFA con differenze dell'ordine di 10⁻²⁰ rad per le componenti e inferiori a 6×10⁻¹⁷ per la matrice.
 
 **Attenzione:** sono stati aggiunti 5 casi di test Node, non ancora eseguiti nell'intera suite. Le coordinate vere della data non sono ancora posizioni planetarie *apparenti*: le correzioni dell'osservatore e i test reali NASA sono ancora mancanti.
+
+
+## Verifica incrociata delle suite
+
+Tutte e **sette le suite** presenti nel repository sono state valutate sul codice GitHub in un runtime JavaScript V8 isolato: **33 casi superati su 33**, inclusi lettura SPK sintetica, tipi 2/3, conversione dei tempi, calcoli analitici, coordinate, Horizons, precessione e nutazione. Per le API `Buffer`, `URL` e `node:test` sono stati utilizzati adattatori di test.
+
+Questo risultato **non sostituisce** ancora l'esecuzione normale `npm test` con Node né la misura dell'accuratezza con `de440s.bsp` e Horizons. Il prodotto VirgoStars e gli Astrolabi non sono stati modificati.
