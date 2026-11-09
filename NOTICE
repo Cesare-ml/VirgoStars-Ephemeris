@@ -1,0 +1,35 @@
+VirgoStars-Ephemeris
+===================
+
+Original project: VirgoStars
+Source repository: https://github.com/Cesare-ml/VirgoStars-Ephemeris
+Project website: https://www.virgostars.it/
+
+Original Developer and Initial Developer: Cesare-ml (VirgoStars project)
+Original code copyright (c) 2026 Cesare-ml, with separate copyrights for
+individual contributors where applicable.
+
+License for original source code: Common Public Attribution License
+Version 1.0 (CPAL-1.0); see LICENSE, including Exhibits A and B.
+
+EXHIBIT B — attribution to the Original Developer:
+Copyright (c) 2026 Cesare-ml (VirgoStars project)
+Powered by VirgoStars
+https://www.virgostars.it/
+This display is required for Larger Works as specified in LICENSE.
+
+The legal requirement is the exact CPAL-1.0 text, including Section 14
+(display when code or a Larger Work is launched/initially run or a
+session starts) and Section 15 (network-use source availability).
+This NOTICE does not add an independent restriction or supersede LICENSE.
+
+No claim of endorsement or affiliation with NASA, JPL, NAIF,
+Astrodienst or any downstream application is implied.
+
+Separate third-party data and materials:
+- JPL DE441 ephemeris files and NASA/JPL/NAIF kernels are NOT included
+  in this repository and are not licensed under CPAL by VirgoStars.
+- Swiss Ephemeris, Astrodienst code, and .se1 data are NOT included.
+- Third-party dependencies, if added, retain their own licensing terms.
+
+Contributors must preserve all applicable copyright and license notices.
