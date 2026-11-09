@@ -1,7 +1,9 @@
+> **Implementation update (2026-11-09):** `VirgoStars-Ephemeris` now has the complete [CPAL-1.0 LICENSE](../LICENSE) with required VirgoStars attribution for Larger Works, [NOTICE](../NOTICE), and [licensing guide](LICENSING_AND_CREDITS.md) on public `main` via [PR #6](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/6). The proposal below remains for the **other future repositories** and must not be read as saying this repository is unlicensed.
+
 # VirgoStars — Free/Open-Source and Attribution Policy (proposed)
 
 **Status: OWNER CHOICE RECORDED — VISIBLE NAME + LINK IN CREDITS/ABOUT. LICENSE TEXT AND ENFORCEABILITY STILL UNDER REVIEW.**
-**Date: 2026-11-09.** This document is a *licensing proposal* and contributor policy, **not itself a copyright license**. The public repository must not be represented as legally reusable under an OSI-approved license until a valid, owner-authorized `LICENSE` is committed.
+**Date: 2026-11-09.** This document is a *licensing proposal* and contributor policy, **not itself a copyright license**. The public VirgoStars-Ephemeris repository is now licensed under CPAL-1.0; other future repositories need their own legally valid and owner-authorized licenses.
 
 ## 1. Permanent project goal
 
