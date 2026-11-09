@@ -31,3 +31,12 @@ Exhaustive Swiss Ephemeris feature equivalence (all house systems, thousands of 
 ### Invariants
 
 No Swiss Ephemeris code or runtime dependency; no code from private VirgoStars; no bundled proprietary datasets; each calculation independently testable; no silent fallbacks; production remains unchanged until explicit integration gates.
+
+
+## Checkpoint di lavoro — 2026-11-09 (documentazione aggiornata)
+
+- E1 **parzialmente implementata, non convalidata**: lettori SPK tipo 2 e tipo 3, posizione e velocità, catene target/center, gestione endian; test solo su kernel sintetici. **Non effettuato il confronto con un file NASA reale**.
+- E2 **avviata ma non validata**: modulo UTC/TAI/TT/TDB approssimato valido dichiaratamente dal 1972 al 2026, con tabella leap-seconds conforme a IERS Bulletin C 72. Non sostituisce una implementazione completa del modello temporale SPICE/IAU.
+- Strumenti di verifica: `scripts/inspect-spk.mjs` e `scripts/compare-horizons.mjs`, con `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` per confronto *manuale* online con Horizons. Non sono stati eseguiti con dati reali.
+- Test locali eseguiti su Node 22.16.0: **18/18 superati**; prove su dati sintetici e unit test, non scientific parity. Nessuna modifica a produzione, dati o Astrolabio.
+- **Blocco attuale:** occorre ottenere ufficialmente un kernel `de440s.bsp` per eseguire e registrare la comparazione numerica; nel runtime isolato il download non è riuscito.
