@@ -49,3 +49,7 @@ Our code is intended to be MIT-licensed as specified in [LICENSE](LICENSE); each
 - `package.json`: dependency-free local prototype with `npm test`; `private: true` prevents accidental npm publication.
 
 Read [implementation checkpoint](docs/IMPLEMENTATION_CHECKPOINT_2026-11-09.md), [analytic fallback design](docs/ANALYTIC_FALLBACK.md), and [actual-kernel validation instructions](docs/REAL_KERNEL_VALIDATION.md) before attempting to integrate anything. There is no automatic fallback from precision to lower accuracy.
+
+## Manual NASA/Horizons comparison
+
+The experimental `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` compares a locally provided SPK state with a live NASA Horizons ICRF geometric vector, reporting position/velocity residuals and kernel SHA-256. It makes no production changes and no automatic kernel download. **It has not yet been successfully run on a real NASA kernel** here because the isolated environment cannot download `.bsp` files. See [real-kernel validation](docs/REAL_KERNEL_VALIDATION.md). Current local test count: **18/18** for this PR's source including the three synthetic comparison-tool tests.

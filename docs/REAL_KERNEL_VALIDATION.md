@@ -19,3 +19,18 @@ JPL Horizons: https://ssd.jpl.nasa.gov/horizons/
 **Important:** the current prototype reads SPK type 2 and frame ID 1 only, and holds the entire binary in memory. Only geometric vectors exist. It must not claim zodiac/apparent/house parity or publish to production based on this smoke.
 
 No GitHub Actions, no production modification, no automated downloads.
+
+## Automated manual comparison against Horizons (experimental, not yet run)
+
+When your own machine has Internet access and the official **unmodified** `de440s.bsp`, from repository root run:
+
+```bash
+npm test
+npm run verify:horizons -- /absolute/path/to/de440s.bsp 0 10 399
+```
+
+Here `0` means **TDB seconds since J2000**, target 10 is the Sun and center 399 is the Earth **center**. The script reads the local SPK and requests the corresponding geometric Horizons vector, using `EPHEM_TYPE=VECTORS`, `VEC_CORR=NONE`, `REF_SYSTEM=ICRF`, `REF_PLANE=FRAME`, `TIME_TYPE=TDB`, `OUT_UNITS=KM-S` and `VEC_TABLE=2`. It prints the request URL, JPL file SHA256, raw vectors and position/velocity residuals. It does **not** download the SPK or modify anything.
+
+**Safety:** the Horizons request is a live external HTTP call only when this script is run explicitly. NASA Horizons can use a different ephemeris generation/solution than the local `de440s.bsp`; verify source coverage and model before interpreting differences. SPK reading is still **not** independently verified against a real NASA binary in this environment: the download was blocked. The three extra unit tests only check query construction, CSV parsing and the residual arithmetic using synthetic rows.
+
+Official Horizons API: https://ssd-api.jpl.nasa.gov/doc/horizons.html
