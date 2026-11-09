@@ -75,3 +75,6 @@ The strict `astrological-functions` natal provider must continue to **reject** t
 ## Full IAU 2000B nutation (experimental)
 
 The [77-term IAU 2000B nutation module](docs/IAU2000B_NUTATION.md) now calculates dPsi/dEpsilon and true equatorial/ecliptic-of-date **geometric axis projections**. Independent ERFA reference values and the complete 3×3 nutation matrix were numerically checked (component residuals ≈1e-20 rad; matrix ≤5.6e-17). The newly authored 5 Node tests have **not** been rerun in the complete suite yet. This is **not a planetary apparent-position provider** and not scientifically validated on a real NASA .bsp. Coefficient provenance and BSD license are recorded in THIRD_PARTY_NOTICES.md.
+
+
+**Additional validation:** the five newly authored IAU 2000B test cases were subsequently executed against the exact pinned GitHub code in a V8 JS isolate: **5/5 passed**. This is not a complete Node `npm test` run. Authentic NASA SPK scientific comparison remains a separate release gate.
