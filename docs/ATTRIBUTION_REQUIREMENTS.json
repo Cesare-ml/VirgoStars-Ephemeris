@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "policyStatus": "proposed-owner-preference-not-yet-binding-license",
+  "source": "docs/OPEN_SOURCE_AND_ATTRIBUTION_POLICY.md",
+  "canonicalProject": {
+    "displayName": "VirgoStars",
+    "url": "https://www.virgostars.it/",
+    "creditsText": "Powered by VirgoStars",
+    "repositoryBase": "https://github.com/Cesare-ml"
+  },
+  "scope": {
+    "softwareLibraries": [
+      "virgostars-ephemeris",
+      "astrological-functions",
+      "astrological-charts"
+    ],
+    "assets": "Only individually rights-cleared content; licenses per asset",
+    "productionMonorepo": "excluded"
+  },
+  "intendedTerms": {
+    "officialDistributionFreeOfCharge": true,
+    "commercialUseAllowed": true,
+    "thirdPartyResaleCanBeForbidden": false,
+    "visibleGuiCreditRequiredWhenFinalLicenseSupportsIt": true,
+    "uiLocation": [
+      "About",
+      "Credits",
+      "Open Source"
+    ],
+    "linkRequired": true,
+    "logoRequired": false,
+    "permanentBannerRequired": false,
+    "cliOrHeadless": "Keep attribution and license notices in human-readable documentation/help, subject to final license"
+  },
+  "legalState": {
+    "approvedLicense": null,
+    "proposedCandidate": "CPAL-1.0 (Exhibit B for Larger Works) — review required",
+    "fallback": "Apache-2.0 with NOTICE and voluntary UI acknowledgement",
+    "requiresCopyrightReview": true,
+    "requiresThirdPartyRightsReview": true,
+    "changesRepositoryVisibility": false,
+    "grantsReuseRights": false
+  },
+  "implementationTests": {
+    "visibleProjectName": "VirgoStars",
+    "requiredUrl": "https://www.virgostars.it/",
+    "guiAccessibleNavigation": true,
+    "externalLinkUsesRelNoopener": true,
+    "cliMayOmitGui": true
+  }
+}
