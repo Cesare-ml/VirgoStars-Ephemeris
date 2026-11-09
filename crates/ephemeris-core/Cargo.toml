@@ -1,0 +1,9 @@
+[package]
+name = "virgostars-ephemeris-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Astronomical calculation core for VirgoStars Ephemeris"
+
+[lib]
+name = "virgostars_ephemeris_core"

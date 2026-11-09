@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision (design only; no implementation, package release, or production migration).
+**Status:** Accepted architectural decision. An experimental Rust DE441 reader exists; bindings, package release, independent numerical validation and production migration remain future work.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -33,7 +33,7 @@ VirgoStars-Ephemeris/
     ADR-0001-RUST-CORE-AND-BINDINGS.md
 ```
 
-The directory names above are proposals, not a claim that these packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
+The core crate now exists; other directory names above are proposals, not a claim that those packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
 
 ## Public result contract
 
@@ -80,4 +80,4 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 
 ## Sintesi italiana
 
-Il motore astronomico di VirgoStars Ephemeris sarà scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. Nessun modulo è ancora implementato.
+Il motore astronomico di VirgoStars Ephemeris è scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. È disponibile un lettore DE441 sperimentale; i binding sono ancora da implementare.

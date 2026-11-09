@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/ephemeris-core"]
+resolver = "2"
