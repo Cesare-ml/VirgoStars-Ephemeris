@@ -2,7 +2,7 @@
 
 **An independent, free/open-source astronomical ephemeris engine for astrology applications.**
 
-**Status: DOCUMENTATION / DESIGN ONLY — no astronomical calculation engine is implemented or validated yet.** This public repository is the future source of truth for a clean-room implementation based on publicly distributed NASA/JPL ephemeris kernels. It is **not** a fork, translation, wrapper, or redistribution of Swiss Ephemeris.
+**Status: EXPERIMENTAL PROTOTYPE — the first source code and synthetic tests exist, but astronomical accuracy on real NASA/JPL kernels has NOT been validated.** This public repository is the future source of truth for a clean-room implementation based on publicly distributed NASA/JPL ephemeris kernels. It is **not** a fork, translation, wrapper, or redistribution of Swiss Ephemeris.
 
 ## Purpose
 
@@ -34,8 +34,8 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 - Public repository created.
 - Requirements and phased architecture being documented.
-- No compatible API, npm package, numerical-parity claim, benchmarks, or production migration yet.
-- No GitHub Actions, automatic releases, or deployment configured.
+- Experimental unversioned API and local npm package metadata on the feature branch only; no scientific parity claim, public release, benchmarks or production migration yet.
+- No GitHub Actions, automatic releases, or deployment configured. Tests must run manually.
 
 Our code is intended to be MIT-licensed as specified in [LICENSE](LICENSE); each external dependency and data source retains its own terms. This project is not affiliated with or endorsed by NASA, JPL, NAIF, or Astrodienst.
 
