@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "policyStatus": "proposed-owner-preference-not-yet-binding-license",
+  "policyStatus": "ephemeris-public-cpal-1.0-adopted-other-repositories-pending",
   "source": "docs/OPEN_SOURCE_AND_ATTRIBUTION_POLICY.md",
   "canonicalProject": {
     "displayName": "VirgoStars",
@@ -33,13 +33,14 @@
     "cliOrHeadless": "Keep attribution and license notices in human-readable documentation/help, subject to final license"
   },
   "legalState": {
-    "approvedLicense": null,
-    "proposedCandidate": "CPAL-1.0 (Exhibit B for Larger Works) — review required",
+    "approvedLicense": "CPAL-1.0 for VirgoStars-Ephemeris only",
+    "proposedCandidate": "Other repositories: decision pending based on provenance and compatibility",
     "fallback": "Apache-2.0 with NOTICE and voluntary UI acknowledgement",
     "requiresCopyrightReview": true,
     "requiresThirdPartyRightsReview": true,
     "changesRepositoryVisibility": false,
-    "grantsReuseRights": false
+    "grantsReuseRights": false,
+    "sourceOfBindingLicense": "https://github.com/Cesare-ml/VirgoStars-Ephemeris/blob/main/LICENSE"
   },
   "implementationTests": {
     "visibleProjectName": "VirgoStars",
