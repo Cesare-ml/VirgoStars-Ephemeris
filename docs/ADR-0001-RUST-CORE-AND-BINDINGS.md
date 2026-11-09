@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision (design only; no implementation, package release, or production migration).
+**Status:** Accepted architectural decision. Initial experimental mathematical Rust crate exists in a review branch; no SPK loader, language bindings, package release, or production migration.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -15,7 +15,7 @@ Implement the **only authoritative astronomical engine in Rust**. Do not maintai
 
 The astronomical engine is distinct from **`astrological-functions`**, which remains a framework-independent **TypeScript** package for zodiacs, house systems, aspects, chart/transit orchestration, and other astrological logic. Do not move astrological domain calculations into the Rust ephemeris crate by default.
 
-## Proposed monorepo layout (not yet created)
+## Proposed monorepo layout (partially created)
 
 ```text
 VirgoStars-Ephemeris/
@@ -33,7 +33,7 @@ VirgoStars-Ephemeris/
     ADR-0001-RUST-CORE-AND-BINDINGS.md
 ```
 
-The directory names above are proposals, not a claim that these packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
+The `crates/ephemeris-core/` directory exists in the feature branch as a mathematical prototype; the other directories remain proposals. Use feature boundaries that permit smaller artifacts and optional dependencies. See [phase-one milestone](RUST_CORE_PHASE1.md).
 
 ## Public result contract
 
@@ -80,4 +80,4 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 
 ## Sintesi italiana
 
-Il motore astronomico di VirgoStars Ephemeris sarà scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. Nessun modulo è ancora implementato.
+Il motore astronomico di VirgoStars Ephemeris sarà scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. È stato avviato soltanto il nucleo matematico Rust sperimentale; lettore SPK, binding Python/TypeScript e validazione astronomica sono ancora da implementare.
