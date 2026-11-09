@@ -58,3 +58,10 @@ This is a **template, not a passing numerical fixture**.
 
 `DESIGNED -> IMPLEMENTED_UNVERIFIED -> VALIDATED_LOCAL -> RELEASE_CANDIDATE -> RELEASED`.
 No automatic promotion. Incompatibility and uncertainty warnings must never be suppressed to make a legacy test pass.
+
+
+## Esecuzione attuale — 2026-11-09
+
+Nel branch della PR #1, `npm test` ha eseguito **18 test con esito positivo**. Sono test unitari e kernel **sintetici**; l'accuratezza su effemeridi NASA **non è stata verificata**.
+
+Il modulo `tools/horizons.mjs` costruisce richieste ufficiali `VECTORS` a Horizons con `VEC_CORR=NONE`, `REF_SYSTEM=ICRF`, `REF_PLANE=FRAME`, `TIME_TYPE=TDB` e `OUT_UNITS=KM-S`. Il comando manuale `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` calcola errori cartesiani di posizione e velocità e registra lo SHA256 del file sorgente; **nessuna misura reale è disponibile** finché non viene eseguito su un kernel ufficiale. Horizons potrebbe usare una versione DE diversa da quella locale; annotarlo nella review. Specifiche: https://ssd-api.jpl.nasa.gov/doc/horizons.html .
