@@ -38,3 +38,14 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - No GitHub Actions, automatic releases, or deployment configured.
 
 Our code is intended to be MIT-licensed as specified in [LICENSE](LICENSE); each external dependency and data source retains its own terms. This project is not affiliated with or endorsed by NASA, JPL, NAIF, or Astrodienst.
+
+## Implementation checkpoint — 9 November 2026
+
+**Status: implemented locally, scientifically UNVERIFIED.** The first isolated Node.js ESM source files and 9 synthetic/sanity tests now exist on the feature branch (PR #1). This supersedes the initial “no engine implemented” note above for the branch only; main is still the baseline until PR merge.
+
+- `src/spk.mjs`: independent read-only DAF/SPK parser, SPK type-2 Chebyshev interpolation and velocity, geometric J2000 target/center chain composition, endian handling and explicit errors.
+- `src/analytic.mjs`: optional file-free, explicitly lower-accuracy analytic calculations using JPL short-range Kepler elements and USNO's approximate apparent Sun (not copied Moshier code).
+- `test/*.test.mjs`: 9 passing Node 22 local tests against **synthetic** SPK data and numerical sanity checks; no NASA/JPL .bsp file or Horizons comparison has yet been tested.
+- `package.json`: dependency-free local prototype with `npm test`; `private: true` prevents accidental npm publication.
+
+Read [implementation checkpoint](docs/IMPLEMENTATION_CHECKPOINT_2026-11-09.md), [analytic fallback design](docs/ANALYTIC_FALLBACK.md), and [actual-kernel validation instructions](docs/REAL_KERNEL_VALIDATION.md) before attempting to integrate anything. There is no automatic fallback from precision to lower accuracy.
