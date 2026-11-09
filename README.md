@@ -71,3 +71,7 @@ The strict `astrological-functions` natal provider must continue to **reject** t
 - Local Node 22: **5/5 new tests passed**, including independent numerical ERFA reference benchmarks for mean obliquity and *all nine* IAU 2006 matrix components (max measured element error about 1.1e-16; test limit 1e-14). The committed source/test Git blob SHA hashes match the locally tested files.
 - No nutation, aberration, topocentric corrections or proper rotating-date-frame velocity in this module. A mean ecliptic position is **NOT an apparent geocentric position**. The real NASA DE440s binary/Horizons comparison is still outstanding.
 - Details: [IAU 2006 mean precession numerical evidence](docs/IAU2006_MEAN_PRECESSION.md).
+
+## Full IAU 2000B nutation (experimental)
+
+The [77-term IAU 2000B nutation module](docs/IAU2000B_NUTATION.md) now calculates dPsi/dEpsilon and true equatorial/ecliptic-of-date **geometric axis projections**. Independent ERFA reference values and the complete 3×3 nutation matrix were numerically checked (component residuals ≈1e-20 rad; matrix ≤5.6e-17). The newly authored 5 Node tests have **not** been rerun in the complete suite yet. This is **not a planetary apparent-position provider** and not scientifically validated on a real NASA .bsp. Coefficient provenance and BSD license are recorded in THIRD_PARTY_NOTICES.md.
