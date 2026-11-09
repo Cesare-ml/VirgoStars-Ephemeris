@@ -65,3 +65,14 @@ No automatic promotion. Incompatibility and uncertainty warnings must never be s
 Nel branch della PR #1, `npm test` ha eseguito **18 test con esito positivo**. Sono test unitari e kernel **sintetici**; l'accuratezza su effemeridi NASA **non è stata verificata**.
 
 Il modulo `tools/horizons.mjs` costruisce richieste ufficiali `VECTORS` a Horizons con `VEC_CORR=NONE`, `REF_SYSTEM=ICRF`, `REF_PLANE=FRAME`, `TIME_TYPE=TDB` e `OUT_UNITS=KM-S`. Il comando manuale `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` calcola errori cartesiani di posizione e velocità e registra lo SHA256 del file sorgente; **nessuna misura reale è disponibile** finché non viene eseguito su un kernel ufficiale. Horizons potrebbe usare una versione DE diversa da quella locale; annotarlo nella review. Specifiche: https://ssd-api.jpl.nasa.gov/doc/horizons.html .
+
+
+### New math-only evidence — J2000 projection/light-time
+
+- Local command: `node --test test/coordinates-lighttime.test.mjs` with Node.js 22.16.0.
+- Outcome: **5/5 new tests passed** (vector rotations, angular/radial speeds, domain errors/singularities, synthetic moving-target retarded-time reference, deterministic nonconvergence).
+- Git blob SHA-1 of the saved source and tests matched the files locally tested.
+- This is not a Horizons accuracy comparison; these tests use synthetic J2000 state vectors and do not check true-of-date precession/nutation, apparent corrections, or a real SPK.
+- **Do not summarize as 23/23 rerun:** only these five new tests were executed this turn, while the previous checkpoint recorded 18/18 earlier. A complete suite run is a separate next step.
+
+Mandatory gating tests for future astrology: compare RA/Dec, ecliptic-of-date longitude/latitude/velocity against matched NAIF/IAU/JPL reference settings and error budgets. Do not feed `projectGeometricJ2000` output to the natal-chart provider as `APPARENT`.

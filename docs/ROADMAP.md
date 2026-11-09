@@ -40,3 +40,10 @@ No Swiss Ephemeris code or runtime dependency; no code from private VirgoStars; 
 - Strumenti di verifica: `scripts/inspect-spk.mjs` e `scripts/compare-horizons.mjs`, con `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` per confronto *manuale* online con Horizons. Non sono stati eseguiti con dati reali.
 - Test locali eseguiti su Node 22.16.0: **18/18 superati**; prove su dati sintetici e unit test, non scientific parity. Nessuna modifica a produzione, dati o Astrolabio.
 - **Blocco attuale:** occorre ottenere ufficialmente un kernel `de440s.bsp` per eseguire e registrare la comparazione numerica; nel runtime isolato il download non è riuscito.
+
+
+### Subsequent checkpoint: geometric coordinates and light-time
+
+E3 now has an **experimental partial implementation**, not scientific validation: equatorial/approximate ecliptic J2000 coordinates and angular speeds from geometric vectors, and an optional one-way light-time-only retarded vector solver. Five new synthetic math tests passed in an isolated Node 22 workspace. This does **not** constitute precession/nutation to the date, aberration, true apparent positions or a VirgoStars chart-ready ephemeris. Real SPK/Horizons scientific comparison remains blocked. See `GEOMETRIC_COORDINATES_AND_LIGHTTIME.md`.
+
+Before E3 can be considered validated, implement and independently test frame bias, IAU precession/nutation, Earth observer/stellar aberration, light-time time-derivatives and a canonical ecliptic-of-date result with declared correction modes. Never re-label simple J2000 projections as apparent.

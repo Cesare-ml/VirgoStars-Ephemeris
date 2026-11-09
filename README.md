@@ -53,3 +53,13 @@ Read [implementation checkpoint](docs/IMPLEMENTATION_CHECKPOINT_2026-11-09.md), 
 ## Manual NASA/Horizons comparison
 
 The experimental `npm run verify:horizons -- /path/to/de440s.bsp 0 10 399` compares a locally provided SPK state with a live NASA Horizons ICRF geometric vector, reporting position/velocity residuals and kernel SHA-256. It makes no production changes and no automatic kernel download. **It has not yet been successfully run on a real NASA kernel** here because the isolated environment cannot download `.bsp` files. See [real-kernel validation](docs/REAL_KERNEL_VALIDATION.md). Current local test count: **18/18** for this PR's source including the three synthetic comparison-tool tests.
+
+
+## Experimental J2000 coordinate projection and light-time (new checkpoint)
+
+- `src/coordinates.mjs` converts validated **geometric J2000** Cartesian km/km/s states to equatorial RA/Dec, and to a **simple approximate mean-ecliptic J2000** longitude/latitude. It also computes angular and range rates. IAU 2006 J2000 mean obliquity is used, but ICRF frame bias, precession, nutation and apparent corrections are not.
+- `src/light-time.mjs` computes a target's **retarded geometric vector**, relative to the observer at reception time, using an injected barycentric SPK-like state provider. This is one-way light-time only, **not complete apparent position**.
+- `test/coordinates-lighttime.test.mjs`: **5 additional isolated Node 22 tests passed**, and their exact source/test Git blobs match the files locally executed. The *prior* checkpoint reported 18/18 across preceding tests; **the complete combined suite has not been rerun in this turn**.
+- See [geometric coordinates and light-time specification](docs/GEOMETRIC_COORDINATES_AND_LIGHTTIME.md).
+
+The strict `astrological-functions` natal provider must continue to **reject** these geometric/J2000 values until an accurate apparent Earth-centered ecliptic-of-date provider is implemented and validated.

@@ -11,3 +11,10 @@ Per ora il prototipo legge dati SPK di tipo 2, calcola posizioni e velocità geo
 **Dati e diritti:** i kernel distribuiti da NAIF sono dati di terzi con proprie condizioni, non diventano MIT. Il loro download/uso/redistribuzione sono disciplinati dalle regole NAIF; il toolkit SPICE ha restrizioni specifiche. Non inserire file di effemeridi, codice Swiss, segreti o dati privati nel repository.
 
 Documenti principali: [architettura](ARCHITECTURE.md), [contratti](API_CONTRACTS.md), [roadmap](ROADMAP.md), [verifiche](VALIDATION.md), [dati e licenze](DATA_AND_LICENSING.md).
+
+
+## Avanzamento: geometria J2000 e tempo della luce
+
+La PR contiene ora `projectGeometricJ2000` per ottenere ascensione retta, declinazione e longitudine/latitudine **eclittiche J2000 approssimate**, con velocità; `solveOneWayLightTime` calcola iterativamente un vettore al tempo di emissione. Sono passati **5 nuovi test locali**; i 18 precedenti appartengono al checkpoint precedente e non sono stati rieseguiti insieme in questo turno.
+
+**Non sono ancora posizioni astrologiche apparenti della data**: mancano le correzioni IAU complete e la validazione su kernel NASA reali. `astrological-functions` continuerà a rifiutare questi risultati come valori `APPARENT/ECLIPTIC_OF_DATE`.
