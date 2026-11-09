@@ -8,11 +8,11 @@
 
 Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL SPK kernels with documented algorithms. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
 
-**Separation of responsibilities:** `virgostars-ephemeris` handles time scales, kernel access, coordinates, physical/geometric corrections and eventually astronomical event primitives. `astrological-functions` handles zodiac/house methods, aspects, synodic phases, astrological events and application-facing chart models. VirgoStars production keeps using its current implementation until tested migration gates pass.
+**Language decision:** The canonical astronomical core will be written in **Rust**, with thin WebAssembly/TypeScript and PyO3/maturin Python bindings so all consumers share the same algorithms. This is an accepted design, not an implemented release. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).\n\n**Separation of responsibilities:** `virgostars-ephemeris` handles time scales, kernel access, coordinates, physical/geometric corrections and eventually astronomical event primitives. `astrological-functions` handles zodiac/house methods, aspects, synodic phases, astrological events and application-facing chart models. VirgoStars production keeps using its current implementation until tested migration gates pass.
 
 ## Read first
 
-- [Architecture and boundaries](docs/ARCHITECTURE.md)
+- [Architecture and boundaries](docs/ARCHITECTURE.md)\n- [Rust core, WebAssembly and Python bindings — ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
