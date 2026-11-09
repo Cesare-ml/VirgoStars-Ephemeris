@@ -94,3 +94,10 @@ Mandatory gating tests for future astrology: compare RA/Dec, ecliptic-of-date lo
 - Complete 77 coefficient rows were audited for 11 finite values each, with scientific provenance and original NumFOCUS/ERFA BSD license retained.
 - Five additional Node regression test cases were written to `test/nutation.test.mjs`, but **were not run as part of a complete `npm test`** in this development step; do not add them to a claimed passing test count.
 - The expected 2000B ~1 mas accuracy around 1995–2050 is a published model characteristic, not a measured local full JPL position/velocity accuracy. A true-of-date GEOMETRIC projection is not an APPARENT position.
+
+
+### Executed committed IAU 2000B regression logic — V8 isolated (2026-11-09)
+
+After the new module was committed, the exact GitHub file blobs `src/nutation.mjs` (SHA `4cc712a0012a8928c513234ff1db5f73dc8117c0`), the 77-row data table and `test/nutation.test.mjs` were fetched by pinned commit `95a2a4f2498606b2c0f65d0404f35e64c8d5cefc`. Their JavaScript was evaluated in a standalone V8 isolate with minimal `node:test` and `node:assert` adapters and the committed IAU 2006 precession dependency. **All five nutation regression test cases PASSED (5/5, 0 failures)**, covering coefficients, ERFA nut00b and num00b reference values, geometric frame semantics, invalid epochs/inputs, and null date-frame rates.
+
+**Scope limitation:** this is execution of the actual committed mathematical test logic in V8, **not** a Node.js `npm test` run of the complete source tree. Do not label it as CI, Node test suite success or NASA kernel validation. On a local checkout, run `npm test` and record Node version, date and pass count as a separate validation receipt.
