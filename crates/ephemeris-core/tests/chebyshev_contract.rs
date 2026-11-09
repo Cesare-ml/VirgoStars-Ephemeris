@@ -17,7 +17,7 @@
 //! These fixtures test mathematical identities and unit conversion only.
 //! They are not a validation against real NASA/JPL kernels or Horizons.
 
-use ephemeris_core::{
+use virgostars_ephemeris_core::{
     evaluate_chebyshev, ChebyshevPositionRecord, EphemerisError, TdbSecondsPastJ2000,
 };
 
