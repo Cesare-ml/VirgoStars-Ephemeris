@@ -33,7 +33,7 @@ Alternatively an English entry: `Powered by VirgoStars — https://www.virgostar
 
 ## 3. Considered alternative: Apache License 2.0 + NOTICE
 
-**Preferred default for original software owned or licensable by VirgoStars** (pending review of third-party code and author ownership):
+**Fallback only, if the owner relaxes the legally mandatory UI-credit requirement** (subject to third-party code and author ownership review):
 
 - `LICENSE`: full unmodified Apache License, Version 2.0;
 - `NOTICE`: original project attribution and URL, plus legally required notices for included works;
@@ -60,7 +60,7 @@ Built with VirgoStars — https://github.com/Cesare-ml/virgostars-ephemeris
 
 is **recommended**, but would not be made mandatory by Apache alone.
 
-## 4. Licensing options if on-screen attribution is a strict requirement
+## 4. Licensing options for mandatory on-screen attribution
 
 The phrase "the project must receive credit" can refer to two significantly different obligations:
 
@@ -121,5 +121,7 @@ The private VirgoStars production monorepo is **not part of this proposed open-s
 - [ ] Verify README/CONTRIBUTING, redistribution instructions, SPDX metadata and examples.
 - [ ] Confirm no secrets, customer data or private application logic are introduced.
 - [ ] Keep paid products and production deployments independent; no GitHub Actions needed.
+
+See [license decision record](LICENSE_DECISION_RECORD.md) and the [non-binding CPAL Exhibit B example](CPAL_EXHIBIT_B_WORKING_DRAFT.md) before choosing. **The owner has not yet approved CPAL or any code license.**
 
 **Working instruction for Codex:** Implement the suggested Credits/About snippet in demos/documentation as a working example without representing it as an already enforceable license. Until the license decision is legally/technically reviewed, prepare license exhibits/compliance files **as drafts**, but do not put a public-release LICENSE on code/assets or change repository visibility without explicit owner authorization.
