@@ -17,6 +17,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [NASA/JPL kernels and legal provenance (planned)](docs/DATA_AND_LICENSING.md)
 - [Free-of-charge open-source and required attribution policy (draft)](docs/OPEN_SOURCE_AND_ATTRIBUTION_POLICY.md)
+- [Owner's Credits/About name-and-link requirement (proposed implementation)](docs/CREDITS_ABOUT_SPEC.md)
 - [Proposed public contracts](docs/API_CONTRACTS.md)
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Italian overview](docs/README.it.md)
