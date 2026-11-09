@@ -1,10 +1,10 @@
 # VirgoStars Ephemeris — implementation roadmap
 
-Status: **planning only**, as of 2026-11-09. All gates below are acceptance criteria, not evidence of completion. Use reviewed PRs and manual/offline validations; do **not** create GitHub Actions.
+Status: **planning and experimental implementation**, updated 2026-11-10. All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
 
 | Phase | Scope | Exit gate |
 |---|---|---|
-| E0 | Public project setup: architecture, clean-room rules, legal provenance, API proposals | Docs reviewed, MIT code license, no proprietary payload |
+| E0 | Public project setup: architecture, clean-room rules, legal provenance, API proposals | Docs reviewed, CPAL-1.0 code license with required attribution, no proprietary payload |
 | E1 | Small SPK/DAF reader, type-2 Chebyshev, segment/center-chain resolver, pinned `de440s.bsp` fixture workflow | Independent NAIF vector comparison for selected Sun/Earth/Moon/planet cases |
 | E2 | UTC/TAI/TT/TDB/UT1, leap seconds, geocentric/heliocentric state and velocity, frame conventions | Reproducible, tolerance-defined comparison against JPL Horizons |
 | E3 | Ecliptic/equatorial of date, precession/nutation, apparent/astrometric modes, topocentric/horizon | Validation across epochs/locations; explicit EOP/refraction limitations |
@@ -22,7 +22,7 @@ Exhaustive Swiss Ephemeris feature equivalence (all house systems, thousands of 
 
 ### Open decisions
 
-- Pure TypeScript vs a small WASM/native module for ERFA-like astronomical routines.
+- Scope and packaging of thin Rust-backed WASM/TypeScript and Python interfaces, without separate astronomy implementations.
 - Precisely supported reference frames/corrections in first stable release.
 - Degree of support for past dates and BCE calendars; extreme ranges require independent Delta-T policy.
 - Kernel packaging/download mechanism for offline Astrolabio; no automatic downloading of multi-GB kernels.
