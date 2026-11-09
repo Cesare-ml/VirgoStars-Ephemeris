@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision (design only; no implementation, package release, or production migration).
+**Status:** Accepted architectural decision. Initial experimental Rust numerical crate exists in review; no SPK file loader, Python/JS bindings, package release, or production migration.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -15,7 +15,7 @@ Implement the **only authoritative astronomical engine in Rust**. Do not maintai
 
 The astronomical engine is distinct from **`astrological-functions`**, which remains a framework-independent **TypeScript** package for zodiacs, house systems, aspects, chart/transit orchestration, and other astrological logic. Do not move astrological domain calculations into the Rust ephemeris crate by default.
 
-## Proposed monorepo layout (not yet created)
+## Proposed monorepo layout (partially created)
 
 ```text
 VirgoStars-Ephemeris/
@@ -33,7 +33,7 @@ VirgoStars-Ephemeris/
     ADR-0001-RUST-CORE-AND-BINDINGS.md
 ```
 
-The directory names above are proposals, not a claim that these packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
+The `crates/ephemeris-core/` directory now exists in the review branch as a mathematical prototype; the other directories remain proposals. See [Rust phase-one implementation status](RUST_CORE_PHASE1.md). Use feature boundaries that permit smaller artifacts and optional dependencies.
 
 ## Public result contract
 
@@ -73,11 +73,11 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 ## Legal, operational and migration guardrails
 
 - Clean-room original implementation: no Swiss Ephemeris source, copied formulas/code, wrapper or vendored SPICE Toolkit without review. Cite scientific algorithms/specifications used.
-- NASA/JPL kernel availability is not permission to bundle or sublicense all data under our MIT code license. Document provenance and distribution rights; default to external user-provided/downloaded data where needed.
-- Rust library and bindings should remain free and open source, subject to final approved license and dependency/legal review. Credit attribution strategy is documented separately; avoid asserting that a nonbinding About/Credits entry is enforceable under stock MIT.
+- NASA/JPL kernel availability is not permission to bundle or sublicense all data under our CPAL-1.0 code license. Document provenance and distribution rights; default to external user-provided/downloaded data where needed.
+- Original source code is governed by [CPAL-1.0](../LICENSE) with VirgoStars Exhibit B attribution and the source/network obligations described in [LICENSING_AND_CREDITS.md](LICENSING_AND_CREDITS.md). Preserve Exhibit A notices in all source files and respect these conditions when distributing future bindings; review each dependency and external dataset separately.
 - Do not change production VirgoStars/Astrolabio, migrate users, publish npm/PyPI packages or configure GitHub Actions as a side effect of this documentation decision.
 - Record tests for Windows, macOS and Linux (and WASM browser/Node) as support targets, not existing support.
 
 ## Sintesi italiana
 
-Il motore astronomico di VirgoStars Ephemeris sarà scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. Nessun modulo è ancora implementato.
+Il motore astronomico di VirgoStars Ephemeris sarà scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. Esiste un primo nucleo matematico Rust sperimentale, non ancora verificato tramite Cargo; il parsing SPK e i binding Python/TypeScript devono ancora essere realizzati e validati.
