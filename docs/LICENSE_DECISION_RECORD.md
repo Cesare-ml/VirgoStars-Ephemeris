@@ -1,3 +1,5 @@
+> **Decision update (2026-11-09):** CPAL-1.0 with completed Exhibits A/B was adopted for **VirgoStars-Ephemeris only** in [PR #6](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/6). This analysis remains useful for licensing decisions about Charts, Functions and Assets. Do not interpret the draft label below as the current Ephemeris license status.
+
 # License decision record — mandatory GUI credits (draft, not binding)
 
 **Status:** Legal/design decision candidate. **No license has been granted by this file.** Updated 2026-11-09.
