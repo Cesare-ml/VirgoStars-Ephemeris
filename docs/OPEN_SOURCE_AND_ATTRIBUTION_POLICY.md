@@ -1,6 +1,6 @@
 # VirgoStars — Free/Open-Source and Attribution Policy (proposed)
 
-**Status: project-wide OWNER PREFERENCE RECORDED; LICENSE CHOICE NOT YET FINAL.**
+**Status: OWNER CHOICE RECORDED — VISIBLE NAME + LINK IN CREDITS/ABOUT. LICENSE TEXT AND ENFORCEABILITY STILL UNDER REVIEW.**
 **Date: 2026-11-09.** This document is a *licensing proposal* and contributor policy, **not itself a copyright license**. The public repository must not be represented as legally reusable under an OSI-approved license until a valid, owner-authorized `LICENSE` is committed.
 
 ## 1. Permanent project goal
@@ -14,7 +14,24 @@ All VirgoStars components intended for future open-source release should be:
 
 **Important legal nuance:** OSI-approved open-source licenses allow third parties to charge for *their copies, hosting or services*. We can commit to distributing the **official VirgoStars software at no charge**, but we cannot simultaneously demand that *all downstream copies remain free of charge* while describing the license as OSI-compliant. See https://opensource.org/osd.
 
-## 2. Recommended default for CODE: Apache License 2.0 + NOTICE
+## 2. Owner decision: visible project name and link in Credits/About
+
+**Owner preference confirmed 2026-11-09:** Any application with a user-facing GUI integrating a VirgoStars open-source library should provide a user-accessible **Credits / About / Open Source** section that clearly identifies the project and links to it. The intention is modest, useful attribution and indirect discoverability rather than a forced footer or an intrusive startup logo.
+
+**Canonical attribution specification proposed:**
+
+```text
+Uses VirgoStars open-source technology
+VirgoStars — https://www.virgostars.it/
+```
+
+Alternatively an English entry: `Powered by VirgoStars — https://www.virgostars.it/`. The website is a proposed canonical marketing URL; a link to the originating GitHub repository can be included as an optional second reference. Do not assert endorsement of the downstream product by VirgoStars.
+
+**Where:** a conventional Credits/About page or dialog accessible through ordinary navigation. If the product exposes other third-party acknowledgments, VirgoStars should be comparably visible. CLI/headless software cannot have a GUI About screen: require preservation of attribution in distribution documentation/help as legally supported by the final license.
+
+**Important limitation:** An Apache 2.0 NOTICE alone does *not* make an in-app clickable link mandatory. A technically convenient About screen is a **design preference**; its enforceability depends on the final selected license. Do not claim that this specific formulation has already been enacted as a license condition.
+
+## 3. Considered alternative: Apache License 2.0 + NOTICE
 
 **Preferred default for original software owned or licensable by VirgoStars** (pending review of third-party code and author ownership):
 
@@ -43,7 +60,7 @@ Built with VirgoStars — https://github.com/Cesare-ml/virgostars-ephemeris
 
 is **recommended**, but would not be made mandatory by Apache alone.
 
-## 3. If ON-SCREEN attribution is a strict requirement
+## 4. Licensing options if on-screen attribution is a strict requirement
 
 The phrase "the project must receive credit" can refer to two significantly different obligations:
 
@@ -52,9 +69,17 @@ The phrase "the project must receive credit" can refer to two significantly diff
 
 CPAL is materially different from Apache 2.0, less common in the library ecosystem, and may complicate integration and contributor adoption. Do **not** casually add a custom "always display our logo" condition to Apache 2.0 and still claim the code is unmodified Apache-licensed.
 
-**Open owner decision:** Is attribution required only upon redistribution (default Apache 2.0 + NOTICE), or must a visible app UI acknowledgment also be legally mandatory (separate CPAL compatibility review)?
+**Owner decision now resolved:** visible name and project link in Credits/About is desired **as a binding obligation**, not just source redistribution credits. **Open legal/engineering decision:** which OSI-approved standard license can enforce that goal without creating unacceptable network-source disclosure, integration friction or incompatibilities? We must choose before release.
 
-## 4. Graphic assets and documentation: separate licenses and rights reviews
+### CPAL-1.0 specific cautions
+
+The OSI-approved CPAL-1.0 §14 with **Exhibit B completed** is a candidate because it supports attribution information (copyright notice, short phrase, URL and optional image) in a GUI, and allows attribution obligations in **Larger Works** when specifically selected in Exhibit B. Its wording addresses a *prominent display at launch/session start*, while recognizing continued use of an existing About/attribution form as one way to satisfy the notice requirement. **A link buried in a settings page is not automatically sufficient** to establish legal compliance. §15 also treats external/network deployments of original code or modifications as distributions and triggers source availability obligations. Both implications require counsel or knowledgeable license review before choosing CPAL.
+
+The OSI-approved **Attribution Assurance License (AAL)** is another alternative, but it explicitly requires prominent attribution when dependent executables launch and includes signed-text conditions. It is not necessarily a better match for a low-friction About screen. Official sources: https://opensource.org/license/aal and https://opensource.org/license/cpal-1.0.
+
+Do not append a custom 'must display link in About' sentence to an unmodified Apache/MIT license and call that combination standard Apache/MIT or automatically OSI-approved. The LGPL/GPLv3 options also require detailed review; the FSF notes that GPLv3 §7(b) notices do not freely extend to arbitrary promotional links/logos (https://www.fsf.org/blogs/community/gpl-compliant-legal-notices-author-attributions).
+
+## 5. Graphic assets and documentation: separate licenses and rights reviews
 
 Code and creative artwork must **not** be indiscriminately placed under one license.
 
@@ -71,7 +96,7 @@ For `Cesare-ml/astrological-assets`: all existing review records remain **pendin
 
 For fonts, planetary kernels, astronomical datasets, reference tables and any other third-party material, obey their **own** license, usage and redistribution terms. An openly downloadable dataset is not automatically CC BY. Track the NASA/JPL source, citation and applicable terms separately. The clean-room ephemeris project must not copy Swiss Ephemeris implementation code or assume any third-party license is automatically cleared.
 
-## 5. Scope and release plan
+## 6. Scope and release plan
 
 Candidate repositories:
 
@@ -84,10 +109,12 @@ Candidate repositories:
 
 The private VirgoStars production monorepo is **not part of this proposed open-source license grant**. Its website, database, saved natal charts, credentials, paid service, private visuals and existing hardware are not changed.
 
-## 6. Do-not-merge release gates
+## 7. Do-not-merge release gates
 
 - [ ] Determine the legally correct copyright holders for original code and contributor contributions.
-- [ ] Decide Apache 2.0 + NOTICE versus a license requiring visible UI attribution.
+- [x] Owner chose visible **VirgoStars name + hyperlink** in an accessible Credits/About UI as the desired condition.
+- [ ] Conduct a license compatibility/legal review (CPAL-1.0 §14/§15 vs AAL vs permissive Apache-2.0 + *voluntary* visible credits) and choose an OSI-approved license that truly meets the desired UI rule.
+- [ ] Confirm the final link destination and legally correct copyright holder(s), and determine whether the same rule should apply to headless/CLI distribution in documentation/help.
 - [ ] Review compatibility of all upstream licenses, especially any historical Swiss Ephemeris-derived code and NASA/JPL data.
 - [ ] Add actual complete `LICENSE` and `NOTICE` only **after owner approval**; a policy draft is not a substitute.
 - [ ] Add per-asset license metadata and publish only rights-cleared images.
@@ -95,4 +122,4 @@ The private VirgoStars production monorepo is **not part of this proposed open-s
 - [ ] Confirm no secrets, customer data or private application logic are introduced.
 - [ ] Keep paid products and production deployments independent; no GitHub Actions needed.
 
-**Working instruction for Codex:** Until the license decision is final, maintain this preference in documentation and prepare compliance files **as draft**, but do not put public-release licenses on code/assets or change repo visibility without explicit owner authorization.
+**Working instruction for Codex:** Implement the suggested Credits/About snippet in demos/documentation as a working example without representing it as an already enforceable license. Until the license decision is legally/technically reviewed, prepare license exhibits/compliance files **as drafts**, but do not put a public-release LICENSE on code/assets or change repository visibility without explicit owner authorization.
