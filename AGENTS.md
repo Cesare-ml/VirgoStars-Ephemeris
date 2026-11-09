@@ -13,4 +13,4 @@ This is a **PUBLIC** repository for an independent, originally implemented astro
 9. Use feature branches and reviewed PRs. For any public-facing compatibility claim, update the coverage matrix and test evidence.
 10. No autonomous long-running tasks, downloads of large files, destructive actions, or releases without deliberate review. No NASA/JPL/NAIF/Astrodienst affiliation or endorsement claims.
 
-Status labels: `DESIGNED`, `IMPLEMENTED_UNVERIFIED`, `VALIDATED_LOCAL`, `RELEASE_CANDIDATE`, `RELEASED`. Today this repository is `DESIGNED`.
+Status labels: `DESIGNED`, `IMPLEMENTED_UNVERIFIED`, `VALIDATED_LOCAL`, `RELEASE_CANDIDATE`, `RELEASED`. The initial Node ESM code is `IMPLEMENTED_UNVERIFIED` and is not scientifically validated against real NASA/JPL kernels.
