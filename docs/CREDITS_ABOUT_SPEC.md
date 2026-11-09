@@ -1,3 +1,5 @@
+> **Implemented for Ephemeris:** [CPAL-1.0 LICENSE](../LICENSE) with completed Exhibit B now applies on `main`. Its **Section 14 launch/session prominence** requirement prevails over the simplified About/Credits UX suggestion below. Other repositories remain undecided.
+
 # VirgoStars — Credits/About implementation contract (proposed)
 
 **Owner decision: 2026-11-09.** Future open-source VirgoStars projects should be free of official licensing fees and require **visible attribution with the VirgoStars name and project hyperlink** within a normal Credits/About/Open Source screen of downstream GUI applications.
