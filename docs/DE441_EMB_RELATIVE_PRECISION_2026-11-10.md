@@ -1,7 +1,7 @@
 # DE441: precision of Earth/Moon states relative to the Earth–Moon barycenter
 
 Date: 2026-11-10
-Status: proposed, not merged into `dev/ephemeris` or `main`.
+Status: experimental implementation. This document describes a change intended for the development branch; check the PR merge history for the branch currently containing it. Independent NASA/JPL/Horizons numerical validation is still outstanding.
 
 ## Issue and calculation
 
