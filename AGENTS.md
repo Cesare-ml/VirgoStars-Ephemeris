@@ -46,7 +46,7 @@ A broken or missing link is not proof that the file exists. Check the repository
 - Do not stage or commit conflict markers: `<<<<<<<`, `=======`, `>>>>>>>` (except deliberate test fixtures). Check modified text files and `git diff --check`.
 - Never solve a Git problem using `git reset --hard`, `git clean -fd`, force push or blanket “discard changes” without explicit authorization and a verified backup.
 - Prefer additive, isolated improvements and reversible migrations. Do not silently change VirgoStars/Astrolabio production or other repositories.
-- **Do not introduce GitHub Actions** or automatic deployment/release workflows. Local/manual tests are the default until the owner explicitly changes that decision.
+- **Owner authorization (2026-11-10):** GitHub Actions are now permitted for this public repository's read-only CI (formatting, lint, unit tests, builds and appropriate non-privileged checks). Use least-privilege permissions, no unnecessary secrets, and keep external network/data downloads out of scientific tests. Automatic deployment, package publication and releases remain forbidden without separate explicit approval. CI results do not replace independent NASA/JPL numerical validation.
 
 Suggested local checks:
 ```bash
@@ -125,7 +125,7 @@ Before proposing a PR:
 4. Run available relevant checks; state what was *not* run and why.
 5. Summarize changes, risk, compatibility, branch/PR link and next actions.
 
-**Owner approval is required** before publishing packages, changing repository visibility, changing licensing, adding GitHub Actions, integrating into production, deleting user data or performing destructive repository operations.
+**Owner approval is required** before publishing packages, changing repository visibility, changing licensing, enabling privileged GitHub Actions (deployments, releases, elevated tokens or secrets), integrating into production, deleting user data or performing destructive repository operations. The owner explicitly approved standard GitHub Actions CI on 2026-11-10; this approval does not cover releases, deployments or publication.
 
 ## 10. Reporting format
 
