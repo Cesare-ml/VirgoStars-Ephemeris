@@ -164,6 +164,48 @@ fn parse_reference(source: &str) -> Result<Reference, String> {
     })
 }
 
+/// Signed differences are always computed as Rust DE441 minus Horizons.
+#[derive(Debug)]
+struct Residuals {
+    position_km: [f64; 3],
+    velocity_km_per_day: [f64; 3],
+    max_position_component_km: f64,
+    max_velocity_component_km_per_day: f64,
+    position_norm_km: f64,
+    velocity_norm_km_per_day: f64,
+}
+
+fn residuals(actual_position: [f64; 3], actual_velocity: [f64; 3], expected: [f64; 6]) -> Result<Residuals, String> {
+    let mut position_km = [0.0; 3];
+    let mut velocity_km_per_day = [0.0; 3];
+    let mut max_position_component_km: f64 = 0.0;
+    let mut max_velocity_component_km_per_day: f64 = 0.0;
+    for axis in 0..3 {
+        position_km[axis] = actual_position[axis] - expected[axis];
+        velocity_km_per_day[axis] = actual_velocity[axis] - expected[axis + 3];
+        if !position_km[axis].is_finite() || !velocity_km_per_day[axis].is_finite() {
+            return Err("non-finite signed coordinate or velocity residual".into());
+        }
+        max_position_component_km = max_position_component_km.max(position_km[axis].abs());
+        max_velocity_component_km_per_day =
+            max_velocity_component_km_per_day.max(velocity_km_per_day[axis].abs());
+    }
+    let position_norm_km = position_km[0].hypot(position_km[1]).hypot(position_km[2]);
+    let velocity_norm_km_per_day =
+        velocity_km_per_day[0].hypot(velocity_km_per_day[1]).hypot(velocity_km_per_day[2]);
+    if !position_norm_km.is_finite() || !velocity_norm_km_per_day.is_finite() {
+        return Err("non-finite residual vector norm".into());
+    }
+    Ok(Residuals {
+        position_km,
+        velocity_km_per_day,
+        max_position_component_km,
+        max_velocity_component_km_per_day,
+        position_norm_km,
+        velocity_norm_km_per_day,
+    })
+}
+
 fn input_error(message: impl Into<String>) -> Box<dyn Error> {
     Box::new(io::Error::new(io::ErrorKind::InvalidInput, message.into()))
 }
@@ -193,6 +235,8 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let mut largest_position: f64 = 0.0;
     let mut largest_velocity: f64 = 0.0;
+    let mut largest_position_norm: f64 = 0.0;
+    let mut largest_velocity_norm: f64 = 0.0;
     let mut failing_cases = 0usize;
     for case in &reference.cases {
         let state = ephemeris.state(
@@ -200,33 +244,50 @@ fn run() -> Result<(), Box<dyn Error>> {
             reference.center,
             JulianDateTdb(case.jd_tdb),
         )?;
-        let mut position_error: f64 = 0.0;
-        let mut velocity_error: f64 = 0.0;
-        for axis in 0..3 {
-            position_error =
-                position_error.max((state.position_km[axis] - case.expected[axis]).abs());
-            velocity_error = velocity_error
-                .max((state.velocity_km_per_day[axis] - case.expected[axis + 3]).abs());
-        }
-        if !position_error.is_finite() || !velocity_error.is_finite() {
-            return Err(input_error("non-finite comparison error"));
-        }
-        largest_position = largest_position.max(position_error);
-        largest_velocity = largest_velocity.max(velocity_error);
-        if position_error > position_tolerance || velocity_error > velocity_tolerance {
+        let error = residuals(
+            state.position_km,
+            state.velocity_km_per_day,
+            case.expected,
+        )
+        .map_err(input_error)?;
+        largest_position = largest_position.max(error.max_position_component_km);
+        largest_velocity = largest_velocity.max(error.max_velocity_component_km_per_day);
+        largest_position_norm = largest_position_norm.max(error.position_norm_km);
+        largest_velocity_norm = largest_velocity_norm.max(error.velocity_norm_km_per_day);
+        if error.max_position_component_km > position_tolerance
+            || error.max_velocity_component_km_per_day > velocity_tolerance
+        {
             failing_cases += 1;
         }
         println!(
-            "JD TDB {:.9}: max |position component error| {:.9e} km; \
-             max |velocity component error| {:.9e} km/day",
-            case.jd_tdb, position_error, velocity_error
+            "JD TDB {:.9}: signed (DE441 - Horizons) dr = [{:+.9e}, {:+.9e}, {:+.9e}] km; \
+             max |dr component| = {:.9e} km; |dr| = {:.9e} km",
+            case.jd_tdb,
+            error.position_km[0],
+            error.position_km[1],
+            error.position_km[2],
+            error.max_position_component_km,
+            error.position_norm_km
+        );
+        println!(
+            "JD TDB {:.9}: signed (DE441 - Horizons) dv = [{:+.9e}, {:+.9e}, {:+.9e}] km/day; \
+             max |dv component| = {:.9e} km/day; |dv| = {:.9e} km/day",
+            case.jd_tdb,
+            error.velocity_km_per_day[0],
+            error.velocity_km_per_day[1],
+            error.velocity_km_per_day[2],
+            error.max_velocity_component_km_per_day,
+            error.velocity_norm_km_per_day
         );
     }
     println!(
-        "{} cases; worst position {:.9e} km, worst velocity {:.9e} km/day; failing cases: {}",
+        "{} cases; worst max-component position {:.9e} km, velocity {:.9e} km/day; \
+         worst vector norms {:.9e} km, {:.9e} km/day; failing cases: {}",
         reference.cases.len(),
         largest_position,
         largest_velocity,
+        largest_position_norm,
+        largest_velocity_norm,
         failing_cases
     );
     if failing_cases != 0 {
@@ -287,6 +348,29 @@ mod tests {
         assert!(parse_reference(&VALID.replace("# retrieved_utc=", "# absent=")).is_err());
         assert!(parse_reference(&VALID.replace("# target=Moon", "# target=PlanetX")).is_err());
         assert!(parse_reference(&VALID.replace("# center=Earth", "# center=Moon")).is_err());
+    }
+
+    #[test]
+    fn reports_signed_residuals_component_maxima_and_vector_norms() {
+        let error = residuals(
+            [10.0, -20.0, 30.0],
+            [-40.0, 50.0, -60.0],
+            [7.0, -18.0, 31.0, -41.0, 48.0, -63.0],
+        )
+        .unwrap();
+        assert_eq!(error.position_km, [3.0, -2.0, -1.0]);
+        assert_eq!(error.velocity_km_per_day, [1.0, 2.0, 3.0]);
+        assert_eq!(error.max_position_component_km, 3.0);
+        assert_eq!(error.max_velocity_component_km_per_day, 3.0);
+        assert!((error.position_norm_km - 14.0_f64.sqrt()).abs() < 1e-12);
+        assert!((error.velocity_norm_km_per_day - 14.0_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rejects_non_finite_residuals_and_overflowed_norms() {
+        assert!(residuals([f64::MAX, 0.0, 0.0], [0.0; 3], [-f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0]).is_err());
+        assert!(residuals([f64::MAX, f64::MAX, 0.0], [0.0; 3], [0.0; 6]).is_err());
+        assert!(residuals([f64::NAN, 0.0, 0.0], [0.0; 3], [0.0; 6]).is_err());
     }
 
     #[test]
