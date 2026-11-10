@@ -248,11 +248,7 @@ mod tests {
             -8.0 * SECONDS_PER_DAY,
             0.8 * SECONDS_PER_DAY,
         ];
-        const EARTH_VELOCITY: [f64; 3] = [
-            -2.0 * SECONDS_PER_DAY,
-            25.0 * SECONDS_PER_DAY,
-            0.0,
-        ];
+        const EARTH_VELOCITY: [f64; 3] = [-2.0 * SECONDS_PER_DAY, 25.0 * SECONDS_PER_DAY, 0.0];
         let linear_transverse = |body: Body, epoch: JulianDateTdb| {
             let dt = epoch.0 - JD;
             let (position, velocity) = match body {
@@ -293,10 +289,8 @@ mod tests {
         let signed_longitude_span =
             (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
         let numerical_longitude_rate = signed_longitude_span / (2.0 * h_days);
-        let numerical_latitude_rate =
-            (after.latitude_rad - before.latitude_rad) / (2.0 * h_days);
-        let numerical_distance_rate =
-            (after.distance_km - before.distance_km) / (2.0 * h_days);
+        let numerical_latitude_rate = (after.latitude_rad - before.latitude_rad) / (2.0 * h_days);
+        let numerical_distance_rate = (after.distance_km - before.distance_km) / (2.0 * h_days);
         let numerical_delay_rate = (next.light_time_seconds - previous.light_time_seconds)
             / (2.0 * h_days * SECONDS_PER_DAY);
 
@@ -342,7 +336,10 @@ mod tests {
                 velocity_km_per_day: [0.0; 3],
             })
         });
-        assert!(matches!(zero_range, Err(LightTimeError::UndefinedDirection)));
+        assert!(matches!(
+            zero_range,
+            Err(LightTimeError::UndefinedDirection)
+        ));
 
         let bad_velocity = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
             let mut s = linear(body, epoch)?;
