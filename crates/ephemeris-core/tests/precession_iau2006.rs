@@ -59,7 +59,7 @@ fn matches_all_nine_independent_erfa_pmat06_reference_elements() {
             0.999_999_928_567_997_2,
         ],
     ];
-    let actual = precession_bias_iau2006(tt_jd(2_400_000.5 + 50_123.9999)).unwrap();
+    let actual = precession_bias_iau2006(tt_jd(2_400_000.5 + 50_123.999_9)).unwrap();
     for (i, row) in EXPECTED.iter().enumerate() {
         for (j, expected) in row.iter().enumerate() {
             near(actual.rotation[i][j], *expected, 1e-13);
