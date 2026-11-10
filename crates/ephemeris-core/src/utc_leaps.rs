@@ -14,11 +14,10 @@
 
 //! Explicit post-1972 UTC leap-second day schedule.
 //!
-//! This module does **not** convert a UTC clock reading into TAI/TT/TDB.
-//! It models UTC day lengths, TAI-UTC day-start offsets and clock
-//! validity using a caller-provided, independently sourced transition schedule.
-//! Nothing is downloaded, updated automatically or extrapolated beyond the
-//! declared coverage interval.
+//! Models UTC day lengths, TAI-UTC offsets and bidirectional UTC/TAI
+//! conversions using caller-provided transitions or a strictly bounded
+//! public-domain IANA 2026b snapshot. It never implicitly converts to
+//! TT/TDB, downloads updates or extrapolates beyond declared coverage.
 
 use std::cmp::Ordering;
 use std::error::Error;
