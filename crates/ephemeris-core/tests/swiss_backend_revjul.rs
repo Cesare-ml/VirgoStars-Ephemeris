@@ -70,6 +70,20 @@ fn backend_swe_revjul_matches_recorded_swiss_reference() {
             actual_hour,
             expected_hour
         );
+        // Verify the inverse conversion against the same original scalar JD,
+        // not only against the expected civil fields. This also catches
+        // fractional-day carry and negative-JD boundary regressions.
+        let roundtrip = actual.to_julian_date(calendar).unwrap();
+        let (whole, fraction) = roundtrip.parts().unwrap();
+        let reconstructed = whole + fraction;
+        assert!(
+            (reconstructed - jd).abs() <= 1e-9,
+            "{} JD roundtrip mismatch: original {:.12}, reconstructed {:.12}",
+            fields[0],
+            jd,
+            reconstructed
+        );
+        assert_eq!(roundtrip.scale(), TimeScale::Ut1);
         checked += 1;
     }
     assert_eq!(checked, 15, "reverse-Julian reference cases were dropped");
