@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: CPAL-1.0
+# Preserve byte-for-byte SHA-256 reproducibility of the pinned public-domain
+# IANA UTC leap-second snapshot on Windows (core.autocrlf), Linux and macOS.
+# Data provenance and public-domain status remain documented in the file.
+crates/ephemeris-core/data/iana-tzdb-2026b-leap-seconds.list text eol=lf
