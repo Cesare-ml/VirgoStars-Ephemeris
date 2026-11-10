@@ -1,10 +1,10 @@
 # UTC leap-second day schedules — explicit, bounded model
 
 **Date:** 2026-11-10  
-**State:** experimental Rust module; an explicitly bounded UTC→TAI
-conversion is implemented, but a complete authoritative transition dataset,
-UTC text parsing, TT→TDB and independent JPL scientific parity
-remain unimplemented.
+**State:** experimental Rust module; bidirectional UTC↔TAI conversion and
+an opt-in, version-pinned, historically complete IANA 2026b snapshot are
+implemented. A current-after-expiration leap table, UTC text parsing,
+TT→TDB and independent JPL scientific parity remain unimplemented.
 
 ## Why this exists
 
@@ -38,6 +38,11 @@ redistributed under CPAL-1.0.
   immediately preceding day's end.
 - `UtcLeapSchedule::new(first_day, last_day, initial_offset, transitions)`:
   owned, explicitly bounded schedule of caller-supplied transitions.
+- `UtcLeapSchedule::from_iana_2026b()`: load the **historically complete,
+  publicly available 1972–2017 transition series** from a bundled, curated
+  public-domain IANA tzdb-2026b snapshot. Its validity is strictly
+  1972-01-01 through **2026-12-27 inclusive**, since the upstream NTP
+  expiration is midnight on 2026-12-28.
 - `tai_minus_utc_at_day_start(day)`: the integer offset for a covered UTC day.
 - `utc_day_length_seconds(day)`: the duration of a named UTC civil day in
   SI seconds, 86,399 / 86,400 / 86,401 according to a transition at the
@@ -259,6 +264,60 @@ input, and an unusual two-day TAI−UTC offset to ensure the algorithm does
 not assume the two day numbers differ by at most one. These tests do not
 establish DE441/Horizons parity or source authenticity.
 
+## Version-pinned public-domain historical snapshot (IANA tzdb-2026b)
+
+This implementation optionally includes the **complete published leap
+history starting 1972-01-01**, as captured from the public-domain
+[IANA tzdb-2026b leap-seconds.list](https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list).
+The upstream file explicitly labels itself **public domain**. It includes
+28 NTP-stamped offset entries: one initial 1972 baseline (TAI−UTC = 10 s)
+and 27 positive leap-second transitions, ending at 2017-01-01
+(TAI−UTC = 37 s). We have included only those numeric NTP/offset pairs and
+the expiry marker, with VirgoStars-authored provenance comments rather
+than copying the upstream textual explanation. Source attribution is
+maintained separately from the Rust source license CPAL-1.0.
+
+The upstream `#@` field is **4007404800 NTP seconds**, representing the
+file's expiration at **2026-12-28 00:00 UTC**. The Rust factory enforces the
+validity interval from **1972-01-01 00:00 UTC** to the instant **strictly
+before 2026-12-28 00:00 UTC**, and rejects the 28 December UTC date or
+later. Although [IERS Bulletin C 72](https://datacenter.iers.org/data/html/bulletinc-072.html)
+confirms no new leap second at the end of December 2026, the *pinned*
+2026b data should not be extrapolated past its own stated expiry.
+To extend the interval, update and review the source and tests in a
+separate versioned change; do not merely alter a numeric expiry constant.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapSchedule,
+};
+
+let schedule = UtcLeapSchedule::from_iana_2026b()?;
+let last_leap = UtcDay::from_gregorian(2016, 12, 31)?;
+let tai = schedule.utc_to_tai(last_leap, UtcClockTime::new(23, 59, 60.25)?)?;
+let (back_day, back_time) = schedule.tai_to_utc(tai)?;
+assert_eq!(back_day, last_leap);
+assert!((back_time.second() - 60.25).abs() < 1e-8);
+assert!(schedule.tai_minus_utc_at_day_start(
+    UtcDay::from_gregorian(2026, 12, 28)?
+).is_err());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`from_iana_2026b()` rejects malformed snapshot metadata, duplicate or
+unsorted transitions, incorrect initial offset, wrong date boundaries,
+unexpected record count and non-unit changes through the existing
+`UtcLeapSchedule::new` validator. The numeric snapshot is checked against
+the source's declared 28 rows, 1972 baseline, 2017 final offset and
+expiration, with historical regression tests. This is intentionally
+*version-specific*, not a general-purpose untrusted NTP-file importer;
+an arbitrary externally downloaded file must not be passed to this API.
+
+The data snapshot is public domain according to its IANA file notice and
+not relicensed as CPAL; the Rust parser and test code remain under the
+project CPAL-1.0 license. For provenance, see the versioned file's
+source URL and last-update/expiration metadata.
+
 ## Validation and failure behavior
 
 The table constructor rejects:
@@ -294,10 +353,16 @@ The separate Rust `tai_to_tt` function can convert TAI to TT under
 the conventional 32.184-second offset, but TT→TDB requires a distinct,
 documented physical model.
 
-No official IERS transition dataset is embedded or downloaded. The
-Gregorian day-number type is separate from `calendar::JulianDate` because
-UTC cannot be assumed to be a uniform Julian-day scale over leap days.
-The source remains dependency-free and requires no network access.
+A compact **historical IANA snapshot** derived from an official
+public-domain `leap-seconds.list` file is included in
+`crates/ephemeris-core/data/iana-tzdb-2026b-leap-seconds.list`.
+It is *not* an IERS-certified new publication, not a byte-for-byte copy of
+the original file and not a promise of updates. The explicit IANA expiration
+is enforced; **beyond 2026-12-27 the pinned schedule fails**, rather than
+assuming that 37 seconds remains correct. The Gregorian day-number type
+remains separate from `calendar::JulianDate` because UTC cannot be
+assumed to be a uniform Julian-day scale over leap days. No runtime network
+access, external dependency or automatic update is introduced.
 
 ## Checks and CPAL modification record
 
@@ -338,3 +403,12 @@ round-trip/boundary tests to `crates/ephemeris-core/src/utc_leaps.rs`.
 The inverse preserves positive and hypothetical negative leap seconds,
 does not require an embedded external transition table or new dependency,
 and retains CPAL-1.0 Exhibit A / VirgoStars credits. No merge or deploy.
+
+2026-11-10: added the public-domain IANA tzdb-2026b numeric
+leap-second snapshot and `UtcLeapSchedule::from_iana_2026b()`
+with explicit expiration on 2026-12-28 UTC, historical coverage
+1972-01-01 through 2026-12-27, a version-specific metadata/offset gate
+and three deterministic regression tests. Upstream source:
+https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list.
+The public-domain data remains separately attributed, CPAL-1.0 Rust
+source notices and VirgoStars Exhibit B attribution are unchanged.
