@@ -326,6 +326,65 @@ mod tests {
     }
 
     #[test]
+    fn retrograde_longitude_rate_is_continuous_across_zero_meridian() {
+        use crate::coordinates::project_fixed_axes;
+        use std::f64::consts::{PI, TAU};
+
+        // At reception JD the retarded target is just above +X; over the
+        // next 600 s its negative Y velocity crosses the 0/2π longitude
+        // boundary. A raw subtraction of the two angles would give a huge
+        // spurious prograde rate.
+        let state_at = |day: f64| {
+            let epoch = JulianDateTdb(day);
+            let corrected = solve(Body::MarsBarycenter, epoch, |body, t| {
+                let (position, velocity) = match body {
+                    Body::Earth => ([0.0; 3], [0.0; 3]),
+                    Body::MarsBarycenter => (
+                        [100_000_000.0, 0.0, 0.0],
+                        [0.0, -20.0 * SECONDS_PER_DAY, 0.0],
+                    ),
+                    _ => return Err(De441Error::MissingSeries("synthetic meridian body")),
+                };
+                Ok(StateVector {
+                    target: body,
+                    center: Body::SolarSystemBarycenter,
+                    epoch: t,
+                    position_km: std::array::from_fn(|i| position[i] + (t.0 - JD) * velocity[i]),
+                    velocity_km_per_day: velocity,
+                })
+            })
+            .unwrap();
+            project_fixed_axes(
+                &StateVector {
+                    target: corrected.target,
+                    center: Body::Earth,
+                    epoch,
+                    position_km: corrected.position_km,
+                    velocity_km_per_day: corrected.velocity_km_per_day,
+                },
+                0.0,
+            )
+            .unwrap()
+        };
+
+        let h = 600.0 / SECONDS_PER_DAY;
+        let before = state_at(JD - h);
+        let current = state_at(JD);
+        let after = state_at(JD + h);
+        assert!(before.longitude_rad < 0.01);
+        assert!(after.longitude_rad > TAU - 0.01);
+        assert!(current.longitude_rate_rad_per_day < 0.0);
+        let signed_span = (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
+        let numerical_rate = signed_span / (2.0 * h);
+        assert!(
+            (current.longitude_rate_rad_per_day - numerical_rate).abs() < 3.0e-7,
+            "longitude wrap regression: analytic={}, finite={}",
+            current.longitude_rate_rad_per_day,
+            numerical_rate
+        );
+    }
+
+    #[test]
     fn zero_relative_range_and_nonfinite_observer_rate_fail_closed() {
         let zero_range = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
             Ok(StateVector {
