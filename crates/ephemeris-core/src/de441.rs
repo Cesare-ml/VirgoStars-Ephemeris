@@ -284,6 +284,14 @@ impl<R: Read + Seek> De441<R> {
             self.barycentric(target, jd, record_start, &record)?
                 .add_scaled(self.barycentric(center, jd, record_start, &record)?, -1.0)
         };
+        if components
+            .position
+            .iter()
+            .chain(components.velocity.iter())
+            .any(|value| !value.is_finite())
+        {
+            return Err(De441Error::InvalidFile("non-finite relative state"));
+        }
         Ok(StateVector {
             target,
             center,

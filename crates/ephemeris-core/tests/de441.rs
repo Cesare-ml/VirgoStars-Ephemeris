@@ -207,3 +207,46 @@ fn rejects_overflowed_interpolated_state() {
         Err(De441Error::InvalidFile("non-finite interpolated state"))
     ));
 }
+
+#[test]
+fn rejects_overflow_when_subtracting_finite_barycentric_positions() {
+    let mut bytes = fixture();
+    // Each constant barycentric series is finite, but their difference is not.
+    let large = f64::MAX * 0.75;
+    put_f64(&mut bytes, 6000 + 2 * 8, large);
+    put_f64(&mut bytes, 6000 + 3 * 8, 0.0);
+    put_f64(&mut bytes, 6000 + 4 * 8, 0.0);
+    put_f64(&mut bytes, 6000 + 20 * 8, -large);
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    assert!(matches!(
+        eph.state(
+            Body::Mercury,
+            Body::EarthMoonBarycenter,
+            JulianDateTdb(1008.0)
+        ),
+        Err(De441Error::InvalidFile("non-finite relative state"))
+    ));
+}
+
+#[test]
+fn rejects_overflow_when_subtracting_finite_barycentric_velocities() {
+    let mut bytes = fixture();
+    // Two one-day records, with a separate Venus series in unused words.
+    put_f64(&mut bytes, 2660, 1002.0);
+    put_f64(&mut bytes, 2668, 1.0);
+    put_f64(&mut bytes, 6008, 1001.0);
+    put_f64(&mut bytes, 9000, 1001.0);
+    put_f64(&mut bytes, 9008, 1002.0);
+    put_i32(&mut bytes, 2696 + 12, 27);
+    put_i32(&mut bytes, 2696 + 16, 2);
+    put_i32(&mut bytes, 2696 + 20, 1);
+    put_f64(&mut bytes, 6000 + 2 * 8, 0.0);
+    put_f64(&mut bytes, 6000 + 3 * 8, f64::MAX * 0.1875);
+    put_f64(&mut bytes, 6000 + 4 * 8, 0.0);
+    put_f64(&mut bytes, 6000 + 27 * 8, -f64::MAX * 0.375);
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    assert!(matches!(
+        eph.state(Body::Mercury, Body::Venus, JulianDateTdb(1000.25)),
+        Err(De441Error::InvalidFile("non-finite relative state"))
+    ));
+}
