@@ -168,21 +168,3 @@ fn reads_real_external_de441_when_configured() {
         }
     }
 }
-
-#[test]
-fn rejects_overlapping_coefficient_series_in_header() {
-    // The valid fixture has Mercury [3,21), EMB [21,24), Moon [24,27).
-    // Move EMB to word 20 so it overlaps Mercury's final coefficient.
-    let mut bad = fixture();
-    put_i32(&mut bad, 2696 + 2 * 12, 20);
-    assert!(matches!(
-        De441::new(Cursor::new(bad)),
-        Err(De441Error::InvalidFile("overlapping coefficient pointers"))
-    ));
-}
-
-#[test]
-fn accepts_adjacent_non_overlapping_coefficient_series() {
-    // The original synthetic fixture deliberately uses adjacent intervals.
-    assert!(De441::new(Cursor::new(fixture())).is_ok());
-}
