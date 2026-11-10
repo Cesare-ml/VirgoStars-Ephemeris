@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod aberration;
+pub mod apparent_geocentric;
 pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
@@ -39,6 +40,7 @@ pub mod rotating_frame;
 pub mod state;
 pub mod time;
 
+pub use apparent_geocentric::{apparent_geocentric, ApparentGeocentricError, ApparentGeocentricState, swiss_id};
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use earth_orientation::{EclipticNutation, NutationAngles, OrientationError};
 pub use error::{EphemerisError, Result};
