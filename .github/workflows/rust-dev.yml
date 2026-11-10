@@ -56,6 +56,10 @@ jobs:
         run: cargo test --workspace --locked
       - name: Check Clippy warnings
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Check public Rust API documentation
+        run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: '-D warnings'
       - name: Install Windows GNU compilation target
         run: rustup target add x86_64-pc-windows-gnu
       - name: Check Windows GNU cross-target compilation
