@@ -93,6 +93,7 @@ mapping decision, rather than silently inventing a code.
 | `duplicate_version` | Attempt to register an existing version ID |
 | `unknown_version` | Requested table version not registered |
 | `source_digest_mismatch` | Exact-byte source SHA-256 disagrees with expected value |
+| `invalid_wire_record` | Record schema, fields or source metadata contradict the selected UTC↔TAI conversion |
 
 ```rust
 use virgostars_ephemeris_core::utc_leaps::{
@@ -115,12 +116,70 @@ assert_eq!(record.code, "source_digest_mismatch");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-Unit tests enumerate all 17 currently defined Rust error variants,
+Unit tests enumerate all 18 currently defined Rust error variants,
 assert one-to-one code mappings and stable schema identifiers, and
 exercise real catalog failure paths for digest mismatches, unknown
 versions, and invalid positive leap-second clock readings. Future
 language bindings must carry the code explicitly; they must not inspect
 human-readable Rust error text or convert failures to invented defaults.
+
+## Validating a received record before trusting its fields
+
+`UtcTaiRecordV1` exposes public scalar fields so thin future bindings can
+transport them. An external client could therefore accidentally modify,
+combine or reorder fields from different conversions. Rust now exposes
+`UtcLeapCatalog::validate_record_v1(&record)`, which **reconstructs
+the UTC representation from the record's split TAI instant** using
+the exactly selected version and expected SHA-256. It rejects records
+whose UTC/TAI values, schema identifier, TAI scale tag, declared
+provenance or exclusive expiration disagree with the selected catalog.
+
+The validator does **not** silently correct input, select a new table
+version, interpret UTC as a uniform Julian date or authenticate an
+unverified source. An invalid or internally inconsistent record produces
+the new stable machine code `invalid_wire_record`; an unknown version
+still produces `unknown_version` and an incorrect SHA-256 produces
+`source_digest_mismatch`. Invalid split-JD fractions, including NaN
+and infinity, fail closed.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapCatalog, UtcLeapError,
+    VersionedUtcLeapSchedule,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let hash = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+let mut record = catalog.utc_to_tai_record_v1(
+    "iana-tzdb-2026b",
+    hash,
+    UtcDay::from_gregorian(2016, 12, 31)?,
+    UtcClockTime::new(23, 59, 60.5)?,
+)?;
+assert_eq!(catalog.validate_record_v1(&record), Ok(()));
+record.utc_second = 59.5;
+assert_eq!(
+    catalog.validate_record_v1(&record),
+    Err(UtcLeapError::InvalidWireRecord)
+);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+For the inverse UTC second calculation, **absolute tolerance is
+1e-8 seconds** (10 nanoseconds), covering binary64 roundoff from
+division by 86,400. The integer UTC day/hour/minute and all source
+metadata must match exactly, as must the record's schema and `"TAI"`
+scale. The record is validated *against the approved local catalog*;
+this is **internal consistency checking**, not a signed provenance
+token or proof that the numeric astronomical results are correct.
+
+Two new Rust tests exercise a real positive leap in both conversion
+directions and deliberate mutations to schema, time scale, provenance,
+expiry, civil time, day number, fractional TAI JD, NaN, unknown
+version and SHA-256. The 18th stable machine error code is
+`invalid_wire_record`. Existing record fields and prior error codes
+are unchanged.
 
 ## Rust example
 
@@ -242,3 +301,11 @@ conversion directions, rejected missing 23:59:59 second, source-hash
 mismatch, and unchanged historical expiry of IANA 2026b. No actual
 future leap event is asserted; no production binding, ABI, or JSON
 serializer is implied.
+
+2026-11-11: added `UtcLeapCatalog::validate_record_v1` and the
+`invalid_wire_record` machine code, with two tamper/roundtrip
+regression tests. Original v1 record fields and conversion APIs remain
+unchanged; validation is opt-in for incoming records and requires the
+reviewed schedule to be registered locally. No bindings or deployment
+are implied. Source CPAL-1.0 and `Powered by VirgoStars` attribution
+remain unchanged.
