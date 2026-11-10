@@ -30,6 +30,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
 - [Experimental annual-aberration direction in fixed ICRF axes](docs/ANNUAL_ABERRATION.md)
+- [Moving-frame Cartesian velocities and angular-rate safeguards](docs/MOVING_FRAME_VELOCITIES.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)
