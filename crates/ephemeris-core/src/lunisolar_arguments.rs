@@ -49,11 +49,41 @@ pub const MOON_ASCENDING_NODE: usize = 4;
 /// MHB2000 differs by +2 microarcsec for l' and -2 microarcsec for D.
 /// The explicit convention below selects these historical variants.
 const LUNISOLAR_POLYNOMIALS_ARCSEC: [[f64; 5]; 5] = [
-    [485_868.249_036, 1_717_915_923.217_8, 31.879_2, 0.051_635, -0.000_244_70],
-    [1_287_104.793_048, 129_596_581.048_1, -0.553_2, 0.000_136, -0.000_011_49],
-    [335_779.526_232, 1_739_527_262.847_8, -12.751_2, -0.001_037, 0.000_004_17],
-    [1_072_260.703_692, 1_602_961_601.209_0, -6.370_6, 0.006_593, -0.000_031_69],
-    [450_160.398_036, -6_962_890.543_1, 7.472_2, 0.007_702, -0.000_059_39],
+    [
+        485_868.249_036,
+        1_717_915_923.217_8,
+        31.879_2,
+        0.051_635,
+        -0.000_244_70,
+    ],
+    [
+        1_287_104.793_048,
+        129_596_581.048_1,
+        -0.553_2,
+        0.000_136,
+        -0.000_011_49,
+    ],
+    [
+        335_779.526_232,
+        1_739_527_262.847_8,
+        -12.751_2,
+        -0.001_037,
+        0.000_004_17,
+    ],
+    [
+        1_072_260.703_692,
+        1_602_961_601.209_0,
+        -6.370_6,
+        0.006_593,
+        -0.000_031_69,
+    ],
+    [
+        450_160.398_036,
+        -6_962_890.543_1,
+        7.472_2,
+        0.007_702,
+        -0.000_059_39,
+    ],
 ];
 
 /// Choice of the two historically distinct constant terms in the fundamental
@@ -161,19 +191,20 @@ pub fn lunisolar_fundamental_arguments(
             rate_arcsec_per_century = rate_arcsec_per_century * centuries + value_arcsec;
             value_arcsec = value_arcsec * centuries + *coefficient;
         }
-        // The historical series differs only in constant terms; derivatives
-        // are identical. IERS 2010 §5.7.2 explicitly documents this.
+        // Reduce the potentially billion-arcsecond unwrapped polynomial
+        // BEFORE adding the historical 2-microarcsecond constant offsets.
+        // Adding those tiny offsets to the huge unwrapped result would lose
+        // meaningful digits in f64 and damage explicit MHB/IERS parity.
+        let mut reduced_arcsec = value_arcsec.rem_euclid(ARCSECONDS_PER_TURN);
         if convention == LuniSolarConvention::Mhb2000 {
             if index == SUN_MEAN_ANOMALY {
-                value_arcsec += 0.000_002;
+                reduced_arcsec += 0.000_002;
             } else if index == MOON_SUN_ELONGATION {
-                value_arcsec -= 0.000_002;
+                reduced_arcsec -= 0.000_002;
             }
         }
-        angles[index] =
-            value_arcsec.rem_euclid(ARCSECONDS_PER_TURN) * ARCSECOND_TO_RADIAN;
-        rates[index] =
-            rate_arcsec_per_century * ARCSECOND_TO_RADIAN / JULIAN_CENTURY_DAYS;
+        angles[index] = reduced_arcsec.rem_euclid(ARCSECONDS_PER_TURN) * ARCSECOND_TO_RADIAN;
+        rates[index] = rate_arcsec_per_century * ARCSECOND_TO_RADIAN / JULIAN_CENTURY_DAYS;
     }
     Ok(LuniSolarArguments {
         angles_rad: angles,
