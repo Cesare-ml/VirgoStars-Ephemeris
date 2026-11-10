@@ -31,6 +31,7 @@ pub mod error;
 pub mod first_sky;
 pub mod light_time;
 pub mod mean_obliquity;
+pub mod precession_iau2006;
 pub mod state;
 pub mod time;
 
