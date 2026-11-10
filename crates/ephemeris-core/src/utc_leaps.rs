@@ -440,7 +440,9 @@ impl UtcLeapCatalog {
 
     /// Select an exact previously registered version, without fallback.
     pub fn select(&self, version: &str) -> Result<&VersionedUtcLeapSchedule, UtcLeapError> {
-        self.schedules.get(version).ok_or(UtcLeapError::UnknownVersion)
+        self.schedules
+            .get(version)
+            .ok_or(UtcLeapError::UnknownVersion)
     }
 
     /// Convert UTC to TAI using precisely the requested version, preserving
@@ -1388,7 +1390,10 @@ mod tests {
         catalog
             .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
             .unwrap();
-        assert_eq!(catalog.versions().collect::<Vec<_>>(), vec!["iana-tzdb-2026b"]);
+        assert_eq!(
+            catalog.versions().collect::<Vec<_>>(),
+            vec!["iana-tzdb-2026b"]
+        );
         let leap_day = d(2016, 12, 31);
         let result = catalog
             .utc_to_tai(
@@ -1402,9 +1407,7 @@ mod tests {
         assert_eq!(result.expires_utc_day, d(2026, 12, 28));
         assert_eq!(result.value.scale(), TimeScale::Tai);
 
-        let reverse = catalog
-            .tai_to_utc("iana-tzdb-2026b", result.value)
-            .unwrap();
+        let reverse = catalog.tai_to_utc("iana-tzdb-2026b", result.value).unwrap();
         assert_eq!(reverse.version, result.version);
         assert_eq!(reverse.provenance, result.provenance);
         assert_eq!(reverse.expires_utc_day, result.expires_utc_day);
@@ -1437,8 +1440,7 @@ mod tests {
         assert_eq!(
             catalog.tai_to_utc(
                 "iana-tzdb-2026c",
-                JulianDate::new(d(2017, 1, 1).julian_day_number(), 0.5, TimeScale::Tai)
-                    .unwrap()
+                JulianDate::new(d(2017, 1, 1).julian_day_number(), 0.5, TimeScale::Tai).unwrap()
             ),
             Err(UtcLeapError::UnknownVersion)
         );
