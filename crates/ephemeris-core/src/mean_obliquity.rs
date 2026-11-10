@@ -89,9 +89,7 @@ impl Error for MeanObliquityError {}
 /// The derivative is obtained analytically from the same polynomial using
 /// simultaneous Horner recurrences. This scalar angle alone must not be
 /// mistaken for a fully specified ecliptic-of-date orientation in the ICRF.
-pub fn mean_obliquity_iau2006(
-    tt_epoch: JulianDate,
-) -> Result<MeanObliquity, MeanObliquityError> {
+pub fn mean_obliquity_iau2006(tt_epoch: JulianDate) -> Result<MeanObliquity, MeanObliquityError> {
     if tt_epoch.scale() != TimeScale::Tt {
         return Err(MeanObliquityError::WrongTimeScale);
     }
