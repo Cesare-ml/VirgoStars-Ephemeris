@@ -59,6 +59,69 @@ an **experimental design target**. No serializer has been published.
 Source fields are currently public Rust fields, not an independently
 guaranteed stable binary ABI.
 
+## Machine-readable failure contract v1
+
+The Rust module also exposes `UTC_TAI_ERROR_V1_SCHEMA`
+(`"virgostars.utc-tai-error.v1"`) and
+`UtcTaiErrorV1 { schema, code }`. Convert a failed
+`UtcLeapError` with `UtcTaiErrorV1::from(error)` before passing
+an error to a future thin Python or TypeScript binding.
+
+The error contract is **implemented in Rust**; no language binding,
+JSON serialization, or stable production API is claimed. These codes
+are lowercase ASCII snake_case, designed to remain independent of
+Rust `Display` wording or localization. The enum match is exhaustive:
+adding a new low-level `UtcLeapError` variant requires an explicit
+mapping decision, rather than silently inventing a code.
+
+| Machine code | Meaning |
+| --- | --- |
+| `invalid_gregorian_date` | Gregorian UTC date outside valid calendar fields |
+| `before_1972` | Unsupported pre-1972 UTC regime |
+| `invalid_coverage` | Malformed declared schedule interval |
+| `invalid_initial_offset` | Invalid initial TAI−UTC offset |
+| `invalid_transition` | Invalid transition date, coverage, or ordering |
+| `invalid_offset_step` | Offset jump not equal to +1/−1 second |
+| `outside_coverage` | Conversion attempted beyond approved table coverage |
+| `invalid_clock_time` | Invalid structured UTC clock components |
+| `clock_time_outside_day` | Syntactically valid clock time absent on the named UTC day |
+| `unrepresentable_tai` | Split TAI JD cannot represent the instant |
+| `wrong_input_scale` | Input JD is not tagged TAI |
+| `invalid_pinned_leap_data` | Bundled, version-pinned snapshot failed validation |
+| `invalid_reviewed_snapshot` | Caller-supplied curated numeric snapshot invalid |
+| `invalid_snapshot_provenance` | Missing or invalid declared version/source metadata |
+| `duplicate_version` | Attempt to register an existing version ID |
+| `unknown_version` | Requested table version not registered |
+| `source_digest_mismatch` | Exact-byte source SHA-256 disagrees with expected value |
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+use virgostars_ephemeris_core::utc_wire::{
+    UtcTaiErrorV1, UTC_TAI_ERROR_V1_SCHEMA,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let day = UtcDay::from_gregorian(2017, 1, 1)?;
+let clock = UtcClockTime::new(0, 0, 0.0)?;
+let failure = catalog
+    .utc_to_tai_record_v1("iana-tzdb-2026b", "wrong-digest", day, clock)
+    .unwrap_err();
+let record = UtcTaiErrorV1::from(failure);
+assert_eq!(record.schema, UTC_TAI_ERROR_V1_SCHEMA);
+assert_eq!(record.code, "source_digest_mismatch");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Unit tests enumerate all 17 currently defined Rust error variants,
+assert one-to-one code mappings and stable schema identifiers, and
+exercise real catalog failure paths for digest mismatches, unknown
+versions, and invalid positive leap-second clock readings. Future
+language bindings must carry the code explicitly; they must not inspect
+human-readable Rust error text or convert failures to invented defaults.
+
 ## Rust example
 
 ```rust
@@ -109,7 +172,7 @@ TAI−UTC was 36 seconds and the next UTC midnight uses 37 seconds.
 
 ### Deterministic acceptance gates
 
-Four Rust tests in `crates/ephemeris-core/src/utc_wire.rs` check:
+Four record tests and two error-code tests in `crates/ephemeris-core/src/utc_wire.rs` check:
 1. Independent date anchors, the 2016 positive leap, and agreement
    of record metadata in UTC→TAI and TAI→UTC directions.
 2. Record fields remain owned after dropping the catalog.
@@ -117,7 +180,8 @@ Four Rust tests in `crates/ephemeris-core/src/utc_wire.rs` check:
    non-TAI reverse input fail before producing any record.
 4. The first excluded day of IANA 2026b (2026-12-28) is rejected.
 
-This confirms scalar **software consistency** only. The tests do not
+Two more tests cover the complete machine-readable error codebook and
+actual fail-closed conversion failures. This confirms scalar **software consistency** only. The tests do not
 validate an astronomical TT↔TDB model, NAIF/JPL vectors, leap-source
 authenticity, or real production bindings.
 
@@ -138,3 +202,10 @@ tzdb-2026b numerical source is unchanged. Required
 **Powered by VirgoStars** (https://www.virgostars.it/) attribution
 and `LICENSE` / `NOTICE` remain unchanged. No new dependencies,
 network calls, merge, deploy or production modifications.
+
+2026-11-10 follow-up: introduced the additive, exhaustive
+`UtcTaiErrorV1` mapping and `UTC_TAI_ERROR_V1_SCHEMA` constant,
+with two deterministic Rust tests. The error codes are part of the
+experimental Rust-only contract and do not imply deployed PyO3/WASM
+bindings. CPAL-1.0 notices, IANA public-domain data provenance and
+`Powered by VirgoStars` attribution remain unchanged.
