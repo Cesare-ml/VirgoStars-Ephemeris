@@ -140,11 +140,11 @@ def parse_table(data: str, *, official: bool) -> LeapTable:
     from_ntp(expiry)
 
     previous_stamp, previous_offset = records[0]
-    for stamp, offset in records:
+    for index, (stamp, offset) in enumerate(records):
         stamp_date = from_ntp(stamp)
         if stamp % 86400 or stamp_date.day != 1:
             raise LeapAuditError("transition is not at UTC midnight on month start")
-        if stamp != BASE_NTP:
+        if index > 0:
             if stamp <= previous_stamp:
                 raise LeapAuditError("duplicate or out-of-order leap transition")
             if abs(offset - previous_offset) != 1:
