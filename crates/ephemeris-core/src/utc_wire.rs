@@ -327,7 +327,10 @@ mod tests {
         assert!((before.tai_midnight_fraction * 86_400.0 - 35.5).abs() < 1e-8);
         assert!((after.tai_midnight_fraction * 86_400.0 - 36.0).abs() < 1e-8);
         assert_eq!(after.utc_second, 0.0);
-        assert_eq!(before.leap_expires_utc_day_number, after.leap_expires_utc_day_number);
+        assert_eq!(
+            before.leap_expires_utc_day_number,
+            after.leap_expires_utc_day_number
+        );
 
         for (clock, tai_record) in [
             (UtcClockTime::new(23, 59, 58.5).unwrap(), &before),
@@ -390,8 +393,7 @@ mod tests {
         .unwrap();
         let mut catalog = UtcLeapCatalog::new();
         catalog.register(future).unwrap();
-        let old_pinned_digest =
-            "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+        let old_pinned_digest = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
         let day = UtcDay::from_gregorian(2026, 12, 31).unwrap();
         assert!(matches!(
             catalog.utc_to_tai_record_v1(
