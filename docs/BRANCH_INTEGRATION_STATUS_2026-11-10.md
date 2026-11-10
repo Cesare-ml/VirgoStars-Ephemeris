@@ -13,7 +13,7 @@ This is a dated engineering snapshot, **not a claim of a released or validated e
 
 | Branch | Snapshot |
 | --- | --- |
-| `main` | CPAL-1.0 license, AGENTS.md, research JavaScript SPK/IAU examples, tests, documentation and CI. **No Cargo workspace or shipping Rust implementation** at the time of this snapshot. |
+| `main` | CPAL-1.0, AGENTS.md, research JavaScript SPK/IAU prototypes and tests. **Before the Rust integration:** no Cargo workspace. **After integration:** an experimental classic-DE441 Rust workspace is present, but no validated shipping engine. |
 | `dev/ephemeris` | Experimental Cargo workspace with a **classic JPL DE441 binary** reader, interpolation, numerical primitives and synthetic/integration regression tests. This reader does **not** parse NAIF SPK `.bsp` files. |
 | Feature / historic PR branches | May contain obsolete or stacked implementations. Evaluate diff, base and duplicate work before merging. |
 
@@ -21,9 +21,9 @@ In development, [PR #22](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/
 [PR #26](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/26) added proleptic calendar and split Julian-date conversions and was merged into `dev/ephemeris` on 2026-11-10.
 [PR #27](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/27) added synthetic finite-difference velocity consistency tests and was merged into `dev/ephemeris` the same day.
 
-These **development-branch merges are not merges to `main`**. They do not prove independent NASA/JPL numerical accuracy. Historical [PR #2](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/2) describes licensing as undecided; the canonical decision is already recorded in `LICENSE`, `NOTICE` and `docs/LICENSING_AND_CREDITS.md`.
+PR #26 and #27 first merged into **`dev/ephemeris`**; their files are transferred to `main` only through a separately reviewed Rust integration PR. Neither step proves independent NASA/JPL numerical accuracy. Historical [PR #2](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/2) describes licensing as undecided; the canonical decision is already recorded in `LICENSE`, `NOTICE` and `docs/LICENSING_AND_CREDITS.md`.
 
-## Remaining gates for the Rust integration PR to `main`
+## Integration review checklist and continuing scientific release gates
 
 1. **Reconcile diverged Git history deliberately.** Preserve `main`'s research code, third-party notices, AGENTS.md, CPAL license and licensing guidance while adding the Rust workspace. Do not resolve README/ADR conflicts by indiscriminate `ours`/`theirs`, rewrite `main`, or drop tests.
 2. **Review scope and provenance.** Confirm `Cargo.lock`, `.gitignore`, ERFA notices and tests. Generated `target/` artifacts and external `.bsp`/`.eph` data must not be committed.
