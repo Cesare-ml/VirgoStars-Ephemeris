@@ -58,6 +58,10 @@ pub enum UtcLeapError {
     WrongInputScale,
     /// Bundled version-pinned IANA leap-second history is malformed.
     InvalidPinnedLeapData,
+    /// Invalid or out-of-bounds reviewed numeric NTP leap snapshot.
+    InvalidReviewedSnapshot,
+    /// Version identifier or mandatory provenance field is missing/unsafe.
+    InvalidSnapshotProvenance,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -77,6 +81,8 @@ impl fmt::Display for UtcLeapError {
             }
             Self::WrongInputScale => write!(f, "TAI input time scale is required"),
             Self::InvalidPinnedLeapData => write!(f, "invalid pinned IANA leap-second snapshot"),
+            Self::InvalidReviewedSnapshot => write!(f, "invalid reviewed leap-second snapshot"),
+            Self::InvalidSnapshotProvenance => write!(f, "invalid leap-second snapshot provenance"),
         }
     }
 }
@@ -193,6 +199,188 @@ pub struct UtcLeapSchedule {
     last_day: UtcDay,
     initial_tai_minus_utc_seconds: i32,
     transitions: Vec<UtcLeapTransition>,
+}
+
+/// Immutable, provenance-bearing wrapper around a validated UTC leap schedule.
+///
+/// A caller's \`version\` and \`provenance\` are declared metadata, **not**
+/// independent proof of authenticity. Candidate files must first pass the
+/// offline official-source SHA-1 and historical-drift audit, and be reviewed.
+///
+/// Each instance owns its schedule and does not mutate other loaded versions.
+/// The historic \`UtcLeapSchedule::from_iana_2026b()\` remains unchanged.
+#[derive(Clone, Debug)]
+pub struct VersionedUtcLeapSchedule {
+    version: String,
+    provenance: String,
+    expires_utc_day: UtcDay,
+    schedule: UtcLeapSchedule,
+}
+
+impl VersionedUtcLeapSchedule {
+    /// Construct a named, immutable view of the repository's pinned IANA
+    /// tzdb-2026b series, without changing the legacy schedule API.
+    pub fn iana_2026b() -> Result<Self, UtcLeapError> {
+        Ok(Self {
+            version: "iana-tzdb-2026b".to_owned(),
+            provenance: "https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list"
+                .to_owned(),
+            expires_utc_day: UtcDay::from_gregorian(2026, 12, 28)?,
+            schedule: UtcLeapSchedule::from_iana_2026b()?,
+        })
+    }
+
+    /// Load **reviewed, curated numeric** NTP leap data from memory.
+    ///
+    /// This accepts the format produced by the offline update proposal:
+    /// comments, exactly one \`#@ EXPIRY_NTP\` marker, followed by ascending
+    /// \`NTP_MIDNIGHT TAI_MINUS_UTC_SECONDS\` rows starting at 1972-01-01.
+    /// NTP seconds are counted from 1900-01-01 UTC. Each leap transition
+    /// must occur at a month boundary and change TAI-UTC by exactly +/-1.
+    ///
+    /// It does not verify an official IANA \`#h\` checksum or authenticate the
+    /// asserted \`version\`/\`provenance\`. Those checks belong to the separate
+    /// offline source audit *before* a curator approves this input. There is
+    /// no filesystem, network, clock, or global "current version" access.
+    pub fn from_reviewed_numeric_snapshot(
+        version: &str,
+        provenance: &str,
+        source: &str,
+    ) -> Result<Self, UtcLeapError> {
+        const FIRST_NTP: i64 = 2_272_060_800; // 1972-01-01 UTC
+        const MAX_INPUT_BYTES: usize = 128 * 1024;
+        const MAX_RECORDS: usize = 1024;
+        let safe_version = !version.is_empty()
+            && version.len() <= 80
+            && version
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'));
+        if !safe_version || provenance.trim().is_empty() || provenance.len() > 1024 {
+            return Err(UtcLeapError::InvalidSnapshotProvenance);
+        }
+        if source.len() > MAX_INPUT_BYTES {
+            return Err(UtcLeapError::InvalidReviewedSnapshot);
+        }
+
+        let mut expiry: Option<i64> = None;
+        let mut records: Vec<(i64, i32)> = Vec::new();
+        for line in source.lines() {
+            let text = line.trim();
+            if let Some(value) = text.strip_prefix("#@") {
+                if expiry.is_some() {
+                    return Err(UtcLeapError::InvalidReviewedSnapshot);
+                }
+                let value = value
+                    .trim()
+                    .parse::<i64>()
+                    .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+                expiry = Some(value);
+            } else if text.is_empty() || text.starts_with('#') {
+                continue;
+            } else {
+                let mut parts = text.split_whitespace();
+                let ntp = parts
+                    .next()
+                    .ok_or(UtcLeapError::InvalidReviewedSnapshot)?
+                    .parse::<i64>()
+                    .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+                let offset = parts
+                    .next()
+                    .ok_or(UtcLeapError::InvalidReviewedSnapshot)?
+                    .parse::<i32>()
+                    .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+                if parts.next().is_some() || records.len() >= MAX_RECORDS {
+                    return Err(UtcLeapError::InvalidReviewedSnapshot);
+                }
+                records.push((ntp, offset));
+            }
+        }
+
+        let expires_ntp = expiry.ok_or(UtcLeapError::InvalidReviewedSnapshot)?;
+        if records.first() != Some(&(FIRST_NTP, 10))
+            || expires_ntp <= FIRST_NTP
+            || expires_ntp % 86_400 != 0
+            || records.last().is_none_or(|row| row.0 >= expires_ntp)
+        {
+            return Err(UtcLeapError::InvalidReviewedSnapshot);
+        }
+        let first = UtcDay::from_gregorian(1972, 1, 1)?;
+        let ntp_day = |ntp: i64| -> Result<UtcDay, UtcLeapError> {
+            let delta = ntp
+                .checked_sub(FIRST_NTP)
+                .ok_or(UtcLeapError::InvalidReviewedSnapshot)?;
+            if delta < 0 || delta % 86_400 != 0 {
+                return Err(UtcLeapError::InvalidReviewedSnapshot);
+            }
+            let day_number = first
+                .julian_day_number()
+                .checked_add(delta / 86_400)
+                .ok_or(UtcLeapError::InvalidReviewedSnapshot)?;
+            Ok(UtcDay {
+                julian_day_number: day_number,
+            })
+        };
+        let expires_utc_day = ntp_day(expires_ntp)?;
+        // Confirm both boundaries lie in the supported Gregorian calendar,
+        // not merely in the machine's i64 range.
+        let expiry_date = JulianDate::new(
+            expires_utc_day.julian_day_number,
+            0.0,
+            TimeScale::Tai,
+        )
+        .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+        expiry_date
+            .to_calendar(Calendar::ProlepticGregorian)
+            .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+        let last_day = UtcDay {
+            julian_day_number: expires_utc_day
+                .julian_day_number
+                .checked_sub(1)
+                .ok_or(UtcLeapError::InvalidReviewedSnapshot)?,
+        };
+        let mut transitions = Vec::with_capacity(records.len() - 1);
+        let mut previous_ntp = FIRST_NTP;
+        for (ntp, offset) in records.into_iter().skip(1) {
+            if ntp <= previous_ntp {
+                return Err(UtcLeapError::InvalidReviewedSnapshot);
+            }
+            previous_ntp = ntp;
+            let day = ntp_day(ntp)?;
+            if day > last_day {
+                return Err(UtcLeapError::InvalidReviewedSnapshot);
+            }
+            transitions.push(UtcLeapTransition {
+                effective_utc_day: day,
+                tai_minus_utc_seconds: offset,
+            });
+        }
+        let schedule = UtcLeapSchedule::new(first, last_day, 10, transitions)
+            .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+        Ok(Self {
+            version: version.to_owned(),
+            provenance: provenance.to_owned(),
+            expires_utc_day,
+            schedule,
+        })
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn provenance(&self) -> &str {
+        &self.provenance
+    }
+
+    /// UTC midnight at which coverage ends, **exclusive**.
+    pub fn expires_utc_day(&self) -> UtcDay {
+        self.expires_utc_day
+    }
+
+    /// Borrow the validated schedule without changing its provenance.
+    pub fn schedule(&self) -> &UtcLeapSchedule {
+        &self.schedule
+    }
 }
 
 impl UtcLeapSchedule {
@@ -970,6 +1158,118 @@ mod tests {
         assert_eq!(
             schedule.tai_to_utc(first_expired_tai),
             Err(UtcLeapError::OutsideCoverage)
+        );
+    }
+
+    #[test]
+    fn versioned_2026b_matches_legacy_schedule_and_keeps_metadata() {
+        let pinned = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        assert_eq!(pinned.version(), "iana-tzdb-2026b");
+        assert!(pinned.provenance().contains("tzdb-2026b"));
+        assert_eq!(pinned.expires_utc_day(), d(2026, 12, 28));
+        let legacy = UtcLeapSchedule::from_iana_2026b().unwrap();
+        for day in [d(1972, 1, 1), d(1972, 7, 1), d(2017, 1, 1), d(2026, 12, 27)] {
+            assert_eq!(
+                pinned.schedule().tai_minus_utc_at_day_start(day),
+                legacy.tai_minus_utc_at_day_start(day)
+            );
+        }
+        assert_eq!(
+            pinned.schedule().tai_minus_utc_at_day_start(d(2026, 12, 28)),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+    }
+
+    #[test]
+    fn reviewed_new_expiry_keeps_original_version_immutable() {
+        let old = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list")
+            .replace("#@ 4007404800", "#@ 4023388800");
+        let new = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "reviewed-2027a",
+            "synthetic-test-only; not an official IANA release",
+            &source,
+        )
+        .unwrap();
+        assert_eq!(new.expires_utc_day(), d(2027, 7, 1));
+        assert_eq!(
+            old.schedule().tai_minus_utc_at_day_start(d(2027, 1, 1)),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        assert_eq!(new.schedule().tai_minus_utc_at_day_start(d(2027, 1, 1)), Ok(37));
+        assert_eq!(
+            new.schedule().tai_minus_utc_at_day_start(d(2027, 7, 1)),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        assert_eq!(old.version(), "iana-tzdb-2026b");
+        assert_eq!(new.version(), "reviewed-2027a");
+    }
+
+    #[test]
+    fn hypothetical_future_leap_is_explicit_and_does_not_change_old_data() {
+        let old = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list")
+            .replace("#@ 4007404800", "#@ 4023388800");
+        let revised = format!("{source}4007750400 38\n");
+        let future = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "hypothetical-2027",
+            "synthetic-test-only",
+            &revised,
+        )
+        .unwrap();
+        let leap_day = d(2026, 12, 31);
+        assert_eq!(future.schedule().utc_day_length_seconds(leap_day), Ok(86_401));
+        let clock = UtcClockTime::new(23, 59, 60.5).unwrap();
+        let tai = future.schedule().utc_to_tai(leap_day, clock).unwrap();
+        let (back_day, back_clock) = future.schedule().tai_to_utc(tai).unwrap();
+        assert_eq!(back_day, leap_day);
+        assert!((back_clock.second() - 60.5).abs() < 1e-8);
+        assert_eq!(
+            old.schedule().utc_day_length_seconds(leap_day),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+    }
+
+    #[test]
+    fn reviewed_snapshot_rejects_malformed_dates_and_metadata() {
+        let good = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let load = |data: &str| {
+            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                "reviewed-test",
+                "synthetic-test-only",
+                data,
+            )
+        };
+        for bad in [
+            good.replace("#@ 4007404800", ""),
+            good.replace("#@ 4007404800", "#@ 4007404800\n#@ 4007404800"),
+            good.replace("2272060800 10", "2272060800 11"),
+            good.replace("2287785600 11", "2287785601 11"),
+            good.replace("2287785600 11", "2287785600 13"),
+            good.replace("2287785600 11", "2272060800 11"),
+            good.replace("#@ 4007404800", "#@ 3692217600"),
+            good.replace("#@ 4007404800", "#@ 4007404801"),
+        ] {
+            assert_eq!(
+                load(&bad).unwrap_err(),
+                UtcLeapError::InvalidReviewedSnapshot
+            );
+        }
+        for version in ["", "../bad", "bad version"] {
+            assert_eq!(
+                VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                    version, "reviewed-source", good
+                )
+                .unwrap_err(),
+                UtcLeapError::InvalidSnapshotProvenance
+            );
+        }
+        assert_eq!(
+            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                "reviewed-2026b", "", good
+            )
+            .unwrap_err(),
+            UtcLeapError::InvalidSnapshotProvenance
         );
     }
 
