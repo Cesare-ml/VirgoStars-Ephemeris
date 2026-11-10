@@ -15,7 +15,8 @@ Inspected `Cesare-ml/virgo-stars` `backend/services/astrology/func.js` and the e
 | P1 | `swe_calc_ut` with `SEFLG_HELCTR` or `SEFLG_EQUATORIAL` | Correct heliocentric and equatorial modes, field names, optional speeds | Not ready; **do not** apply 6-field polar comparator blindly |
 | P1 | `swe_calc(jd,SE_ECL_NUT,0)` | Mean/true obliquity and nutation; distinguish TT from UT | Not ready; existing backend passes JD built from civil UTC |
 | P1 | `swe_azalt` | South-west Swiss azimuth, true/apparent altitude; refraction model | Not ready; backend rotates azimuth 180° |
-| P1/P2 | `swe_revjul`, `swe_rise_trans`, `swe_fixstar_ut`, `swe_fixstar_mag`, eclipse routines | Calendar reverse, events, fixed stars, eclipses | Later, distinct per-function contracts |
+| P1 | `swe_revjul(jd,SE_GREG_CAL)` | Reverse JD to year/month/day and decimal hour; Rust `calendar.rs` | **15 independent Swiss calendar values tested** in Rust (no time-scale conversion) |
+| P1/P2 | `swe_rise_trans`, `swe_fixstar_ut`, `swe_fixstar_mag`, eclipse routines | Events, fixed stars, eclipses | Later, distinct per-function contracts |
 
 These entries are *test targets*, not exposed Rust APIs. See [ADR-0001](ADR-0001-RUST-CORE-AND-BINDINGS.md): the only astronomical engine is Rust, with future thin bindings; zodiac/house logic belongs in `astrological-functions`.
 
@@ -25,7 +26,21 @@ These entries are *test targets*, not exposed Rust APIs. See [ADR-0001](ADR-0001
 
 This is a real *calendar arithmetic* reference from a **different Swiss binding/version**, not yet a test of the backend's exact Node `swisseph@0.5.17` ABI. That backend version must be confirmed independently at adapter integration. Swiss `swe_julday` does not validate leap-second clocks, convert time scales, or produce planetary positions.
 
-Run with: `cargo test --workspace --locked swiss_backend_julday` (or the entire workspace). Normal CI requires **no Swiss binary, `.se1` file, private backend repository or network**.
+Run with: `cargo test --workspace --locked --test swiss_backend_julday` (or the entire workspace). Normal CI requires **no Swiss binary, `.se1` file, private backend repository or network**.
+
+### Reverse JD reference added — 2026-11-10
+
+The legacy backend also calls `swe_revjul` in planetary-hour and event workflows. The existing Rust `JulianDate::to_calendar` supports this **calendar arithmetic** without a new astronomy API. Added `crates/ephemeris-core/tests/fixtures/swiss_backend_revjul.tsv`, independently recorded with installed `pyswisseph 2.10.03` `swe_revjul(jd, SE_GREG_CAL/SE_JUL_CAL)`, and `crates/ephemeris-core/tests/swiss_backend_revjul.rs`.
+
+The **15 golden cases** cover the same modern epochs as the forward-Julian reference plus J2000 noon, a fractional second, 1900/2100, Gregorian and Julian 1582 dates, astronomical year 0, and negative/zero Julian days. Assertions compare the exact year/month/day, compare Swiss's decimal-hour result within **3e-7 hours = 1.08 milliseconds**, and preserve the caller's explicit `TimeScale::Ut1` label. The time tolerance is deliberately conservative for the single-`f64` JD representation: it is **not** a claim about submillisecond UTC or leap-second precision, and no UTC-to-UT1 conversion is implied.
+
+Reproduce just this Rust integration test with:
+
+```bash
+cargo test --workspace --locked --test swiss_backend_revjul
+```
+
+These 15 reverse-date values are actual outputs of a separately installed Swiss Python binding, but do **not** certify the future Node 0.5.17 compatibility adapter, event times, planetary positions or time-scale conversion.
 
 ## 2. Optional Node 0.5.17 positional oracle (external, never CI)
 
@@ -70,7 +85,7 @@ node scripts/compare-swiss-backend.mjs swiss-reference.json rust-candidate.json 
 node --test test/compare-swiss-backend.test.mjs
 ```
 
-**No production tolerances are approved yet.** Choose and document budgets *before* claiming scientific parity, using independent JPL Horizons/NAIF validation, data version, time model, nutation/precession, light-time, aberration, frame and observer configuration. Do not widen thresholds just to turn red tests green. Node comparator tests use **synthetic values only** to exercise edge cases, not to claim astronomy accuracy.
+**No production planetary tolerances are approved yet.** Choose and document budgets *before* claiming scientific parity, using independent JPL Horizons/NAIF validation, data version, time model, nutation/precession, light-time, aberration, frame and observer configuration. Do not widen thresholds just to turn red tests green. Node comparator tests use **synthetic values only** to exercise edge cases, not to claim astronomy accuracy.
 
 ## 4. Planned acceptance grid
 
