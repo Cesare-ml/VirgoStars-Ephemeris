@@ -68,12 +68,14 @@ function verifySwissDataManifest(source) {
     manifest.files.length > 0, 'reference: missing SHA-256 dataset manifest');
   let previous = null;
   for (const entry of manifest.files) {
-    ensure(typeof entry?.name === 'string' && /^[^/\\\\]+\\.se1$/i.test(entry.name),
+    ensure(typeof entry?.name === 'string' && entry.name.length > 4 &&
+      entry.name.toLowerCase().endsWith('.se1') &&
+      !entry.name.includes('/') && !entry.name.includes(String.fromCharCode(92)),
       'reference: invalid Swiss .se1 manifest filename');
     ensure(previous === null || previous < entry.name,
       'reference: manifest filenames must be unique and sorted');
     ensure(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0 &&
-      /^[0-9a-f]{64}$/.test(entry.sha256),
+      typeof entry.sha256 === 'string' && /^[0-9a-f]{64}$/.test(entry.sha256),
       `reference: invalid file size or SHA-256 for ${entry.name}`);
     previous = entry.name;
   }
