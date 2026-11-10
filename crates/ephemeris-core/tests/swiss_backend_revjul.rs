@@ -48,9 +48,8 @@ fn backend_swe_revjul_matches_recorded_swiss_reference() {
             .unwrap()
             .to_calendar(calendar)
             .unwrap();
-        let actual_hour = f64::from(actual.hour)
-            + f64::from(actual.minute) / 60.0
-            + actual.second / 3600.0;
+        let actual_hour =
+            f64::from(actual.hour) + f64::from(actual.minute) / 60.0 + actual.second / 3600.0;
 
         assert_eq!(
             (actual.year, actual.month, actual.day),
