@@ -14,12 +14,15 @@ fn atomic_offset_roundtrips_across_midnight_and_negative_epochs() {
 
     for day in days {
         for second in seconds {
-            let original =
-                JulianDate::new(day, second / SECONDS_PER_DAY, TimeScale::Tai).unwrap();
+            let original = JulianDate::new(day, second / SECONDS_PER_DAY, TimeScale::Tai).unwrap();
             let tt = tai_to_tt(original).unwrap();
             assert_eq!(tt.scale(), TimeScale::Tt);
             let recovered = tt_to_tai(tt).unwrap();
-            assert_eq!(recovered.day_number(), original.day_number(), "day={day}, second={second}");
+            assert_eq!(
+                recovered.day_number(),
+                original.day_number(),
+                "day={day}, second={second}"
+            );
             let drift_seconds =
                 (recovered.midnight_fraction() - original.midnight_fraction()) * SECONDS_PER_DAY;
             assert!(
@@ -33,12 +36,14 @@ fn atomic_offset_roundtrips_across_midnight_and_negative_epochs() {
 #[test]
 fn tt_to_tai_roundtrip_preserves_midnight_boundary() {
     for second in [0.0, 0.001, 32.184, 86_399.999] {
-        let original =
-            JulianDate::new(2_451_545, second / SECONDS_PER_DAY, TimeScale::Tt).unwrap();
+        let original = JulianDate::new(2_451_545, second / SECONDS_PER_DAY, TimeScale::Tt).unwrap();
         let recovered = tai_to_tt(tt_to_tai(original).unwrap()).unwrap();
         assert_eq!(recovered.day_number(), original.day_number());
         let drift_seconds =
             (recovered.midnight_fraction() - original.midnight_fraction()) * SECONDS_PER_DAY;
-        assert!(drift_seconds.abs() < 1e-8, "second={second}, drift={drift_seconds} s");
+        assert!(
+            drift_seconds.abs() < 1e-8,
+            "second={second}, drift={drift_seconds} s"
+        );
     }
 }
