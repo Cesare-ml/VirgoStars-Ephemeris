@@ -28,6 +28,53 @@ use crate::utc_leaps::{UtcClockTime, UtcDay, UtcLeapCatalog, UtcLeapError, Versi
 /// reinterpreting existing fields when future bindings are introduced.
 pub const UTC_TAI_RECORD_V1_SCHEMA: &str = "virgostars.utc-tai.v1";
 
+/// Identifier of the experimental stable error-code schema.
+///
+/// Unlike Rust's human-readable `Display` strings, these short codes
+/// are designed for future thin bindings and non-localized machine use.
+pub const UTC_TAI_ERROR_V1_SCHEMA: &str = "virgostars.utc-tai-error.v1";
+
+/// Language-neutral machine-readable error for UTC/TAI conversion.
+///
+/// This does not carry personally identifiable data, raw source files,
+/// or any implicit fallback. The `code` is a stable ASCII snake_case
+/// identifier; human-readable messages remain the caller's responsibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UtcTaiErrorV1 {
+    pub schema: &'static str,
+    pub code: &'static str,
+}
+
+impl From<UtcLeapError> for UtcTaiErrorV1 {
+    fn from(value: UtcLeapError) -> Self {
+        // Exhaustive match: adding a new Rust error requires intentionally
+        // deciding the corresponding machine-facing v1 code.
+        let code = match value {
+            UtcLeapError::InvalidGregorianDate => "invalid_gregorian_date",
+            UtcLeapError::Before1972 => "before_1972",
+            UtcLeapError::InvalidCoverage => "invalid_coverage",
+            UtcLeapError::InvalidInitialOffset => "invalid_initial_offset",
+            UtcLeapError::InvalidTransition => "invalid_transition",
+            UtcLeapError::InvalidOffsetStep => "invalid_offset_step",
+            UtcLeapError::OutsideCoverage => "outside_coverage",
+            UtcLeapError::InvalidClockTime => "invalid_clock_time",
+            UtcLeapError::ClockTimeOutsideDay => "clock_time_outside_day",
+            UtcLeapError::UnrepresentableTai => "unrepresentable_tai",
+            UtcLeapError::WrongInputScale => "wrong_input_scale",
+            UtcLeapError::InvalidPinnedLeapData => "invalid_pinned_leap_data",
+            UtcLeapError::InvalidReviewedSnapshot => "invalid_reviewed_snapshot",
+            UtcLeapError::InvalidSnapshotProvenance => "invalid_snapshot_provenance",
+            UtcLeapError::DuplicateVersion => "duplicate_version",
+            UtcLeapError::UnknownVersion => "unknown_version",
+            UtcLeapError::SourceDigestMismatch => "source_digest_mismatch",
+        };
+        Self {
+            schema: UTC_TAI_ERROR_V1_SCHEMA,
+            code,
+        }
+    }
+}
+
 /// Language-neutral scalar record for one UTC ↔ TAI instant.
 ///
 /// UTC fields describe a named Gregorian civil day and clock, **not** a
@@ -230,6 +277,77 @@ mod tests {
             catalog.tai_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, tt),
             Err(UtcLeapError::WrongInputScale)
         ));
+    }
+
+    #[test]
+    fn all_leap_error_variants_have_unique_stable_machine_codes() {
+        use std::collections::HashSet;
+
+        let expected = [
+            (UtcLeapError::InvalidGregorianDate, "invalid_gregorian_date"),
+            (UtcLeapError::Before1972, "before_1972"),
+            (UtcLeapError::InvalidCoverage, "invalid_coverage"),
+            (UtcLeapError::InvalidInitialOffset, "invalid_initial_offset"),
+            (UtcLeapError::InvalidTransition, "invalid_transition"),
+            (UtcLeapError::InvalidOffsetStep, "invalid_offset_step"),
+            (UtcLeapError::OutsideCoverage, "outside_coverage"),
+            (UtcLeapError::InvalidClockTime, "invalid_clock_time"),
+            (UtcLeapError::ClockTimeOutsideDay, "clock_time_outside_day"),
+            (UtcLeapError::UnrepresentableTai, "unrepresentable_tai"),
+            (UtcLeapError::WrongInputScale, "wrong_input_scale"),
+            (UtcLeapError::InvalidPinnedLeapData, "invalid_pinned_leap_data"),
+            (UtcLeapError::InvalidReviewedSnapshot, "invalid_reviewed_snapshot"),
+            (UtcLeapError::InvalidSnapshotProvenance, "invalid_snapshot_provenance"),
+            (UtcLeapError::DuplicateVersion, "duplicate_version"),
+            (UtcLeapError::UnknownVersion, "unknown_version"),
+            (UtcLeapError::SourceDigestMismatch, "source_digest_mismatch"),
+        ];
+        let mut distinct = HashSet::new();
+        for (variant, code) in expected {
+            let record = UtcTaiErrorV1::from(variant);
+            assert_eq!(record.schema, UTC_TAI_ERROR_V1_SCHEMA);
+            assert_eq!(record.code, code);
+            assert!(record
+                .code
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b == b'_' || b.is_ascii_digit()));
+            assert!(distinct.insert(record.code), "duplicate machine error code");
+        }
+        assert_eq!(distinct.len(), 17);
+    }
+
+    #[test]
+    fn checked_conversion_failures_map_to_documented_machine_codes() {
+        let catalog = catalog();
+        let day = UtcDay::from_gregorian(2017, 1, 1).unwrap();
+        let clock = UtcClockTime::new(0, 0, 0.0).unwrap();
+
+        let digest_error = catalog
+            .utc_to_tai_record_v1("iana-tzdb-2026b", "wrong", day, clock)
+            .unwrap_err();
+        assert_eq!(
+            UtcTaiErrorV1::from(digest_error).code,
+            "source_digest_mismatch"
+        );
+        let version_error = catalog
+            .utc_to_tai_record_v1("unknown", PINNED_SHA, day, clock)
+            .unwrap_err();
+        assert_eq!(
+            UtcTaiErrorV1::from(version_error).code,
+            "unknown_version"
+        );
+        let leap_error = catalog
+            .utc_to_tai_record_v1(
+                "iana-tzdb-2026b",
+                PINNED_SHA,
+                day,
+                UtcClockTime::new(23, 59, 60.0).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(
+            UtcTaiErrorV1::from(leap_error).code,
+            "clock_time_outside_day"
+        );
     }
 
     #[test]
