@@ -775,17 +775,11 @@ mod tests {
             schedule.tai_to_utc(one_second),
             Err(UtcLeapError::OutsideCoverage)
         );
-        let outside = schedule
-            .utc_to_tai(last, UtcClockTime::new(23, 59, 59.0).unwrap())
-            .unwrap();
-        let after_end = JulianDate::new(
-            outside.day_number() + 1,
-            (37.0 / 86_400.0),
-            TimeScale::Tai,
-        )
-        .unwrap();
+        let end_boundary =
+            JulianDate::new(last.julian_day_number() + 1, 37.0 / 86_400.0, TimeScale::Tai)
+                .unwrap();
         assert_eq!(
-            schedule.tai_to_utc(after_end),
+            schedule.tai_to_utc(end_boundary),
             Err(UtcLeapError::OutsideCoverage)
         );
         let tt = crate::time::tai_to_tt(first_tai).unwrap();
