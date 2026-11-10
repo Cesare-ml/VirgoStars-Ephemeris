@@ -909,38 +909,14 @@ mod tests {
     fn iana_2026b_snapshot_has_full_history_and_fixed_expiration() {
         let schedule = UtcLeapSchedule::from_iana_2026b().unwrap();
         assert_eq!(schedule.transitions.len(), 27);
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(1972, 1, 1)),
-            Ok(10)
-        );
-        assert_eq!(
-            schedule.utc_day_length_seconds(d(1972, 6, 30)),
-            Ok(86_401)
-        );
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(1972, 7, 1)),
-            Ok(11)
-        );
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(1980, 1, 1)),
-            Ok(19)
-        );
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(2000, 1, 1)),
-            Ok(32)
-        );
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(2017, 1, 1)),
-            Ok(37)
-        );
-        assert_eq!(
-            schedule.utc_day_length_seconds(d(2016, 12, 31)),
-            Ok(86_401)
-        );
-        assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(2026, 12, 27)),
-            Ok(37)
-        );
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(1972, 1, 1)), Ok(10));
+        assert_eq!(schedule.utc_day_length_seconds(d(1972, 6, 30)), Ok(86_401));
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(1972, 7, 1)), Ok(11));
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(1980, 1, 1)), Ok(19));
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(2000, 1, 1)), Ok(32));
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(2017, 1, 1)), Ok(37));
+        assert_eq!(schedule.utc_day_length_seconds(d(2016, 12, 31)), Ok(86_401));
+        assert_eq!(schedule.tai_minus_utc_at_day_start(d(2026, 12, 27)), Ok(37));
         assert_eq!(
             schedule.tai_minus_utc_at_day_start(d(2026, 12, 28)),
             Err(UtcLeapError::OutsideCoverage)
@@ -985,8 +961,7 @@ mod tests {
         let last_tai = schedule.utc_to_tai(last, midnight).unwrap();
         assert_eq!(schedule.tai_to_utc(last_tai).unwrap().0, last);
         let first_expired_tai =
-            JulianDate::new(next.julian_day_number(), 37.0 / 86_400.0, TimeScale::Tai)
-                .unwrap();
+            JulianDate::new(next.julian_day_number(), 37.0 / 86_400.0, TimeScale::Tai).unwrap();
         assert_eq!(
             schedule.tai_to_utc(first_expired_tai),
             Err(UtcLeapError::OutsideCoverage)
