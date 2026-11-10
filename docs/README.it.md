@@ -2,7 +2,7 @@
 
 **Stato: primo prototipo isolato realizzato; accuratezza astronomica su kernel JPL reali NON ancora verificata.**
 
-Il repository pubblico `virgostars-ephemeris` sviluppa un motore originale di effemeridi astronomiche, con codice originale sotto **CPAL-1.0** (attribuzione VirgoStars secondo LICENSE e NOTICE), senza usare codice Swiss Ephemeris. **Rust è il solo motore astronomico canonico**: su `main` sono presenti prototipi JavaScript sperimentali; il workspace Rust e il lettore binario classico DE441 sono in sviluppo su `dev/ephemeris`, in attesa di integrazione verificata. I binding WASM/TypeScript e Python sono previsti, non ancora disponibili.
+Il repository pubblico `virgostars-ephemeris` sviluppa un motore originale di effemeridi astronomiche, con codice originale sotto **CPAL-1.0** (attribuzione VirgoStars secondo LICENSE e NOTICE), senza usare codice Swiss Ephemeris. **Rust è il solo motore astronomico canonico**: su `main` rimangono prototipi JavaScript sperimentali; sono presenti anche il workspace Rust e il lettore **classico binario DE441**, integrati da `dev/ephemeris` come componenti sperimentali. Quest'ultimo non legge file SPK `.bsp` e non è scientificamente validato. I binding WASM/TypeScript e Python sono previsti, non ancora disponibili.
 
 La parola «equivalente» rappresenta **l'obiettivo di copertura delle funzioni necessarie** a VirgoStars: non significa che esista già un sostituto, né che tutti gli algoritmi/risultati Swiss saranno identici. La precisione va verificata con dati indipendenti (JPL Horizons/NAIF), tenendo conto di modello, epoca, coordinate e correzioni utilizzate.
 
