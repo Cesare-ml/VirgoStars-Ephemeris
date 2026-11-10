@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 pub mod chebyshev;
+pub mod coordinates;
 pub mod de441;
 pub mod error;
 pub mod state;
