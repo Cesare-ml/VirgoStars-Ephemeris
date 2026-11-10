@@ -15,6 +15,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { angularDistanceDeg, compareRecordedCases } from '../scripts/compare-swiss-backend.mjs';
+import swissData from '../scripts/swiss-reference-data.cjs';
+
+const { manifestDigest } = swissData;
 
 const fields = {
   longitude: 359.999, latitude: 0.2, distance: 1.1,
@@ -34,9 +37,15 @@ const resultContract = {
   rateUnit: 'per_day',
 };
 const input = { jdUt: 2461355.5, bodyId: 4, flags: 258 };
+const syntheticFiles = [{ name: 'sepl_18.se1', bytes: 4, sha256: 'a'.repeat(64) }];
+const digest = manifestDigest(syntheticFiles);
 const reference = {
   schemaVersion: 1,
-  source: { binding: 'swisseph@0.5.17', ephemeris: 'SWIEPH', dataId: 'synthetic-only', resultContract },
+  source: {
+    binding: 'swisseph@0.5.17', ephemeris: 'SWIEPH', dataId: digest,
+    dataManifest: { algorithm: 'sha256', digest, files: syntheticFiles },
+    resultContract,
+  },
   cases: [{
     id: 'mars-wrap-synthetic', function: 'swe_calc_ut', input,
     effectiveFlags: 258, output: fields,
@@ -176,4 +185,33 @@ test('maximum errors identify the worst sample across multiple bodies/dates', ()
   assert.equal(report.failures[0].id, 'another-date-body-4');
   assert.equal(report.maxErrors.longitude.id, 'another-date-body-4');
   assert.ok(Math.abs(report.maxErrors.longitude.delta - 0.05) < 1e-9);
+});
+
+test('Swiss reference manifest is required and validated against its digest', () => {
+  const altered = structuredClone(reference);
+  delete altered.source.dataManifest;
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /missing SHA-256 dataset manifest/);
+
+  altered.source.dataManifest = structuredClone(reference.source.dataManifest);
+  altered.source.dataManifest.files[0].sha256 = 'b'.repeat(64);
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /manifest digest and dataId disagree/);
+
+  altered.source.dataManifest = structuredClone(reference.source.dataManifest);
+  altered.source.dataId = 'c'.repeat(64);
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /manifest digest and dataId disagree/);
+});
+
+test('Swiss reference manifest rejects unsafe filenames and duplicate entries', () => {
+  const altered = structuredClone(reference);
+  altered.source.dataManifest.files[0].name = '../sepl_18.se1';
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /invalid Swiss .se1 manifest filename/);
+
+  altered.source.dataManifest = structuredClone(reference.source.dataManifest);
+  altered.source.dataManifest.files.push(structuredClone(altered.source.dataManifest.files[0]));
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /manifest filenames must be unique and sorted/);
 });
