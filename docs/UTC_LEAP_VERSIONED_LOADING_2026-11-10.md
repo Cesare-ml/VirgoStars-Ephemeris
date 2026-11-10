@@ -220,6 +220,64 @@ verification, review sign-off or source preservation. The upstream
 `#h` is a distinct SHA-1 calculated over the official NTP numeric
 tokens, *not* the SHA-256 of the curated VirgoStars snapshot.
 
+## Opt-in conversion with a verified expected SHA-256
+
+For applications that need a reproducible **source-checked** conversion
+contract, the catalog now additionally exposes:
+
+- `utc_to_tai_checked(version, expected_sha256, day, clock)`
+- `tai_to_utc_checked(version, expected_sha256, tai)`
+
+These methods **require** both an explicit version ID and an expected
+lowercase SHA-256 for **each** conversion. They reuse the same conversions
+as their nonchecked counterparts but first call
+`select_matching_sha256`. Consequently an unknown version fails with
+`UnknownVersion`, and a wrong digest fails with
+`SourceDigestMismatch` **before** testing time-scale or date coverage.
+Successful results contain the selected fingerprint alongside the
+existing version, provenance and expiry.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let expected = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+let tai = catalog.utc_to_tai_checked(
+    "iana-tzdb-2026b",
+    expected,
+    UtcDay::from_gregorian(2016, 12, 31)?,
+    UtcClockTime::new(23, 59, 60.5)?,
+)?;
+let back = catalog.tai_to_utc_checked(
+    "iana-tzdb-2026b", expected, tai.value,
+)?;
+assert_eq!(tai.source_sha256, expected);
+assert_eq!(back.source_sha256, expected);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Both operations remain local, deterministic and free of network access.
+They provide a convenient primitive for future **thin Python and
+TypeScript/WASM bindings**; those bindings are not implemented by this
+PR. If an application stores its results, it should persist the
+version, SHA-256, actual input values/time scale, output fields and
+reviewed provenance. Time values should not be represented as a
+single floating-point Julian Day if the split-date precision matters.
+
+The digest comparison alone is not proof of an authentic IANA publisher
+or scientific accuracy, particularly when the expected value has been
+copied from the same unverified input. Independent source acquisition,
+the offline IANA SHA-1 audit, and human review remain prerequisites for
+a genuinely trusted expected digest.
+
+Three additional deterministic Rust tests check a successful
+positive-leap-second roundtrip on the pinned SHA-256; rejection of
+unknown versions and invalid hashes in **both** directions; and
+rejection of a table reusing an old version label with changed bytes.
+
 ## Tests and compatibility
 
 Four additional deterministic Rust tests cover:
@@ -284,3 +342,11 @@ SHA-256. New original, dependency-free `fingerprint.rs` and standard
 reference-vector tests are covered by the existing CPAL-1.0 source
 license; the public-domain IANA numeric snapshot is unmodified.
 No network access, automatic acceptance, hidden defaults or merge.
+
+2026-11-10: added explicit per-call digest-checked UTC↔TAI catalog
+conversions (`utc_to_tai_checked`, `tai_to_utc_checked`) with three
+additional deterministic fail-closed tests. Kept the existing
+nonchecked API compatible for experimental callers and left the
+pinned IANA data unchanged. No Python or TypeScript runtime binding
+is claimed, and the independent JPL scientific validation gate remains
+open. Source CPAL-1.0 and required VirgoStars credits unchanged.
