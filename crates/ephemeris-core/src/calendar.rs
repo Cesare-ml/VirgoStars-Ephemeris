@@ -21,6 +21,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::de441::JulianDateTdb;
+use crate::time::{TdbSecondsPastJ2000, J2000_JD_TDB};
 
 pub const MIN_YEAR: i32 = -20_000;
 pub const MAX_YEAR: i32 = 20_000;
@@ -218,6 +219,29 @@ impl JulianDate {
         Ok((self.day_number as f64 - 0.5, self.midnight_fraction))
     }
 
+    /// Express an already-TDB split Julian date as TDB seconds past J2000.
+    ///
+    /// Unlike converting to a single `f64` JD first, this keeps the integral
+    /// day offset and sub-day fraction separate until after multiplication by
+    /// 86,400 seconds/day. This avoids the avoidable microsecond-scale
+    /// quantization caused by collapsing modern Julian dates first.
+    ///
+    /// No UTC, TAI, TT or UT1 conversion is performed. The result is still a
+    /// single `f64` second count, whose resolution decreases far from J2000.
+    /// The time scale must already be TDB.
+    pub fn to_tdb_seconds_past_j2000(
+        self,
+    ) -> Result<TdbSecondsPastJ2000, CalendarError> {
+        if self.scale != TimeScale::Tdb {
+            return Err(CalendarError::WrongTimeScale);
+        }
+        let (midnight_jd, midnight_fraction) = self.parts()?;
+        let integral_seconds = (midnight_jd - J2000_JD_TDB) * SECONDS_PER_DAY;
+        let fractional_seconds = midnight_fraction * SECONDS_PER_DAY;
+        TdbSecondsPastJ2000::new(integral_seconds + fractional_seconds)
+            .map_err(|_| CalendarError::UnrepresentableTime)
+    }
+
     /// Convert an already-TDB date to the DE441 reader's single-f64 epoch.
     /// Adding the parts loses sub-millisecond precision near modern dates.
     /// No time-scale conversion is performed.
@@ -271,5 +295,73 @@ impl JulianDate {
             second,
             scale: self.scale,
         })
+    }
+}
+
+
+#[cfg(test)]
+mod tdb_seconds_tests {
+    use super::*;
+
+    #[test]
+    fn j2000_noon_is_zero_and_following_midnight_is_half_day() {
+        let j2000 = JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap();
+        assert_eq!(j2000.to_tdb_seconds_past_j2000().unwrap().value(), 0.0);
+
+        let midnight = JulianDate::new(2_451_546, 0.0, TimeScale::Tdb).unwrap();
+        assert_eq!(
+            midnight.to_tdb_seconds_past_j2000().unwrap().value(),
+            43_200.0
+        );
+    }
+
+    #[test]
+    fn split_date_preserves_subsecond_detail_lost_by_single_julian_day() {
+        let epoch = JulianDate::new(
+            2_451_545,
+            0.5 + 0.25 / SECONDS_PER_DAY,
+            TimeScale::Tdb,
+        )
+        .unwrap();
+        let accurate = epoch.to_tdb_seconds_past_j2000().unwrap().value();
+        assert!((accurate - 0.25).abs() < 1e-9);
+
+        // This is only a demonstration of the lossy f64-JD conversion, not
+        // an alternate astronomical algorithm or time-scale transformation.
+        let (day, fraction) = epoch.parts().unwrap();
+        let collapsed = (day + fraction - J2000_JD_TDB) * SECONDS_PER_DAY;
+        assert!((collapsed - 0.25).abs() > 1e-6);
+    }
+
+    #[test]
+    fn modern_epoch_keeps_day_offset_and_fraction_signs() {
+        let modern = JulianDate::new(2_460_000, 0.625, TimeScale::Tdb).unwrap();
+        let expected = (2_460_000.0 - J2000_JD_TDB) * SECONDS_PER_DAY
+            + 0.125 * SECONDS_PER_DAY;
+        let et = modern.to_tdb_seconds_past_j2000().unwrap().value();
+        assert!((et - expected).abs() < 1e-6);
+        assert!(et > 0.0);
+
+        let before = JulianDate::new(2_451_544, 0.5, TimeScale::Tdb).unwrap();
+        assert_eq!(
+            before.to_tdb_seconds_past_j2000().unwrap().value(),
+            -SECONDS_PER_DAY
+        );
+    }
+
+    #[test]
+    fn rejects_non_tdb_scales_and_unrepresentable_days() {
+        for scale in [TimeScale::Tai, TimeScale::Tt, TimeScale::Ut1] {
+            let epoch = JulianDate::new(2_451_545, 0.5, scale).unwrap();
+            assert_eq!(
+                epoch.to_tdb_seconds_past_j2000(),
+                Err(CalendarError::WrongTimeScale)
+            );
+        }
+        let out_of_range = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
+        assert_eq!(
+            out_of_range.to_tdb_seconds_past_j2000(),
+            Err(CalendarError::YearOutOfRange)
+        );
     }
 }
