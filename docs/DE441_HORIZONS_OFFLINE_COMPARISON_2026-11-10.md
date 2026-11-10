@@ -146,6 +146,22 @@ Source modification: `crates/ephemeris-core/examples/validate_horizons.rs`,
 2026-11-10, within the existing CPAL-1.0 Exhibit A notice; no JPL data
 or new dependencies were introduced.
 
+
+## Cross-platform validator regression gate — 2026-11-10
+
+The Rust CI workflow explicitly invokes
+`cargo test --workspace --example validate_horizons --locked` on **Linux,
+Windows and macOS**, independently of `cargo test --workspace`. Standard
+workspace tests alone did not execute the example's internal `#[test]`
+regressions. In particular, a failed example assertion on Linux could have
+coincided with green Windows/macOS workspace tests. Each platform now runs the
+same strict parser and synthetic DE441 end-to-end checks.
+
+These are **offline, synthetic validation-harness tests** and do not fetch or
+compare NASA/JPL vectors. No new dependencies, secrets, licensed datasets
+or release/deployment steps are introduced. This is a CI-only modification
+to `.github/workflows/rust-dev.yml` dated 2026-11-10.
+
 ## Evidence required before claiming a passing scientific gate
 
 Record the exact commit SHA and toolchain, binary file name, original source,
