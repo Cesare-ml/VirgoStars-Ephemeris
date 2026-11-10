@@ -127,7 +127,8 @@ pub fn nutation_matrix_from_angles(
     if values.iter().any(|value| !value.is_finite()) {
         return Err(NutationMatrixError::NonFiniteInput);
     }
-    if !(0.0..std::f64::consts::FRAC_PI_2).contains(&angles.mean_obliquity_rad)
+    if angles.mean_obliquity_rad <= 0.0
+        || angles.mean_obliquity_rad >= std::f64::consts::FRAC_PI_2
         || angles.delta_psi_rad.abs() >= 0.1
         || angles.delta_epsilon_rad.abs() >= 0.1
     {
@@ -142,20 +143,19 @@ pub fn nutation_matrix_from_angles(
             angles.mean_obliquity_rad,
             angles.mean_obliquity_rate_rad_per_tt_day,
         ),
-        passive_z(
-            -angles.delta_psi_rad,
-            -angles.delta_psi_rate_rad_per_tt_day,
-        ),
+        passive_z(-angles.delta_psi_rad, -angles.delta_psi_rate_rad_per_tt_day),
         passive_x(
             -(angles.mean_obliquity_rad + angles.delta_epsilon_rad),
-            -(angles.mean_obliquity_rate_rad_per_tt_day
-                + angles.delta_epsilon_rate_rad_per_tt_day),
+            -(angles.mean_obliquity_rate_rad_per_tt_day + angles.delta_epsilon_rate_rad_per_tt_day),
         ),
     ];
     let mut rotation: Matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let mut derivative: Matrix = [[0.0; 3]; 3];
     for (factor, factor_rate) in factors {
-        derivative = add(multiply(factor_rate, rotation), multiply(factor, derivative));
+        derivative = add(
+            multiply(factor_rate, rotation),
+            multiply(factor, derivative),
+        );
         rotation = multiply(factor, rotation);
     }
     Ok(NutationMatrix {
