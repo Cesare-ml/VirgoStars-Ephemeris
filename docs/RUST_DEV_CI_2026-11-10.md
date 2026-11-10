@@ -5,6 +5,7 @@ The owner explicitly authorized GitHub Actions for this public repository on 202
 - Workflow: `.github/workflows/rust-dev.yml`.
 - Scope: Rust changes to `dev/ephemeris`, its pull requests and manual dispatch.
 - Gates: `cargo fmt --all -- --check`, `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+- Cross-platform compile check: install the `x86_64-pc-windows-gnu` Rust target and run `cargo check --workspace --locked --target x86_64-pc-windows-gnu` on Ubuntu. This checks Windows-target Rust type checking without executing Windows binaries or performing a full native Windows linker/build; it does not prove Windows runtime compatibility.
 - Security: read-only repository token; no secrets, artifacts, third-party data downloads, automatic merges, deployments or package publication.
 - Rust tests are synthetic or local regression tests; they **do not establish** agreement with NASA/JPL kernels or Horizons.
 - Coordinate this gate with PR #13 during integration to avoid permanently duplicating Rust CI jobs on `main` and `dev/ephemeris`.
