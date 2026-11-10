@@ -17,19 +17,19 @@
 // Optional, manually executed Swiss REFERENCE recorder (never part of Rust core/CI).
 // Requires a separately licensed swisseph@0.5.17 Node module and local ephemeris.
 // Nothing from the Swiss implementation or data files is committed here.
-const { statSync } = require('node:fs');
 const path = require('node:path');
+const { swissDataManifest } = require('./swiss-reference-data.cjs');
 
 function fail(message) { throw new Error(message); }
-function run() {
+async function run() {
   const ephePath = process.env.ASTRODIENST_EPHE_PATH;
-  const dataId = process.env.SWISS_EPHE_DATA_ID;
-  if (!ephePath || !statSync(path.resolve(ephePath)).isDirectory()) {
-    fail('ASTRODIENST_EPHE_PATH must point to an existing Swiss data directory');
+  if (!ephePath) {
+    fail('ASTRODIENST_EPHE_PATH must point to a Swiss data directory');
   }
-  if (!dataId || !dataId.trim()) {
-    fail('Set SWISS_EPHE_DATA_ID to a reproducible dataset manifest/hash identifier');
-  }
+  // Compute the full external .se1 directory snapshot before any calculations.
+  // This avoids an unverifiable user-supplied data identifier; no data is
+  // downloaded, bundled, logged by absolute path, or committed.
+  const manifest = await swissDataManifest(ephePath);
 
   const swe = require('swisseph');
   const installedVersion = require('swisseph/package.json').version;
@@ -80,7 +80,8 @@ function run() {
     source: {
       binding: 'swisseph@0.5.17',
       ephemeris: 'SWIEPH',
-      dataId,
+      dataId: manifest.digest,
+      dataManifest: manifest,
       generatedAtUtc: new Date().toISOString(),
       inputConvention: 'Gregorian UTC wall clock passed as UT JD (legacy backend)',
       positionConvention: 'apparent geocentric true ecliptic/equinox of date',
@@ -97,4 +98,7 @@ function run() {
     cases,
   }, null, 2) + '\n');
 }
-try { run(); } catch (error) { console.error(error.message); process.exitCode = 1; }
+run().catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
