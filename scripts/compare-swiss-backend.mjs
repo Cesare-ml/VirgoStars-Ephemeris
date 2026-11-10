@@ -14,6 +14,9 @@
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import swissData from './swiss-reference-data.cjs';
+
+const { manifestDigest } = swissData;
 
 // Offline-only comparison of independently exported JSON files.
 // No Swiss library, external kernel or Rust binding is loaded by this tool.
@@ -59,6 +62,26 @@ function requireResultContract(source, label) {
   }
 }
 
+function verifySwissDataManifest(source) {
+  const manifest = source?.dataManifest;
+  ensure(manifest?.algorithm === 'sha256' && Array.isArray(manifest?.files) &&
+    manifest.files.length > 0, 'reference: missing SHA-256 dataset manifest');
+  let previous = null;
+  for (const entry of manifest.files) {
+    ensure(typeof entry?.name === 'string' && /^[^/\\\\]+\\.se1$/i.test(entry.name),
+      'reference: invalid Swiss .se1 manifest filename');
+    ensure(previous === null || previous < entry.name,
+      'reference: manifest filenames must be unique and sorted');
+    ensure(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0 &&
+      /^[0-9a-f]{64}$/.test(entry.sha256),
+      `reference: invalid file size or SHA-256 for ${entry.name}`);
+    previous = entry.name;
+  }
+  const expected = manifestDigest(manifest.files);
+  ensure(manifest.digest === expected && source.dataId === expected,
+    'reference: Swiss file manifest digest and dataId disagree');
+}
+
 function indexCases(document, label) {
   ensure(document?.schemaVersion === 1, `${label}: unsupported schemaVersion`);
   ensure(Array.isArray(document.cases) && document.cases.length > 0, `${label}: no cases`);
@@ -98,6 +121,7 @@ export function compareRecordedCases(reference, candidate, tolerances) {
   ensure(candidate?.source?.engine === 'VirgoStars-Ephemeris',
     'candidate must identify the independently implemented engine');
   requireResultContract(reference?.source, 'reference');
+  verifySwissDataManifest(reference?.source);
   requireResultContract(candidate?.source, 'candidate');
 
   for (const field of FIELDS) {
