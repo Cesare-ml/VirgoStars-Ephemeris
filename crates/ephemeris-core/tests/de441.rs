@@ -169,7 +169,6 @@ fn reads_real_external_de441_when_configured() {
     }
 }
 
-
 /// A reader that opens normally but fails on later reads, modelling removable
 /// media or a damaged stream without requiring a real DE441 file.
 struct FailAfterOpen {
@@ -180,10 +179,7 @@ struct FailAfterOpen {
 impl std::io::Read for FailAfterOpen {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.fail_reads.get() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "injected record read failure",
-            ));
+            return Err(std::io::Error::other("injected record read failure"));
         }
         std::io::Read::read(&mut self.inner, buf)
     }
