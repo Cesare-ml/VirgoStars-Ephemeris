@@ -165,6 +165,13 @@ digest of the exact bytes** in each curated numeric source:
   expected lowercase digest. An unknown version is still rejected
   without fallback.
 
+The currently pinned **989-byte** IANA tzdb-2026b *curated* file has
+SHA-256 `e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd`,
+independently calculated with Python's standard-library `hashlib.sha256`.
+A Rust regression asserts this exact digest to detect changes to the
+pinned bytes. This is **not** the SHA-256 of the upstream IANA original
+file; the curated extract differs in comments and formatting.
+
 This fingerprint covers the complete **curated snapshot bytes**, including
 `#@` expiration, numeric rows, whitespace and comments. Two files with
 the same numeric transitions but different comments or line endings
