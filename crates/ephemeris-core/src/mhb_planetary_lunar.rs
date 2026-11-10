@@ -153,8 +153,7 @@ impl MhbPlanetaryLunarArguments {
         ]);
         for i in 0..9 {
             phase += f64::from(multipliers[5 + i]) * planetary_angles_rad[i];
-            rate += f64::from(multipliers[5 + i])
-                * planetary_rates_rad_per_tdb_day[i];
+            rate += f64::from(multipliers[5 + i]) * planetary_rates_rad_per_tdb_day[i];
         }
         if !phase.is_finite() || !rate.is_finite() {
             return Err(MhbPlanetaryLunarError::ArithmeticOverflow);
