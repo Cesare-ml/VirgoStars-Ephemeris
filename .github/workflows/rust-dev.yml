@@ -23,6 +23,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/audit_iana_leap_seconds.py'
+      - 'scripts/test_audit_iana_leap_seconds.py'
       - '.github/workflows/rust-dev.yml'
   push:
     branches: [dev/ephemeris]
@@ -30,6 +32,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/audit_iana_leap_seconds.py'
+      - 'scripts/test_audit_iana_leap_seconds.py'
       - '.github/workflows/rust-dev.yml'
   workflow_dispatch:
 
@@ -50,6 +54,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Check offline IANA leap-file maintenance tests
+        run: python3 -m unittest discover -s scripts -p 'test_audit_iana_leap_seconds.py' -v
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run deterministic workspace tests
