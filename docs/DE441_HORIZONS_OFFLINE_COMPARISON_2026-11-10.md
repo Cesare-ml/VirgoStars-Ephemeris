@@ -131,6 +131,21 @@ The corresponding source modification was made on 2026-11-10 under the
 existing CPAL-1.0 Exhibit A notice. No external JPL data, new dependencies
 or scientific results were introduced.
 
+## Malformed reference regression fix — 2026-11-10
+
+The strict offline CSV parser already rejects repeated metadata keys,
+metadata after numeric rows, non-finite vector fields, and incomplete or
+extra vector columns. The regression for these cases initially contained
+literal `\\n` sequences instead of line endings, so its string replacement
+never changed the baseline reference. The corrected test uses actual
+newline escapes and a fixture-mutation helper that asserts its search
+text exists before replacing it. This tests the **existing parser contract**;
+it is not a change to accepted scientific input or numerical behavior.
+
+Source modification: `crates/ephemeris-core/examples/validate_horizons.rs`,
+2026-11-10, within the existing CPAL-1.0 Exhibit A notice; no JPL data
+or new dependencies were introduced.
+
 ## Evidence required before claiming a passing scientific gate
 
 Record the exact commit SHA and toolchain, binary file name, original source,
