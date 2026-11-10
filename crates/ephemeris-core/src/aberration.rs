@@ -99,8 +99,8 @@ pub fn annual_aberration_icrf(
         return Err(AberrationError::ArithmeticOverflow);
     }
     let direction = source_position_km.map(|component| component / range);
-    let beta = earth_barycentric_velocity_km_per_day
-        .map(|velocity| velocity / SPEED_OF_LIGHT_KM_PER_DAY);
+    let beta =
+        earth_barycentric_velocity_km_per_day.map(|velocity| velocity / SPEED_OF_LIGHT_KM_PER_DAY);
     let speed = beta[0].hypot(beta[1]).hypot(beta[2]);
     if speed >= 1.0 {
         return Err(AberrationError::SuperluminalObserver);
@@ -112,11 +112,7 @@ pub fn annual_aberration_icrf(
     // 1/gamma avoids infinities at high but subluminal speeds. 1+dot
     // is strictly positive since |beta| < 1, even for anti-parallel rays.
     let inverse_gamma = (1.0 - speed * speed).sqrt();
-    let dot = direction
-        .iter()
-        .zip(beta)
-        .map(|(n, b)| n * b)
-        .sum::<f64>();
+    let dot = direction.iter().zip(beta).map(|(n, b)| n * b).sum::<f64>();
     let denominator = 1.0 + dot;
     let boost = 1.0 + dot / (1.0 + inverse_gamma);
     if !denominator.is_finite() || denominator <= 0.0 {
@@ -125,9 +121,7 @@ pub fn annual_aberration_icrf(
     let transformed = std::array::from_fn::<_, 3, _>(|i| {
         (inverse_gamma * direction[i] + boost * beta[i]) / denominator
     });
-    let norm = transformed[0]
-        .hypot(transformed[1])
-        .hypot(transformed[2]);
+    let norm = transformed[0].hypot(transformed[1]).hypot(transformed[2]);
     if !norm.is_finite() || norm == 0.0 {
         return Err(AberrationError::ArithmeticOverflow);
     }
