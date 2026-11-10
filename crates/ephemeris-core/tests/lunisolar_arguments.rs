@@ -19,12 +19,16 @@ use std::f64::consts::{PI, TAU};
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
 use virgostars_ephemeris_core::lunisolar_arguments::{
-    lunisolar_fundamental_arguments, LuniSolarError, MOON_ASCENDING_NODE,
+    lunisolar_fundamental_arguments, LuniSolarArguments, LuniSolarConvention, LuniSolarError, MOON_ASCENDING_NODE,
     MOON_ARGUMENT_OF_LATITUDE, MOON_MEAN_ANOMALY, MOON_SUN_ELONGATION, SUN_MEAN_ANOMALY,
 };
 
 fn tdb_jd(value: f64) -> JulianDate {
     JulianDate::from_f64(value, TimeScale::Tdb).unwrap()
+}
+
+fn iers_arguments(epoch: JulianDate) -> Result<LuniSolarArguments, LuniSolarError> {
+    lunisolar_fundamental_arguments(epoch, LuniSolarConvention::Iers2010)
 }
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
@@ -46,7 +50,7 @@ fn matches_all_five_independent_erfa_fundamental_argument_fixtures() {
     // l' and D. IERS §5.7.2 explicitly notes their rounded c0 convention.
     // This test compares the same numeric T, NOT a TT-to-TDB conversion.
     let epoch = tdb_jd(2_451_545.0 + 0.8 * 36_525.0);
-    let actual = lunisolar_fundamental_arguments(epoch).unwrap();
+    let actual = iers_arguments(epoch).unwrap();
     let reference_radians = [
         5.132_369_751_108_684,
         6.226_797_973_505_507,
@@ -62,17 +66,47 @@ fn matches_all_five_independent_erfa_fundamental_argument_fixtures() {
 }
 
 #[test]
+fn mhb2000_rounding_is_explicit_and_does_not_change_rates() {
+    // IERS 2010 section 5.7.2: original MHB2000 IAU 2000A series uses
+    // fixed l' and D offsets of +2 and -2 microarcseconds respectively.
+    // ERFA standalone Falp03/Fad03 instead implement unrounded Eq. 5.43.
+    let epoch = tdb_jd(2_451_545.0 + 0.8 * 36_525.0);
+    let iers = iers_arguments(epoch).unwrap();
+    let mhb = lunisolar_fundamental_arguments(epoch, LuniSolarConvention::Mhb2000).unwrap();
+    let microarcsecond_radians = PI / (180.0 * 3_600.0) * 1e-6;
+    for index in 0..5 {
+        let expected_microarcseconds = if index == SUN_MEAN_ANOMALY {
+            2.0
+        } else if index == MOON_SUN_ELONGATION {
+            -2.0
+        } else {
+            0.0
+        };
+        near(
+            shortest_angle_difference(mhb.angles_rad[index], iers.angles_rad[index]),
+            expected_microarcseconds * microarcsecond_radians,
+            2e-15,
+        );
+        near(
+            mhb.rates_rad_per_tdb_day[index],
+            iers.rates_rad_per_tdb_day[index],
+            1e-15,
+        );
+    }
+}
+
+#[test]
 fn j2000_angles_and_rates_match_published_arcsecond_coefficients() {
     // The five c0/c1 pairs are the IERS/MHB2000 constants, not generated
     // by this repository. The J2000 epoch is noon in the TDB time scale.
     let reference = [
         (485_868.249_036, 1_717_915_923.217_8),
-        (1_287_104.793_05, 129_596_581.048_1),
+        (1_287_104.793_048, 129_596_581.048_1),
         (335_779.526_232, 1_739_527_262.847_8),
-        (1_072_260.703_69, 1_602_961_601.209_0),
+        (1_072_260.703_692, 1_602_961_601.209_0),
         (450_160.398_036, -6_962_890.543_1),
     ];
-    let actual = lunisolar_fundamental_arguments(
+    let actual = iers_arguments(
         JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap(),
     )
     .unwrap();
@@ -95,11 +129,11 @@ fn analytic_rates_match_wrapped_centered_position_differences() {
     let half_step_days = 0.5;
     for centuries in [-1.5, -0.7, 0.0, 0.8, 1.6] {
         let day = 2_451_545.0 + centuries * 36_525.0;
-        let current = lunisolar_fundamental_arguments(tdb_jd(day)).unwrap();
+        let current = iers_arguments(tdb_jd(day)).unwrap();
         let before =
-            lunisolar_fundamental_arguments(tdb_jd(day - half_step_days)).unwrap();
+            iers_arguments(tdb_jd(day - half_step_days)).unwrap();
         let after =
-            lunisolar_fundamental_arguments(tdb_jd(day + half_step_days)).unwrap();
+            iers_arguments(tdb_jd(day + half_step_days)).unwrap();
         for i in 0..5 {
             let difference = shortest_angle_difference(
                 after.angles_rad[i],
@@ -116,7 +150,7 @@ fn analytic_rates_match_wrapped_centered_position_differences() {
 
 #[test]
 fn argument_order_and_phase_multiplier_convention_are_stable() {
-    let a = lunisolar_fundamental_arguments(tdb_jd(2_451_545.0)).unwrap();
+    let a = iers_arguments(tdb_jd(2_451_545.0)).unwrap();
     assert_eq!(MOON_MEAN_ANOMALY, 0);
     assert_eq!(SUN_MEAN_ANOMALY, 1);
     assert_eq!(MOON_ARGUMENT_OF_LATITUDE, 2);
@@ -143,7 +177,7 @@ fn argument_order_and_phase_multiplier_convention_are_stable() {
 #[test]
 fn all_angles_are_normalized_but_rates_keep_their_physical_sign() {
     for centuries in [-2.0, -0.1, 0.0, 0.8, 2.0] {
-        let a = lunisolar_fundamental_arguments(tdb_jd(
+        let a = iers_arguments(tdb_jd(
             2_451_545.0 + centuries * 36_525.0,
         ))
         .unwrap();
@@ -163,14 +197,14 @@ fn rejects_tdb_mislabelling_and_unrepresentable_split_julian_dates() {
     for scale in [TimeScale::Tt, TimeScale::Tai, TimeScale::Ut1] {
         let epoch = JulianDate::new(2_451_545, 0.5, scale).unwrap();
         assert_eq!(
-            lunisolar_fundamental_arguments(epoch),
+            iers_arguments(epoch),
             Err(LuniSolarError::WrongTimeScale),
         );
     }
     let unrepresentable =
         JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
     assert_eq!(
-        lunisolar_fundamental_arguments(unrepresentable),
+        iers_arguments(unrepresentable),
         Err(LuniSolarError::UnrepresentableEpoch),
     );
 }
@@ -180,9 +214,9 @@ fn bounded_epoch_policy_is_explicit_not_a_claim_of_iau_validity() {
     let year_centuries = 73_050.0;
     for direction in [-1.0, 1.0] {
         let edge = 2_451_545.0 + direction * year_centuries;
-        assert!(lunisolar_fundamental_arguments(tdb_jd(edge)).is_ok());
+        assert!(iers_arguments(tdb_jd(edge)).is_ok());
         assert_eq!(
-            lunisolar_fundamental_arguments(tdb_jd(edge + direction)),
+            iers_arguments(tdb_jd(edge + direction)),
             Err(LuniSolarError::OutsideTestedInterval),
         );
     }
