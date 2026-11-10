@@ -67,6 +67,8 @@ pub enum UtcLeapError {
     DuplicateVersion,
     /// The requested version was not explicitly registered.
     UnknownVersion,
+    /// The exact snapshot bytes disagree with the requested SHA-256.
+    SourceDigestMismatch,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -90,6 +92,9 @@ impl fmt::Display for UtcLeapError {
             Self::InvalidSnapshotProvenance => write!(f, "invalid leap-second snapshot provenance"),
             Self::DuplicateVersion => write!(f, "leap-second schedule version already registered"),
             Self::UnknownVersion => write!(f, "requested leap-second schedule version is unknown"),
+            Self::SourceDigestMismatch => {
+                write!(f, "leap-second source SHA-256 differs from the expected digest")
+            }
         }
     }
 }
@@ -220,6 +225,7 @@ pub struct UtcLeapSchedule {
 pub struct VersionedUtcLeapSchedule {
     version: String,
     provenance: String,
+    source_sha256: String,
     expires_utc_day: UtcDay,
     schedule: UtcLeapSchedule,
 }
@@ -231,6 +237,9 @@ impl VersionedUtcLeapSchedule {
         Ok(Self {
             version: "iana-tzdb-2026b".to_owned(),
             provenance: "https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list".to_owned(),
+            source_sha256: crate::fingerprint::sha256_hex(
+                include_str!("../data/iana-tzdb-2026b-leap-seconds.list").as_bytes(),
+            ),
             expires_utc_day: UtcDay::from_gregorian(2026, 12, 28)?,
             schedule: UtcLeapSchedule::from_iana_2026b()?,
         })
@@ -361,6 +370,7 @@ impl VersionedUtcLeapSchedule {
         Ok(Self {
             version: version.to_owned(),
             provenance: provenance.to_owned(),
+            source_sha256: crate::fingerprint::sha256_hex(source.as_bytes()),
             expires_utc_day,
             schedule,
         })
@@ -372,6 +382,14 @@ impl VersionedUtcLeapSchedule {
 
     pub fn provenance(&self) -> &str {
         &self.provenance
+    }
+
+    /// SHA-256 of exact loaded curated source bytes, lowercase hex.
+    ///
+    /// This identifies bytes; it does not authenticate the source or
+    /// replace verification of the upstream IANA #h integrity checksum.
+    pub fn source_sha256(&self) -> &str {
+        &self.source_sha256
     }
 
     /// UTC midnight at which coverage ends, **exclusive**.
@@ -397,6 +415,8 @@ pub struct VersionedUtcResult<T> {
     pub version: String,
     /// Declared source provenance (not authenticated by the Rust loader).
     pub provenance: String,
+    /// Exact-byte SHA-256 fingerprint of the curated snapshot (not IANA #h).
+    pub source_sha256: String,
     /// First UTC day excluded from this schedule's validity.
     pub expires_utc_day: UtcDay,
     /// Converted TAI Julian date, or UTC civil day plus clock, as requested.
@@ -445,6 +465,21 @@ impl UtcLeapCatalog {
             .ok_or(UtcLeapError::UnknownVersion)
     }
 
+    /// Require an exact version and matching, independently expected SHA-256.
+    ///
+    /// A matching digest identifies bytes, not the identity of the publisher.
+    pub fn select_matching_sha256(
+        &self,
+        version: &str,
+        expected_sha256: &str,
+    ) -> Result<&VersionedUtcLeapSchedule, UtcLeapError> {
+        let selected = self.select(version)?;
+        if selected.source_sha256() != expected_sha256 {
+            return Err(UtcLeapError::SourceDigestMismatch);
+        }
+        Ok(selected)
+    }
+
     /// Convert UTC to TAI using precisely the requested version, preserving
     /// that version's provenance and exclusive expiry in the result.
     pub fn utc_to_tai(
@@ -458,6 +493,7 @@ impl UtcLeapCatalog {
         Ok(VersionedUtcResult {
             version: selected.version().to_owned(),
             provenance: selected.provenance().to_owned(),
+            source_sha256: selected.source_sha256().to_owned(),
             expires_utc_day: selected.expires_utc_day(),
             value,
         })
@@ -475,6 +511,7 @@ impl UtcLeapCatalog {
         Ok(VersionedUtcResult {
             version: selected.version().to_owned(),
             provenance: selected.provenance().to_owned(),
+            source_sha256: selected.source_sha256().to_owned(),
             expires_utc_day: selected.expires_utc_day(),
             value,
         })
