@@ -54,6 +54,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run deterministic workspace tests
         run: cargo test --workspace --locked
+      - name: Run optimized workspace regression tests
+        run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Check public Rust API documentation
