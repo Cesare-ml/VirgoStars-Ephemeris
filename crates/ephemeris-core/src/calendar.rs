@@ -229,9 +229,7 @@ impl JulianDate {
     /// No UTC, TAI, TT or UT1 conversion is performed. The result is still a
     /// single `f64` second count, whose resolution decreases far from J2000.
     /// The time scale must already be TDB.
-    pub fn to_tdb_seconds_past_j2000(
-        self,
-    ) -> Result<TdbSecondsPastJ2000, CalendarError> {
+    pub fn to_tdb_seconds_past_j2000(self) -> Result<TdbSecondsPastJ2000, CalendarError> {
         if self.scale != TimeScale::Tdb {
             return Err(CalendarError::WrongTimeScale);
         }
@@ -317,12 +315,8 @@ mod tdb_seconds_tests {
 
     #[test]
     fn split_date_preserves_subsecond_detail_lost_by_single_julian_day() {
-        let epoch = JulianDate::new(
-            2_451_545,
-            0.5 + 0.25 / SECONDS_PER_DAY,
-            TimeScale::Tdb,
-        )
-        .unwrap();
+        let epoch =
+            JulianDate::new(2_451_545, 0.5 + 0.25 / SECONDS_PER_DAY, TimeScale::Tdb).unwrap();
         let accurate = epoch.to_tdb_seconds_past_j2000().unwrap().value();
         assert!((accurate - 0.25).abs() < 1e-9);
 
