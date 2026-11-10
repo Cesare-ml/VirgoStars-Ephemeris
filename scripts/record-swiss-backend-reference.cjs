@@ -54,6 +54,9 @@ function run() {
       if (!Number.isInteger(result.rflag) || (result.rflag & 7) !== swe.SEFLG_SWIEPH) {
         fail(`${id}: SWIEPH fallback or missing rflag: ${result.rflag}`);
       }
+      if ((result.rflag & swe.SEFLG_SPEED) !== swe.SEFLG_SPEED) {
+        fail(`${id}: Swiss did not honor SEFLG_SPEED: ${result.rflag}`);
+      }
       const output = {};
       for (const key of [
         'longitude', 'latitude', 'distance',
@@ -81,6 +84,15 @@ function run() {
       generatedAtUtc: new Date().toISOString(),
       inputConvention: 'Gregorian UTC wall clock passed as UT JD (legacy backend)',
       positionConvention: 'apparent geocentric true ecliptic/equinox of date',
+      resultContract: {
+        center: 'geocentric',
+        frame: 'true_ecliptic_of_date',
+        corrections: 'apparent',
+        inputTimeScale: 'UT',
+        angleUnit: 'degree',
+        distanceUnit: 'AU',
+        rateUnit: 'per_day',
+      },
     },
     cases,
   }, null, 2) + '\n');
