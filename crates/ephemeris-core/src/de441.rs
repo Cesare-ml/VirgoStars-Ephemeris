@@ -190,6 +190,28 @@ impl<R: Read + Seek> De441<R> {
                     + pointer.coefficients * pointer.granules * if i == 11 { 2 } else { 3 },
             );
         }
+        // Every series occupies a disjoint interval of 1-based coefficient words.
+        // Reject overlapping pointers instead of interpreting another series' data
+        // as valid coefficients. Words 1 and 2 are reserved for record dates.
+        for (i, current) in pointers.iter().enumerate() {
+            if current.first == 0 {
+                continue;
+            }
+            let current_components = if i == 11 { 2 } else { 3 };
+            let current_end =
+                current.first + current.coefficients * current.granules * current_components;
+            for (j, previous) in pointers[..i].iter().enumerate() {
+                if previous.first == 0 {
+                    continue;
+                }
+                let previous_components = if j == 11 { 2 } else { 3 };
+                let previous_end = previous.first
+                    + previous.coefficients * previous.granules * previous_components;
+                if current.first < previous_end && previous.first < current_end {
+                    return Err(De441Error::InvalidFile("overlapping coefficient pointers"));
+                }
+            }
+        }
         let record_size = words
             .checked_mul(8)
             .ok_or(De441Error::InvalidFile("record size overflow"))?;
