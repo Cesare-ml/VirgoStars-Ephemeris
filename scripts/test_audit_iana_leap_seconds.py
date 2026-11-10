@@ -64,8 +64,11 @@ class LeapAuditTests(unittest.TestCase):
             )
         )
 
-    def test_tampered_single_offset_rejected_by_upstream_integrity_hash(self):
-        source = original_source().replace("3692217600 37", "3692217600 36")
+    def test_tampered_transition_date_rejected_by_upstream_integrity_hash(self):
+        # Move the final leap from 1 January to 1 February 2017. The
+        # altered history still satisfies strict month-start / +/-1 rules,
+        # so only the original signed #h field can reject it here.
+        source = original_source().replace("3692217600 37", "3694896000 37")
         with self.assertRaisesRegex(audit.LeapAuditError, "checksum mismatch"):
             audit.parse_table(source, official=True)
 
