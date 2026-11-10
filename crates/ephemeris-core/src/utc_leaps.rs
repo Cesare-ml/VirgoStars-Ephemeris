@@ -57,6 +57,8 @@ pub enum UtcLeapError {
     UnrepresentableTai,
     /// Only a TAI-tagged JulianDate can be converted back to UTC.
     WrongInputScale,
+    /// Bundled version-pinned IANA leap-second history is malformed.
+    InvalidPinnedLeapData,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -75,6 +77,7 @@ impl fmt::Display for UtcLeapError {
                 write!(f, "TAI Julian date cannot represent this UTC instant")
             }
             Self::WrongInputScale => write!(f, "TAI input time scale is required"),
+            Self::InvalidPinnedLeapData => write!(f, "invalid pinned IANA leap-second snapshot"),
         }
     }
 }
@@ -233,6 +236,99 @@ impl UtcLeapSchedule {
             initial_tai_minus_utc_seconds,
             transitions,
         })
+    }
+
+    /// Load the complete post-1972 **IANA tzdb-2026b** leap-second history.
+    ///
+    /// Bundled data is a compact, curated public-domain snapshot of
+    /// `leap-seconds.list` at:
+    /// https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list
+    ///
+    /// The IANA source declares NTP expiration 4007404800, corresponding
+    /// to 2026-12-28 at 00:00 UTC. This constructor conservatively covers
+    /// January 1, 1972 through **December 27, 2026 inclusive**, and will
+    /// never extrapolate beyond that date. Update the source, provenance,
+    /// expected metadata and independent tests in a reviewed new version.
+    /// No network access or automatic updates are performed.
+    pub fn from_iana_2026b() -> Result<Self, UtcLeapError> {
+        const FIRST_NTP: i64 = 2_272_060_800; // 1972-01-01 UTC
+        const EXPIRY_NTP: i64 = 4_007_404_800; // 2026-12-28 UTC
+        let mut expiry: Option<i64> = None;
+        let mut records: Vec<(i64, i32)> = Vec::new();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        for line in source.lines() {
+            let line = line.trim();
+            if let Some(stamp) = line.strip_prefix("#@") {
+                let stamp = stamp
+                    .trim()
+                    .parse::<i64>()
+                    .map_err(|_| UtcLeapError::InvalidPinnedLeapData)?;
+                if expiry.replace(stamp).is_some() {
+                    return Err(UtcLeapError::InvalidPinnedLeapData);
+                }
+                continue;
+            }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let mut columns = line.split('#').next().unwrap_or("").split_whitespace();
+            let ntp = columns
+                .next()
+                .ok_or(UtcLeapError::InvalidPinnedLeapData)?
+                .parse::<i64>()
+                .map_err(|_| UtcLeapError::InvalidPinnedLeapData)?;
+            let offset = columns
+                .next()
+                .ok_or(UtcLeapError::InvalidPinnedLeapData)?
+                .parse::<i32>()
+                .map_err(|_| UtcLeapError::InvalidPinnedLeapData)?;
+            if columns.next().is_some() {
+                return Err(UtcLeapError::InvalidPinnedLeapData);
+            }
+            records.push((ntp, offset));
+        }
+        if expiry != Some(EXPIRY_NTP)
+            || records.len() != 28
+            || records.first() != Some(&(FIRST_NTP, 10))
+            || records.last() != Some(&(3_692_217_600, 37))
+        {
+            return Err(UtcLeapError::InvalidPinnedLeapData);
+        }
+        let first_day = UtcDay::from_gregorian(1972, 1, 1)?;
+        let ntp_day = |stamp: i64| -> Result<UtcDay, UtcLeapError> {
+            let elapsed = stamp
+                .checked_sub(FIRST_NTP)
+                .ok_or(UtcLeapError::InvalidPinnedLeapData)?;
+            if elapsed < 0 || elapsed % 86_400 != 0 {
+                return Err(UtcLeapError::InvalidPinnedLeapData);
+            }
+            let number = first_day
+                .julian_day_number
+                .checked_add(elapsed / 86_400)
+                .ok_or(UtcLeapError::InvalidPinnedLeapData)?;
+            Ok(UtcDay {
+                julian_day_number: number,
+            })
+        };
+        let last_day = UtcDay {
+            julian_day_number: ntp_day(EXPIRY_NTP)?
+                .julian_day_number
+                .checked_sub(1)
+                .ok_or(UtcLeapError::InvalidPinnedLeapData)?,
+        };
+        let mut transitions = Vec::with_capacity(records.len() - 1);
+        for (stamp, offset) in records.into_iter().skip(1) {
+            let effective_utc_day = ntp_day(stamp)?;
+            if effective_utc_day > last_day {
+                return Err(UtcLeapError::InvalidPinnedLeapData);
+            }
+            transitions.push(UtcLeapTransition {
+                effective_utc_day,
+                tai_minus_utc_seconds: offset,
+            });
+        }
+        Self::new(first_day, last_day, 10, transitions)
+            .map_err(|_| UtcLeapError::InvalidPinnedLeapData)
     }
 
     fn offset_at_boundary(&self, day_number: i64) -> i32 {
@@ -808,6 +904,94 @@ mod tests {
             assert_eq!(back_clock.minute(), clock.minute());
             assert!((back_clock.second() - clock.second()).abs() < 1e-8);
         }
+    }
+
+    #[test]
+    fn iana_2026b_snapshot_has_full_history_and_fixed_expiration() {
+        let schedule = UtcLeapSchedule::from_iana_2026b().unwrap();
+        assert_eq!(schedule.transitions.len(), 27);
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(1972, 1, 1)),
+            Ok(10)
+        );
+        assert_eq!(
+            schedule.utc_day_length_seconds(d(1972, 6, 30)),
+            Ok(86_401)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(1972, 7, 1)),
+            Ok(11)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(1980, 1, 1)),
+            Ok(19)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(2000, 1, 1)),
+            Ok(32)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(2017, 1, 1)),
+            Ok(37)
+        );
+        assert_eq!(
+            schedule.utc_day_length_seconds(d(2016, 12, 31)),
+            Ok(86_401)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(2026, 12, 27)),
+            Ok(37)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(2026, 12, 28)),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        assert_eq!(
+            schedule.tai_minus_utc_at_day_start(d(1971, 12, 31)),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+    }
+
+    #[test]
+    fn iana_2026b_snapshot_roundtrips_historical_positive_leaps() {
+        let schedule = UtcLeapSchedule::from_iana_2026b().unwrap();
+        for leap_day in [
+            d(1972, 6, 30),
+            d(1972, 12, 31),
+            d(1998, 12, 31),
+            d(2008, 12, 31),
+            d(2016, 12, 31),
+        ] {
+            assert_eq!(schedule.utc_day_length_seconds(leap_day), Ok(86_401));
+            let leap = UtcClockTime::new(23, 59, 60.25).unwrap();
+            let tai = schedule.utc_to_tai(leap_day, leap).unwrap();
+            let (day, clock) = schedule.tai_to_utc(tai).unwrap();
+            assert_eq!(day, leap_day);
+            assert_eq!(clock.hour(), 23);
+            assert_eq!(clock.minute(), 59);
+            assert!((clock.second() - 60.25).abs() < 1e-8);
+        }
+    }
+
+    #[test]
+    fn iana_2026b_expired_schedule_rejects_both_directions() {
+        let schedule = UtcLeapSchedule::from_iana_2026b().unwrap();
+        let last = d(2026, 12, 27);
+        let next = d(2026, 12, 28);
+        let midnight = UtcClockTime::new(0, 0, 0.0).unwrap();
+        assert_eq!(
+            schedule.utc_to_tai(next, midnight),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        let last_tai = schedule.utc_to_tai(last, midnight).unwrap();
+        assert_eq!(schedule.tai_to_utc(last_tai).unwrap().0, last);
+        let first_expired_tai =
+            JulianDate::new(next.julian_day_number(), 37.0 / 86_400.0, TimeScale::Tai)
+                .unwrap();
+        assert_eq!(
+            schedule.tai_to_utc(first_expired_tai),
+            Err(UtcLeapError::OutsideCoverage)
+        );
     }
 
     #[test]
