@@ -223,8 +223,7 @@ impl VersionedUtcLeapSchedule {
     pub fn iana_2026b() -> Result<Self, UtcLeapError> {
         Ok(Self {
             version: "iana-tzdb-2026b".to_owned(),
-            provenance: "https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list"
-                .to_owned(),
+            provenance: "https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list".to_owned(),
             expires_utc_day: UtcDay::from_gregorian(2026, 12, 28)?,
             schedule: UtcLeapSchedule::from_iana_2026b()?,
         })
@@ -323,9 +322,8 @@ impl VersionedUtcLeapSchedule {
         let expires_utc_day = ntp_day(expires_ntp)?;
         // Confirm both boundaries lie in the supported Gregorian calendar,
         // not merely in the machine's i64 range.
-        let expiry_date =
-            JulianDate::new(expires_utc_day.julian_day_number, 0.0, TimeScale::Tai)
-                .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+        let expiry_date = JulianDate::new(expires_utc_day.julian_day_number, 0.0, TimeScale::Tai)
+            .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
         expiry_date
             .to_calendar(Calendar::ProlepticGregorian)
             .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
@@ -1172,7 +1170,9 @@ mod tests {
             );
         }
         assert_eq!(
-            pinned.schedule().tai_minus_utc_at_day_start(d(2026, 12, 28)),
+            pinned
+                .schedule()
+                .tai_minus_utc_at_day_start(d(2026, 12, 28)),
             Err(UtcLeapError::OutsideCoverage)
         );
     }
@@ -1193,7 +1193,10 @@ mod tests {
             old.schedule().tai_minus_utc_at_day_start(d(2027, 1, 1)),
             Err(UtcLeapError::OutsideCoverage)
         );
-        assert_eq!(new.schedule().tai_minus_utc_at_day_start(d(2027, 1, 1)), Ok(37));
+        assert_eq!(
+            new.schedule().tai_minus_utc_at_day_start(d(2027, 1, 1)),
+            Ok(37)
+        );
         assert_eq!(
             new.schedule().tai_minus_utc_at_day_start(d(2027, 7, 1)),
             Err(UtcLeapError::OutsideCoverage)
@@ -1215,7 +1218,10 @@ mod tests {
         )
         .unwrap();
         let leap_day = d(2026, 12, 31);
-        assert_eq!(future.schedule().utc_day_length_seconds(leap_day), Ok(86_401));
+        assert_eq!(
+            future.schedule().utc_day_length_seconds(leap_day),
+            Ok(86_401)
+        );
         let clock = UtcClockTime::new(23, 59, 60.5).unwrap();
         let tai = future.schedule().utc_to_tai(leap_day, clock).unwrap();
         let (back_day, back_clock) = future.schedule().tai_to_utc(tai).unwrap();
@@ -1255,17 +1261,17 @@ mod tests {
         for version in ["", "../bad", "bad version"] {
             assert_eq!(
                 VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
-                    version, "reviewed-source", good
+                    version,
+                    "reviewed-source",
+                    good
                 )
                 .unwrap_err(),
                 UtcLeapError::InvalidSnapshotProvenance
             );
         }
         assert_eq!(
-            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
-                "reviewed-2026b", "", good
-            )
-            .unwrap_err(),
+            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot("reviewed-2026b", "", good)
+                .unwrap_err(),
             UtcLeapError::InvalidSnapshotProvenance
         );
     }
