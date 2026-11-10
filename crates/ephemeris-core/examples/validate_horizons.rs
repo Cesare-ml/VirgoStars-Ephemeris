@@ -175,7 +175,11 @@ struct Residuals {
     velocity_norm_km_per_day: f64,
 }
 
-fn residuals(actual_position: [f64; 3], actual_velocity: [f64; 3], expected: [f64; 6]) -> Result<Residuals, String> {
+fn residuals(
+    actual_position: [f64; 3],
+    actual_velocity: [f64; 3],
+    expected: [f64; 6],
+) -> Result<Residuals, String> {
     let mut position_km = [0.0; 3];
     let mut velocity_km_per_day = [0.0; 3];
     let mut max_position_component_km: f64 = 0.0;
@@ -191,8 +195,9 @@ fn residuals(actual_position: [f64; 3], actual_velocity: [f64; 3], expected: [f6
             max_velocity_component_km_per_day.max(velocity_km_per_day[axis].abs());
     }
     let position_norm_km = position_km[0].hypot(position_km[1]).hypot(position_km[2]);
-    let velocity_norm_km_per_day =
-        velocity_km_per_day[0].hypot(velocity_km_per_day[1]).hypot(velocity_km_per_day[2]);
+    let velocity_norm_km_per_day = velocity_km_per_day[0]
+        .hypot(velocity_km_per_day[1])
+        .hypot(velocity_km_per_day[2]);
     if !position_norm_km.is_finite() || !velocity_norm_km_per_day.is_finite() {
         return Err("non-finite residual vector norm".into());
     }
@@ -244,12 +249,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             reference.center,
             JulianDateTdb(case.jd_tdb),
         )?;
-        let error = residuals(
-            state.position_km,
-            state.velocity_km_per_day,
-            case.expected,
-        )
-        .map_err(input_error)?;
+        let error = residuals(state.position_km, state.velocity_km_per_day, case.expected)
+            .map_err(input_error)?;
         largest_position = largest_position.max(error.max_position_component_km);
         largest_velocity = largest_velocity.max(error.max_velocity_component_km_per_day);
         largest_position_norm = largest_position_norm.max(error.position_norm_km);
@@ -368,7 +369,12 @@ mod tests {
 
     #[test]
     fn rejects_non_finite_residuals_and_overflowed_norms() {
-        assert!(residuals([f64::MAX, 0.0, 0.0], [0.0; 3], [-f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0]).is_err());
+        assert!(residuals(
+            [f64::MAX, 0.0, 0.0],
+            [0.0; 3],
+            [-f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
+        .is_err());
         assert!(residuals([f64::MAX, f64::MAX, 0.0], [0.0; 3], [0.0; 6]).is_err());
         assert!(residuals([f64::NAN, 0.0, 0.0], [0.0; 3], [0.0; 6]).is_err());
     }
