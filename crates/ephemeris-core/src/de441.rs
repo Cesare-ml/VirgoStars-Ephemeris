@@ -198,8 +198,8 @@ impl<R: Read + Seek> De441<R> {
                 continue;
             }
             let current_components = if i == 11 { 2 } else { 3 };
-            let current_end = current.first
-                + current.coefficients * current.granules * current_components;
+            let current_end =
+                current.first + current.coefficients * current.granules * current_components;
             for (j, previous) in pointers[..i].iter().enumerate() {
                 if previous.first == 0 {
                     continue;
