@@ -44,22 +44,25 @@ These 15 reverse-date values are actual outputs of a separately installed Swiss 
 
 ## 2. Optional Node 0.5.17 positional oracle (external, never CI)
 
-`scripts/record-swiss-backend-reference.cjs` may be executed manually in a licensed environment with **separately installed** `swisseph@0.5.17` and the exact **Swiss `.se1` dataset** used for the reference. No Swiss implementation, dependency or ephemeris file is included in VirgoStars-Ephemeris. The recorder uses the observed P0 invocation (`SEFLG_SPEED | SEFLG_SWIEPH`), the same Gregorian fractional-hour JD and seven bodies Sun–Saturn over four UTC calendar instants, producing **28 positional records**. It checks each returned `rflag & 7 == SEFLG_SWIEPH` and rejects a Moshier/JPL fallback or missing output.
+`scripts/record-swiss-backend-reference.cjs` may be executed manually in a licensed environment with **separately installed** `swisseph@0.5.17` and the exact **Swiss `.se1` dataset** used for the reference. No Swiss implementation, dependency or ephemeris file is included in VirgoStars-Ephemeris. The recorder uses the observed P0 invocation (`SEFLG_SPEED | SEFLG_SWIEPH`), the same Gregorian fractional-hour JD and seven bodies Sun–Saturn over four UTC calendar instants, producing **28 positional records**. It checks the source and speed bits of each effective `rflag` and rejects a Moshier/JPL fallback or missing output.
+
+**Source integrity (update 2026-11-10):** The optional recorder now computes its own SHA-256 manifest of all regular `*.se1` files directly in the configured data directory **before** calling Swiss. `scripts/swiss-reference-data.cjs` hashes each file in bounded-memory streams, sorts the basenames, records byte lengths and per-file hashes, and makes `source.dataId` the SHA-256 digest of the canonical JSON array of those sorted `{name,bytes,sha256}` entries. `source.dataManifest` includes `algorithm: "sha256"`, `digest` and `files`; the offline comparator verifies internal manifest consistency and rejects missing/duplicate/unsorted entries, malformed hashes and changed identifiers. The manifest contains **no absolute paths or file contents**. No new dependencies are installed; pure offline synthetic tests are included in CI.
+
+This identifies the declared **directory snapshot**, not a cryptographic attestation of which individual ephemeris files the Swiss library actually opened. The P0 scanner intentionally considers only regular `.se1` files at the **top level** of the single configured directory; symlink-only files, subdirectories, external paths and fixed-star catalogs are not covered. Do not claim full model/data equivalence from the fingerprint alone, and do not export results if the directory is concurrently modified. For reproducibility, keep and review the manifest beside your locally generated reference JSON. Large directories take additional I/O time because each `.se1` file is read in full once to hash it.
 
 Example for an appropriately configured local environment (the Node module must be separately resolvable via `NODE_PATH` or installed outside this repo):
 
 ```bash
 export ASTRODIENST_EPHE_PATH=/separately/installed/swiss-ephemeris-directory
-export SWISS_EPHE_DATA_ID='Swiss ephemeris files + locally recorded hashes/version'
 export NODE_PATH=/path/to/virgo-stars/backend/node_modules
 node scripts/record-swiss-backend-reference.cjs > /tmp/swiss-reference.json
 ```
 
-**No oracle reference JSON is checked in**, because the actual backend data file hashes and environment are not available on this branch. Verify `dataId` against a recorded file-hash manifest; the recorder does not calculate those hashes for you. This tool does **not** validate the Swiss license or permission to redistribute recordings: review rights before checking reference data into a public repo.
+**No real oracle reference JSON is checked in**, because the actual backend ephemeris files and environment are not available on this branch. The recorder now calculates `dataId` from the externally supplied data files automatically; the verifier checks the recorded manifest against that identifier. This does **not** authenticate the files against a separate official vendor checksum. The tool does **not** validate Swiss's license or permission to redistribute recordings: review rights before checking reference data into a public repo.
 
 ## 3. Offline numerical comparison of reference vs Rust-candidate export
 
-`scripts/compare-swiss-backend.mjs` compares two saved JSON exports with the same `schemaVersion: 1`. A reference record must declare `source.binding = "swisseph@0.5.17"`, `source.ephemeris = "SWIEPH"`, a meaningful `source.dataId` and the effective ephemeris source through each case's `effectiveFlags`. The candidate must declare `source.engine = "VirgoStars-Ephemeris"` and be produced by the **future Rust-backed, apparent-geocentric ecliptic-of-date adapter**. It rejects missing/duplicate case IDs, altered `jdUt`/`bodyId`/`flags`, non-finite/missing six-field output, and unverified Swiss source flags. The current comparison scope is deliberately **only** `SWIEPH|SPEED` (`258`): heliocentric, equatorial and other flags will require separately typed field contracts, not reinterpretation of this six-field case.
+`scripts/compare-swiss-backend.mjs` compares two saved JSON exports with the same `schemaVersion: 1`. A reference record must declare `source.binding = "swisseph@0.5.17"`, `source.ephemeris = "SWIEPH"`, a canonical `source.dataManifest` and its matching SHA-256 `source.dataId`, and the effective ephemeris source through each case's `effectiveFlags`. The candidate must declare `source.engine = "VirgoStars-Ephemeris"` and be produced by the **future Rust-backed, apparent-geocentric ecliptic-of-date adapter**. It rejects missing/duplicate case IDs, altered `jdUt`/`bodyId`/`flags`, non-finite/missing six-field output, and unverified Swiss source flags. The current comparison scope is deliberately **only** `SWIEPH|SPEED` (`258`): heliocentric, equatorial and other flags will require separately typed field contracts, not reinterpretation of this six-field case.
 
 ### Explicit frame and correction identity (update 2026-11-10)
 
@@ -104,7 +107,7 @@ Create a separately reviewed tolerance file with **exactly six nonnegative finit
 
 ```bash
 node scripts/compare-swiss-backend.mjs swiss-reference.json rust-candidate.json reviewed-tolerances.json
-node --test test/compare-swiss-backend.test.mjs
+node --test test/compare-swiss-backend.test.mjs test/swiss-reference-data.test.cjs
 ```
 
 **No production planetary tolerances are approved yet.** Choose and document budgets *before* claiming scientific parity, using independent JPL Horizons/NAIF validation, data version, time model, nutation/precession, light-time, aberration, frame and observer configuration. Do not widen thresholds just to turn red tests green. Node comparator tests use **synthetic values only** to exercise edge cases, not to claim astronomy accuracy.
