@@ -23,6 +23,15 @@ In development, [PR #22](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/
 
 PR #26 and #27 first merged into **`dev/ephemeris`**; their files are transferred to `main` only through a separately reviewed Rust integration PR. Neither step proves independent NASA/JPL numerical accuracy. Historical [PR #2](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/2) describes licensing as undecided; the canonical decision is already recorded in `LICENSE`, `NOTICE` and `docs/LICENSING_AND_CREDITS.md`.
 
+## Integration outcome (2026-11-10)
+
+- [PR #30](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/30): reconciled CPAL/Rust/agent documentation and merged to `main` after a successful Node.js CI run.
+- [PR #31](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/31): transferred the experimental classic-DE441 Cargo workspace and tests from `dev/ephemeris` into `main` while keeping the JavaScript research modules. [CI run #42825578006](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/42825578006) succeeded: Node tests, Rust formatting, workspace tests and Clippy.
+- [PR #29](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/29) (development) and [PR #32](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/32) (`main`): precision-preserving Earth/Moon/EMB relative states. [Main integration CI #42826281131](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/42826281131) succeeded with Node/Rust regression checks.
+- [PRs #2, #8 and #14](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pulls?q=is%3Apr+is%3Aclosed) were closed as superseded; their conflicting branches were **not** merged.
+
+The work was imported by **content-reconciled PRs**, not a Git history merge of `dev/ephemeris`. The two branches can still have divergent ancestry despite equivalent Rust features; do not use a blind merge/reset to "fix" this. There was **no deployment, published package, real-kernel JPL parity, or production migration**.
+
 ## Integration review checklist and continuing scientific release gates
 
 1. **Reconcile diverged Git history deliberately.** Preserve `main`'s research code, third-party notices, AGENTS.md, CPAL license and licensing guidance while adding the Rust workspace. Do not resolve README/ADR conflicts by indiscriminate `ours`/`theirs`, rewrite `main`, or drop tests.
