@@ -203,12 +203,12 @@ pub struct UtcLeapSchedule {
 
 /// Immutable, provenance-bearing wrapper around a validated UTC leap schedule.
 ///
-/// A caller's \`version\` and \`provenance\` are declared metadata, **not**
+/// A caller's `version` and `provenance` are declared metadata, **not**
 /// independent proof of authenticity. Candidate files must first pass the
 /// offline official-source SHA-1 and historical-drift audit, and be reviewed.
 ///
 /// Each instance owns its schedule and does not mutate other loaded versions.
-/// The historic \`UtcLeapSchedule::from_iana_2026b()\` remains unchanged.
+/// The historic `UtcLeapSchedule::from_iana_2026b()` remains unchanged.
 #[derive(Clone, Debug)]
 pub struct VersionedUtcLeapSchedule {
     version: String,
@@ -233,13 +233,13 @@ impl VersionedUtcLeapSchedule {
     /// Load **reviewed, curated numeric** NTP leap data from memory.
     ///
     /// This accepts the format produced by the offline update proposal:
-    /// comments, exactly one \`#@ EXPIRY_NTP\` marker, followed by ascending
-    /// \`NTP_MIDNIGHT TAI_MINUS_UTC_SECONDS\` rows starting at 1972-01-01.
+    /// comments, exactly one `#@ EXPIRY_NTP` marker, followed by ascending
+    /// `NTP_MIDNIGHT TAI_MINUS_UTC_SECONDS` rows starting at 1972-01-01.
     /// NTP seconds are counted from 1900-01-01 UTC. Each leap transition
     /// must occur at a month boundary and change TAI-UTC by exactly +/-1.
     ///
-    /// It does not verify an official IANA \`#h\` checksum or authenticate the
-    /// asserted \`version\`/\`provenance\`. Those checks belong to the separate
+    /// It does not verify an official IANA `#h` checksum or authenticate the
+    /// asserted `version`/`provenance`. Those checks belong to the separate
     /// offline source audit *before* a curator approves this input. There is
     /// no filesystem, network, clock, or global "current version" access.
     pub fn from_reviewed_numeric_snapshot(
@@ -323,12 +323,9 @@ impl VersionedUtcLeapSchedule {
         let expires_utc_day = ntp_day(expires_ntp)?;
         // Confirm both boundaries lie in the supported Gregorian calendar,
         // not merely in the machine's i64 range.
-        let expiry_date = JulianDate::new(
-            expires_utc_day.julian_day_number,
-            0.0,
-            TimeScale::Tai,
-        )
-        .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+        let expiry_date =
+            JulianDate::new(expires_utc_day.julian_day_number, 0.0, TimeScale::Tai)
+                .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
         expiry_date
             .to_calendar(Calendar::ProlepticGregorian)
             .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
