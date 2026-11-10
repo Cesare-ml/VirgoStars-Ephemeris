@@ -48,6 +48,10 @@ pub enum UtcLeapError {
     /// A leap event must change TAI-UTC by exactly +1 or -1 second.
     InvalidOffsetStep,
     OutsideCoverage,
+    /// Invalid hour, minute, fractional second, or leap-second placement.
+    InvalidClockTime,
+    /// This clock reading does not exist on the named UTC day.
+    ClockTimeOutsideDay,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -60,6 +64,8 @@ impl fmt::Display for UtcLeapError {
             Self::InvalidTransition => write!(f, "invalid UTC leap-second transition date/order"),
             Self::InvalidOffsetStep => write!(f, "TAI minus UTC must change by exactly one second"),
             Self::OutsideCoverage => write!(f, "UTC day lies outside approved schedule coverage"),
+            Self::InvalidClockTime => write!(f, "invalid UTC clock fields"),
+            Self::ClockTimeOutsideDay => write!(f, "UTC clock reading does not exist on this day"),
         }
     }
 }
@@ -104,6 +110,53 @@ impl UtcDay {
             .to_calendar(Calendar::ProlepticGregorian)
             .map_err(|_| UtcLeapError::InvalidGregorianDate)?;
         Ok(date.day == 1)
+    }
+}
+
+/// A UTC civil-clock reading, independently of the named day.
+///
+/// Second 60 (including its fractional portion) is syntactically permitted
+/// **only at 23:59**. It is valid for a particular date only if the explicitly
+/// supplied leap-second schedule confirms a positive leap on that day.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UtcClockTime {
+    hour: u8,
+    minute: u8,
+    second: f64,
+}
+
+impl UtcClockTime {
+    /// Construct a UTC clock reading without assuming a leap-second calendar.
+    pub fn new(hour: u8, minute: u8, second: f64) -> Result<Self, UtcLeapError> {
+        if hour > 23
+            || minute > 59
+            || !second.is_finite()
+            || !(0.0..61.0).contains(&second)
+            || (second >= 60.0 && (hour != 23 || minute != 59))
+        {
+            return Err(UtcLeapError::InvalidClockTime);
+        }
+        Ok(Self {
+            hour,
+            minute,
+            second,
+        })
+    }
+
+    pub fn hour(self) -> u8 {
+        self.hour
+    }
+
+    pub fn minute(self) -> u8 {
+        self.minute
+    }
+
+    pub fn second(self) -> f64 {
+        self.second
+    }
+
+    fn seconds_since_midnight(self) -> f64 {
+        f64::from(self.hour) * 3_600.0 + f64::from(self.minute) * 60.0 + self.second
     }
 }
 
@@ -190,6 +243,25 @@ impl UtcLeapSchedule {
             return Err(UtcLeapError::OutsideCoverage);
         }
         Ok(self.offset_at_boundary(day.julian_day_number))
+    }
+
+    /// Validate that a UTC clock reading exists on a covered civil day.
+    ///
+    /// The result is elapsed SI seconds into that **named UTC day**, not a
+    /// Julian date or a TAI/TT/TDB instant. A positive leap permits
+    /// 23:59:60.x; a hypothetical negative leap omits 23:59:59.x.
+    /// At every day's end, the next valid reading is the next day's 00:00.
+    pub fn seconds_into_utc_day(
+        &self,
+        day: UtcDay,
+        clock: UtcClockTime,
+    ) -> Result<f64, UtcLeapError> {
+        let day_length = f64::from(self.utc_day_length_seconds(day)?);
+        let seconds = clock.seconds_since_midnight();
+        if seconds >= day_length {
+            return Err(UtcLeapError::ClockTimeOutsideDay);
+        }
+        Ok(seconds)
     }
 
     /// Return 86,399, 86,400 or 86,401 SI seconds for a UTC civil day.
@@ -306,6 +378,111 @@ mod tests {
             Err(UtcLeapError::InvalidGregorianDate)
         );
         assert!(UtcDay::from_gregorian(2020, 2, 29).is_ok());
+    }
+
+    #[test]
+    fn utc_clock_accepts_positive_leap_second_and_fraction_only_on_that_day() {
+        let schedule = UtcLeapSchedule::new(
+            d(2016, 12, 31),
+            d(2017, 1, 1),
+            36,
+            vec![UtcLeapTransition {
+                effective_utc_day: d(2017, 1, 1),
+                tai_minus_utc_seconds: 37,
+            }],
+        )
+        .unwrap();
+        let leap = UtcClockTime::new(23, 59, 60.5).unwrap();
+        assert_eq!(leap.hour(), 23);
+        assert_eq!(leap.minute(), 59);
+        assert_eq!(leap.second(), 60.5);
+        assert_eq!(
+            schedule.seconds_into_utc_day(d(2016, 12, 31), leap),
+            Ok(86_400.5)
+        );
+        assert_eq!(
+            schedule.seconds_into_utc_day(d(2017, 1, 1), leap),
+            Err(UtcLeapError::ClockTimeOutsideDay)
+        );
+        assert_eq!(
+            schedule.seconds_into_utc_day(
+                d(2017, 1, 1),
+                UtcClockTime::new(0, 0, 0.0).unwrap()
+            ),
+            Ok(0.0)
+        );
+    }
+
+    #[test]
+    fn negative_leap_day_omits_235959_but_keeps_235958() {
+        // Synthetic negative leap; no historical negative leap is asserted.
+        let schedule = UtcLeapSchedule::new(
+            d(2020, 6, 30),
+            d(2020, 7, 1),
+            37,
+            vec![UtcLeapTransition {
+                effective_utc_day: d(2020, 7, 1),
+                tai_minus_utc_seconds: 36,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            schedule.seconds_into_utc_day(
+                d(2020, 6, 30),
+                UtcClockTime::new(23, 59, 58.5).unwrap()
+            ),
+            Ok(86_398.5)
+        );
+        assert_eq!(
+            schedule.seconds_into_utc_day(
+                d(2020, 6, 30),
+                UtcClockTime::new(23, 59, 59.0).unwrap()
+            ),
+            Err(UtcLeapError::ClockTimeOutsideDay)
+        );
+        assert_eq!(
+            schedule.seconds_into_utc_day(
+                d(2020, 7, 1),
+                UtcClockTime::new(23, 59, 59.0).unwrap()
+            ),
+            Ok(86_399.0)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_clock_fields_and_nonfinite_seconds() {
+        for (hour, minute, second) in [
+            (24, 0, 0.0),
+            (0, 60, 0.0),
+            (0, 0, -0.001),
+            (0, 0, 60.0),
+            (23, 58, 60.0),
+            (23, 59, 61.0),
+            (23, 59, f64::NAN),
+            (23, 59, f64::INFINITY),
+        ] {
+            assert_eq!(
+                UtcClockTime::new(hour, minute, second),
+                Err(UtcLeapError::InvalidClockTime)
+            );
+        }
+        assert!(UtcClockTime::new(23, 59, 60.999).is_ok());
+        assert!(UtcClockTime::new(12, 30, 59.999).is_ok());
+    }
+
+    #[test]
+    fn clock_validation_requires_explicit_coverage() {
+        let schedule = UtcLeapSchedule::new(d(2020, 1, 1), d(2020, 1, 1), 37, vec![])
+            .unwrap();
+        let midnight = UtcClockTime::new(0, 0, 0.0).unwrap();
+        assert_eq!(
+            schedule.seconds_into_utc_day(d(2019, 12, 31), midnight),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        assert_eq!(
+            schedule.seconds_into_utc_day(d(2020, 1, 2), midnight),
+            Err(UtcLeapError::OutsideCoverage)
+        );
     }
 
     #[test]
