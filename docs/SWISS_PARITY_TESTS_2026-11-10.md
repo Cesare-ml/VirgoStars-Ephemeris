@@ -59,7 +59,29 @@ node scripts/record-swiss-backend-reference.cjs > /tmp/swiss-reference.json
 
 ## 3. Offline numerical comparison of reference vs Rust-candidate export
 
-`scripts/compare-swiss-backend.mjs` compares two saved JSON exports with the same `schemaVersion: 1`. A reference record must declare `source.binding = "swisseph@0.5.17"`, `source.ephemeris = "SWIEPH"`, a meaningful `source.dataId` and the effective ephemeris source through each case's `effectiveFlags`. The candidate must declare `source.engine = "VirgoStars-Ephemeris"` and be produced by the **future Rust-backed, apparent-geocentric ecliptic-of-date adapter**. It rejects missing/duplicate case IDs, altered `jdUt`/`bodyId`/`flags`, non-finite/missing six-field output, and unverified Swiss source flags.
+`scripts/compare-swiss-backend.mjs` compares two saved JSON exports with the same `schemaVersion: 1`. A reference record must declare `source.binding = "swisseph@0.5.17"`, `source.ephemeris = "SWIEPH"`, a meaningful `source.dataId` and the effective ephemeris source through each case's `effectiveFlags`. The candidate must declare `source.engine = "VirgoStars-Ephemeris"` and be produced by the **future Rust-backed, apparent-geocentric ecliptic-of-date adapter**. It rejects missing/duplicate case IDs, altered `jdUt`/`bodyId`/`flags`, non-finite/missing six-field output, and unverified Swiss source flags. The current comparison scope is deliberately **only** `SWIEPH|SPEED` (`258`): heliocentric, equatorial and other flags will require separately typed field contracts, not reinterpretation of this six-field case.
+
+### Explicit frame and correction identity (update 2026-11-10)
+
+**Both** saved exports must declare the following `source.resultContract`. The Swiss recorder now emits this object directly. A Rust candidate must not emit it until its output truly implements the declared pipeline (geocentric **apparent**, true ecliptic/equinox of date, degrees/AU, signed rates per day). A geometric DE441 ICRF/J2000 result, light-time-only result or topocentric position must fail closed; merely relabeling it would be scientifically incorrect.
+
+```json
+{
+  "resultContract": {
+    "center": "geocentric",
+    "frame": "true_ecliptic_of_date",
+    "corrections": "apparent",
+    "inputTimeScale": "UT",
+    "angleUnit": "degree",
+    "distanceUnit": "AU",
+    "rateUnit": "per_day"
+  }
+}
+```
+
+`inputTimeScale: "UT"` denotes Swiss's `swe_calc_ut` contract, **not** an assertion that the legacy backend's UTC-derived Julian day is rigorously UT1. No UTC-to-UT1, Delta-T or TT conversion is performed by the comparator. This metadata check guards against accidental frame mixing, but does **not** prove that an exporter correctly implemented the declared model.
+
+The reference's effective flags must show `SEFLG_SWIEPH` **and** `SEFLG_SPEED`; a silent ephemeris fallback or dropped speed bit fails. Longitudes must be normalized into `[0,360)`, latitudes into `[-90,90]`, distances nonnegative; all six components must be finite. The circular angle distance remains in `[0,180]` even for negative or multi-turn values because each argument is normalized before subtracting. Such out-of-range raw outputs still fail validation as invalid Swiss-shaped results.
 
 Each `cases[]` element:
 
@@ -78,7 +100,7 @@ Each `cases[]` element:
 
 **The JSON above is an intentionally fictitious shape example, NOT a Swiss reference value.** The candidate JSON uses the same `id`, `function`, `input`, `output` shape and the engine identification above; only the reference requires `effectiveFlags`.
 
-Create a separately reviewed tolerance file with **exactly six nonnegative finite numeric fields** named `longitude`, `latitude`, `distance`, `longitudeSpeed`, `latitudeSpeed`, `distanceSpeed`. Units are degrees, AU, degrees/day and AU/day. Angular longitude error is **circular**, i.e. 359.999° vs 0.001° differs by 0.002°, while rates are **signed**, so a retrograde-vs-direct mismatch fails. Other fields use absolute error; all six are tested per case.
+Create a separately reviewed tolerance file with **exactly six nonnegative finite numeric fields** named `longitude`, `latitude`, `distance`, `longitudeSpeed`, `latitudeSpeed`, `distanceSpeed`. Units are degrees, AU, degrees/day and AU/day. Angular longitude error is **circular**, i.e. 359.999° vs 0.001° differs by 0.002°, while rates are **signed**, so a retrograde-vs-direct mismatch fails. Other fields use absolute error; all six are tested per case. The CLI also prints the **maximum observed absolute error per field, with the case ID**, including on an otherwise successful comparison, so accuracy reviews can record a worst case instead of only a pass/fail. The comparison returns `maxErrors` alongside its prior `failures`, `totalCases` and `totalFields`; existing consumers of those fields remain compatible.
 
 ```bash
 node scripts/compare-swiss-backend.mjs swiss-reference.json rust-candidate.json reviewed-tolerances.json
