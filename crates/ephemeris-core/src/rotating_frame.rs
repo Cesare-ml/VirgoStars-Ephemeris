@@ -147,8 +147,7 @@ impl RotatingFrame {
         }
         let position_km = mat_vec(self.rotation, state.position_km);
         let velocity_rotated = mat_vec(self.rotation, state.velocity_km_per_day);
-        let velocity_due_to_axes =
-            mat_vec(self.rotation_rate_per_tdb_day, state.position_km);
+        let velocity_due_to_axes = mat_vec(self.rotation_rate_per_tdb_day, state.position_km);
         let velocity_km_per_day =
             std::array::from_fn(|i| velocity_rotated[i] + velocity_due_to_axes[i]);
         if position_km
