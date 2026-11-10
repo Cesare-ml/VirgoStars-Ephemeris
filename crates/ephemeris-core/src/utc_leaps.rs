@@ -93,7 +93,10 @@ impl fmt::Display for UtcLeapError {
             Self::DuplicateVersion => write!(f, "leap-second schedule version already registered"),
             Self::UnknownVersion => write!(f, "requested leap-second schedule version is unknown"),
             Self::SourceDigestMismatch => {
-                write!(f, "leap-second source SHA-256 differs from the expected digest")
+                write!(
+                    f,
+                    "leap-second source SHA-256 differs from the expected digest"
+                )
             }
         }
     }
@@ -1592,11 +1595,18 @@ mod tests {
             "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd"
         );
         assert_eq!(pinned.source_sha256().len(), 64);
-        assert!(pinned.source_sha256().chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(pinned
+            .source_sha256()
+            .chars()
+            .all(|c| c.is_ascii_hexdigit()));
 
         let mut catalog = UtcLeapCatalog::new();
         catalog.register(pinned).unwrap();
-        let expected = catalog.select("iana-tzdb-2026b").unwrap().source_sha256().to_owned();
+        let expected = catalog
+            .select("iana-tzdb-2026b")
+            .unwrap()
+            .source_sha256()
+            .to_owned();
         assert!(catalog
             .select_matching_sha256("iana-tzdb-2026b", &expected)
             .is_ok());
@@ -1634,8 +1644,12 @@ mod tests {
         assert_eq!(original.version(), different.version());
         assert_ne!(original.source_sha256(), different.source_sha256());
         assert_eq!(
-            original.schedule().tai_minus_utc_at_day_start(d(2017, 1, 1)),
-            different.schedule().tai_minus_utc_at_day_start(d(2017, 1, 1))
+            original
+                .schedule()
+                .tai_minus_utc_at_day_start(d(2017, 1, 1)),
+            different
+                .schedule()
+                .tai_minus_utc_at_day_start(d(2017, 1, 1))
         );
 
         let mut catalog = UtcLeapCatalog::new();
@@ -1644,7 +1658,11 @@ mod tests {
             catalog.select_matching_sha256("identical-name", original.source_sha256()),
             Err(UtcLeapError::SourceDigestMismatch)
         ));
-        let actual = catalog.select("identical-name").unwrap().source_sha256().to_owned();
+        let actual = catalog
+            .select("identical-name")
+            .unwrap()
+            .source_sha256()
+            .to_owned();
         assert!(catalog
             .select_matching_sha256("identical-name", &actual)
             .is_ok());
@@ -1706,7 +1724,11 @@ mod tests {
         let day = d(2017, 1, 1);
         let zero = UtcClockTime::new(0, 0, 0.0).unwrap();
         let tai = catalog.utc_to_tai(version, day, zero).unwrap().value;
-        for wrong_hash in ["", "f", "0000000000000000000000000000000000000000000000000000000000000000"] {
+        for wrong_hash in [
+            "",
+            "f",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ] {
             assert_eq!(
                 catalog.utc_to_tai_checked(version, wrong_hash, day, zero),
                 Err(UtcLeapError::SourceDigestMismatch)
