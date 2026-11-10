@@ -72,7 +72,8 @@ function indexCases(document, label) {
     const input = testCase.input;
     ensure(finiteNumber(input?.jdUt) && Number.isInteger(input?.bodyId) &&
       Number.isInteger(input?.flags), `${label}: invalid input in ${testCase.id}`);
-    ensure((input.flags & SWIEPH) !== 0, `${label}: SWIEPH not requested in ${testCase.id}`);
+    ensure(input.flags === (SWIEPH | SPEED),
+      `${label}: only P0 SWIEPH|SPEED ecliptic mode is supported in ${testCase.id}`);
     for (const field of FIELDS) {
       ensure(finiteNumber(testCase.output?.[field]),
         `${label}: missing/non-finite ${field} for ${testCase.id}`);
