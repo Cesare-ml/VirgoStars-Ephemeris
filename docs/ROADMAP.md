@@ -16,9 +16,9 @@ Status: **planning and experimental implementation**, updated 2026-11-10. The ex
 
 Read *one official* DE440s SPK locally; parse headers and segment metadata; evaluate at least one known state at one epoch; correctly distinguish target/center/frame and position-vs-velocity. Show agreement with an independent NAIF reference at a documented tolerance. No tropical longitude, natal chart or Swiss replacement claims in E1.
 
-### Deliberately later / not promised in v1
+### Full functional coverage target
 
-Exhaustive Swiss Ephemeris feature equivalence (all house systems, thousands of minor bodies, hypothetical points, obscure historical ranges, unusual sidereal traditions). The **functions library** owns astrology-specific parts. Any extension needs verified data availability, separate model/rights review and a scientific test.
+The owner has set coverage of the documented Swiss Ephemeris capabilities as the long-term goal, including house systems, minor bodies, hypothetical points, historical ranges and sidereal traditions. The first usable milestone is a time-and-location planet calculation; the remaining families are tracked in [FEATURE_COVERAGE.md](FEATURE_COVERAGE.md). The **functions library** owns astrology-specific parts. Each extension still needs verified data availability, documented models and independent numerical tests; full coverage is not yet implemented.
 
 ### Open decisions
 
