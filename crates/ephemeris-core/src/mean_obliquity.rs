@@ -80,16 +80,12 @@ impl fmt::Display for MeanObliquityError {
 }
 impl Error for MeanObliquityError {}
 
-/// Evaluate IAU 2006 mean obliquity and its exact polynomial derivative.
-///
-/// TT Julian centuries T = (JD_TT - 2451545.0) / 36525.0.
-/// The split JD is used *before* subtraction to retain fractional-day
-/// precision. No leap-second, UTC, TT↔TDB or UT1 conversion is attempted.
-///
-/// The derivative is obtained analytically from the same polynomial using
-/// simultaneous Horner recurrences. This scalar angle alone must not be
-/// mistaken for a fully specified ecliptic-of-date orientation in the ICRF.
-pub fn mean_obliquity_iau2006(tt_epoch: JulianDate) -> Result<MeanObliquity, MeanObliquityError> {
+/// TT Julian centuries from J2000 for the guarded IAU 2006 precession
+/// family. Kept crate-private so each constituent uses identical epochs and
+/// refuses wrong time scales or dates outside the tested policy window.
+pub(crate) fn tt_centuries_iau2006(
+    tt_epoch: JulianDate,
+) -> Result<f64, MeanObliquityError> {
     if tt_epoch.scale() != TimeScale::Tt {
         return Err(MeanObliquityError::WrongTimeScale);
     }
@@ -103,6 +99,20 @@ pub fn mean_obliquity_iau2006(tt_epoch: JulianDate) -> Result<MeanObliquity, Mea
     if centuries.abs() > MAX_ABS_CENTURIES_FROM_J2000 {
         return Err(MeanObliquityError::OutsideTestedInterval);
     }
+    Ok(centuries)
+}
+
+/// Evaluate IAU 2006 mean obliquity and its exact polynomial derivative.
+///
+/// TT Julian centuries T = (JD_TT - 2451545.0) / 36525.0.
+/// The split JD is used *before* subtraction to retain fractional-day
+/// precision. No leap-second, UTC, TT↔TDB or UT1 conversion is attempted.
+///
+/// The derivative is obtained analytically from the same polynomial using
+/// simultaneous Horner recurrences. This scalar angle alone must not be
+/// mistaken for a fully specified ecliptic-of-date orientation in the ICRF.
+pub fn mean_obliquity_iau2006(tt_epoch: JulianDate) -> Result<MeanObliquity, MeanObliquityError> {
+    let centuries = tt_centuries_iau2006(tt_epoch)?;
 
     // Paired Horner recurrences: derivative is with respect to centuries.
     let mut angle_arcsec = OBLIQUITY_ARCSECONDS[5];
