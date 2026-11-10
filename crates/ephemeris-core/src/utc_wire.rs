@@ -154,11 +154,8 @@ impl UtcLeapCatalog {
             crate::calendar::TimeScale::Tai,
         )
         .map_err(|_| UtcLeapError::InvalidWireRecord)?;
-        let expected = self.tai_to_utc_record_v1(
-            &record.leap_table_version,
-            &record.leap_table_sha256,
-            tai,
-        )?;
+        let expected =
+            self.tai_to_utc_record_v1(&record.leap_table_version, &record.leap_table_sha256, tai)?;
         if record.leap_table_provenance != expected.leap_table_provenance
             || record.leap_expires_utc_day_number != expected.leap_expires_utc_day_number
             || record.utc_day_number != expected.utc_day_number
@@ -485,55 +482,94 @@ mod tests {
 
         let mut modified = original.clone();
         modified.schema = "virgostars.utc-tai.v2";
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.tai_time_scale = "TT";
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.leap_table_provenance.push_str("/unreviewed");
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.leap_expires_utc_day_number += 1;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.utc_day_number += 1;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.utc_hour = 1;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.utc_minute = 1;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.utc_second += 0.5;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.utc_second = f64::NAN;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.tai_midnight_fraction += 1.0 / 86_400.0;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.tai_midnight_fraction = f64::INFINITY;
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::InvalidWireRecord)
+        );
 
         modified = original.clone();
         modified.leap_table_version = "unknown".to_owned();
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::UnknownVersion));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::UnknownVersion)
+        );
 
         modified = original;
         modified.leap_table_sha256 = "0".repeat(64);
-        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::SourceDigestMismatch));
+        assert_eq!(
+            catalog.validate_record_v1(&modified),
+            Err(UtcLeapError::SourceDigestMismatch)
+        );
         assert_eq!(
             UtcTaiErrorV1::from(UtcLeapError::InvalidWireRecord).code,
             "invalid_wire_record"
