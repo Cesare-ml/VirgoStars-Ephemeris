@@ -21,15 +21,20 @@ use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
 use virgostars_ephemeris_core::planetary_arguments::{
     planetary_fundamental_arguments, PlanetaryArgumentConvention, PlanetaryArgumentError,
     EARTH_MEAN_LONGITUDE, GENERAL_PRECESSION_IN_LONGITUDE, JUPITER_MEAN_LONGITUDE,
-    MARS_MEAN_LONGITUDE, MERCURY_MEAN_LONGITUDE, NEPTUNE_MEAN_LONGITUDE,
-    SATURN_MEAN_LONGITUDE, URANUS_MEAN_LONGITUDE, VENUS_MEAN_LONGITUDE,
+    MARS_MEAN_LONGITUDE, MERCURY_MEAN_LONGITUDE, NEPTUNE_MEAN_LONGITUDE, SATURN_MEAN_LONGITUDE,
+    URANUS_MEAN_LONGITUDE, VENUS_MEAN_LONGITUDE,
 };
 
 fn tdb_jd(value: f64) -> JulianDate {
     JulianDate::from_f64(value, TimeScale::Tdb).unwrap()
 }
 
-fn iers(epoch: JulianDate) -> Result<virgostars_ephemeris_core::planetary_arguments::PlanetaryArguments, PlanetaryArgumentError> {
+fn iers(
+    epoch: JulianDate,
+) -> Result<
+    virgostars_ephemeris_core::planetary_arguments::PlanetaryArguments,
+    PlanetaryArgumentError,
+> {
     planetary_fundamental_arguments(epoch, PlanetaryArgumentConvention::Iers2010)
 }
 
@@ -92,7 +97,11 @@ fn j2000_iers_coefficients_and_precession_rate_are_exactly_grounded() {
         near(result.angles_rad[index], initial, 1e-15);
         near(result.rates_rad_per_tdb_day[index], slope / 36_525.0, 1e-15);
     }
-    near(result.angles_rad[GENERAL_PRECESSION_IN_LONGITUDE], 0.0, 1e-16);
+    near(
+        result.angles_rad[GENERAL_PRECESSION_IN_LONGITUDE],
+        0.0,
+        1e-16,
+    );
     near(
         result.rates_rad_per_tdb_day[GENERAL_PRECESSION_IN_LONGITUDE],
         0.024_381_75 / 36_525.0,
@@ -143,8 +152,7 @@ fn analytic_day_rates_match_independently_evaluated_angles_at_five_dates() {
         let before = iers(tdb_jd(epoch - 0.5)).unwrap();
         let after = iers(tdb_jd(epoch + 0.5)).unwrap();
         for i in 0..9 {
-            let measured =
-                shortest_angle_delta(after.angles_rad[i], before.angles_rad[i]);
+            let measured = shortest_angle_delta(after.angles_rad[i], before.angles_rad[i]);
             near(current.rates_rad_per_tdb_day[i], measured, 2e-11);
         }
     }
@@ -155,13 +163,16 @@ fn signed_phase_rate_matches_independent_nine_term_expression() {
     let a = iers(tdb_jd(2_451_545.0 + 37_000.0)).unwrap();
     let coeff: [i8; 9] = [2, -1, 3, 0, 1, -2, 0, 1, -1];
     let (phase, rate) = a.phase(coeff);
-    let p = (2.0 * a.angles_rad[0] - a.angles_rad[1]
-        + 3.0 * a.angles_rad[2] + a.angles_rad[4]
-        - 2.0 * a.angles_rad[5] + a.angles_rad[7]
-        - a.angles_rad[8]).rem_euclid(TAU);
+    let p = (2.0 * a.angles_rad[0] - a.angles_rad[1] + 3.0 * a.angles_rad[2] + a.angles_rad[4]
+        - 2.0 * a.angles_rad[5]
+        + a.angles_rad[7]
+        - a.angles_rad[8])
+        .rem_euclid(TAU);
     let v = 2.0 * a.rates_rad_per_tdb_day[0] - a.rates_rad_per_tdb_day[1]
-        + 3.0 * a.rates_rad_per_tdb_day[2] + a.rates_rad_per_tdb_day[4]
-        - 2.0 * a.rates_rad_per_tdb_day[5] + a.rates_rad_per_tdb_day[7]
+        + 3.0 * a.rates_rad_per_tdb_day[2]
+        + a.rates_rad_per_tdb_day[4]
+        - 2.0 * a.rates_rad_per_tdb_day[5]
+        + a.rates_rad_per_tdb_day[7]
         - a.rates_rad_per_tdb_day[8];
     near(phase, p, 1e-14);
     near(rate, v, 1e-15);
@@ -201,7 +212,10 @@ fn split_julian_date_detects_fractional_second_motion() {
     let b = iers(later).unwrap();
     let elapsed = 0.25 / 86_400.0;
     near(
-        shortest_angle_delta(b.angles_rad[MERCURY_MEAN_LONGITUDE], a.angles_rad[MERCURY_MEAN_LONGITUDE]),
+        shortest_angle_delta(
+            b.angles_rad[MERCURY_MEAN_LONGITUDE],
+            a.angles_rad[MERCURY_MEAN_LONGITUDE],
+        ),
         a.rates_rad_per_tdb_day[MERCURY_MEAN_LONGITUDE] * elapsed,
         1e-14,
     );
@@ -211,10 +225,7 @@ fn split_julian_date_detects_fractional_second_motion() {
 fn rejects_wrong_time_scales_unrepresentable_epochs_and_extrapolation() {
     for scale in [TimeScale::Tt, TimeScale::Tai, TimeScale::Ut1] {
         let epoch = JulianDate::new(2_451_545, 0.5, scale).unwrap();
-        assert_eq!(
-            iers(epoch),
-            Err(PlanetaryArgumentError::WrongTimeScale),
-        );
+        assert_eq!(iers(epoch), Err(PlanetaryArgumentError::WrongTimeScale),);
     }
     let huge = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
     assert_eq!(
