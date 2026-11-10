@@ -23,7 +23,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::calendar::{Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale};
+use crate::calendar::{Calendar, CalendarDateTime, JulianDate, TimeScale};
 
 /// A Gregorian UTC calendar day (not a uniform-scale Julian date).
 ///
