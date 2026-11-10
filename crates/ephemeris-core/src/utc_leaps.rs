@@ -1546,6 +1546,90 @@ mod tests {
     }
 
     #[test]
+    fn content_sha256_is_stable_and_attached_to_both_conversion_results() {
+        let pinned = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        assert_eq!(
+            pinned.source_sha256(),
+            crate::fingerprint::sha256_hex(source.as_bytes())
+        );
+        assert_eq!(pinned.source_sha256().len(), 64);
+        assert!(pinned.source_sha256().chars().all(|c| c.is_ascii_hexdigit()));
+
+        let mut catalog = UtcLeapCatalog::new();
+        catalog.register(pinned).unwrap();
+        let expected = catalog.select("iana-tzdb-2026b").unwrap().source_sha256().to_owned();
+        assert!(catalog
+            .select_matching_sha256("iana-tzdb-2026b", &expected)
+            .is_ok());
+        let day = d(2016, 12, 31);
+        let result = catalog
+            .utc_to_tai(
+                "iana-tzdb-2026b",
+                day,
+                UtcClockTime::new(23, 59, 60.5).unwrap(),
+            )
+            .unwrap();
+        let reverse = catalog.tai_to_utc("iana-tzdb-2026b", result.value).unwrap();
+        assert_eq!(result.source_sha256, expected);
+        assert_eq!(reverse.source_sha256, expected);
+        assert_eq!(reverse.value.0, day);
+        assert!((reverse.value.1.second() - 60.5).abs() < 1e-8);
+    }
+
+    #[test]
+    fn same_version_label_with_different_source_bytes_has_different_sha256() {
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let changed = format!("{source}# reviewer-specific comment; rows unchanged\n");
+        let original = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "identical-name",
+            "reviewed-source-A",
+            source,
+        )
+        .unwrap();
+        let different = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "identical-name",
+            "reviewed-source-B",
+            &changed,
+        )
+        .unwrap();
+        assert_eq!(original.version(), different.version());
+        assert_ne!(original.source_sha256(), different.source_sha256());
+        assert_eq!(
+            original.schedule().tai_minus_utc_at_day_start(d(2017, 1, 1)),
+            different.schedule().tai_minus_utc_at_day_start(d(2017, 1, 1))
+        );
+
+        let mut catalog = UtcLeapCatalog::new();
+        catalog.register(different).unwrap();
+        assert!(matches!(
+            catalog.select_matching_sha256("identical-name", original.source_sha256()),
+            Err(UtcLeapError::SourceDigestMismatch)
+        ));
+        let actual = catalog.select("identical-name").unwrap().source_sha256().to_owned();
+        assert!(catalog
+            .select_matching_sha256("identical-name", &actual)
+            .is_ok());
+    }
+
+    #[test]
+    fn modified_expiry_cannot_reuse_pinned_source_digest() {
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let updated = source.replace("#@ 4007404800", "#@ 4023388800");
+        let pinned = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let future = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "iana-tzdb-2026b",
+            "synthetic-test-only",
+            &updated,
+        )
+        .unwrap();
+        assert_eq!(future.version(), pinned.version());
+        assert_ne!(future.source_sha256(), pinned.source_sha256());
+        assert_eq!(pinned.expires_utc_day(), d(2026, 12, 28));
+        assert_eq!(future.expires_utc_day(), d(2027, 7, 1));
+    }
+
+    #[test]
     fn final_boundary_transition_and_no_extrapolation_are_explicit() {
         let last = d(2016, 12, 31);
         let schedule = UtcLeapSchedule::new(
