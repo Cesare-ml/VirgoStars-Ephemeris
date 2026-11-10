@@ -81,11 +81,18 @@ cargo run --example validate_horizons -- \
 
 The final two arguments **must be positive finite numbers**, chosen and
 approved in the scientific validation plan. There are deliberately no default
-accuracy thresholds. The example prints the largest **absolute component**
-position and velocity error for each epoch, the overall maxima and the number
-of failing epochs. Any exceeded threshold, out-of-coverage JD, missing DE441
-series, invalid reference contract or unreadable file produces a nonzero exit
-code.
+accuracy thresholds. For every epoch the example prints all **six signed
+component residuals**, defined strictly as **Rust DE441 minus Horizons**:
+`dx, dy, dz` in km and `dvx, dvy, dvz` in km/day. It also prints the
+maximum absolute component error and Euclidean (3D) norm for position and
+velocity, followed by overall maxima and the number of failing epochs.
+
+The **pass/fail decision still uses the two explicitly approved maximum
+absolute component tolerances**; Euclidean norms are reported as additional
+diagnostics, not silently substituted as acceptance thresholds. Overflowing
+or non-finite residual components/norms are rejected rather than counted as
+passing. Any exceeded threshold, out-of-coverage JD, missing DE441 series,
+invalid reference contract or unreadable file produces a nonzero exit code.
 
 The parser has synthetic unit tests rejecting mismatched frame, plane,
 corrections, units, unknown bodies, missing provenance and non-finite values.
@@ -93,6 +100,15 @@ A green GitHub Actions CI job only establishes those harness/parser checks.
 **No real-kernel validation is run in CI**: the private/local reference
 file and external DE441 binary are required to establish real scientific
 agreement.
+
+
+## Incremental validation improvement — 2026-11-10
+
+The example now calculates signed XYZ/VXYZ residuals, maximum per-axis absolute
+errors and 3D residual norms, with deterministic regression tests for signs,
+units and large-magnitude numeric failures. These extra diagnostics support a
+scientific audit of each body and epoch once real data is supplied; they do
+**not** constitute an independent numerical comparison by themselves.
 
 ## Evidence required before claiming a passing scientific gate
 
