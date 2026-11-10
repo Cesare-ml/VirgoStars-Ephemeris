@@ -100,7 +100,7 @@ impl fmt::Display for MhbPlanetaryLunarError {
 impl Error for MhbPlanetaryLunarError {}
 
 impl MhbPlanetaryLunarArguments {
-    /// Compose a harmonic phase from four multipliers in [l,F,D,Omega] order.
+    /// Compose a harmonic phase from four multipliers in `[l,F,D,Omega]` order.
     /// The output derivative is signed rad/TDB day and phase is [0,2π).
     pub fn phase(&self, multipliers: [i8; 4]) -> (f64, f64) {
         let mut phase = 0.0;
