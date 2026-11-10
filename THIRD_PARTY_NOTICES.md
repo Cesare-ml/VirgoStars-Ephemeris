@@ -7,3 +7,7 @@ its license is reproduced in [third_party/ERFA_LICENSE.txt](third_party/ERFA_LIC
 Reference: <https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c>.
 Only numerical test values are used; no ERFA implementation or library is
 included. The ERFA terms remain separate from VirgoStars' CPAL-1.0 license.
+
+`crates/ephemeris-core/tests/calendar_contract.rs` also uses the numeric
+Gregorian date/JD reference from the ERFA `t_cal2jd` conformance test, under
+the same license and source attribution.

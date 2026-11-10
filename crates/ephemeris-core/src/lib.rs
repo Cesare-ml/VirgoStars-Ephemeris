@@ -23,6 +23,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
