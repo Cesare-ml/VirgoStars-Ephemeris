@@ -31,11 +31,16 @@ pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod lunar_points;
 pub mod state;
 pub mod time;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use earth_orientation::{EclipticNutation, NutationAngles, OrientationError};
 pub use error::{EphemerisError, Result};
+pub use lunar_points::{
+    calculate_lunar_point, mean_lunar_apogee, mean_lunar_node, LunarPoint, LunarPointCoordinates,
+    LunarPointError,
+};
 pub use state::{ChebyshevPositionRecord, StateVectorKm, Vector3};
 pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};

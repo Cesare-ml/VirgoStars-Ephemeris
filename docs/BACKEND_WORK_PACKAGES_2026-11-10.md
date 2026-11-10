@@ -146,18 +146,20 @@ file size/IO and callback needs; record the choice and measured constraints.
 
 ## F — Additional default chart bodies (P0)
 
-**Owner:** ephemeris core; new data policy where needed. Start with actual
-backend default IDs in the inventory. Split nodes/apogees and Chiron into
-separate PRs; data and models are different.
+**Owner:** ephemeris core. Lunar mathematical points implemented in
+`crates/ephemeris-core/src/lunar_points.rs` and documented in
+[LUNAR_NODES_AND_APOGEES_2026-11-10.md](LUNAR_NODES_AND_APOGEES_2026-11-10.md).
+Chiron requires separate data policy / asteroid model.
 
 - Cover outer planet systems, mean/true lunar node, mean/osculating apogee,
   and Chiron with named, documented algorithms and source/data provenance.
   Distinguish mathematical points from physical apparent bodies.
+- Progress: Mean Node (ID 10), True Node (ID 11), Mean Apogee / Lilith (ID 12),
+  and Osculating Apogee / True Lilith (ID 13) implemented with independent
+  analytical algorithms (Simon et al. 1994, Chapront ELP-2000, and orbital momentum/Runge-Lenz).
 - Acceptance: body IDs and names, independent fixtures in-range and at
   boundaries, correct rates and error behavior; no fabricated positions if
-  the classic DE441 file lacks a required model or target. Include reference
-  mode/flag differences and legally reviewed data acquisition.
-
+  the classic DE441 file lacks a required model or target.
 ## G — Houses and house positions (P0; separate repository)
 
 **Owner:** `astrological-functions`, with ephemeris time/orientation inputs.
