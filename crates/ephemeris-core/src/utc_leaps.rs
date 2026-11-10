@@ -1706,7 +1706,7 @@ mod tests {
         let day = d(2017, 1, 1);
         let zero = UtcClockTime::new(0, 0, 0.0).unwrap();
         let tai = catalog.utc_to_tai(version, day, zero).unwrap().value;
-        for wrong_hash in ["", "f", "0".repeat(64).as_str()] {
+        for wrong_hash in ["", "f", "0000000000000000000000000000000000000000000000000000000000000000"] {
             assert_eq!(
                 catalog.utc_to_tai_checked(version, wrong_hash, day, zero),
                 Err(UtcLeapError::SourceDigestMismatch)
@@ -1732,7 +1732,7 @@ mod tests {
         let pinned = VersionedUtcLeapSchedule::iana_2026b().unwrap();
         let old_hash = pinned.source_sha256().to_owned();
         let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
-        let altered = format!("{source}# harmless extra comment\\n");
+        let altered = format!("{source}# harmless extra comment\n");
         catalog
             .register(
                 VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
