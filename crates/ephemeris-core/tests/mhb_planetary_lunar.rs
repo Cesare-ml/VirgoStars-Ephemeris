@@ -20,8 +20,8 @@ use std::f64::consts::{PI, TAU};
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
 use virgostars_ephemeris_core::mhb_planetary_lunar::{
-    mhb2000_planetary_lunar_arguments, MhbPlanetaryLunarError,
-    MOON_ARGUMENT_OF_LATITUDE, MOON_ASCENDING_NODE, MOON_MEAN_ANOMALY, MOON_SUN_ELONGATION,
+    mhb2000_planetary_lunar_arguments, MhbPlanetaryLunarError, MOON_ARGUMENT_OF_LATITUDE,
+    MOON_ASCENDING_NODE, MOON_MEAN_ANOMALY, MOON_SUN_ELONGATION,
 };
 
 fn at(day_offset: f64) -> JulianDate {
@@ -98,7 +98,11 @@ fn independent_high_precision_decimal_reference_at_t_point_eight() {
     ];
     let actual = mhb2000_planetary_lunar_arguments(at(0.8 * 36_525.0)).unwrap();
     for (index, reference) in expected.into_iter().enumerate() {
-        near(angle_difference(actual.angles_rad[index], reference), 0.0, 2e-12);
+        near(
+            angle_difference(actual.angles_rad[index], reference),
+            0.0,
+            2e-12,
+        );
     }
 }
 
@@ -120,7 +124,8 @@ fn exact_rates_match_finite_differences_across_multiple_dates() {
         let earlier = mhb2000_planetary_lunar_arguments(at(day - h)).unwrap();
         let later = mhb2000_planetary_lunar_arguments(at(day + h)).unwrap();
         for i in 0..4 {
-            let numerical = angle_difference(later.angles_rad[i], earlier.angles_rad[i]) / (2.0 * h);
+            let numerical =
+                angle_difference(later.angles_rad[i], earlier.angles_rad[i]) / (2.0 * h);
             near(now.rates_rad_per_tdb_day[i], numerical, 4e-11);
         }
     }
@@ -130,8 +135,8 @@ fn exact_rates_match_finite_differences_across_multiple_dates() {
 fn phase_combination_and_signs_are_explicit() {
     let args = mhb2000_planetary_lunar_arguments(at(500.0)).unwrap();
     let (angle, rate) = args.phase([2, -1, 0, 3]);
-    let expected_angle = (2.0 * args.angles_rad[0] - args.angles_rad[1]
-        + 3.0 * args.angles_rad[3]).rem_euclid(TAU);
+    let expected_angle =
+        (2.0 * args.angles_rad[0] - args.angles_rad[1] + 3.0 * args.angles_rad[3]).rem_euclid(TAU);
     let expected_rate = 2.0 * args.rates_rad_per_tdb_day[0] - args.rates_rad_per_tdb_day[1]
         + 3.0 * args.rates_rad_per_tdb_day[3];
     near(angle, expected_angle, 1e-14);
@@ -157,20 +162,22 @@ fn can_combine_four_lunar_and_nine_planetary_terms_with_zero_solar_coefficient()
     let mut planetary_rates = [0.0; 9];
     planetary_rates[0] = 0.04;
     planetary_rates[8] = -0.002;
-    let (phase, speed) =
-        args.phase_with_planets(multipliers, planetary, planetary_rates).unwrap();
+    let (phase, speed) = args
+        .phase_with_planets(multipliers, planetary, planetary_rates)
+        .unwrap();
     near(
         phase,
-        (2.0 * args.angles_rad[0] - args.angles_rad[1]
-            + 3.0 * args.angles_rad[3] + planetary[0]
-            - 2.0 * planetary[8]).rem_euclid(TAU),
+        (2.0 * args.angles_rad[0] - args.angles_rad[1] + 3.0 * args.angles_rad[3] + planetary[0]
+            - 2.0 * planetary[8])
+            .rem_euclid(TAU),
         1e-14,
     );
     near(
         speed,
         2.0 * args.rates_rad_per_tdb_day[0] - args.rates_rad_per_tdb_day[1]
             + 3.0 * args.rates_rad_per_tdb_day[3]
-            + 0.04 - 2.0 * (-0.002),
+            + 0.04
+            - 2.0 * (-0.002),
         1e-14,
     );
 }
