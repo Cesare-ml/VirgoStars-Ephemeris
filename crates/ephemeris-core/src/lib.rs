@@ -32,6 +32,7 @@ mod fingerprint;
 pub mod state;
 pub mod time;
 pub mod utc_leaps;
+pub mod utc_wire;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
