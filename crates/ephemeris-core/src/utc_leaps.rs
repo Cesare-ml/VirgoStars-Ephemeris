@@ -52,6 +52,8 @@ pub enum UtcLeapError {
     InvalidClockTime,
     /// This clock reading does not exist on the named UTC day.
     ClockTimeOutsideDay,
+    /// Conversion to a normalized split TAI Julian date was not representable.
+    UnrepresentableTai,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -66,6 +68,7 @@ impl fmt::Display for UtcLeapError {
             Self::OutsideCoverage => write!(f, "UTC day lies outside approved schedule coverage"),
             Self::InvalidClockTime => write!(f, "invalid UTC clock fields"),
             Self::ClockTimeOutsideDay => write!(f, "UTC clock reading does not exist on this day"),
+            Self::UnrepresentableTai => write!(f, "TAI Julian date cannot represent this UTC instant"),
         }
     }
 }
@@ -262,6 +265,37 @@ impl UtcLeapSchedule {
             return Err(UtcLeapError::ClockTimeOutsideDay);
         }
         Ok(seconds)
+    }
+
+    /// Convert a validated UTC civil day and clock into a split **TAI** JD.
+    ///
+    /// The caller-provided leap schedule determines the integer TAI-UTC
+    /// offset at the **start of the UTC day**. Add that offset to the elapsed
+    /// SI seconds within the named day, then normalize across TAI midnight.
+    /// This preserves distinct instants at 23:59:59, 23:59:60 (positive
+    /// leap), and the next day's 00:00:00, without treating UTC as a uniform
+    /// Julian-day time scale. A hypothetical negative leap is also supported.
+    ///
+    /// The output is explicitly tagged `TimeScale::Tai`. It is not TT/TDB;
+    /// the schedule must have been independently sourced and approved.
+    pub fn utc_to_tai(
+        &self,
+        day: UtcDay,
+        clock: UtcClockTime,
+    ) -> Result<JulianDate, UtcLeapError> {
+        let utc_elapsed = self.seconds_into_utc_day(day, clock)?;
+        let offset = self.tai_minus_utc_at_day_start(day)?;
+        let tai_seconds = utc_elapsed + f64::from(offset);
+        let tai_day_carry = (tai_seconds / 86_400.0).floor() as i64;
+        let tai_day_number = day
+            .julian_day_number
+            .checked_add(tai_day_carry)
+            .ok_or(UtcLeapError::UnrepresentableTai)?;
+        let tai_fraction = (tai_seconds - (tai_day_carry as f64) * 86_400.0) / 86_400.0;
+        let tai = JulianDate::new(tai_day_number, tai_fraction, TimeScale::Tai)
+            .map_err(|_| UtcLeapError::UnrepresentableTai)?;
+        tai.parts().map_err(|_| UtcLeapError::UnrepresentableTai)?;
+        Ok(tai)
     }
 
     /// Return 86,399, 86,400 or 86,401 SI seconds for a UTC civil day.
@@ -468,6 +502,110 @@ mod tests {
         );
         assert_eq!(
             schedule.seconds_into_utc_day(d(2020, 1, 2), midnight),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+    }
+
+    #[test]
+    fn utc_to_tai_distinguishes_positive_leap_second_and_next_midnight() {
+        let schedule = UtcLeapSchedule::new(
+            d(2016, 12, 31),
+            d(2017, 1, 1),
+            36,
+            vec![UtcLeapTransition {
+                effective_utc_day: d(2017, 1, 1),
+                tai_minus_utc_seconds: 37,
+            }],
+        )
+        .unwrap();
+        let last_day = d(2016, 12, 31);
+        let next_day = d(2017, 1, 1);
+
+        let before = schedule
+            .utc_to_tai(last_day, UtcClockTime::new(23, 59, 59.0).unwrap())
+            .unwrap();
+        let leap = schedule
+            .utc_to_tai(last_day, UtcClockTime::new(23, 59, 60.0).unwrap())
+            .unwrap();
+        let after = schedule
+            .utc_to_tai(next_day, UtcClockTime::new(0, 0, 0.0).unwrap())
+            .unwrap();
+        assert_eq!(before.scale(), TimeScale::Tai);
+        assert_eq!(leap.scale(), TimeScale::Tai);
+        assert_eq!(after.scale(), TimeScale::Tai);
+        assert_eq!(before.day_number(), next_day.julian_day_number());
+        assert_eq!(leap.day_number(), next_day.julian_day_number());
+        assert_eq!(after.day_number(), next_day.julian_day_number());
+        for (epoch, expected_seconds) in [(before, 35.0), (leap, 36.0), (after, 37.0)] {
+            assert!(
+                (epoch.midnight_fraction() * 86_400.0 - expected_seconds).abs() < 1e-8
+            );
+        }
+        let fraction = schedule
+            .utc_to_tai(last_day, UtcClockTime::new(23, 59, 60.5).unwrap())
+            .unwrap();
+        assert!(
+            (fraction.midnight_fraction() * 86_400.0 - 36.5).abs() < 1e-8
+        );
+    }
+
+    #[test]
+    fn utc_to_tai_negative_leap_has_no_missing_tai_second() {
+        // Synthetic negative leap: valid 23:59:58 -> 00:00:00 UTC
+        // corresponds to consecutive TAI clock seconds 00:00:35 and :36.
+        let schedule = UtcLeapSchedule::new(
+            d(2020, 6, 30),
+            d(2020, 7, 1),
+            37,
+            vec![UtcLeapTransition {
+                effective_utc_day: d(2020, 7, 1),
+                tai_minus_utc_seconds: 36,
+            }],
+        )
+        .unwrap();
+        let before = schedule
+            .utc_to_tai(d(2020, 6, 30), UtcClockTime::new(23, 59, 58.0).unwrap())
+            .unwrap();
+        let after = schedule
+            .utc_to_tai(d(2020, 7, 1), UtcClockTime::new(0, 0, 0.0).unwrap())
+            .unwrap();
+        assert_eq!(before.day_number(), d(2020, 7, 1).julian_day_number());
+        assert_eq!(after.day_number(), d(2020, 7, 1).julian_day_number());
+        assert!((before.midnight_fraction() * 86_400.0 - 35.0).abs() < 1e-8);
+        assert!((after.midnight_fraction() * 86_400.0 - 36.0).abs() < 1e-8);
+        assert_eq!(
+            schedule.utc_to_tai(
+                d(2020, 6, 30),
+                UtcClockTime::new(23, 59, 59.0).unwrap()
+            ),
+            Err(UtcLeapError::ClockTimeOutsideDay)
+        );
+    }
+
+    #[test]
+    fn utc_to_tai_normal_midday_and_tai_to_tt_composition() {
+        let day = d(2017, 1, 2);
+        let schedule = UtcLeapSchedule::new(day, day, 37, vec![]).unwrap();
+        let tai = schedule
+            .utc_to_tai(day, UtcClockTime::new(12, 0, 0.25).unwrap())
+            .unwrap();
+        assert_eq!(tai.day_number(), day.julian_day_number());
+        assert!((tai.midnight_fraction() * 86_400.0 - 43_237.25).abs() < 1e-8);
+        let tt = crate::time::tai_to_tt(tai).unwrap();
+        assert_eq!(tt.scale(), TimeScale::Tt);
+        assert!((tt.midnight_fraction() * 86_400.0 - 43_269.434).abs() < 1e-8);
+    }
+
+    #[test]
+    fn utc_to_tai_rejects_invalid_date_specific_clock_and_coverage() {
+        let day = d(2017, 1, 2);
+        let schedule = UtcLeapSchedule::new(day, day, 37, vec![]).unwrap();
+        assert_eq!(
+            schedule.utc_to_tai(day, UtcClockTime::new(23, 59, 60.0).unwrap()),
+            Err(UtcLeapError::ClockTimeOutsideDay)
+        );
+        assert_eq!(
+            schedule.utc_to_tai(d(2017, 1, 3), UtcClockTime::new(0, 0, 0.0).unwrap()),
             Err(UtcLeapError::OutsideCoverage)
         );
     }
