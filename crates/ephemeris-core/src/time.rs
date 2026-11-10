@@ -87,10 +87,13 @@ fn offset_atomic_date(
     } else {
         0
     };
-    let day = epoch
-        .day_number()
-        .checked_add(rollover)
-        .ok_or(AtomicTimeError::InvalidJulianDate(CalendarError::YearOutOfRange))?;
+    let day =
+        epoch
+            .day_number()
+            .checked_add(rollover)
+            .ok_or(AtomicTimeError::InvalidJulianDate(
+                CalendarError::YearOutOfRange,
+            ))?;
     let shifted = JulianDate::new(day, shifted_fraction - rollover as f64, output)?;
     shifted.parts()?;
     Ok(shifted)
@@ -101,24 +104,14 @@ fn offset_atomic_date(
 /// TT = TAI + 32.184 seconds. This does not convert UTC to TAI and
 /// does not calculate TT↔TDB. The date's scale must be `TimeScale::Tai`.
 pub fn tai_to_tt(epoch: JulianDate) -> std::result::Result<JulianDate, AtomicTimeError> {
-    offset_atomic_date(
-        epoch,
-        TimeScale::Tai,
-        TimeScale::Tt,
-        TT_MINUS_TAI_SECONDS,
-    )
+    offset_atomic_date(epoch, TimeScale::Tai, TimeScale::Tt, TT_MINUS_TAI_SECONDS)
 }
 
 /// Convert a split Julian date in TT back to TAI.
 ///
 /// TAI = TT - 32.184 seconds. Input must explicitly be `TimeScale::Tt`.
 pub fn tt_to_tai(epoch: JulianDate) -> std::result::Result<JulianDate, AtomicTimeError> {
-    offset_atomic_date(
-        epoch,
-        TimeScale::Tt,
-        TimeScale::Tai,
-        -TT_MINUS_TAI_SECONDS,
-    )
+    offset_atomic_date(epoch, TimeScale::Tt, TimeScale::Tai, -TT_MINUS_TAI_SECONDS)
 }
 
 /// SPK-style ephemeris time: TDB seconds past J2000.
@@ -214,12 +207,7 @@ mod tests {
 
     #[test]
     fn addition_rolls_over_midnight_and_subtraction_rolls_back() {
-        let tai = JulianDate::new(
-            2_451_545,
-            1.0 - 10.0 / SECONDS_PER_DAY,
-            TimeScale::Tai,
-        )
-        .unwrap();
+        let tai = JulianDate::new(2_451_545, 1.0 - 10.0 / SECONDS_PER_DAY, TimeScale::Tai).unwrap();
         let tt = tai_to_tt(tai).unwrap();
         assert_eq!(tt.day_number(), 2_451_546);
         assert_eq!(tt.scale(), TimeScale::Tt);
@@ -231,13 +219,11 @@ mod tests {
                 < 1e-8
         );
 
-        let early_tt =
-            JulianDate::new(2_451_545, 10.0 / SECONDS_PER_DAY, TimeScale::Tt).unwrap();
+        let early_tt = JulianDate::new(2_451_545, 10.0 / SECONDS_PER_DAY, TimeScale::Tt).unwrap();
         let previous_day_tai = tt_to_tai(early_tt).unwrap();
         assert_eq!(previous_day_tai.day_number(), 2_451_544);
         assert!(
-            ((1.0 - previous_day_tai.midnight_fraction()) * SECONDS_PER_DAY - 22.184).abs()
-                < 1e-8
+            ((1.0 - previous_day_tai.midnight_fraction()) * SECONDS_PER_DAY - 22.184).abs() < 1e-8
         );
     }
 
@@ -268,18 +254,18 @@ mod tests {
         let beyond_range = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tai).unwrap();
         assert_eq!(
             tai_to_tt(beyond_range),
-            Err(AtomicTimeError::InvalidJulianDate(CalendarError::YearOutOfRange))
+            Err(AtomicTimeError::InvalidJulianDate(
+                CalendarError::YearOutOfRange
+            ))
         );
 
-        let last_exact_day = JulianDate::new(
-            1_i64 << 51,
-            1.0 - 1.0 / SECONDS_PER_DAY,
-            TimeScale::Tai,
-        )
-        .unwrap();
+        let last_exact_day =
+            JulianDate::new(1_i64 << 51, 1.0 - 1.0 / SECONDS_PER_DAY, TimeScale::Tai).unwrap();
         assert_eq!(
             tai_to_tt(last_exact_day),
-            Err(AtomicTimeError::InvalidJulianDate(CalendarError::YearOutOfRange))
+            Err(AtomicTimeError::InvalidJulianDate(
+                CalendarError::YearOutOfRange
+            ))
         );
     }
 
