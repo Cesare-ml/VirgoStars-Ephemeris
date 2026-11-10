@@ -1553,6 +1553,12 @@ mod tests {
             pinned.source_sha256(),
             crate::fingerprint::sha256_hex(source.as_bytes())
         );
+        // Independent SHA-256 over the exact 989-byte pinned text,
+        // checked with Python hashlib (not the Rust implementation).
+        assert_eq!(
+            pinned.source_sha256(),
+            "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd"
+        );
         assert_eq!(pinned.source_sha256().len(), 64);
         assert!(pinned.source_sha256().chars().all(|c| c.is_ascii_hexdigit()));
 
