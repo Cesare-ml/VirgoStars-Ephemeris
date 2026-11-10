@@ -15,8 +15,8 @@
 //! Explicit post-1972 UTC leap-second day schedule.
 //!
 //! This module does **not** convert a UTC clock reading into TAI/TT/TDB.
-//! It only models the duration and TAI-UTC offset of named Gregorian UTC days
-//! using a caller-provided, independently sourced transition schedule.
+//! It models UTC day lengths, TAI-UTC day-start offsets and clock
+//! validity using a caller-provided, independently sourced transition schedule.
 //! Nothing is downloaded, updated automatically or extrapolated beyond the
 //! declared coverage interval.
 
