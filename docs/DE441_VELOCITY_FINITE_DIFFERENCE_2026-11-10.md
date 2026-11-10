@@ -6,7 +6,7 @@ The absolute acceptance threshold is `1e-7 km/day` per ICRF component. This chec
 
 ## Verification
 
-The GitHub Actions Rust CI is configured on `dev/ephemeris` to run locked workspace tests, release tests, formatting and Clippy (plus native Windows/macOS jobs). The new test must pass on **this PR head** before merging. No local Cargo execution was available in the GitHub connector environment. Record the exact CI results in the PR after inspection; do not infer success from the parent branch's previous green run.
+The GitHub Actions Rust CI is configured on `dev/ephemeris` to run locked workspace tests, release tests, formatting and Clippy (plus native Windows/macOS jobs). **Verified on this PR head `85853363e03d71c01bb76909ccc5f5976e8c6294`:** GitHub Actions run [#42811296833](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/42811296833) completed successfully on 2026-11-10. All three jobs concluded `success`: Linux `Rust fmt, test and Clippy` (including the configured release-test and documentation checks), `Windows native Rust tests`, and `macOS native Rust tests`. These results are from GitHub-hosted runners; no local Cargo execution was available in the connector environment. This is a synthetic regression, **not** independent NASA/JPL/Horizons validation.
 
 ## Scope and licensing
 
