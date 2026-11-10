@@ -159,10 +159,8 @@ impl UtcLeapSchedule {
             if !step.effective_utc_day.starts_month()? {
                 return Err(UtcLeapError::InvalidTransition);
             }
-            if step.tai_minus_utc_seconds < 0
-                || i64::from(step.tai_minus_utc_seconds) - i64::from(previous_offset) != 1
-                    && i64::from(step.tai_minus_utc_seconds) - i64::from(previous_offset) != -1
-            {
+            let change = i64::from(step.tai_minus_utc_seconds) - i64::from(previous_offset);
+            if step.tai_minus_utc_seconds < 0 || change.abs() != 1 {
                 return Err(UtcLeapError::InvalidOffsetStep);
             }
             previous_day = effective;
