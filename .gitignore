@@ -1,1 +1,14 @@
+# Rust build output
 /target/
+**/target/
+*.rs.bk
+
+# External kernels and Swiss ephemeris data are not distributed here.
+*.bsp
+*.eph
+*.se1
+*.bpc
+*.tpc
+*.tls
+*.tf
+*.tsc
