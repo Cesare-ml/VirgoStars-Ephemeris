@@ -102,8 +102,7 @@ fn both_derivatives_match_independent_centered_perturbations() {
         },
     ];
     let at = |time_days: f64| {
-        let arguments =
-            std::array::from_fn(|i| (base[i] + rates[i] * time_days).rem_euclid(TAU));
+        let arguments = std::array::from_fn(|i| (base[i] + rates[i] * time_days).rem_euclid(TAU));
         evaluate_nutation_harmonics(tdb(80.0 + time_days), arguments, rates, &terms).unwrap()
     };
     let h = 0.01;
@@ -162,13 +161,7 @@ fn all_zero_multipliers_keep_only_secular_obliquity_changes() {
         obliquity_sin_rad: 5.0,
         ..empty_term([0; 5])
     };
-    let result = evaluate_nutation_harmonics(
-        tdb(36_525.0),
-        [0.0; 5],
-        [0.0; 5],
-        &[term],
-    )
-    .unwrap();
+    let result = evaluate_nutation_harmonics(tdb(36_525.0), [0.0; 5], [0.0; 5], &[term]).unwrap();
     near(result.longitude_rad, 2.0, 1e-15);
     near(result.obliquity_rad, 13.0, 1e-15);
     near(result.longitude_rate_rad_per_tdb_day, 0.0, 1e-15);
@@ -188,13 +181,9 @@ fn compensated_accumulator_preserves_small_terms_between_large_cancellations() {
         obliquity_sin_rad: amplitude,
         ..empty_term([1, 0, 0, 0, 0])
     });
-    let sum = evaluate_nutation_harmonics(
-        tdb(0.0),
-        [FRAC_PI_2, 0.0, 0.0, 0.0, 0.0],
-        [0.0; 5],
-        &terms,
-    )
-    .unwrap();
+    let sum =
+        evaluate_nutation_harmonics(tdb(0.0), [FRAC_PI_2, 0.0, 0.0, 0.0, 0.0], [0.0; 5], &terms)
+            .unwrap();
     near(sum.longitude_rad, 1.0, 1e-15);
     near(sum.obliquity_rad, 1.0, 1e-15);
     assert_eq!(sum.terms_evaluated, 3);
@@ -207,8 +196,7 @@ fn wrapping_a_fundamental_angle_does_not_spike_its_derivative() {
         obliquity_cos_rad: 0.4,
         ..empty_term([1, 0, 0, 0, 0])
     };
-    let baseline =
-        evaluate_nutation_harmonics(tdb(0.0), [0.0; 5], [0.01; 5], &[term]).unwrap();
+    let baseline = evaluate_nutation_harmonics(tdb(0.0), [0.0; 5], [0.01; 5], &[term]).unwrap();
     let wrapped = evaluate_nutation_harmonics(
         tdb(0.0),
         [TAU - 1e-12, 0.0, 0.0, 0.0, 0.0],
@@ -254,7 +242,12 @@ fn rejects_missing_oversized_or_wrong_width_tables() {
         Err(NutationHarmonicError::TooManyTerms),
     );
     assert_eq!(
-        evaluate_nutation_harmonics(tdb(0.0), [0.0; 14], [0.0; 14], &vec![empty_term([0;14]); 688]),
+        evaluate_nutation_harmonics(
+            tdb(0.0),
+            [0.0; 14],
+            [0.0; 14],
+            &vec![empty_term([0; 14]); 688]
+        ),
         Err(NutationHarmonicError::TooManyTerms),
     );
     assert_eq!(
