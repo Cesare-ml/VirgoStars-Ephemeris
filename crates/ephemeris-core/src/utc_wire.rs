@@ -174,8 +174,7 @@ mod tests {
     use crate::calendar::{JulianDate, TimeScale};
     use crate::utc_leaps::VersionedUtcLeapSchedule;
 
-    const PINNED_SHA: &str =
-        "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+    const PINNED_SHA: &str = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
 
     fn catalog() -> UtcLeapCatalog {
         let mut catalog = UtcLeapCatalog::new();
@@ -295,9 +294,18 @@ mod tests {
             (UtcLeapError::ClockTimeOutsideDay, "clock_time_outside_day"),
             (UtcLeapError::UnrepresentableTai, "unrepresentable_tai"),
             (UtcLeapError::WrongInputScale, "wrong_input_scale"),
-            (UtcLeapError::InvalidPinnedLeapData, "invalid_pinned_leap_data"),
-            (UtcLeapError::InvalidReviewedSnapshot, "invalid_reviewed_snapshot"),
-            (UtcLeapError::InvalidSnapshotProvenance, "invalid_snapshot_provenance"),
+            (
+                UtcLeapError::InvalidPinnedLeapData,
+                "invalid_pinned_leap_data",
+            ),
+            (
+                UtcLeapError::InvalidReviewedSnapshot,
+                "invalid_reviewed_snapshot",
+            ),
+            (
+                UtcLeapError::InvalidSnapshotProvenance,
+                "invalid_snapshot_provenance",
+            ),
             (UtcLeapError::DuplicateVersion, "duplicate_version"),
             (UtcLeapError::UnknownVersion, "unknown_version"),
             (UtcLeapError::SourceDigestMismatch, "source_digest_mismatch"),
@@ -332,10 +340,7 @@ mod tests {
         let version_error = catalog
             .utc_to_tai_record_v1("unknown", PINNED_SHA, day, clock)
             .unwrap_err();
-        assert_eq!(
-            UtcTaiErrorV1::from(version_error).code,
-            "unknown_version"
-        );
+        assert_eq!(UtcTaiErrorV1::from(version_error).code, "unknown_version");
         let leap_error = catalog
             .utc_to_tai_record_v1(
                 "iana-tzdb-2026b",
