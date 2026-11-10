@@ -235,6 +235,182 @@ mod tests {
     }
 
     #[test]
+    fn transverse_light_time_spherical_rates_match_reception_finite_difference() {
+        use crate::coordinates::project_fixed_axes;
+        use std::f64::consts::{PI, TAU};
+
+        // Independent analytic *linear-motion* synthetic model, not a JPL
+        // ephemeris or a Swiss-compatible apparent position. Non-radial Earth
+        // and target velocities expose mistakes in d(light-time)/d(reception).
+        const TARGET_POSITION: [f64; 3] = [150_000_000.0, 40_000_000.0, -5_000_000.0];
+        const TARGET_VELOCITY: [f64; 3] = [
+            16.0 * SECONDS_PER_DAY,
+            -8.0 * SECONDS_PER_DAY,
+            0.8 * SECONDS_PER_DAY,
+        ];
+        const EARTH_VELOCITY: [f64; 3] = [-2.0 * SECONDS_PER_DAY, 25.0 * SECONDS_PER_DAY, 0.0];
+        let linear_transverse = |body: Body, epoch: JulianDateTdb| {
+            let dt = epoch.0 - JD;
+            let (position, velocity) = match body {
+                Body::Earth => ([0.0; 3], EARTH_VELOCITY),
+                Body::MarsBarycenter => (TARGET_POSITION, TARGET_VELOCITY),
+                _ => return Err(De441Error::MissingSeries("synthetic transverse body")),
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: std::array::from_fn(|i| position[i] + dt * velocity[i]),
+                velocity_km_per_day: velocity,
+            })
+        };
+
+        let at = |observation_day: f64| {
+            let epoch = JulianDateTdb(observation_day);
+            let corrected = solve(Body::MarsBarycenter, epoch, linear_transverse).unwrap();
+            let relative = StateVector {
+                target: corrected.target,
+                center: Body::Earth,
+                epoch,
+                position_km: corrected.position_km,
+                velocity_km_per_day: corrected.velocity_km_per_day,
+            };
+            (corrected, project_fixed_axes(&relative, 0.0).unwrap())
+        };
+
+        let (center, sph) = at(JD);
+        // Use a wide enough difference step to dominate quantization of the
+        // classic DE441 single-f64 JD, while keeping second-order curvature
+        // of this smooth synthetic motion small.
+        let h_days = 600.0 / SECONDS_PER_DAY;
+        let (previous, before) = at(JD - h_days);
+        let (next, after) = at(JD + h_days);
+
+        let signed_longitude_span =
+            (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
+        let numerical_longitude_rate = signed_longitude_span / (2.0 * h_days);
+        let numerical_latitude_rate = (after.latitude_rad - before.latitude_rad) / (2.0 * h_days);
+        let numerical_distance_rate = (after.distance_km - before.distance_km) / (2.0 * h_days);
+        let numerical_delay_rate = (next.light_time_seconds - previous.light_time_seconds)
+            / (2.0 * h_days * SECONDS_PER_DAY);
+
+        assert!(center.emission_epoch.0 < center.observation_epoch.0);
+        assert!(
+            sph.longitude_rate_rad_per_day < 0.0,
+            "synthetic angular motion must be retrograde"
+        );
+        assert!(
+            (sph.longitude_rate_rad_per_day - numerical_longitude_rate).abs() < 3.0e-7,
+            "retarded longitude derivative disagrees: analytic={}, finite={}",
+            sph.longitude_rate_rad_per_day,
+            numerical_longitude_rate
+        );
+        assert!(
+            (sph.latitude_rate_rad_per_day - numerical_latitude_rate).abs() < 3.0e-7,
+            "retarded latitude derivative disagrees: analytic={}, finite={}",
+            sph.latitude_rate_rad_per_day,
+            numerical_latitude_rate
+        );
+        assert!(
+            (sph.distance_rate_km_per_day - numerical_distance_rate).abs() < 0.1,
+            "retarded distance derivative disagrees: analytic={}, finite={}",
+            sph.distance_rate_km_per_day,
+            numerical_distance_rate
+        );
+        assert!(
+            (center.light_time_rate - numerical_delay_rate).abs() < 3.0e-8,
+            "light-time derivative disagrees: analytic={}, finite={}",
+            center.light_time_rate,
+            numerical_delay_rate
+        );
+    }
+
+    #[test]
+    fn retrograde_longitude_rate_is_continuous_across_zero_meridian() {
+        use crate::coordinates::project_fixed_axes;
+        use std::f64::consts::{PI, TAU};
+
+        // At reception JD the retarded target is just above +X; over the
+        // next 600 s its negative Y velocity crosses the 0/2π longitude
+        // boundary. A raw subtraction of the two angles would give a huge
+        // spurious prograde rate.
+        let state_at = |day: f64| {
+            let epoch = JulianDateTdb(day);
+            let corrected = solve(Body::MarsBarycenter, epoch, |body, t| {
+                let (position, velocity) = match body {
+                    Body::Earth => ([0.0; 3], [0.0; 3]),
+                    Body::MarsBarycenter => (
+                        [100_000_000.0, 0.0, 0.0],
+                        [0.0, -20.0 * SECONDS_PER_DAY, 0.0],
+                    ),
+                    _ => return Err(De441Error::MissingSeries("synthetic meridian body")),
+                };
+                Ok(StateVector {
+                    target: body,
+                    center: Body::SolarSystemBarycenter,
+                    epoch: t,
+                    position_km: std::array::from_fn(|i| position[i] + (t.0 - JD) * velocity[i]),
+                    velocity_km_per_day: velocity,
+                })
+            })
+            .unwrap();
+            project_fixed_axes(
+                &StateVector {
+                    target: corrected.target,
+                    center: Body::Earth,
+                    epoch,
+                    position_km: corrected.position_km,
+                    velocity_km_per_day: corrected.velocity_km_per_day,
+                },
+                0.0,
+            )
+            .unwrap()
+        };
+
+        let h = 600.0 / SECONDS_PER_DAY;
+        let before = state_at(JD - h);
+        let current = state_at(JD);
+        let after = state_at(JD + h);
+        assert!(before.longitude_rad < 0.01);
+        assert!(after.longitude_rad > TAU - 0.01);
+        assert!(current.longitude_rate_rad_per_day < 0.0);
+        let signed_span = (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
+        let numerical_rate = signed_span / (2.0 * h);
+        assert!(
+            (current.longitude_rate_rad_per_day - numerical_rate).abs() < 3.0e-7,
+            "longitude wrap regression: analytic={}, finite={}",
+            current.longitude_rate_rad_per_day,
+            numerical_rate
+        );
+    }
+
+    #[test]
+    fn zero_relative_range_and_nonfinite_observer_rate_fail_closed() {
+        let zero_range = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [1_000_000.0, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        });
+        assert!(matches!(
+            zero_range,
+            Err(LightTimeError::UndefinedDirection)
+        ));
+
+        let bad_velocity = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let mut s = linear(body, epoch)?;
+            if body == Body::Earth {
+                s.velocity_km_per_day[1] = f64::INFINITY;
+            }
+            Ok(s)
+        });
+        assert!(matches!(bad_velocity, Err(LightTimeError::InvalidGeometry)));
+    }
+
+    #[test]
     fn reports_nonconvergence_for_near_light_speed_synthetic_target() {
         let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
             let mut state = linear(body, epoch)?;
