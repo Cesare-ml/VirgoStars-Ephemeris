@@ -30,6 +30,10 @@ async function sha256File(filePath) {
   return hash.digest('hex');
 }
 
+function manifestDigest(files) {
+  return createHash('sha256').update(JSON.stringify(files), 'utf8').digest('hex');
+}
+
 async function swissDataManifest(directory) {
   if (typeof directory !== 'string' || directory.trim() === '') {
     throw new Error('Swiss ephemeris directory is required');
@@ -64,10 +68,8 @@ async function swissDataManifest(directory) {
   // Canonical JSON layout (sorted names, fixed property order). The aggregate
   // SHA-256 identifies this recorded directory snapshot, not the exact subset
   // that Swiss loaded at runtime.
-  const digest = createHash('sha256')
-    .update(JSON.stringify(files), 'utf8')
-    .digest('hex');
+  const digest = manifestDigest(files);
   return { algorithm: 'sha256', digest, files };
 }
 
-module.exports = { swissDataManifest };
+module.exports = { swissDataManifest, manifestDigest };
