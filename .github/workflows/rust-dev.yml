@@ -60,3 +60,17 @@ jobs:
         run: rustup target add x86_64-pc-windows-gnu
       - name: Check Windows GNU cross-target compilation
         run: cargo check --workspace --locked --target x86_64-pc-windows-gnu
+
+  windows-native:
+    name: Windows native Rust tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run workspace tests natively on Windows
+        run: cargo test --workspace --locked
+      - name: Run Clippy natively on Windows
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
