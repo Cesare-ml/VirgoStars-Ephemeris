@@ -327,9 +327,15 @@ impl<R: Read + Seek> De441<R> {
             let offset = (p.first - 1 + (granule * 3 + axis) * p.coefficients) * 8;
             let (mut t0, mut t1, mut d0, mut d1) = (1.0, x, 0.0, 1.0);
             let mut position = f64_at(record, offset);
+            if !position.is_finite() {
+                return Err(De441Error::InvalidFile("non-finite Chebyshev coefficient"));
+            }
             let mut derivative = 0.0;
             if p.coefficients > 1 {
                 let c = f64_at(record, offset + 8);
+                if !c.is_finite() {
+                    return Err(De441Error::InvalidFile("non-finite Chebyshev coefficient"));
+                }
                 position += c * x;
                 derivative += c;
             }
@@ -337,12 +343,19 @@ impl<R: Read + Seek> De441<R> {
                 let t = 2.0 * x * t1 - t0;
                 let d = 2.0 * t1 + 2.0 * x * d1 - d0;
                 let c = f64_at(record, offset + k * 8);
+                if !c.is_finite() {
+                    return Err(De441Error::InvalidFile("non-finite Chebyshev coefficient"));
+                }
                 position += c * t;
                 derivative += c * d;
                 (t0, t1, d0, d1) = (t1, t, d1, d);
             }
+            let velocity = derivative * 2.0 / width;
+            if !position.is_finite() || !velocity.is_finite() {
+                return Err(De441Error::InvalidFile("non-finite interpolated state"));
+            }
             result.position[axis] = position;
-            result.velocity[axis] = derivative * 2.0 / width;
+            result.velocity[axis] = velocity;
         }
         Ok(result)
     }
