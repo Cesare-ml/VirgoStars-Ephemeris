@@ -313,3 +313,45 @@ fn rejects_overflow_when_subtracting_finite_barycentric_velocities() {
         Err(De441Error::InvalidFile("non-finite relative state"))
     ));
 }
+
+#[test]
+fn chebyshev_velocity_agrees_with_central_position_difference_inside_granules() {
+    // Independent numerical check of the derivative evaluation: finite
+    // differences of positions, not the derivative recurrence under test.
+    // Epochs avoid granule/record boundaries; h is expressed in TDB days.
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    let h = 1.0e-4;
+    for jd in [1004.0, 1012.0, 1020.0, 1028.0, 1040.0, 1052.0] {
+        let state = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        let before = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd - h),
+            )
+            .unwrap();
+        let after = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd + h),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            let finite_difference =
+                (after.position_km[axis] - before.position_km[axis]) / (2.0 * h);
+            assert!(
+                (state.velocity_km_per_day[axis] - finite_difference).abs() < 1.0e-7,
+                "JD {jd}, axis {axis}: velocity={} km/day, finite difference={} km/day",
+                state.velocity_km_per_day[axis],
+                finite_difference
+            );
+        }
+    }
+}
