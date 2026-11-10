@@ -68,7 +68,9 @@ impl fmt::Display for UtcLeapError {
             Self::OutsideCoverage => write!(f, "UTC day lies outside approved schedule coverage"),
             Self::InvalidClockTime => write!(f, "invalid UTC clock fields"),
             Self::ClockTimeOutsideDay => write!(f, "UTC clock reading does not exist on this day"),
-            Self::UnrepresentableTai => write!(f, "TAI Julian date cannot represent this UTC instant"),
+            Self::UnrepresentableTai => {
+                write!(f, "TAI Julian date cannot represent this UTC instant")
+            }
         }
     }
 }
@@ -278,11 +280,7 @@ impl UtcLeapSchedule {
     ///
     /// The output is explicitly tagged `TimeScale::Tai`. It is not TT/TDB;
     /// the schedule must have been independently sourced and approved.
-    pub fn utc_to_tai(
-        &self,
-        day: UtcDay,
-        clock: UtcClockTime,
-    ) -> Result<JulianDate, UtcLeapError> {
+    pub fn utc_to_tai(&self, day: UtcDay, clock: UtcClockTime) -> Result<JulianDate, UtcLeapError> {
         let utc_elapsed = self.seconds_into_utc_day(day, clock)?;
         let offset = self.tai_minus_utc_at_day_start(day)?;
         let tai_seconds = utc_elapsed + f64::from(offset);
@@ -537,16 +535,12 @@ mod tests {
         assert_eq!(leap.day_number(), next_day.julian_day_number());
         assert_eq!(after.day_number(), next_day.julian_day_number());
         for (epoch, expected_seconds) in [(before, 35.0), (leap, 36.0), (after, 37.0)] {
-            assert!(
-                (epoch.midnight_fraction() * 86_400.0 - expected_seconds).abs() < 1e-8
-            );
+            assert!((epoch.midnight_fraction() * 86_400.0 - expected_seconds).abs() < 1e-8);
         }
         let fraction = schedule
             .utc_to_tai(last_day, UtcClockTime::new(23, 59, 60.5).unwrap())
             .unwrap();
-        assert!(
-            (fraction.midnight_fraction() * 86_400.0 - 36.5).abs() < 1e-8
-        );
+        assert!((fraction.midnight_fraction() * 86_400.0 - 36.5).abs() < 1e-8);
     }
 
     #[test]
@@ -574,10 +568,7 @@ mod tests {
         assert!((before.midnight_fraction() * 86_400.0 - 35.0).abs() < 1e-8);
         assert!((after.midnight_fraction() * 86_400.0 - 36.0).abs() < 1e-8);
         assert_eq!(
-            schedule.utc_to_tai(
-                d(2020, 6, 30),
-                UtcClockTime::new(23, 59, 59.0).unwrap()
-            ),
+            schedule.utc_to_tai(d(2020, 6, 30), UtcClockTime::new(23, 59, 59.0).unwrap()),
             Err(UtcLeapError::ClockTimeOutsideDay)
         );
     }
