@@ -78,9 +78,8 @@ fn moving_source_and_axes_match_independent_centered_differences() {
     let rate = 0.4;
     let at = |t: f64| {
         let mut sample = original;
-        sample.position_km = std::array::from_fn(|i| {
-            original.position_km[i] + original.velocity_km_per_day[i] * t
-        });
+        sample.position_km =
+            std::array::from_fn(|i| original.position_km[i] + original.velocity_km_per_day[i] * t);
         passive_z(theta0 + rate * t, rate)
             .rotate_state(&sample)
             .unwrap()
@@ -100,9 +99,8 @@ fn moving_source_and_axes_match_independent_centered_differences() {
     let spherical_now = project_fixed_axes(&now, 0.0).unwrap();
     let spherical_before = project_fixed_axes(&before, 0.0).unwrap();
     let spherical_after = project_fixed_axes(&after, 0.0).unwrap();
-    let signed_delta = (spherical_after.longitude_rad - spherical_before.longitude_rad + PI)
-        .rem_euclid(TAU)
-        - PI;
+    let signed_delta =
+        (spherical_after.longitude_rad - spherical_before.longitude_rad + PI).rem_euclid(TAU) - PI;
     near(
         spherical_now.longitude_rate_rad_per_day,
         signed_delta / (2.0 * h),
@@ -128,7 +126,11 @@ fn rotating_axes_preserve_radius_and_physical_radial_speed() {
         let actual = passive_z(angle, 0.07).rotate_state(&original).unwrap();
         let sphere = project_fixed_axes(&actual, 0.0).unwrap();
         near(sphere.distance_km, source.distance_km, 1e-12);
-        near(sphere.distance_rate_km_per_day, source.distance_rate_km_per_day, 1e-12);
+        near(
+            sphere.distance_rate_km_per_day,
+            source.distance_rate_km_per_day,
+            1e-12,
+        );
     }
 }
 
