@@ -63,7 +63,7 @@ fn body_from_name(name: &str) -> Option<Body> {
 
 fn parse_reference(source: &str) -> Result<Reference, String> {
     let mut metadata: BTreeMap<&str, &str> = BTreeMap::new();
-    let mut cases = Vec::new();
+    let mut cases: Vec<Case> = Vec::new();
     let mut seen_columns = false;
     for (index, raw) in source.lines().enumerate() {
         let number = index + 1;
