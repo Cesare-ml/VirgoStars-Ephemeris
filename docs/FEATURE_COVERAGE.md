@@ -21,11 +21,15 @@ acceptance cases before a feature can be considered complete.
 | Tropical/sidereal zodiacs, ayanamshas, houses, house positions and Gauquelin sectors | Astrological Functions, backed by the Rust core | Not implemented in the inspected functions repository. |
 | Names, configuration, units, compatibility flags, lifecycle and API adapters | Core and language bindings | No stable Swiss-compatible facade or released bindings. |
 
-Priority sequence: (1) usable DE441 states, time scales and geometric
-projections; (2) date frames and apparent/topocentric positions; (3) stars,
-minor bodies and the astrological functions; (4) event searches and visibility;
-(5) exhaustive compatibility and independently reproduced reference cases.
-These phases overlap where dependencies permit. A clean-room Rust engine and
+Backend-first priorities, concrete call sites and acceptance cases are tracked
+in [the compatibility inventory](BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
+and [work packages](BACKEND_WORK_PACKAGES_2026-11-10.md). First target the
+backend's apparent geocentric Sun–Saturn positions **and speeds**, calendar and
+time policy, Rust-backed Node compatibility, houses and the remaining default
+chart bodies; then cover its observed horizons, rise/set, fixed-star and
+eclipse workflows. Independent reference work starts alongside implementation.
+This ordering does not remove the long-term full-coverage target.
+A clean-room Rust engine and
 thin language bindings remain the architecture; public access to data does
 not grant redistribution rights. House and zodiac algorithms belong in the
 functions layer unless an explicit later architecture decision changes that.
