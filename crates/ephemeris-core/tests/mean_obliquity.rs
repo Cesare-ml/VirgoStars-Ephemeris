@@ -15,9 +15,7 @@
 use std::f64::consts::PI;
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
-use virgostars_ephemeris_core::mean_obliquity::{
-    mean_obliquity_iau2006, MeanObliquityError,
-};
+use virgostars_ephemeris_core::mean_obliquity::{mean_obliquity_iau2006, MeanObliquityError};
 
 fn tt_jd(julian_date: f64) -> JulianDate {
     JulianDate::from_f64(julian_date, TimeScale::Tt).unwrap()
@@ -43,10 +41,8 @@ fn matches_independent_erfa_obl06_numerical_reference() {
 #[test]
 fn j2000_mean_obliquity_and_analytical_rate_match_iers_coefficients() {
     // IERS Technical Note 36, Eq. (5.40), 84381.406 arcseconds at J2000.
-    let at_j2000 = mean_obliquity_iau2006(
-        JulianDate::new(2_451_545, 0.5, TimeScale::Tt).unwrap(),
-    )
-    .unwrap();
+    let at_j2000 =
+        mean_obliquity_iau2006(JulianDate::new(2_451_545, 0.5, TimeScale::Tt).unwrap()).unwrap();
     let arcsec_to_radians = PI / (180.0 * 3_600.0);
     near(at_j2000.radians, 84_381.406 * arcsec_to_radians, 1e-15);
     near(
@@ -83,7 +79,10 @@ fn split_julian_date_preserves_subsecond_angle_change() {
     let later = mean_obliquity_iau2006(quarter_second_later).unwrap();
     assert!(later.radians < baseline.radians);
     let change = (later.radians - baseline.radians).abs();
-    assert!(change > 1e-14 && change < 3e-14, "subsecond change = {change}");
+    assert!(
+        change > 1e-14 && change < 3e-14,
+        "subsecond change = {change}"
+    );
 }
 
 #[test]
