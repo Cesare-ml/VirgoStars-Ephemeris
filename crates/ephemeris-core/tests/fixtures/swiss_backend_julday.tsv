@@ -1,0 +1,15 @@
+# Calendar-to-JD reference obtained 2026-11-10 with pyswisseph 2.10.03
+# Swiss Ephemeris function: swe_julday(year, month, day, hour + minute/60, cal)
+# G=SE_GREG_CAL, J=SE_JUL_CAL. Decimal hour only; no UTC/UT1 conversion.
+# id|calendar|year|month|day|hour|minute|expected_jd
+j2000_noon|G|2000|1|1|12|0|2451545.000000000000
+current_2026|G|2026|11|10|18|30|2461355.270833333489
+leap_2024|G|2024|2|29|23|45|2460370.489583333489
+new_year_2025|G|2025|1|1|0|0|2460676.500000000000
+century_1900_feb|G|1900|2|28|23|59|2415079.499305555597
+century_1900_mar|G|1900|3|1|0|0|2415079.500000000000
+gregorian_1582|G|1582|10|15|0|0|2299160.500000000000
+julian_1582|J|1582|10|4|0|0|2299159.500000000000
+astronomical_year_zero|G|0|1|1|0|0|1721059.500000000000
+century_2100|G|2100|3|1|0|0|2488128.500000000000
+midnight_2026|G|2026|11|11|0|0|2461355.500000000000
