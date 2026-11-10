@@ -35,6 +35,7 @@ pub mod error;
 pub mod first_sky;
 pub mod light_time;
 pub mod lunar_points;
+pub mod rotating_frame;
 pub mod state;
 pub mod time;
 
