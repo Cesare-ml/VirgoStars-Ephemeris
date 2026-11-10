@@ -168,3 +168,42 @@ fn reads_real_external_de441_when_configured() {
         }
     }
 }
+
+#[test]
+fn rejects_non_finite_chebyshev_coefficients_without_returning_nan_states() {
+    // Mercury's first granule, first axis: T0, T1 and T2 respectively.
+    for (offset, invalid) in [
+        (0usize, f64::NAN),
+        (8, f64::INFINITY),
+        (16, f64::NEG_INFINITY),
+    ] {
+        let mut bytes = fixture();
+        put_f64(&mut bytes, 6000 + (2 * 8) + offset, invalid);
+        let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+        assert!(matches!(
+            eph.state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(1008.0)
+            ),
+            Err(De441Error::InvalidFile("non-finite Chebyshev coefficient"))
+        ));
+    }
+}
+
+#[test]
+fn rejects_overflowed_interpolated_state() {
+    let mut bytes = fixture();
+    // Finite but extreme T1 coefficient: velocity scaling overflows at this
+    // short granule width even though the coefficient itself is finite.
+    put_f64(&mut bytes, 6000 + (3 * 8), f64::MAX);
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    assert!(matches!(
+        eph.state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1008.0)
+        ),
+        Err(De441Error::InvalidFile("non-finite interpolated state"))
+    ));
+}
