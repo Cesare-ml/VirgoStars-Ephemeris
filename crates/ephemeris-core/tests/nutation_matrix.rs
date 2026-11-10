@@ -21,7 +21,7 @@ use virgostars_ephemeris_core::nutation_matrix::{
 
 fn example() -> NutationAngles {
     NutationAngles {
-        mean_obliquity_rad: 0.409_078_976_335_650_99,
+        mean_obliquity_rad: 0.409_078_976_335_651,
         mean_obliquity_rate_rad_per_tt_day: 0.0,
         delta_psi_rad: -0.963_090_910_711_558_2e-5,
         delta_psi_rate_rad_per_tt_day: 0.0,
@@ -51,11 +51,11 @@ fn matches_all_nine_independent_erfa_numat_matrix_elements() {
     const EXPECTED: [[f64; 3]; 3] = [
         [
             0.999_999_999_953_622_8,
-            0.883_623_932_023_625_1e-5,
+            8.836_239_320_236_25e-6,
             0.383_083_344_745_825_2e-5,
         ],
         [
-            -0.883_608_365_701_668_9e-5,
+            -8.836_083_657_016_69e-6,
             0.999_999_999_135_465_5,
             -0.406_324_086_536_185_8e-4,
         ],
