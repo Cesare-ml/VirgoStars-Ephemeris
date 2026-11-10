@@ -3,8 +3,8 @@
 **Date:** 2026-11-10  
 **State:** experimental Rust module; an explicitly bounded UTC→TAI
 conversion is implemented, but a complete authoritative transition dataset,
-UTC text parsing, reverse TAI→UTC, TT→TDB and independent JPL scientific
-parity remain unimplemented.
+UTC text parsing, TT→TDB and independent JPL scientific parity
+remain unimplemented.
 
 ## Why this exists
 
@@ -48,10 +48,11 @@ redistributed under CPAL-1.0.
 - `UtcLeapSchedule::seconds_into_utc_day(day, clock)`: checks that the
   clock time **actually exists** according to the approved schedule, and
   returns its elapsed SI seconds from the named UTC midnight, not a JD.
-- `UtcLeapSchedule::utc_to_tai(day, clock)`: after those checks,
-  converts the validated civil reading into a **split `JulianDate`
-  explicitly tagged `TimeScale::Tai`** using the supplied TAI−UTC
-  offset and an integer day carry; no TDB or TT conversion is implied.
+- `UtcLeapSchedule::utc_to_tai(day, clock)`: converts a validated civil
+  reading into a split `JulianDate` explicitly tagged `TimeScale::Tai`.
+- `UtcLeapSchedule::tai_to_utc(tai)`: converts an **already TAI-tagged**
+  split Julian date to `(UtcDay, UtcClockTime)`, including `23:59:60.x`
+  when appropriate; it refuses instants outside the bounded schedule.
 
 Example using a **minimal historical test schedule**, **not** an exhaustive
 IERS table:
@@ -202,6 +203,62 @@ Production callers must import and review a complete authoritative
 transition history with a version and a known **coverage/announcement
 horizon**; nothing here retrieves or updates that data automatically.
 
+## TAI→UTC inverse conversion and day-boundary search
+
+The inverse method `UtcLeapSchedule::tai_to_utc(tai)` accepts only a
+`calendar::JulianDate` tagged **TAI**, and returns the matching
+`(UtcDay, UtcClockTime)`. To avoid the precision loss from collapsing a
+large Julian day into a single `f64`, it compares normalized two-part TAI
+dates and uses a binary search over **TAI instants of UTC midnights**.
+The method builds these midnight instants from the supplied TAI−UTC offset
+for each UTC day, including the exclusive boundary *after* the last covered
+day. It then subtracts the selected midnight's TAI instant to obtain elapsed
+SI seconds in that UTC day. The conversion is logarithmic in the number of
+covered days.
+
+A positive leap day's duration is 86,401 seconds: TAI clock
+`2017-01-01 00:00:36` becomes UTC
+`2016-12-31 23:59:60`, while TAI `00:00:37` becomes
+UTC `2017-01-01 00:00:00`. A hypothetical negative leap day has
+86,399 seconds and produces no nonexistent `23:59:59` reading.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapSchedule, UtcLeapTransition,
+};
+let last = UtcDay::from_gregorian(2016, 12, 31)?;
+let next = UtcDay::from_gregorian(2017, 1, 1)?;
+let schedule = UtcLeapSchedule::new(
+    last, next, 36,
+    vec![UtcLeapTransition {
+        effective_utc_day: next,
+        tai_minus_utc_seconds: 37,
+    }],
+)?;
+let tai = schedule.utc_to_tai(last, UtcClockTime::new(23, 59, 60.5)?)?;
+let (utc_day, utc_clock) = schedule.tai_to_utc(tai)?;
+assert_eq!(utc_day, last);
+assert_eq!(utc_clock.hour(), 23);
+assert_eq!(utc_clock.minute(), 59);
+assert!((utc_clock.second() - 60.5).abs() < 1e-8);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The conversion rejects **non-TAI** inputs
+(`UtcLeapError::WrongInputScale`), missing or exceeded schedule coverage
+(`OutsideCoverage`) and unrepresentable split dates
+(`UnrepresentableTai`). Neither direction downloads a leap-second table
+or invents past/future corrections. Precision is limited by the existing
+`f64` fractional days, especially for arbitrary sub-nanosecond timestamps.
+The original UTC→TAI implementation and the inverse should be tested with
+the **same** official versioned schedule in operational deployments.
+
+Four deterministic tests exercise 2016 positive-leap and hypothetical
+negative-leap round-trips, exact start/end coverage rejection, wrong-scale
+input, and an unusual two-day TAI−UTC offset to ensure the algorithm does
+not assume the two day numbers differ by at most one. These tests do not
+establish DE441/Horizons parity or source authenticity.
+
 ## Validation and failure behavior
 
 The table constructor rejects:
@@ -227,15 +284,15 @@ behavior; no negative leap second is asserted to have occurred.
 
 ## Deliberately not implemented
 
-There is **no reverse TAI→UTC conversion**, complete UTC string parser,
-embedded official IERS table, leap-second extrapolation or mapping to TDB,
-TT or UT1 inside this module. `UtcClockTime` is a structured civil reading,
-not a JD or a parsed timezone-bearing timestamp. `utc_to_tai` is a
-**one-way conversion to TAI only**, conditional on a properly reviewed,
-bounded leap schedule. It does not by itself make the result suitable for
-DE441, which requires TDB. The separate Rust `tai_to_tt` function can
-convert TAI to TT under the conventional 32.184-second offset, but TT→TDB
-requires a distinct, documented physical model.
+There is **no complete UTC string parser**, embedded official IERS table,
+leap-second extrapolation or mapping to TDB, TT or UT1 inside this module.
+`UtcClockTime` is a structured civil reading, not a JD or a parsed
+timezone-bearing timestamp. The bidirectional UTC↔TAI conversion is
+**conditional on a properly reviewed, bounded leap schedule**. It does
+not by itself make the result suitable for DE441, which requires TDB.
+The separate Rust `tai_to_tt` function can convert TAI to TT under
+the conventional 32.184-second offset, but TT→TDB requires a distinct,
+documented physical model.
 
 No official IERS transition dataset is embedded or downloaded. The
 Gregorian day-number type is separate from `calendar::JulianDate` because
@@ -274,3 +331,10 @@ with four deterministic tests for positive and hypothetical negative leap
 boundaries, fractional civil time, TAI→TT composition and failure modes.
 Original CPAL-1.0 source notices and mandatory VirgoStars credits remain
 unchanged. Neither third-party code nor a complete IERS table was bundled.
+
+2026-11-10: added `UtcLeapSchedule::tai_to_utc`, strict
+`UtcLeapError::WrongInputScale` rejection, and four deterministic
+round-trip/boundary tests to `crates/ephemeris-core/src/utc_leaps.rs`.
+The inverse preserves positive and hypothetical negative leap seconds,
+does not require an embedded external transition table or new dependency,
+and retains CPAL-1.0 Exhibit A / VirgoStars credits. No merge or deploy.
