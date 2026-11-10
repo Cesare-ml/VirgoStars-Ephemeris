@@ -67,6 +67,7 @@ impl From<UtcLeapError> for UtcTaiErrorV1 {
             UtcLeapError::DuplicateVersion => "duplicate_version",
             UtcLeapError::UnknownVersion => "unknown_version",
             UtcLeapError::SourceDigestMismatch => "source_digest_mismatch",
+            UtcLeapError::InvalidWireRecord => "invalid_wire_record",
         };
         Self {
             schema: UTC_TAI_ERROR_V1_SCHEMA,
@@ -131,6 +132,46 @@ impl UtcTaiRecordV1 {
 }
 
 impl UtcLeapCatalog {
+    /// Validate a received v1 scalar record against the explicitly registered
+    /// leap table, its SHA-256 and the actual inverse TAI → UTC conversion.
+    ///
+    /// This is intended for future Python/TypeScript binding boundaries: it
+    /// refuses a self-inconsistent or tampered record rather than trusting
+    /// its public fields. All non-metadata numeric fields are independently
+    /// reconstructed from the TAI input. Reconstructed fractional UTC
+    /// seconds are compared with an absolute 1e-8 s tolerance because the
+    /// inverse uses floating-point arithmetic.
+    ///
+    /// This does not authenticate the IANA source or guarantee its publisher;
+    /// the expected table content must already be independently approved.
+    pub fn validate_record_v1(&self, record: &UtcTaiRecordV1) -> Result<(), UtcLeapError> {
+        if record.schema != UTC_TAI_RECORD_V1_SCHEMA || record.tai_time_scale != "TAI" {
+            return Err(UtcLeapError::InvalidWireRecord);
+        }
+        let tai = JulianDate::new(
+            record.tai_day_number,
+            record.tai_midnight_fraction,
+            crate::calendar::TimeScale::Tai,
+        )
+        .map_err(|_| UtcLeapError::InvalidWireRecord)?;
+        let expected = self.tai_to_utc_record_v1(
+            &record.leap_table_version,
+            &record.leap_table_sha256,
+            tai,
+        )?;
+        if record.leap_table_provenance != expected.leap_table_provenance
+            || record.leap_expires_utc_day_number != expected.leap_expires_utc_day_number
+            || record.utc_day_number != expected.utc_day_number
+            || record.utc_hour != expected.utc_hour
+            || record.utc_minute != expected.utc_minute
+            || !record.utc_second.is_finite()
+            || (record.utc_second - expected.utc_second).abs() > 1e-8
+        {
+            return Err(UtcLeapError::InvalidWireRecord);
+        }
+        Ok(())
+    }
+
     /// Build a v1 wire-ready scalar record from UTC after exact-version and
     /// expected-source-SHA-256 checks. No serialization or I/O is performed.
     pub fn utc_to_tai_record_v1(
@@ -407,6 +448,99 @@ mod tests {
     }
 
     #[test]
+    fn record_validator_accepts_both_directions_on_real_positive_leap() {
+        let catalog = catalog();
+        let utc_day = UtcDay::from_gregorian(2016, 12, 31).unwrap();
+        let clock = UtcClockTime::new(23, 59, 60.5).unwrap();
+        let record = catalog
+            .utc_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, utc_day, clock)
+            .unwrap();
+        assert_eq!(catalog.validate_record_v1(&record), Ok(()));
+
+        let tai = JulianDate::new(
+            record.tai_day_number,
+            record.tai_midnight_fraction,
+            TimeScale::Tai,
+        )
+        .unwrap();
+        let reverse = catalog
+            .tai_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, tai)
+            .unwrap();
+        assert_eq!(catalog.validate_record_v1(&reverse), Ok(()));
+    }
+
+    #[test]
+    fn record_validator_rejects_inconsistent_schema_metadata_and_times() {
+        let catalog = catalog();
+        let day = UtcDay::from_gregorian(2017, 1, 1).unwrap();
+        let original = catalog
+            .utc_to_tai_record_v1(
+                "iana-tzdb-2026b",
+                PINNED_SHA,
+                day,
+                UtcClockTime::new(0, 0, 0.25).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(catalog.validate_record_v1(&original), Ok(()));
+
+        let mut modified = original.clone();
+        modified.schema = "virgostars.utc-tai.v2";
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.tai_time_scale = "TT";
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.leap_table_provenance.push_str("/unreviewed");
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.leap_expires_utc_day_number += 1;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.utc_day_number += 1;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.utc_hour = 1;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.utc_minute = 1;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.utc_second += 0.5;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.utc_second = f64::NAN;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.tai_midnight_fraction += 1.0 / 86_400.0;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.tai_midnight_fraction = f64::INFINITY;
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::InvalidWireRecord));
+
+        modified = original.clone();
+        modified.leap_table_version = "unknown".to_owned();
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::UnknownVersion));
+
+        modified = original;
+        modified.leap_table_sha256 = "0".repeat(64);
+        assert_eq!(catalog.validate_record_v1(&modified), Err(UtcLeapError::SourceDigestMismatch));
+        assert_eq!(
+            UtcTaiErrorV1::from(UtcLeapError::InvalidWireRecord).code,
+            "invalid_wire_record"
+        );
+    }
+
+    #[test]
     fn all_leap_error_variants_have_unique_stable_machine_codes() {
         use std::collections::HashSet;
 
@@ -437,6 +571,7 @@ mod tests {
             (UtcLeapError::DuplicateVersion, "duplicate_version"),
             (UtcLeapError::UnknownVersion, "unknown_version"),
             (UtcLeapError::SourceDigestMismatch, "source_digest_mismatch"),
+            (UtcLeapError::InvalidWireRecord, "invalid_wire_record"),
         ];
         let mut distinct = HashSet::new();
         for (variant, code) in expected {
@@ -449,7 +584,7 @@ mod tests {
                 .all(|b| b.is_ascii_lowercase() || b == b'_' || b.is_ascii_digit()));
             assert!(distinct.insert(record.code), "duplicate machine error code");
         }
-        assert_eq!(distinct.len(), 17);
+        assert_eq!(distinct.len(), 18);
     }
 
     #[test]
