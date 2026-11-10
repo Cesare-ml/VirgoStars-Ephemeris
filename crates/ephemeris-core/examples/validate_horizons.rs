@@ -113,6 +113,15 @@ fn parse_reference(source: &str) -> Result<Reference, String> {
             }
             values[i] = value;
         }
+        // Prevent duplicate or shuffled epochs from overstating validation coverage.
+        // Compare parsed TDB f64 values so indistinguishable dates are duplicates.
+        if let Some(previous) = cases.last() {
+            if values[0] <= previous.jd_tdb {
+                return Err(format!(
+                    "line {number}: Julian dates TDB must be strictly increasing"
+                ));
+            }
+        }
         let mut expected = [0.0; 6];
         expected.copy_from_slice(&values[1..]);
         cases.push(Case {
@@ -377,6 +386,93 @@ mod tests {
         .is_err());
         assert!(residuals([f64::MAX, f64::MAX, 0.0], [0.0; 3], [0.0; 6]).is_err());
         assert!(residuals([f64::NAN, 0.0, 0.0], [0.0; 3], [0.0; 6]).is_err());
+    }
+
+    #[test]
+    fn rejects_repeated_and_unsorted_epochs_without_changing_numeric_values() {
+        let two_epochs = format!("{VALID}2451546.0,2,3,4,5,6,7\n");
+        assert_eq!(parse_reference(&two_epochs).unwrap().cases.len(), 2);
+
+        for second_row in [
+            "2451545.0,2,3,4,5,6,7\n",
+            "2451544.0,2,3,4,5,6,7\n",
+            "2451545.00000000001,2,3,4,5,6,7\n",
+        ] {
+            let message = parse_reference(&format!("{VALID}{second_row}")).unwrap_err();
+            assert!(message.contains("strictly increasing"), "{message}");
+        }
+    }
+
+    fn put_f64(bytes: &mut [u8], offset: usize, value: f64) {
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_i32(bytes: &mut [u8], offset: usize, value: i32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    #[test]
+    fn synthetic_de441_reader_and_reference_residuals_agree_on_two_records() {
+        use std::io::Cursor;
+
+        // Synthetic classic DE441 layout, two 32-day records, Moon-geocentric
+        // T0/T1 series, no official JPL coefficients or Horizons values.
+        const RECORD_SIZE: usize = 3000;
+        let mut bytes = vec![0u8; RECORD_SIZE * 4];
+        let title = b"JPL Planetary Ephemeris DE441";
+        bytes[..title.len()].copy_from_slice(title);
+        put_f64(&mut bytes, 2652, 1000.0);
+        put_f64(&mut bytes, 2660, 1064.0);
+        put_f64(&mut bytes, 2668, 32.0);
+        put_f64(&mut bytes, 2688, 81.0);
+        put_i32(&mut bytes, 2840, 441);
+
+        // Last pointer extends the record to the declared 3000 bytes;
+        // Moon pointer is at index 9 with 2 coefficients per axis.
+        let moon_at = 2696 + 9 * 12;
+        put_i32(&mut bytes, moon_at, 3);
+        put_i32(&mut bytes, moon_at + 4, 2);
+        put_i32(&mut bytes, moon_at + 8, 1);
+        put_i32(&mut bytes, 2844, 373);
+        put_i32(&mut bytes, 2848, 1);
+        put_i32(&mut bytes, 2852, 1);
+        for record in 0..2 {
+            let base = (record + 2) * RECORD_SIZE;
+            put_f64(&mut bytes, base, 1000.0 + record as f64 * 32.0);
+            put_f64(&mut bytes, base + 8, 1032.0 + record as f64 * 32.0);
+            for axis in 0..3 {
+                put_f64(&mut bytes, base + (2 + axis * 2) * 8, 100.0 * (axis + 1) as f64);
+                put_f64(&mut bytes, base + (3 + axis * 2) * 8, 16.0 * (axis + 1) as f64);
+            }
+        }
+        let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+        let reference = parse_reference(
+            &VALID.replace(
+                "2451545.0,1,2,3,4,5,6\n",
+                "1016.0,100,200,300,1,2,3\n1048.0,100,200,300,1,2,3\n",
+            ),
+        )
+        .unwrap();
+        for case in &reference.cases {
+            let state = eph
+                .state(reference.target, reference.center, JulianDateTdb(case.jd_tdb))
+                .unwrap();
+            let exact = residuals(state.position_km, state.velocity_km_per_day, case.expected)
+                .unwrap();
+            assert_eq!(exact.position_km, [0.0; 3]);
+            assert_eq!(exact.velocity_km_per_day, [0.0; 3]);
+
+            let mut changed_reference = case.expected;
+            changed_reference[0] += 0.5;
+            changed_reference[4] -= 0.25;
+            let mismatch =
+                residuals(state.position_km, state.velocity_km_per_day, changed_reference)
+                    .unwrap();
+            assert_eq!(mismatch.position_km, [-0.5, 0.0, 0.0]);
+            assert_eq!(mismatch.velocity_km_per_day, [0.0, 0.25, 0.0]);
+            assert_eq!(mismatch.max_position_component_km, 0.5);
+            assert_eq!(mismatch.max_velocity_component_km_per_day, 0.25);
+        }
     }
 
     #[test]
