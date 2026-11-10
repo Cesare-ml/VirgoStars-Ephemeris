@@ -127,3 +127,22 @@ before treating any result as a Swiss-style `swe_calc_ut` replacement.
 numerical/error-case tests in `crates/ephemeris-core/src/light_time.rs`
 and documented their limits here; initial developer and VirgoStars copyright
 notices preserved, no external source/data incorporated.
+
+### Retrograde zero-meridian continuity regression
+
+A second synthetic reception-time test,
+`retrograde_longitude_rate_is_continuous_across_zero_meridian`,
+places a target just above the positive ICRF X axis at observation and gives
+it a negative transverse Y velocity. Across a ±600-second reception window,
+its longitude crosses the 0/2π meridian in the retrograde direction. The
+test explicitly checks that the before/after longitudes lie on opposite
+sides of the discontinuity, that the analytically projected angular speed
+is negative, and that a shortest-arc unwrapped finite-difference speed
+matches within `3e-7` rad/TDB day. This protects downstream station and
+retrograde calculations from accidentally treating a coordinate wrap as
+a genuine large prograde displacement. The input remains a synthetic
+linear-motion model; no independent JPL or Swiss accuracy claim is implied.
+
+CPAL-1.0 modification record (2026-11-10): added this deterministic
+zero-meridian regression to the existing Rust light-time test module;
+preserved original Exhibit A, license and VirgoStars attribution.
