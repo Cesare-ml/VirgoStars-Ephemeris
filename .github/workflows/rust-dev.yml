@@ -54,6 +54,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run deterministic workspace tests
         run: cargo test --workspace --locked
+      - name: Check offline Horizons reference parser
+        run: cargo test --workspace --example validate_horizons --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -78,6 +80,8 @@ jobs:
           components: clippy
       - name: Run workspace tests natively on Windows
         run: cargo test --workspace --locked
+      - name: Run Horizons comparator regressions on Windows
+        run: cargo test --workspace --example validate_horizons --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -92,5 +96,7 @@ jobs:
           components: clippy
       - name: Run workspace tests natively on macOS
         run: cargo test --workspace --locked
+      - name: Run Horizons comparator regressions on macOS
+        run: cargo test --workspace --example validate_horizons --locked
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
