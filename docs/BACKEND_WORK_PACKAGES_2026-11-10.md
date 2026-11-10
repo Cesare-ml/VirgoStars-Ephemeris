@@ -115,17 +115,16 @@ facade; the package remains open.
 
 ## D — Earth orientation, nutation and ECL_NUT (P0/P1)
 
-**Owner:** ephemeris core. Start with mean IAU 2006 functions in `first_sky.rs`
-(and historical prototypes for context only). Provide reviewed independent
-references and provenance for any adopted coefficient table.
+**Owner:** ephemeris core. Implemented in `crates/ephemeris-core/src/earth_orientation.rs`
+and documented in [IAU2000B_EARTH_ORIENTATION_2026-11-10.md](IAU2000B_EARTH_ORIENTATION_2026-11-10.md).
 
-- Implement and test a selected nutation model, true equator/ecliptic of date,
-  sidereal time and obliquity; keep UT1/EOP assumptions explicit. Expose
-  typed primitives to C and to the functions library for houses.
-- Acceptance: documented model/range and independent reference cases for
-  matrix, obliquity, sidereal time and each `SE_ECL_NUT` compatibility field;
-  distinguish TT from UT. Verify orthogonality, angle boundaries and cases
-  different from J2000. Do not equate a mean model to a true-of-date model.
+- Evaluates the 77-term IAU 2000B nutation series, mean and true obliquity of date,
+  rotation matrices from ICRF to True Equator of Date and True Ecliptic of Date,
+  sidereal time (ERA, GMST, GAST) with explicit UT1 vs TT separation, and `EclipticNutation`
+  with Swiss-compatible `to_swiss_ecl_nut()` representation.
+- Acceptance: independent numerical verification against ERFA `nut00b` and `num00b`
+  at JD 2453736.5 TT (< 1e-13 rad / element), matrix orthogonality, vector length
+  preservation, and explicit domain bounds (1900–2100 TT).
 
 ## E — Rust-backed Node compatibility facade (P0)
 

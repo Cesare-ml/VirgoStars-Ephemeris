@@ -15,7 +15,7 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
+//! No SPK file parsing, UTC conversion, aberration, or
 //! validated real-world astronomical positions are provided at this stage.
 //!
 //! The core is intentionally free of external runtime dependencies so the
@@ -27,6 +27,7 @@ pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
+pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
@@ -34,6 +35,7 @@ pub mod state;
 pub mod time;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
+pub use earth_orientation::{EclipticNutation, NutationAngles, OrientationError};
 pub use error::{EphemerisError, Result};
 pub use state::{ChebyshevPositionRecord, StateVectorKm, Vector3};
 pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
