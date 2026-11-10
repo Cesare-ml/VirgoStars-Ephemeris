@@ -56,3 +56,7 @@ jobs:
         run: cargo test --workspace --locked
       - name: Check Clippy warnings
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Install Windows GNU compilation target
+        run: rustup target add x86_64-pc-windows-gnu
+      - name: Check Windows GNU cross-target compilation
+        run: cargo check --workspace --locked --target x86_64-pc-windows-gnu
