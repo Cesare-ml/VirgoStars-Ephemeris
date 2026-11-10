@@ -2,15 +2,15 @@
 
 **Stato: primo prototipo isolato realizzato; accuratezza astronomica su kernel JPL reali NON ancora verificata.**
 
-Il repository pubblico `virgostars-ephemeris` svilupperà da zero, con sorgenti originali e licenza MIT per il nostro codice, un motore di effemeridi astronomiche che legge i kernel NASA/JPL SPK senza usare Swiss Ephemeris.
+Il repository pubblico `virgostars-ephemeris` sviluppa un motore originale di effemeridi astronomiche, con codice originale sotto **CPAL-1.0** (attribuzione VirgoStars secondo LICENSE e NOTICE), senza usare codice Swiss Ephemeris. **Rust è il solo motore astronomico canonico**: su `main` sono presenti prototipi JavaScript sperimentali; il workspace Rust e il lettore binario classico DE441 sono in sviluppo su `dev/ephemeris`, in attesa di integrazione verificata. I binding WASM/TypeScript e Python sono previsti, non ancora disponibili.
 
 La parola «equivalente» rappresenta **l'obiettivo di copertura delle funzioni necessarie** a VirgoStars: non significa che esista già un sostituto, né che tutti gli algoritmi/risultati Swiss saranno identici. La precisione va verificata con dati indipendenti (JPL Horizons/NAIF), tenendo conto di modello, epoca, coordinate e correzioni utilizzate.
 
 Per ora il prototipo legge dati SPK di tipo 2, calcola posizioni e velocità geometriche J2000 e include una prima modalità Analytic Lite senza file esterni (JPL approssimato/USNO). Sono stati superati 18 test locali con dati sintetici e test dello strumento Horizons: non sono stati effettuati confronti con kernel NASA reali o Horizons; esiste ora lo script manuale `npm run verify:horizons`. Il motore completo dovrà fornire tempi astronomici, posizioni, velocità e coordinate; `astrological-functions` si occuperà di case, aspetti, temi, transiti, sinodi, rivoluzioni e altri metodi astrologici. Il sito e l'Astrolabio continueranno a usare il motore attuale fino a un collaudo separato.
 
-**Dati e diritti:** i kernel distribuiti da NAIF sono dati di terzi con proprie condizioni, non diventano MIT. Il loro download/uso/redistribuzione sono disciplinati dalle regole NAIF; il toolkit SPICE ha restrizioni specifiche. Non inserire file di effemeridi, codice Swiss, segreti o dati privati nel repository.
+**Dati e diritti:** i kernel distribuiti da NAIF sono dati di terzi con proprie condizioni, non diventano CPAL-1.0. Il loro download/uso/redistribuzione sono disciplinati dalle regole NAIF; il toolkit SPICE ha restrizioni specifiche. Non inserire file di effemeridi, codice Swiss, segreti o dati privati nel repository.
 
-Documenti principali: [architettura](ARCHITECTURE.md), [contratti](API_CONTRACTS.md), [roadmap](ROADMAP.md), [verifiche](VALIDATION.md), [dati e licenze](DATA_AND_LICENSING.md).
+Documenti principali: [architettura](ARCHITECTURE.md), [ADR Rust](ADR-0001-RUST-CORE-AND-BINDINGS.md), [contratti](API_CONTRACTS.md), [roadmap](ROADMAP.md), [verifiche](VALIDATION.md), [dati e licenze](DATA_AND_LICENSING.md), [licenza e crediti](LICENSING_AND_CREDITS.md), [stato dei rami](BRANCH_INTEGRATION_STATUS_2026-11-10.md).
 
 
 ## Avanzamento: geometria J2000 e tempo della luce
