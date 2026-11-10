@@ -295,6 +295,9 @@ impl<R: Read + Seek> De441<R> {
             let record_index =
                 (((jd - self.start) / self.step).floor() as usize).min(self.record_count - 1);
             if self.cached_record_index != Some(record_index) {
+                // Invalidate before I/O: a short read may partially overwrite
+                // the buffer, including the previously cached record.
+                self.cached_record_index = None;
                 let offset = (record_index as u64 + 2) * self.record_size as u64;
                 self.source.seek(SeekFrom::Start(offset))?;
                 self.source.read_exact(&mut self.cached_record)?;
