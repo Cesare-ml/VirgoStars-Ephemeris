@@ -20,8 +20,8 @@ SPK provides ephemeris segments; coverage **varies by target and frame**. Many p
 
 ## Rights — distinct assets
 
-1. **Original VirgoStars Ephemeris source**: MIT license applies only to original code and documentation in this repository.
-2. **NAIF-supplied SPK kernels**: NAIF states they can be downloaded and used, and that redistribution of kernels NAIF distributed is permitted when they have not been modified; provenance/attribution must be respected. Kernels are **not relabeled MIT** by including a manifest/link.
+1. **Original VirgoStars Ephemeris source**: the repository uses [CPAL-1.0](../LICENSE) (including Exhibits A/B and VirgoStars attribution); third-party materials keep their own licenses. See [NOTICE](../NOTICE) and [LICENSING_AND_CREDITS.md](LICENSING_AND_CREDITS.md).
+2. **NAIF-supplied SPK kernels**: NAIF states they can be downloaded and used, and that redistribution of kernels NAIF distributed is permitted when they have not been modified; provenance/attribution must be respected. Kernels are **not relicensed as CPAL-1.0** by including a manifest/link.
 3. **NAIF SPICE Toolkit**: distinct rules; redistribution of the unmodified standalone toolkit as a mirror requires prior written clearance. Inclusion of toolkit modules within a customer's SPICE-based tool is described separately. **Do not copy/toolkit-vendor without review.**
 4. **ERFA or other external code**: licenses are their own; use and preserve all notices, source links, versions and changes; do not claim entire third-party material is ours.
 5. **Swiss Ephemeris**: has AGPL/professional dual license. It is a **non-dependency** of this project. Do not paste/copy/translate its implementation or bundle its datasets, compressed ephemerides, source or headers as project artifacts.
@@ -39,7 +39,7 @@ Official rules: https://naif.jpl.nasa.gov/naif/rules.html ; Swiss terms: https:/
 ## License checklist before public release of code
 
 - [ ] Every dependency reviewed for licensing and notices
-- [ ] No Swiss/copyleft or non-redistributable implementation copied into MIT code
+- [ ] No Swiss Ephemeris source or incompatible third-party implementation copied into CPAL-1.0-covered code
 - [ ] Exact kernel versions/coverage checked
 - [ ] Public documentation contains no secrets/private data
 - [ ] Independent scientific test/reference provenance documented
@@ -52,4 +52,4 @@ This document records technical intentions, not legal advice.
 
 `src/data/iau2000b-terms.mjs` includes the published numerical 77-term nutation coefficients derived from the BSD-style ERFA `nut00b.c` reference, explicitly credited to NumFOCUS Foundation; see repository `THIRD_PARTY_NOTICES.md` and the full `third_party/ERFA_LICENSE.txt`. These numerical series data are third-party provenance even though the new VirgoStars `src/nutation.mjs` JavaScript evaluator is original source.
 
-Preserve full ERFA attribution and required BSD notices in both source and any binary/package distributions; the general MIT license does not automatically supersede them. No ERFA C source or runtime dependency is bundled and no Swiss code or compressed Swiss data has been copied.
+Preserve full ERFA attribution and required BSD notices in both source and any binary/package distributions; the project's CPAL-1.0 license does not supersede third-party BSD notices. No ERFA C source or runtime dependency is bundled and no Swiss code or compressed Swiss data has been copied.

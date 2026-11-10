@@ -26,6 +26,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Proposed public contracts](docs/API_CONTRACTS.md)
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Italian overview](docs/README.it.md)
+- [Branch integration status and merge gates (2026-11-10)](docs/BRANCH_INTEGRATION_STATUS_2026-11-10.md)
 
 ## Scientific sources
 
@@ -42,7 +43,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - Public repository created.
 - Requirements and phased architecture being documented.
 - Experimental classic JPL DE441 binary reader in `src/jpl-de441.mjs` with isolated synthetic tests in `test/jpl-de441.test.mjs`.
-- No production-ready API, Rust core or bindings, npm package, numerical-parity claim, benchmarks, or production migration yet.
+- No production-ready API, Rust core or bindings, npm package, numerical-parity claim, benchmarks, or production migration yet. **The experimental Rust workspace currently lives on `dev/ephemeris`, not `main`**. Its classic binary DE441 reader is not an SPK `.bsp` reader; see the [branch status](docs/BRANCH_INTEGRATION_STATUS_2026-11-10.md).
 - GitHub Actions CI for Node.js regression tests and Rust format/lint/test checks when a Cargo workspace exists on the checked-out branch; no automatic releases or deployment.
 
 **License:** the original VirgoStars-Ephemeris source code is provided under the [Common Public Attribution License 1.0 (CPAL-1.0)](LICENSE), with completed Exhibits A and B. See [NOTICE](NOTICE) and [Licensing and visible credits](docs/LICENSING_AND_CREDITS.md). This license permits commercial use and redistribution, but requires preservation of notices and, where applicable, prominent *Powered by VirgoStars* attribution (including in Larger Works). It also has network-use source-availability obligations. A normal About/Credits link is encouraged but cannot automatically be assumed to satisfy the actual CPAL §14 launch/session display requirement.
