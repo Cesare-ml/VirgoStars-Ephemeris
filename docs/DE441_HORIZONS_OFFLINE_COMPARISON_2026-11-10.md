@@ -110,6 +110,27 @@ units and large-magnitude numeric failures. These extra diagnostics support a
 scientific audit of each body and epoch once real data is supplied; they do
 **not** constitute an independent numerical comparison by themselves.
 
+## Deterministic reference ordering and synthetic end-to-end gate
+
+The curated input must contain **strictly increasing, unique Julian dates
+TDB**. The parser rejects out-of-order, repeated or numerically
+indistinguishable dates (after parsing into `f64`), rather than counting
+repeated vectors as independent coverage. Sort raw Horizons observations by
+epoch before curating the reference CSV; do not change the original timestamps
+or invent rows.
+
+The Rust example's tests additionally construct a tiny **synthetic
+classic-DE441-format file in memory** containing two coefficient records.
+They check that the *actual* `De441::state` reader returns the expected
+Moon-relative-to-Earth position and km/day velocity at both record midpoints,
+that zero reference differences produce zero residuals, and that deliberate
+reference perturbations produce the expected signed errors. These fixtures are
+deliberately artificial and do **not** prove real-world JPL precision.
+
+The corresponding source modification was made on 2026-11-10 under the
+existing CPAL-1.0 Exhibit A notice. No external JPL data, new dependencies
+or scientific results were introduced.
+
 ## Evidence required before claiming a passing scientific gate
 
 Record the exact commit SHA and toolchain, binary file name, original source,
