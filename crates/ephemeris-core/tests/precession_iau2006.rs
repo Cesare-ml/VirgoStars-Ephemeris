@@ -80,8 +80,7 @@ fn analytic_rotation_derivative_agrees_with_independent_finite_differences() {
         for i in 0..3 {
             for j in 0..3 {
                 let numerical =
-                    (later.rotation[i][j] - earlier.rotation[i][j])
-                    / (2.0 * half_step_tt_days);
+                    (later.rotation[i][j] - earlier.rotation[i][j]) / (2.0 * half_step_tt_days);
                 near(current.rate_per_tt_day[i][j], numerical, 5e-13);
             }
         }
@@ -96,7 +95,11 @@ fn matrix_is_right_handed_and_derivative_is_tangent_to_so3() {
         let derivative = state.rate_per_tt_day;
         for i in 0..3 {
             for j in 0..3 {
-                near(dot(rotation[i], rotation[j]), if i == j { 1.0 } else { 0.0 }, 2e-14);
+                near(
+                    dot(rotation[i], rotation[j]),
+                    if i == j { 1.0 } else { 0.0 },
+                    2e-14,
+                );
                 near(
                     dot(derivative[i], rotation[j]) + dot(rotation[i], derivative[j]),
                     0.0,
