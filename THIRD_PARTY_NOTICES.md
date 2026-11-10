@@ -11,3 +11,7 @@ included. The ERFA terms remain separate from VirgoStars' CPAL-1.0 license.
 `crates/ephemeris-core/tests/calendar_contract.rs` also uses the numeric
 Gregorian date/JD reference from the ERFA `t_cal2jd` conformance test, under
 the same license and source attribution.
+
+`crates/ephemeris-core/src/first_sky.rs` tests the IAU 2006 precession
+matrix against the ERFA `t_pmat06` numerical conformance reference. These
+reference values are subject to the same attribution and license above.

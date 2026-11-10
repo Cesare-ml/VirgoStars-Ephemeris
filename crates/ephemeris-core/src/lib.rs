@@ -31,6 +31,8 @@ pub mod coordinates;
 pub mod de441;
 pub mod error;
 mod fingerprint;
+pub mod first_sky;
+pub mod light_time;
 pub mod state;
 pub mod time;
 pub mod utc_leaps;
