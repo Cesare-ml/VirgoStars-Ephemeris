@@ -83,9 +83,7 @@ impl Error for MeanObliquityError {}
 /// TT Julian centuries from J2000 for the guarded IAU 2006 precession
 /// family. Kept crate-private so each constituent uses identical epochs and
 /// refuses wrong time scales or dates outside the tested policy window.
-pub(crate) fn tt_centuries_iau2006(
-    tt_epoch: JulianDate,
-) -> Result<f64, MeanObliquityError> {
+pub(crate) fn tt_centuries_iau2006(tt_epoch: JulianDate) -> Result<f64, MeanObliquityError> {
     if tt_epoch.scale() != TimeScale::Tt {
         return Err(MeanObliquityError::WrongTimeScale);
     }
