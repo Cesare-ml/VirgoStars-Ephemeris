@@ -281,8 +281,14 @@ impl<R: Read + Seek> De441<R> {
                     "coefficient record has unexpected dates",
                 ));
             }
-            self.barycentric(target, jd, record_start, &record)?
-                .add_scaled(self.barycentric(center, jd, record_start, &record)?, -1.0)
+            match (target, center) {
+                (Body::Moon, Body::Earth) => self.series(9, jd, record_start, &record)?,
+                (Body::Earth, Body::Moon) => Components::default()
+                    .add_scaled(self.series(9, jd, record_start, &record)?, -1.0),
+                _ => self
+                    .barycentric(target, jd, record_start, &record)?
+                    .add_scaled(self.barycentric(center, jd, record_start, &record)?, -1.0),
+            }
         };
         if components
             .position
