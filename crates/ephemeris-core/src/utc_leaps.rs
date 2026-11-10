@@ -405,10 +405,7 @@ mod tests {
             Err(UtcLeapError::ClockTimeOutsideDay)
         );
         assert_eq!(
-            schedule.seconds_into_utc_day(
-                d(2017, 1, 1),
-                UtcClockTime::new(0, 0, 0.0).unwrap()
-            ),
+            schedule.seconds_into_utc_day(d(2017, 1, 1), UtcClockTime::new(0, 0, 0.0).unwrap()),
             Ok(0.0)
         );
     }
@@ -427,24 +424,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            schedule.seconds_into_utc_day(
-                d(2020, 6, 30),
-                UtcClockTime::new(23, 59, 58.5).unwrap()
-            ),
+            schedule.seconds_into_utc_day(d(2020, 6, 30), UtcClockTime::new(23, 59, 58.5).unwrap()),
             Ok(86_398.5)
         );
         assert_eq!(
-            schedule.seconds_into_utc_day(
-                d(2020, 6, 30),
-                UtcClockTime::new(23, 59, 59.0).unwrap()
-            ),
+            schedule.seconds_into_utc_day(d(2020, 6, 30), UtcClockTime::new(23, 59, 59.0).unwrap()),
             Err(UtcLeapError::ClockTimeOutsideDay)
         );
         assert_eq!(
-            schedule.seconds_into_utc_day(
-                d(2020, 7, 1),
-                UtcClockTime::new(23, 59, 59.0).unwrap()
-            ),
+            schedule.seconds_into_utc_day(d(2020, 7, 1), UtcClockTime::new(23, 59, 59.0).unwrap()),
             Ok(86_399.0)
         );
     }
@@ -472,8 +460,7 @@ mod tests {
 
     #[test]
     fn clock_validation_requires_explicit_coverage() {
-        let schedule = UtcLeapSchedule::new(d(2020, 1, 1), d(2020, 1, 1), 37, vec![])
-            .unwrap();
+        let schedule = UtcLeapSchedule::new(d(2020, 1, 1), d(2020, 1, 1), 37, vec![]).unwrap();
         let midnight = UtcClockTime::new(0, 0, 0.0).unwrap();
         assert_eq!(
             schedule.seconds_into_utc_day(d(2019, 12, 31), midnight),
