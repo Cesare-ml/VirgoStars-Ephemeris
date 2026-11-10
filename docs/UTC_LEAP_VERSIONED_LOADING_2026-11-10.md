@@ -165,6 +165,14 @@ digest of the exact bytes** in each curated numeric source:
   expected lowercase digest. An unknown version is still rejected
   without fallback.
 
+The repository's `.gitattributes` **forces LF checkout for this exact
+pinned data file**, regardless of the Windows `core.autocrlf` setting.
+Without this rule, Windows Git checkout can silently replace LF with CRLF,
+changing the exact-byte digest and causing a `SourceDigestMismatch`
+even though the numerical leap table is unchanged. A CI regression must
+confirm the same digest on Linux, Windows and macOS; neither side
+should silently normalize data inside the SHA-256 function.
+
 The currently pinned **989-byte** IANA tzdb-2026b *curated* file has
 SHA-256 `e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd`,
 independently calculated with Python's standard-library `hashlib.sha256`.
@@ -360,3 +368,9 @@ nonchecked API compatible for experimental callers and left the
 pinned IANA data unchanged. No Python or TypeScript runtime binding
 is claimed, and the independent JPL scientific validation gate remains
 open. Source CPAL-1.0 and required VirgoStars credits unchanged.
+
+2026-11-10 CI portability correction: added a path-specific
+`.gitattributes` entry forcing LF checkout for the approved 2026b
+public-domain numeric file, preserving the exact-byte SHA-256 across
+Windows and Unix runners. The numeric source, expected digest and
+time-scale conversion behavior are unchanged.
