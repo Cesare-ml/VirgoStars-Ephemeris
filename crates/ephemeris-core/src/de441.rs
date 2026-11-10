@@ -137,6 +137,10 @@ pub struct De441<R> {
     pointers: [Pointer; SERIES_COUNT],
     record_size: usize,
     record_count: usize,
+    // Reuse the last complete coefficient record for repeated epochs in the
+    // same 32-day interval; a failed read must never populate the cache.
+    cached_record_index: Option<usize>,
+    cached_record: Vec<u8>,
 }
 
 impl De441<File> {
@@ -260,6 +264,8 @@ impl<R: Read + Seek> De441<R> {
             pointers,
             record_size,
             record_count,
+            cached_record_index: None,
+            cached_record: vec![0u8; record_size],
         })
     }
 
@@ -288,18 +294,22 @@ impl<R: Read + Seek> De441<R> {
         } else {
             let record_index =
                 (((jd - self.start) / self.step).floor() as usize).min(self.record_count - 1);
-            let offset = (record_index as u64 + 2) * self.record_size as u64;
-            self.source.seek(SeekFrom::Start(offset))?;
-            let mut record = vec![0u8; self.record_size];
-            self.source.read_exact(&mut record)?;
-            let record_start = f64_at(&record, 0);
-            if record_start != self.start + record_index as f64 * self.step
-                || f64_at(&record, 8) != record_start + self.step
-            {
-                return Err(De441Error::InvalidFile(
-                    "coefficient record has unexpected dates",
-                ));
+            if self.cached_record_index != Some(record_index) {
+                let offset = (record_index as u64 + 2) * self.record_size as u64;
+                self.source.seek(SeekFrom::Start(offset))?;
+                self.source.read_exact(&mut self.cached_record)?;
+                let record_start = f64_at(&self.cached_record, 0);
+                if record_start != self.start + record_index as f64 * self.step
+                    || f64_at(&self.cached_record, 8) != record_start + self.step
+                {
+                    return Err(De441Error::InvalidFile(
+                        "coefficient record has unexpected dates",
+                    ));
+                }
+                self.cached_record_index = Some(record_index);
             }
+            let record = &self.cached_record;
+            let record_start = f64_at(record, 0);
             // The Moon series is geocentric. Compute Earth/Moon/EMB-relative
             // vectors directly from it, without subtracting large barycentric
             // positions that can erase small lunar offsets through cancellation.
@@ -321,10 +331,10 @@ impl<R: Read + Seek> De441<R> {
                 _ => None,
             };
             if let Some(scale) = lunar_scale {
-                Components::default().add_scaled(self.series(9, jd, record_start, &record)?, scale)
+                Components::default().add_scaled(self.series(9, jd, record_start, record)?, scale)
             } else {
-                self.barycentric(target, jd, record_start, &record)?
-                    .add_scaled(self.barycentric(center, jd, record_start, &record)?, -1.0)
+                self.barycentric(target, jd, record_start, record)?
+                    .add_scaled(self.barycentric(center, jd, record_start, record)?, -1.0)
             }
         };
         if components
