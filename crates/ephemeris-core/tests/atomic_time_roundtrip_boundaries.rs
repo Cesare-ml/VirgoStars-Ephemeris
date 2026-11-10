@@ -47,3 +47,21 @@ fn tt_to_tai_roundtrip_preserves_midnight_boundary() {
         );
     }
 }
+
+#[test]
+fn tai_midnight_maps_to_next_tt_day_when_offset_crosses_boundary() {
+    // Independent civil-clock convention: TT = TAI + 32.184 SI seconds.
+    // This checks the *direction and magnitude* of the offset, not merely
+    // roundtrip reversibility (which could pass with the wrong sign).
+    let tai = JulianDate::new(2_451_545, 1.0 - 20.0 / SECONDS_PER_DAY, TimeScale::Tai)
+        .unwrap();
+    let tt = tai_to_tt(tai).unwrap();
+    assert_eq!(tt.day_number(), 2_451_546);
+    assert_eq!(tt.scale(), TimeScale::Tt);
+    let expected_tt_seconds_after_midnight = 12.184;
+    let actual = tt.midnight_fraction() * SECONDS_PER_DAY;
+    assert!(
+        (actual - expected_tt_seconds_after_midnight).abs() < 1e-8,
+        "TT seconds after midnight: {actual}"
+    );
+}
