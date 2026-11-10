@@ -296,7 +296,6 @@ impl JulianDate {
     }
 }
 
-
 #[cfg(test)]
 mod tdb_seconds_tests {
     use super::*;
@@ -330,8 +329,7 @@ mod tdb_seconds_tests {
     #[test]
     fn modern_epoch_keeps_day_offset_and_fraction_signs() {
         let modern = JulianDate::new(2_460_000, 0.625, TimeScale::Tdb).unwrap();
-        let expected = (2_460_000.0 - J2000_JD_TDB) * SECONDS_PER_DAY
-            + 0.125 * SECONDS_PER_DAY;
+        let expected = (2_460_000.0 - J2000_JD_TDB) * SECONDS_PER_DAY + 0.125 * SECONDS_PER_DAY;
         let et = modern.to_tdb_seconds_past_j2000().unwrap().value();
         assert!((et - expected).abs() < 1e-6);
         assert!(et > 0.0);
