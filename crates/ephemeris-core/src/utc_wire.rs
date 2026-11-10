@@ -279,6 +279,132 @@ mod tests {
     }
 
     #[test]
+    fn synthetic_negative_leap_record_preserves_a_missing_utc_second() {
+        // This is a hypothetical scenario, NOT an IERS announcement.
+        // A -1s step at 2027-01-01 makes 2026-12-31 only 86,399 s long.
+        let original = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list")
+            .replace("#@ 4007404800", "#@ 4023388800");
+        let reviewed = format!("{source}4007750400 36\n");
+        let future = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "synthetic-negative-2027",
+            "test only: hypothetical negative leap; not IANA or IERS",
+            &reviewed,
+        )
+        .unwrap();
+        let future_digest = future.source_sha256().to_owned();
+
+        let mut catalog = UtcLeapCatalog::new();
+        catalog.register(original).unwrap();
+        catalog.register(future).unwrap();
+
+        let last_day = UtcDay::from_gregorian(2026, 12, 31).unwrap();
+        let next_day = UtcDay::from_gregorian(2027, 1, 1).unwrap();
+        let before = catalog
+            .utc_to_tai_record_v1(
+                "synthetic-negative-2027",
+                &future_digest,
+                last_day,
+                UtcClockTime::new(23, 59, 58.5).unwrap(),
+            )
+            .unwrap();
+        let after = catalog
+            .utc_to_tai_record_v1(
+                "synthetic-negative-2027",
+                &future_digest,
+                next_day,
+                UtcClockTime::new(0, 0, 0.0).unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(before.schema, UTC_TAI_RECORD_V1_SCHEMA);
+        assert_eq!(before.leap_table_version, "synthetic-negative-2027");
+        assert_eq!(before.leap_table_sha256, future_digest);
+        assert_eq!(before.utc_day_number, last_day.julian_day_number());
+        assert_eq!(before.utc_second, 58.5);
+        assert_eq!(before.tai_day_number, next_day.julian_day_number());
+        assert_eq!(after.tai_day_number, next_day.julian_day_number());
+        assert!((before.tai_midnight_fraction * 86_400.0 - 35.5).abs() < 1e-8);
+        assert!((after.tai_midnight_fraction * 86_400.0 - 36.0).abs() < 1e-8);
+        assert_eq!(after.utc_second, 0.0);
+        assert_eq!(before.leap_expires_utc_day_number, after.leap_expires_utc_day_number);
+
+        for (clock, tai_record) in [
+            (UtcClockTime::new(23, 59, 58.5).unwrap(), &before),
+            (UtcClockTime::new(0, 0, 0.0).unwrap(), &after),
+        ] {
+            let utc = catalog
+                .tai_to_utc_record_v1(
+                    "synthetic-negative-2027",
+                    &future_digest,
+                    JulianDate::new(
+                        tai_record.tai_day_number,
+                        tai_record.tai_midnight_fraction,
+                        TimeScale::Tai,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            assert_eq!(utc.leap_table_sha256, future_digest);
+            assert_eq!(utc.tai_day_number, tai_record.tai_day_number);
+            assert_eq!(utc.utc_hour, clock.hour());
+            assert_eq!(utc.utc_minute, clock.minute());
+            assert!((utc.utc_second - clock.second()).abs() < 1e-8);
+            assert_eq!(utc.utc_day_number, tai_record.utc_day_number);
+        }
+
+        let missing = catalog
+            .utc_to_tai_record_v1(
+                "synthetic-negative-2027",
+                &future_digest,
+                last_day,
+                UtcClockTime::new(23, 59, 59.0).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(missing, UtcLeapError::ClockTimeOutsideDay);
+        assert_eq!(UtcTaiErrorV1::from(missing).code, "clock_time_outside_day");
+
+        // Registering the synthetic 2027 table must not lift the original
+        // historical 2026b expiry or silently select a newer version.
+        assert!(matches!(
+            catalog.utc_to_tai_record_v1(
+                "iana-tzdb-2026b",
+                "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd",
+                last_day,
+                UtcClockTime::new(23, 59, 58.5).unwrap(),
+            ),
+            Err(UtcLeapError::OutsideCoverage)
+        ));
+    }
+
+    #[test]
+    fn negative_leap_synthetic_source_rejects_prior_pinned_sha256() {
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list")
+            .replace("#@ 4007404800", "#@ 4023388800");
+        let future_text = format!("{source}4007750400 36\n");
+        let future = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+            "synthetic-negative-2027",
+            "test only",
+            &future_text,
+        )
+        .unwrap();
+        let mut catalog = UtcLeapCatalog::new();
+        catalog.register(future).unwrap();
+        let old_pinned_digest =
+            "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+        let day = UtcDay::from_gregorian(2026, 12, 31).unwrap();
+        assert!(matches!(
+            catalog.utc_to_tai_record_v1(
+                "synthetic-negative-2027",
+                old_pinned_digest,
+                day,
+                UtcClockTime::new(23, 59, 58.0).unwrap(),
+            ),
+            Err(UtcLeapError::SourceDigestMismatch)
+        ));
+    }
+
+    #[test]
     fn all_leap_error_variants_have_unique_stable_machine_codes() {
         use std::collections::HashSet;
 
