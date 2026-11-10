@@ -20,6 +20,7 @@
 //! TT/TDB, downloads updates or extrapolates beyond declared coverage.
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 
@@ -62,6 +63,10 @@ pub enum UtcLeapError {
     InvalidReviewedSnapshot,
     /// Version identifier or mandatory provenance field is missing/unsafe.
     InvalidSnapshotProvenance,
+    /// An approved version ID was registered more than once in this catalog.
+    DuplicateVersion,
+    /// The requested version was not explicitly registered.
+    UnknownVersion,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -83,6 +88,8 @@ impl fmt::Display for UtcLeapError {
             Self::InvalidPinnedLeapData => write!(f, "invalid pinned IANA leap-second snapshot"),
             Self::InvalidReviewedSnapshot => write!(f, "invalid reviewed leap-second snapshot"),
             Self::InvalidSnapshotProvenance => write!(f, "invalid leap-second snapshot provenance"),
+            Self::DuplicateVersion => write!(f, "leap-second schedule version already registered"),
+            Self::UnknownVersion => write!(f, "requested leap-second schedule version is unknown"),
         }
     }
 }
@@ -375,6 +382,100 @@ impl VersionedUtcLeapSchedule {
     /// Borrow the validated schedule without changing its provenance.
     pub fn schedule(&self) -> &UtcLeapSchedule {
         &self.schedule
+    }
+}
+
+/// A calendar or atomic-time value annotated with the selected leap table.
+///
+/// Metadata is copied into each result, so records remain interpretable even
+/// after the catalog is dropped. `version` and `provenance` are declared
+/// identifiers, not cryptographic evidence of the source content. Persist
+/// an independently reviewed digest in the provenance when auditing results.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VersionedUtcResult<T> {
+    /// Exact schedule version explicitly selected for this conversion.
+    pub version: String,
+    /// Declared source provenance (not authenticated by the Rust loader).
+    pub provenance: String,
+    /// First UTC day excluded from this schedule's validity.
+    pub expires_utc_day: UtcDay,
+    /// Converted TAI Julian date, or UTC civil day plus clock, as requested.
+    pub value: T,
+}
+
+/// Explicit catalog of independently owned leap-second schedule versions.
+///
+/// No default, best, or latest version exists. An unknown version and a
+/// duplicate registration are errors. Inserting an instance does **not**
+/// validate external source authenticity: callers must first complete the
+/// independent official-source audit and human review.
+#[derive(Debug, Default)]
+pub struct UtcLeapCatalog {
+    schedules: BTreeMap<String, VersionedUtcLeapSchedule>,
+}
+
+impl UtcLeapCatalog {
+    /// Create an empty catalog, deliberately with no implicit default.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register an independently validated, version-named schedule.
+    ///
+    /// The same version string cannot be replaced, even with different
+    /// contents: use a new ID for a new approved data snapshot.
+    pub fn register(&mut self, schedule: VersionedUtcLeapSchedule) -> Result<(), UtcLeapError> {
+        let version = schedule.version().to_owned();
+        if self.schedules.contains_key(&version) {
+            return Err(UtcLeapError::DuplicateVersion);
+        }
+        self.schedules.insert(version, schedule);
+        Ok(())
+    }
+
+    /// List registered version IDs in stable lexical order.
+    pub fn versions(&self) -> impl Iterator<Item = &str> {
+        self.schedules.keys().map(String::as_str)
+    }
+
+    /// Select an exact previously registered version, without fallback.
+    pub fn select(&self, version: &str) -> Result<&VersionedUtcLeapSchedule, UtcLeapError> {
+        self.schedules.get(version).ok_or(UtcLeapError::UnknownVersion)
+    }
+
+    /// Convert UTC to TAI using precisely the requested version, preserving
+    /// that version's provenance and exclusive expiry in the result.
+    pub fn utc_to_tai(
+        &self,
+        version: &str,
+        day: UtcDay,
+        clock: UtcClockTime,
+    ) -> Result<VersionedUtcResult<JulianDate>, UtcLeapError> {
+        let selected = self.select(version)?;
+        let value = selected.schedule().utc_to_tai(day, clock)?;
+        Ok(VersionedUtcResult {
+            version: selected.version().to_owned(),
+            provenance: selected.provenance().to_owned(),
+            expires_utc_day: selected.expires_utc_day(),
+            value,
+        })
+    }
+
+    /// Convert TAI to UTC using precisely the requested version. The output
+    /// identifies the schedule that determined whether a leap second exists.
+    pub fn tai_to_utc(
+        &self,
+        version: &str,
+        tai: JulianDate,
+    ) -> Result<VersionedUtcResult<(UtcDay, UtcClockTime)>, UtcLeapError> {
+        let selected = self.select(version)?;
+        let value = selected.schedule().tai_to_utc(tai)?;
+        Ok(VersionedUtcResult {
+            version: selected.version().to_owned(),
+            provenance: selected.provenance().to_owned(),
+            expires_utc_day: selected.expires_utc_day(),
+            value,
+        })
     }
 }
 
@@ -1274,6 +1375,135 @@ mod tests {
                 .unwrap_err(),
             UtcLeapError::InvalidSnapshotProvenance
         );
+    }
+
+    #[test]
+    fn catalog_requires_explicit_selection_and_preserves_result_metadata() {
+        let mut catalog = UtcLeapCatalog::new();
+        assert_eq!(catalog.versions().count(), 0);
+        assert!(matches!(
+            catalog.select("iana-tzdb-2026b"),
+            Err(UtcLeapError::UnknownVersion)
+        ));
+        catalog
+            .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+            .unwrap();
+        assert_eq!(catalog.versions().collect::<Vec<_>>(), vec!["iana-tzdb-2026b"]);
+        let leap_day = d(2016, 12, 31);
+        let result = catalog
+            .utc_to_tai(
+                "iana-tzdb-2026b",
+                leap_day,
+                UtcClockTime::new(23, 59, 60.5).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(result.version, "iana-tzdb-2026b");
+        assert!(result.provenance.contains("tzdb-2026b"));
+        assert_eq!(result.expires_utc_day, d(2026, 12, 28));
+        assert_eq!(result.value.scale(), TimeScale::Tai);
+
+        let reverse = catalog
+            .tai_to_utc("iana-tzdb-2026b", result.value)
+            .unwrap();
+        assert_eq!(reverse.version, result.version);
+        assert_eq!(reverse.provenance, result.provenance);
+        assert_eq!(reverse.expires_utc_day, result.expires_utc_day);
+        assert_eq!(reverse.value.0, leap_day);
+        assert!((reverse.value.1.second() - 60.5).abs() < 1e-8);
+    }
+
+    #[test]
+    fn catalog_rejects_duplicate_or_unknown_versions_without_fallback() {
+        let mut catalog = UtcLeapCatalog::new();
+        catalog
+            .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+            .unwrap();
+        assert_eq!(
+            catalog.register(VersionedUtcLeapSchedule::iana_2026b().unwrap()),
+            Err(UtcLeapError::DuplicateVersion)
+        );
+        assert!(matches!(
+            catalog.select("iana-tzdb-2026c"),
+            Err(UtcLeapError::UnknownVersion)
+        ));
+        assert_eq!(
+            catalog.utc_to_tai(
+                "iana-tzdb-2026c",
+                d(2017, 1, 1),
+                UtcClockTime::new(0, 0, 0.0).unwrap()
+            ),
+            Err(UtcLeapError::UnknownVersion)
+        );
+        assert_eq!(
+            catalog.tai_to_utc(
+                "iana-tzdb-2026c",
+                JulianDate::new(d(2017, 1, 1).julian_day_number(), 0.5, TimeScale::Tai)
+                    .unwrap()
+            ),
+            Err(UtcLeapError::UnknownVersion)
+        );
+    }
+
+    #[test]
+    fn catalog_keeps_old_expiry_when_another_version_is_registered() {
+        let mut catalog = UtcLeapCatalog::new();
+        catalog
+            .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+            .unwrap();
+        let synthetic = include_str!("../data/iana-tzdb-2026b-leap-seconds.list")
+            .replace("#@ 4007404800", "#@ 4023388800");
+        catalog
+            .register(
+                VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                    "synthetic-2027",
+                    "test-only; not an official future IANA release",
+                    &synthetic,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            catalog.versions().collect::<Vec<_>>(),
+            vec!["iana-tzdb-2026b", "synthetic-2027"]
+        );
+        let day = d(2027, 1, 1);
+        let clock = UtcClockTime::new(0, 0, 0.25).unwrap();
+        assert_eq!(
+            catalog.utc_to_tai("iana-tzdb-2026b", day, clock),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        let result = catalog.utc_to_tai("synthetic-2027", day, clock).unwrap();
+        assert_eq!(result.version, "synthetic-2027");
+        assert_eq!(result.expires_utc_day, d(2027, 7, 1));
+        assert_eq!(
+            catalog.tai_to_utc("iana-tzdb-2026b", result.value),
+            Err(UtcLeapError::OutsideCoverage)
+        );
+        let back = catalog.tai_to_utc("synthetic-2027", result.value).unwrap();
+        assert_eq!(back.value.0, day);
+        assert!((back.value.1.second() - clock.second()).abs() < 1e-8);
+    }
+
+    #[test]
+    fn result_metadata_is_owned_after_catalog_is_dropped() {
+        let result = {
+            let mut catalog = UtcLeapCatalog::new();
+            catalog
+                .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+                .unwrap();
+            catalog
+                .utc_to_tai(
+                    "iana-tzdb-2026b",
+                    d(2017, 1, 1),
+                    UtcClockTime::new(0, 0, 0.0).unwrap(),
+                )
+                .unwrap()
+        };
+        assert_eq!(result.version, "iana-tzdb-2026b");
+        assert!(result.provenance.contains("leap-seconds.list"));
+        assert_eq!(result.expires_utc_day, d(2026, 12, 28));
+        assert_eq!(result.value.scale(), TimeScale::Tai);
     }
 
     #[test]
