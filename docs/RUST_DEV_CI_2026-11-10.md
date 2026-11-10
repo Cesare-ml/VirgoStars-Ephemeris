@@ -6,8 +6,13 @@ The owner explicitly authorized GitHub Actions for this public repository on 202
 - Scope: Rust changes to `dev/ephemeris`, its pull requests and manual dispatch.
 - Gates: `cargo fmt --all -- --check`, `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --locked -- -D warnings`.
 - Cross-platform compile check: install the `x86_64-pc-windows-gnu` Rust target and run `cargo check --workspace --locked --target x86_64-pc-windows-gnu` on Ubuntu. This checks Windows-target Rust type checking without executing Windows binaries or performing a full native Windows linker/build; it does not prove Windows runtime compatibility.
+- **Native Windows runner added 2026-11-10:** on `windows-latest`, execute `cargo test --workspace --locked` and `cargo clippy --workspace --all-targets --locked -- -D warnings`. Unlike cross-compilation, these run the unit/integration test binaries on Windows. Passing tests cover the Rust workspace's tested behavior only, not external DE441 kernels or every supported Windows version.
 - Security: read-only repository token; no secrets, artifacts, third-party data downloads, automatic merges, deployments or package publication.
 - Rust tests are synthetic or local regression tests; they **do not establish** agreement with NASA/JPL kernels or Horizons.
 - Coordinate this gate with PR #13 during integration to avoid permanently duplicating Rust CI jobs on `main` and `dev/ephemeris`.
 - Scientific contract unchanged: no changes to frames, timescales, units, bodies, corrections or numerical methods.
 - CPAL-1.0 and the VirgoStars attribution remain unchanged; workflow includes Exhibit A notice.
+
+## CI modification history
+
+- **2026-11-10:** Added a separate Windows-hosted test/Clippy job to complement the existing Ubuntu suite and Windows GNU cross-target check. This is an incremental CI change and does not modify scientific algorithms or third-party data. Await the actual GitHub job result before claiming Windows tests passed.
