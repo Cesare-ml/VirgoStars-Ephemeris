@@ -39,6 +39,13 @@ redistributed under CPAL-1.0.
 - `utc_day_length_seconds(day)`: the duration of a named UTC civil day in
   SI seconds, 86,399 / 86,400 / 86,401 according to a transition at the
   following midnight.
+- `UtcClockTime::new(hour, minute, second)`: validates the clock fields
+  (`second` is a finite `f64`, in `[0, 61)`). A `60.x` second is
+  *syntactically* permitted only in the final minute, at `23:59`.
+- `UtcLeapSchedule::seconds_into_utc_day(day, clock)`: checks that the
+  clock time **actually exists** according to the approved schedule, and
+  returns its elapsed SI seconds from the named UTC midnight. It does **not**
+  construct a Julian date or an instant in TAI, TT or TDB.
 
 Example using a **minimal historical test schedule**, **not** an exhaustive
 IERS table:
@@ -68,6 +75,52 @@ arithmetic. An internally used TAI tag is just a convenience for invoking
 the calendar's **scale-independent date arithmetic**; no UTC↔TAI conversion
 is performed by it.
 
+## UTC clock seconds and positive/negative leap-day validation
+
+The clock component is intentionally checked in **two stages**: lexical
+field validity (`UtcClockTime::new`) and date-specific validity
+(`schedule.seconds_into_utc_day`). Only `23:59:60` (and fractional
+`60.x` seconds) is a possible **positive** leap second, and it is accepted
+only if that named UTC day is 86,401 SI seconds long. On a normal day
+`23:59:60` is an error.
+
+A **hypothetical negative** leap day of 86,399 seconds ends after
+`23:59:58.999...` and does not contain `23:59:59`; this final
+second is rejected by the same test against the day length.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapSchedule, UtcLeapTransition,
+};
+let day = UtcDay::from_gregorian(2016, 12, 31)?;
+let next = UtcDay::from_gregorian(2017, 1, 1)?;
+let table = UtcLeapSchedule::new(
+    day,
+    next,
+    36,
+    vec![UtcLeapTransition {
+        effective_utc_day: next,
+        tai_minus_utc_seconds: 37,
+    }],
+)?;
+let leap = UtcClockTime::new(23, 59, 60.5)?;
+assert_eq!(table.seconds_into_utc_day(day, leap)?, 86_400.5);
+assert!(table.seconds_into_utc_day(next, leap).is_err());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The numeric return is the number of *elapsed SI seconds inside a civil
+day*, **not** a uniform-scale Julian-date fraction and **not** an
+astronomical time-scale conversion. The `f64` representation cannot
+resolve arbitrary sub-nanosecond fractions near midnight; values rounding
+to the next day are conservatively rejected, not wrapped or extrapolated.
+
+Four additional deterministic tests cover the positive 2016-12-31 leap
+with fractions, a hypothetical negative leap, invalid/non-finite clock
+fields, and explicit out-of-coverage failures. All tests are synthetic
+except the historically documented 2016 positive leap structure; they
+do not establish DE441/Horizons positional parity.
+
 ## Validation and failure behavior
 
 The table constructor rejects:
@@ -93,9 +146,12 @@ behavior; no negative leap second is asserted to have occurred.
 
 ## Deliberately not implemented
 
-There is **no UTC clock time struct**, no parsing of `23:59:60`, no UTC→TAI
-conversion, and no leap-second interpolation or mapping to TDB, TT or UT1.
-This module cannot make a civil-time timestamp astronomically ready.
+There is **no UTC→TAI conversion**, no leap-second interpolation or
+mapping to TDB, TT or UT1. `UtcClockTime` is a **validated structured
+clock value**, not a full textual date/time parser or instant with a stable
+uniform-scale Julian date. The parser/conversion of complete civil timestamps
+remains future work. This module cannot make a civil-time timestamp
+astronomically ready.
 It is a narrow validation building block intended to precede those
 capabilities with explicit provenance and tests.
 
@@ -123,3 +179,9 @@ Ephemeris, NAIF, or any JPL ephemeris file were copied. Source includes
 the repository's existing **CPAL-1.0 Exhibit A** notice; `LICENSE`,
 `NOTICE`, Exhibit B and the required attribution **Powered by VirgoStars**
 (https://www.virgostars.it/) remain unchanged. No package release or merge.
+
+2026-11-10: extended `crates/ephemeris-core/src/utc_leaps.rs`
+with `UtcClockTime`, explicit clock-field errors, and a schedule-bound
+`seconds_into_utc_day` validation for leap and non-leap UTC days.
+The existing CPAL-1.0 source notice and VirgoStars attribution are
+unchanged. No external data, leap-second table, or third-party code added.
