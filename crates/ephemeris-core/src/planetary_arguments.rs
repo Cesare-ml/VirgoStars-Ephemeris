@@ -153,13 +153,12 @@ pub fn planetary_fundamental_arguments(
     let mut angles_rad = [0.0_f64; 9];
     let mut rates_rad_per_tdb_day = [0.0_f64; 9];
     for i in 0..8 {
-        let [initial, slope] = if i == NEPTUNE_MEAN_LONGITUDE
-            && convention == PlanetaryArgumentConvention::Mhb2000
-        {
-            MHB2000_NEPTUNE
-        } else {
-            MEAN_LONGITUDES[i]
-        };
+        let [initial, slope] =
+            if i == NEPTUNE_MEAN_LONGITUDE && convention == PlanetaryArgumentConvention::Mhb2000 {
+                MHB2000_NEPTUNE
+            } else {
+                MEAN_LONGITUDES[i]
+            };
         angles_rad[i] = (initial + slope * centuries).rem_euclid(TAU);
         rates_rad_per_tdb_day[i] = slope / JULIAN_CENTURY_TDB_DAYS;
     }
