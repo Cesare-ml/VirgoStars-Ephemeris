@@ -64,7 +64,10 @@ fn gregorian_cutover_is_not_implicitly_applied() {
         let jd = original
             .to_julian_date(Calendar::ProlepticGregorian)
             .unwrap();
-        assert_eq!(jd.to_calendar(Calendar::ProlepticGregorian).unwrap(), original);
+        assert_eq!(
+            jd.to_calendar(Calendar::ProlepticGregorian).unwrap(),
+            original
+        );
     }
 }
 
@@ -76,12 +79,18 @@ fn century_leap_rules_are_distinct_and_reversible() {
         let result = leap_date.to_julian_date(Calendar::ProlepticGregorian);
         if leap_gregorian {
             let jd = result.unwrap();
-            assert_eq!(jd.to_calendar(Calendar::ProlepticGregorian).unwrap(), leap_date);
+            assert_eq!(
+                jd.to_calendar(Calendar::ProlepticGregorian).unwrap(),
+                leap_date
+            );
         } else {
             assert_eq!(result, Err(CalendarError::InvalidDate));
         }
         let jd_julian = leap_date.to_julian_date(Calendar::ProlepticJulian).unwrap();
-        assert_eq!(jd_julian.to_calendar(Calendar::ProlepticJulian).unwrap(), leap_date);
+        assert_eq!(
+            jd_julian.to_calendar(Calendar::ProlepticJulian).unwrap(),
+            leap_date
+        );
     }
 }
 
@@ -98,13 +107,21 @@ fn astronomical_year_zero_and_negative_years_round_trip() {
 
 #[test]
 fn scale_labels_survive_round_trip_without_conversions() {
-    for scale in [TimeScale::Tai, TimeScale::Tt, TimeScale::Tdb, TimeScale::Ut1] {
+    for scale in [
+        TimeScale::Tai,
+        TimeScale::Tt,
+        TimeScale::Tdb,
+        TimeScale::Ut1,
+    ] {
         let original = date(2026, 11, 10, 12, scale);
         let jd = original
             .to_julian_date(Calendar::ProlepticGregorian)
             .unwrap();
         assert_eq!(jd.scale(), scale);
-        assert_eq!(jd.to_calendar(Calendar::ProlepticGregorian).unwrap(), original);
+        assert_eq!(
+            jd.to_calendar(Calendar::ProlepticGregorian).unwrap(),
+            original
+        );
     }
 }
 
