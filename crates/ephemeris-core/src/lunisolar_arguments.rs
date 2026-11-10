@@ -15,9 +15,9 @@
 //! Five lunar-solar Delaunay fundamental arguments for IAU nutation series.
 //!
 //! Independently evaluates scientific polynomials from the IERS Conventions
-//! (2010), Chapter 5, Eq. 5.43. The l' and D constant terms follow the
-//! original MHB2000 decimal rounding documented in IERS section 5.7.2;
-//! this matches the SOFA/ERFA IAU 2000A nutation-series convention.
+//! (2010), Chapter 5, Eq. 5.43. The l' and D constant terms can also use the
+//! original MHB2000 decimal rounding documented in IERS section 5.7.2,
+//! selected explicitly to reproduce the IAU 2000A nutation-series convention.
 //! This module has NO IAU 2000A periodic coefficient tables or actual
 //! delta-psi/delta-epsilon evaluation. No third-party program code reused.
 
@@ -45,17 +45,29 @@ pub const MOON_ASCENDING_NODE: usize = 4;
 /// Public scientific coefficients in **arcseconds** and powers of Julian
 /// centuries from J2000; each row is c0..c4 in ascending power order.
 ///
-/// Source: IERS Conventions 2010, Eq. 5.43; the two indicated constants
-/// use the MHB2000 rounding explicitly described immediately after Eq. 5.43
-/// (1287104.79305 and 1072260.70369 arcsec). Do not silently swap these
-/// with the unrounded Eq. 5.43 c0 values if seeking SOFA/ERFA 2000A parity.
+/// Source: IERS Conventions 2010, Eq. 5.43 (unrounded constants).
+/// MHB2000 differs by +2 microarcsec for l' and -2 microarcsec for D.
+/// The explicit convention below selects these historical variants.
 const LUNISOLAR_POLYNOMIALS_ARCSEC: [[f64; 5]; 5] = [
     [485_868.249_036, 1_717_915_923.217_8, 31.879_2, 0.051_635, -0.000_244_70],
-    [1_287_104.793_05, 129_596_581.048_1, -0.553_2, 0.000_136, -0.000_011_49],
+    [1_287_104.793_048, 129_596_581.048_1, -0.553_2, 0.000_136, -0.000_011_49],
     [335_779.526_232, 1_739_527_262.847_8, -12.751_2, -0.001_037, 0.000_004_17],
-    [1_072_260.703_69, 1_602_961_601.209_0, -6.370_6, 0.006_593, -0.000_031_69],
+    [1_072_260.703_692, 1_602_961_601.209_0, -6.370_6, 0.006_593, -0.000_031_69],
     [450_160.398_036, -6_962_890.543_1, 7.472_2, 0.007_702, -0.000_059_39],
 ];
+
+/// Choice of the two historically distinct constant terms in the fundamental
+/// argument polynomials. Always choose explicitly; neither variant silently
+/// substitutes for the other in a high-precision IAU 2000A comparison.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LuniSolarConvention {
+    /// IERS Conventions 2010, Eq. 5.43 (Sun and D unrounded constants).
+    /// Matches the ERFA standalone Falp03/Fad03 regression test inputs.
+    Iers2010,
+    /// Original MHB2000/SOFA Nut00a historical rounding for Sun and D.
+    /// Each differs from IERS Eq. 5.43 by exactly 2 microarcseconds.
+    Mhb2000,
+}
 
 /// Five fundamental arguments and their rates, in Delaunay order.
 ///
@@ -124,6 +136,7 @@ impl Error for LuniSolarError {}
 /// boundary is a project test policy, NOT an IAU model validity statement.
 pub fn lunisolar_fundamental_arguments(
     tdb_epoch: JulianDate,
+    convention: LuniSolarConvention,
 ) -> Result<LuniSolarArguments, LuniSolarError> {
     if tdb_epoch.scale() != TimeScale::Tdb {
         return Err(LuniSolarError::WrongTimeScale);
@@ -147,6 +160,15 @@ pub fn lunisolar_fundamental_arguments(
         for coefficient in coefficients[..4].iter().rev() {
             rate_arcsec_per_century = rate_arcsec_per_century * centuries + value_arcsec;
             value_arcsec = value_arcsec * centuries + *coefficient;
+        }
+        // The historical series differs only in constant terms; derivatives
+        // are identical. IERS 2010 §5.7.2 explicitly documents this.
+        if convention == LuniSolarConvention::Mhb2000 {
+            if index == SUN_MEAN_ANOMALY {
+                value_arcsec += 0.000_002;
+            } else if index == MOON_SUN_ELONGATION {
+                value_arcsec -= 0.000_002;
+            }
         }
         angles[index] =
             value_arcsec.rem_euclid(ARCSECONDS_PER_TURN) * ARCSECOND_TO_RADIAN;
