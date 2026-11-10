@@ -363,7 +363,10 @@ mod tests {
     // Fail loudly if a malformed-input fixture does not match the baseline.
     // String::replace alone would otherwise leave VALID intact and hide test mistakes.
     fn malformed_reference(needle: &str, replacement: &str) -> String {
-        assert!(VALID.contains(needle), "test mutation absent from VALID fixture");
+        assert!(
+            VALID.contains(needle),
+            "test mutation absent from VALID fixture"
+        );
         VALID.replacen(needle, replacement, 1)
     }
 
