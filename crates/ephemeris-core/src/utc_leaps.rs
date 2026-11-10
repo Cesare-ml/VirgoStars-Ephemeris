@@ -921,8 +921,13 @@ mod tests {
             schedule.tai_minus_utc_at_day_start(d(2026, 12, 28)),
             Err(UtcLeapError::OutsideCoverage)
         );
+        // Construct the preceding day internally: the public constructor
+        // correctly refuses UTC civil dates before the 1972 leap regime.
+        let before_1972 = UtcDay {
+            julian_day_number: d(1972, 1, 1).julian_day_number() - 1,
+        };
         assert_eq!(
-            schedule.tai_minus_utc_at_day_start(d(1971, 12, 31)),
+            schedule.tai_minus_utc_at_day_start(before_1972),
             Err(UtcLeapError::OutsideCoverage)
         );
     }
