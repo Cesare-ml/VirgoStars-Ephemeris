@@ -194,15 +194,15 @@ fn rejects_non_finite_chebyshev_coefficients_without_returning_nan_states() {
 #[test]
 fn rejects_overflowed_interpolated_state() {
     let mut bytes = fixture();
-    // Finite but extreme T1 coefficient: velocity scaling overflows at this
-    // short granule width even though the coefficient itself is finite.
-    put_f64(&mut bytes, 6000 + (3 * 8), f64::MAX);
+    // Finite but extreme T2 coefficient: Chebyshev evaluation overflows
+    // near the end of the first granule even though the input is finite.
+    put_f64(&mut bytes, 6000 + (4 * 8), f64::MAX);
     let mut eph = De441::new(Cursor::new(bytes)).unwrap();
     assert!(matches!(
         eph.state(
             Body::Mercury,
             Body::SolarSystemBarycenter,
-            JulianDateTdb(1008.0)
+            JulianDateTdb(1015.0)
         ),
         Err(De441Error::InvalidFile("non-finite interpolated state"))
     ));
