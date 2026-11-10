@@ -28,9 +28,7 @@
 use std::f64::consts::PI;
 
 use crate::calendar::JulianDate;
-use crate::mean_obliquity::{
-    mean_obliquity_iau2006, tt_centuries_iau2006, MeanObliquityError,
-};
+use crate::mean_obliquity::{mean_obliquity_iau2006, tt_centuries_iau2006, MeanObliquityError};
 
 const ARCSEC_TO_RADIANS: f64 = PI / (180.0 * 3_600.0);
 const TT_DAYS_PER_CENTURY: f64 = 36_525.0;
@@ -92,9 +90,7 @@ fn polynomial_and_tt_day_rate(coefficients: &[f64; 6], centuries: f64) -> (f64, 
 }
 
 fn multiply(left: Matrix, right: Matrix) -> Matrix {
-    std::array::from_fn(|i| {
-        std::array::from_fn(|j| (0..3).map(|k| left[i][k] * right[k][j]).sum())
-    })
+    std::array::from_fn(|i| std::array::from_fn(|j| (0..3).map(|k| left[i][k] * right[k][j]).sum()))
 }
 
 fn add(left: Matrix, right: Matrix) -> Matrix {
