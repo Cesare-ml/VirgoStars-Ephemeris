@@ -278,6 +278,16 @@ positive-leap-second roundtrip on the pinned SHA-256; rejection of
 unknown versions and invalid hashes in **both** directions; and
 rejection of a table reusing an old version label with changed bytes.
 
+## Experimental scalar record v1 for future bindings
+
+The first language-neutral Rust record is now implemented in
+`crates/ephemeris-core/src/utc_wire.rs`. See
+[UTC_TAI_SCALAR_RECORD_V1_2026-11-10.md](UTC_TAI_SCALAR_RECORD_V1_2026-11-10.md)
+for the exact scalar fields, explicit version/SHA-256 checking, leap-second
+clock semantics, example, numeric/calendar anchors, test gates, and
+limits. This does **not** claim that JSON, WASM, Python or TypeScript
+bindings are already available.
+
 ## Tests and compatibility
 
 Four additional deterministic Rust tests cover:
