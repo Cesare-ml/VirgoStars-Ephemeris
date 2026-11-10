@@ -101,8 +101,7 @@ fn time_derivatives_match_recomputed_angles_at_shifted_tt_dates() {
         let angles = NutationAngles {
             mean_obliquity_rad: initial.mean_obliquity_rad
                 + initial.mean_obliquity_rate_rad_per_tt_day * days,
-            delta_psi_rad: initial.delta_psi_rad
-                + initial.delta_psi_rate_rad_per_tt_day * days,
+            delta_psi_rad: initial.delta_psi_rad + initial.delta_psi_rate_rad_per_tt_day * days,
             delta_epsilon_rad: initial.delta_epsilon_rad
                 + initial.delta_epsilon_rate_rad_per_tt_day * days,
             ..initial
