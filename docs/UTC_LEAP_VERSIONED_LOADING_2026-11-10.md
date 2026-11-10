@@ -87,6 +87,64 @@ extrapolates beyond the stated cutoff. Existing pinned 2026b results
 remain available unchanged after importing a candidate as a separate
 object.
 
+## Explicit selection and provenance-bearing conversion results
+
+`UtcLeapCatalog` stores **independent named versions**, with no implicit
+default and no automatic switch to a newer or unexpired table. Use
+`register(versioned_schedule)`, then `utc_to_tai(version, day, clock)`
+or `tai_to_utc(version, tai)`; callers **must supply the exact version
+ID on each conversion**. `select(version)` provides a read-only reference
+to the chosen schedule, while `versions()` lists IDs in stable lexical
+order.
+
+Both conversion functions return a `VersionedUtcResult<T>`, with owned
+fields `version`, `provenance`, `expires_utc_day` and `value`.
+The version and provenance remain attached even after the catalog is
+dropped, making it possible to save the **data source used** alongside
+a derived timestamp.
+
+```rust
+use virgostars_ephemeris_core::calendar::TimeScale;
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let day = UtcDay::from_gregorian(2016, 12, 31)?;
+let selected = "iana-tzdb-2026b"; // explicitly chosen by caller
+let result = catalog.utc_to_tai(
+    selected, day, UtcClockTime::new(23, 59, 60.0)?,
+)?;
+assert_eq!(result.value.scale(), TimeScale::Tai);
+assert_eq!(result.version, selected);
+assert_eq!(result.expires_utc_day, UtcDay::from_gregorian(2026, 12, 28)?);
+
+let back = catalog.tai_to_utc(selected, result.value)?;
+assert_eq!(back.version, result.version);
+assert_eq!(back.value.0, day);
+assert!((back.value.1.second() - 60.0).abs() < 1e-8);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The catalog **refuses** duplicate version IDs (`DuplicateVersion`) and
+unknown names (`UnknownVersion`) instead of silently replacing or
+falling back. When two tables have different coverage intervals, a valid
+date for one version can be `OutsideCoverage` for another: **the
+historical 2026b object retains its expiration**. The example's version
+labels and source strings are declared metadata, not an authenticated
+digital signature. For stronger independent reproducibility, save an
+externally verified source **content digest** and the actual conversion
+inputs with your application record. Merely matching a version string
+does not prove that two users loaded identical bytes.
+
+Four additional deterministic tests check selected version metadata on
+both conversion directions, lack of implicit fallback, duplicate
+registration rejection, coexistence of historical and **synthetic**
+future validity, and ownership of result metadata beyond the catalog's
+lifetime. These are API and time-label checks, not proof of scientific
+ephemeris parity.
+
 ## Tests and compatibility
 
 Four additional deterministic Rust tests cover:
@@ -135,3 +193,11 @@ cargo test --workspace --release --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 ```
+
+2026-11-10: added `UtcLeapCatalog` and `VersionedUtcResult<T>`
+with explicit selection, owned result provenance and expiry metadata,
+duplicate/unknown-version errors, four deterministic tests and no new
+dependencies. The old `UtcLeapSchedule` and
+`VersionedUtcLeapSchedule` signatures remain compatible. CPAL-1.0,
+the separately attributed public-domain IANA history, and
+`Powered by VirgoStars` attribution are unchanged.
