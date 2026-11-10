@@ -90,6 +90,69 @@ fn reconstructs_earth_and_moon_and_respects_center() {
 }
 
 #[test]
+fn lunar_relative_state_preserves_small_offsets_with_large_barycenter() {
+    let mut bytes = fixture();
+    // Deliberately huge Earth-Moon barycenter; lunar offsets are much smaller
+    // than one f64 spacing at this scale. The Moon series is linear.
+    put_i32(&mut bytes, 2696 + 9 * 12 + 4, 2);
+    for record in 0..2 {
+        let base = 6000 + record * 3000;
+        for axis in 0..3 {
+            put_f64(&mut bytes, base + (20 + axis) * 8, 1.0e20);
+            put_f64(
+                &mut bytes,
+                base + (23 + axis * 2) * 8,
+                82.0 * (axis + 1) as f64,
+            );
+            put_f64(
+                &mut bytes,
+                base + (24 + axis * 2) * 8,
+                16.0 * (axis + 1) as f64,
+            );
+        }
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    let epoch = JulianDateTdb(1016.0);
+    let moon = eph.state(Body::Moon, Body::Earth, epoch).unwrap();
+    assert_eq!(moon.position_km, [82.0, 164.0, 246.0]);
+    assert_eq!(moon.velocity_km_per_day, [1.0, 2.0, 3.0]);
+    let earth = eph.state(Body::Earth, Body::Moon, epoch).unwrap();
+    assert_eq!(earth.position_km, [-82.0, -164.0, -246.0]);
+    assert_eq!(earth.velocity_km_per_day, [-1.0, -2.0, -3.0]);
+}
+
+#[test]
+fn lunar_relative_state_requires_moon_series_but_not_barycenter_series() {
+    let mut bytes = fixture();
+    // A geocentric Moon vector is sufficient for Earth-relative lunar states.
+    for offset in [2720, 2724, 2728] {
+        put_i32(&mut bytes, offset, 0);
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    let epoch = JulianDateTdb(1016.0);
+    assert_eq!(
+        eph.state(Body::Moon, Body::Earth, epoch)
+            .unwrap()
+            .position_km,
+        [82.0, 164.0, 246.0]
+    );
+    assert!(matches!(
+        eph.state(Body::Moon, Body::SolarSystemBarycenter, epoch),
+        Err(De441Error::MissingSeries("Earth-Moon barycenter"))
+    ));
+
+    let mut bytes = fixture();
+    for offset in [2804, 2808, 2812] {
+        put_i32(&mut bytes, offset, 0);
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    assert!(matches!(
+        eph.state(Body::Moon, Body::Earth, epoch),
+        Err(De441Error::MissingSeries("geocentric Moon"))
+    ));
+}
+
+#[test]
 fn rejects_bad_input_missing_series_and_corrupt_data() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     for jd in [999.0, 1065.0, f64::NAN, f64::INFINITY] {
