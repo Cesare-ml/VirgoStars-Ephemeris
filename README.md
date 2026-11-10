@@ -44,7 +44,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
 - Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
-- GitHub Actions CI has been proposed in [PR #17](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/17) for `dev/ephemeris` and [PR #13](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/13) for `main`; their workflows are not integrated into this branch until those PRs are merged.
+- GitHub Actions `Rust development CI` is present on `dev/ephemeris` and checks Rust formatting, debug/release tests, strict Clippy, Rustdoc, Windows GNU cross-compilation, and native Windows/macOS tests. Passing CI validates these code checks, **not** astronomical accuracy against independent NASA/JPL data.
 
 **License:** Original VirgoStars-Ephemeris code is provided under [CPAL-1.0](LICENSE), including its Exhibits A/B, with required attribution and network-use provisions. See [NOTICE](NOTICE) and [Licensing and visible credits](docs/LICENSING_AND_CREDITS.md). A Credits/About link is encouraged but does not necessarily satisfy the license's launch/session prominence requirement.
 
