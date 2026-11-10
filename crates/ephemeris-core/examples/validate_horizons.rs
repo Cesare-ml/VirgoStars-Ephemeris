@@ -360,25 +360,32 @@ mod tests {
         assert!(parse_reference(&VALID.replace("# center=Earth", "# center=Moon")).is_err());
     }
 
+    // Fail loudly if a malformed-input fixture does not match the baseline.
+    // String::replace alone would otherwise leave VALID intact and hide test mistakes.
+    fn malformed_reference(needle: &str, replacement: &str) -> String {
+        assert!(VALID.contains(needle), "test mutation absent from VALID fixture");
+        VALID.replacen(needle, replacement, 1)
+    }
+
     #[test]
     fn rejects_ambiguous_reference_metadata_and_malformed_rows() {
         // A duplicated metadata key must never silently override an earlier
         // claim about the reference's scientific provenance.
-        assert!(parse_reference(&VALID.replace(
-            "# provider=JPL_HORIZONS\\n",
-            "# provider=JPL_HORIZONS\\n# provider=JPL_HORIZONS\\n",
+        assert!(parse_reference(&malformed_reference(
+            "# provider=JPL_HORIZONS\n",
+            "# provider=JPL_HORIZONS\n# provider=JPL_HORIZONS\n",
         ))
         .is_err());
         // Do not permit a metadata block to appear after numeric samples.
-        assert!(parse_reference(&format!("{VALID}# units=KM-D\\n")).is_err());
+        assert!(parse_reference(&format!("{VALID}# units=KM-D\n")).is_err());
         // Exact column count and order matter: no truncated or extra vector
         // component can be interpreted as a valid comparison.
-        let short_row = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5\\n");
+        let short_row = malformed_reference("2451545.0,1,2,3,4,5,6\n", "2451545.0,1,2,3,4,5\n");
         assert!(parse_reference(&short_row).is_err());
-        let long_row = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5,6,7\\n");
+        let long_row = malformed_reference("2451545.0,1,2,3,4,5,6\n", "2451545.0,1,2,3,4,5,6,7\n");
         assert!(parse_reference(&long_row).is_err());
         // A finite reference must not admit infinity in any component.
-        let infinite = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5,inf\\n");
+        let infinite = malformed_reference("2451545.0,1,2,3,4,5,6\n", "2451545.0,1,2,3,4,5,inf\n");
         assert!(parse_reference(&infinite).is_err());
     }
 
