@@ -63,11 +63,7 @@ fn oblique_lorentz_boost_matches_independent_angular_formula_and_inverts() {
     let observer_velocity = [speed * SPEED_OF_LIGHT_KM_PER_DAY, 0.0, 0.0];
     let transformed = annual_aberration_icrf(original, observer_velocity).unwrap();
     let denominator = 1.0 + speed * FRAC_1_SQRT_2;
-    near(
-        transformed[0],
-        (FRAC_1_SQRT_2 + speed) / denominator,
-        1e-15,
-    );
+    near(transformed[0], (FRAC_1_SQRT_2 + speed) / denominator, 1e-15);
     near(
         transformed[1],
         FRAC_1_SQRT_2 * (1.0 - speed * speed).sqrt() / denominator,
@@ -75,8 +71,7 @@ fn oblique_lorentz_boost_matches_independent_angular_formula_and_inverts() {
     );
 
     // An equal and opposite observer boost restores the original direction.
-    let restored =
-        annual_aberration_icrf(transformed, [-observer_velocity[0], 0.0, 0.0]).unwrap();
+    let restored = annual_aberration_icrf(transformed, [-observer_velocity[0], 0.0, 0.0]).unwrap();
     for axis in 0..3 {
         near(restored[axis], original[axis], 1e-15);
     }
@@ -98,11 +93,8 @@ fn orbital_speed_yields_expected_aberration_scale_without_calendar_or_jpl() {
     // Independent check on the scale: a 29.78 km/s transverse Earth speed
     // produces asin(v/c) ~= 20.49 arcseconds (special relativity).
     const KM_PER_SECOND: f64 = 29.78;
-    let direction = annual_aberration_icrf(
-        [0.0, 1.0, 0.0],
-        [KM_PER_SECOND * 86_400.0, 0.0, 0.0],
-    )
-    .unwrap();
+    let direction =
+        annual_aberration_icrf([0.0, 1.0, 0.0], [KM_PER_SECOND * 86_400.0, 0.0, 0.0]).unwrap();
     let shift_arcseconds = direction[0].atan2(direction[1]) * 180.0 / PI * 3600.0;
     near(shift_arcseconds, 20.489_394_500_179_557, 1e-9);
 }
@@ -111,8 +103,7 @@ fn orbital_speed_yields_expected_aberration_scale_without_calendar_or_jpl() {
 fn arbitrary_nonzero_range_does_not_change_an_aberrated_direction() {
     let velocity = [0.0, 24.0 * 86_400.0, 15.0 * 86_400.0];
     let near_source = annual_aberration_icrf([4.0, 5.0, -2.0], velocity).unwrap();
-    let far_source =
-        annual_aberration_icrf([4.0e9, 5.0e9, -2.0e9], velocity).unwrap();
+    let far_source = annual_aberration_icrf([4.0e9, 5.0e9, -2.0e9], velocity).unwrap();
     for axis in 0..3 {
         near(near_source[axis], far_source[axis], 1e-15);
     }
@@ -149,10 +140,7 @@ fn rejects_undefined_or_nonfinite_source_or_velocity() {
 
 #[test]
 fn rejects_speed_at_or_above_c_instead_of_silent_fallback() {
-    for speed in [
-        SPEED_OF_LIGHT_KM_PER_DAY,
-        1.01 * SPEED_OF_LIGHT_KM_PER_DAY,
-    ] {
+    for speed in [SPEED_OF_LIGHT_KM_PER_DAY, 1.01 * SPEED_OF_LIGHT_KM_PER_DAY] {
         assert_eq!(
             annual_aberration_icrf([0.0, 1.0, 0.0], [speed, 0.0, 0.0]),
             Err(AberrationError::SuperluminalObserver),
