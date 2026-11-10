@@ -241,7 +241,7 @@ impl UtcLeapSchedule {
     ///
     /// Bundled data is a compact, curated public-domain snapshot of
     /// `leap-seconds.list` at:
-    /// https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list
+    /// <https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list>
     ///
     /// The IANA source declares NTP expiration 4007404800, corresponding
     /// to 2026-12-28 at 00:00 UTC. This constructor conservatively covers
