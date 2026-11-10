@@ -23,6 +23,18 @@ const FIELDS = [
 ];
 const EPH_MASK = 1 | 2 | 4;
 const SWIEPH = 2;
+const SPEED = 256;
+// These labels are an assertion made by each exporter, not proof of accuracy.
+// They prevent a geometric/ICRF state from being silently compared as apparent.
+const RESULT_CONTRACT = Object.freeze({
+  center: 'geocentric',
+  frame: 'true_ecliptic_of_date',
+  corrections: 'apparent',
+  inputTimeScale: 'UT',
+  angleUnit: 'degree',
+  distanceUnit: 'AU',
+  rateUnit: 'per_day',
+});
 
 function ensure(ok, message) {
   if (!ok) throw new Error(message);
@@ -34,7 +46,17 @@ function finiteNumber(value) {
 
 export function angularDistanceDeg(left, right) {
   ensure(finiteNumber(left) && finiteNumber(right), 'non-finite angle');
-  return Math.abs(((left - right + 540) % 360) - 180);
+  // JavaScript's remainder keeps the dividend's sign; normalize each angle
+  // before taking the shortest signed separation (always <= 180 degrees).
+  const normalize = value => ((value % 360) + 360) % 360;
+  return Math.abs(((normalize(left) - normalize(right) + 540) % 360) - 180);
+}
+
+function requireResultContract(source, label) {
+  for (const [field, expected] of Object.entries(RESULT_CONTRACT)) {
+    ensure(source?.resultContract?.[field] === expected,
+      `${label}: resultContract.${field} must be ${expected}`);
+  }
 }
 
 function indexCases(document, label) {
@@ -55,6 +77,10 @@ function indexCases(document, label) {
       ensure(finiteNumber(testCase.output?.[field]),
         `${label}: missing/non-finite ${field} for ${testCase.id}`);
     }
+    ensure(testCase.output.longitude >= 0 && testCase.output.longitude < 360,
+      `${label}: longitude outside [0, 360) for ${testCase.id}`);
+    ensure(Math.abs(testCase.output.latitude) <= 90 && testCase.output.distance >= 0,
+      `${label}: invalid latitude/distance for ${testCase.id}`);
     cases.set(testCase.id, testCase);
   }
   return cases;
@@ -70,6 +96,8 @@ export function compareRecordedCases(reference, candidate, tolerances) {
   'reference must identify an explicit SWIEPH data set');
   ensure(candidate?.source?.engine === 'VirgoStars-Ephemeris',
     'candidate must identify the independently implemented engine');
+  requireResultContract(reference?.source, 'reference');
+  requireResultContract(candidate?.source, 'candidate');
 
   for (const field of FIELDS) {
     ensure(finiteNumber(tolerances?.[field]) && tolerances[field] >= 0,
@@ -81,12 +109,17 @@ export function compareRecordedCases(reference, candidate, tolerances) {
   ensure(refs.size === actual.size, 'case counts differ');
 
   const failures = [];
+  const maxErrors = Object.fromEntries(
+    FIELDS.map(field => [field, { delta: 0, id: null }]),
+  );
   for (const [id, expected] of refs) {
     const got = actual.get(id);
     ensure(got, `candidate missing case ${id}`);
     ensure(Number.isInteger(expected.effectiveFlags) &&
       (expected.effectiveFlags & EPH_MASK) === SWIEPH,
     `reference ${id} did not verify SWIEPH effective flags (possible fallback)`);
+    ensure((expected.effectiveFlags & SPEED) === (expected.input.flags & SPEED),
+      `reference ${id} did not honor requested speed flag`);
     for (const key of ['jdUt', 'bodyId', 'flags']) {
       ensure(Object.is(expected.input[key], got.input[key]),
         `${id}: input ${key} does not match`);
@@ -95,12 +128,15 @@ export function compareRecordedCases(reference, candidate, tolerances) {
       const delta = field === 'longitude'
         ? angularDistanceDeg(expected.output[field], got.output[field])
         : Math.abs(expected.output[field] - got.output[field]);
+      if (maxErrors[field].id === null || delta > maxErrors[field].delta) {
+        maxErrors[field] = { delta, id };
+      }
       if (delta > tolerances[field]) {
         failures.push({ id, field, delta, tolerance: tolerances[field] });
       }
     }
   }
-  return { totalCases: refs.size, totalFields: refs.size * FIELDS.length, failures };
+  return { totalCases: refs.size, totalFields: refs.size * FIELDS.length, failures, maxErrors };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -112,6 +148,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const result = compareRecordedCases(
       load(referencePath), load(candidatePath), load(tolerancePath),
     );
+    for (const [field, worst] of Object.entries(result.maxErrors)) {
+      console.log(`MAX ${field}: ${worst.delta} (case ${worst.id})`);
+    }
     if (result.failures.length) {
       for (const failure of result.failures) console.error(JSON.stringify(failure));
       console.error(`FAIL: ${result.failures.length}/${result.totalFields} fields differ`);
