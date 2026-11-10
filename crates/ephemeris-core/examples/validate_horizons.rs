@@ -441,33 +441,46 @@ mod tests {
             put_f64(&mut bytes, base, 1000.0 + record as f64 * 32.0);
             put_f64(&mut bytes, base + 8, 1032.0 + record as f64 * 32.0);
             for axis in 0..3 {
-                put_f64(&mut bytes, base + (2 + axis * 2) * 8, 100.0 * (axis + 1) as f64);
-                put_f64(&mut bytes, base + (3 + axis * 2) * 8, 16.0 * (axis + 1) as f64);
+                put_f64(
+                    &mut bytes,
+                    base + (2 + axis * 2) * 8,
+                    100.0 * (axis + 1) as f64,
+                );
+                put_f64(
+                    &mut bytes,
+                    base + (3 + axis * 2) * 8,
+                    16.0 * (axis + 1) as f64,
+                );
             }
         }
         let mut eph = De441::new(Cursor::new(bytes)).unwrap();
-        let reference = parse_reference(
-            &VALID.replace(
-                "2451545.0,1,2,3,4,5,6\n",
-                "1016.0,100,200,300,1,2,3\n1048.0,100,200,300,1,2,3\n",
-            ),
-        )
+        let reference = parse_reference(&VALID.replace(
+            "2451545.0,1,2,3,4,5,6\n",
+            "1016.0,100,200,300,1,2,3\n1048.0,100,200,300,1,2,3\n",
+        ))
         .unwrap();
         for case in &reference.cases {
             let state = eph
-                .state(reference.target, reference.center, JulianDateTdb(case.jd_tdb))
+                .state(
+                    reference.target,
+                    reference.center,
+                    JulianDateTdb(case.jd_tdb),
+                )
                 .unwrap();
-            let exact = residuals(state.position_km, state.velocity_km_per_day, case.expected)
-                .unwrap();
+            let exact =
+                residuals(state.position_km, state.velocity_km_per_day, case.expected).unwrap();
             assert_eq!(exact.position_km, [0.0; 3]);
             assert_eq!(exact.velocity_km_per_day, [0.0; 3]);
 
             let mut changed_reference = case.expected;
             changed_reference[0] += 0.5;
             changed_reference[4] -= 0.25;
-            let mismatch =
-                residuals(state.position_km, state.velocity_km_per_day, changed_reference)
-                    .unwrap();
+            let mismatch = residuals(
+                state.position_km,
+                state.velocity_km_per_day,
+                changed_reference,
+            )
+            .unwrap();
             assert_eq!(mismatch.position_km, [-0.5, 0.0, 0.0]);
             assert_eq!(mismatch.velocity_km_per_day, [0.0, 0.25, 0.0]);
             assert_eq!(mismatch.max_position_component_km, 0.5);
