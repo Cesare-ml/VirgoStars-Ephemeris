@@ -69,6 +69,8 @@ pub enum UtcLeapError {
     UnknownVersion,
     /// The exact snapshot bytes disagree with the requested SHA-256.
     SourceDigestMismatch,
+    /// An incoming v1 scalar record has inconsistent schema, fields or metadata.
+    InvalidWireRecord,
 }
 
 impl fmt::Display for UtcLeapError {
@@ -98,6 +100,7 @@ impl fmt::Display for UtcLeapError {
                     "leap-second source SHA-256 differs from the expected digest"
                 )
             }
+            Self::InvalidWireRecord => write!(f, "invalid or inconsistent UTC/TAI v1 record"),
         }
     }
 }
