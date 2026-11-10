@@ -775,18 +775,18 @@ mod tests {
             schedule.tai_to_utc(one_second),
             Err(UtcLeapError::OutsideCoverage)
         );
-        let end_boundary =
-            JulianDate::new(last.julian_day_number() + 1, 37.0 / 86_400.0, TimeScale::Tai)
-                .unwrap();
+        let end_boundary = JulianDate::new(
+            last.julian_day_number() + 1,
+            37.0 / 86_400.0,
+            TimeScale::Tai,
+        )
+        .unwrap();
         assert_eq!(
             schedule.tai_to_utc(end_boundary),
             Err(UtcLeapError::OutsideCoverage)
         );
         let tt = crate::time::tai_to_tt(first_tai).unwrap();
-        assert_eq!(
-            schedule.tai_to_utc(tt),
-            Err(UtcLeapError::WrongInputScale)
-        );
+        assert_eq!(schedule.tai_to_utc(tt), Err(UtcLeapError::WrongInputScale));
     }
 
     #[test]
