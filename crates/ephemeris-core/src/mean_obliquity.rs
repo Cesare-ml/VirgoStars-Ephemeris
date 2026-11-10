@@ -111,7 +111,7 @@ pub fn mean_obliquity_iau2006(
     let mut rate_arcsec_per_century = 0.0;
     for coefficient in OBLIQUITY_ARCSECONDS[..5].iter().rev() {
         rate_arcsec_per_century = rate_arcsec_per_century * centuries + angle_arcsec;
-        angle_arcsec = angle_arcsec * centuries + coefficient;
+        angle_arcsec = angle_arcsec * centuries + *coefficient;
     }
 
     let result = MeanObliquity {
