@@ -12,7 +12,6 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
-
 //! Versioned scalar UTC↔TAI conversion record for future thin bindings.
 //!
 //! This is a *Rust data contract*, not a JSON serializer, a PyO3 extension,
@@ -21,9 +20,7 @@
 //! date, and an explicit IANA schedule version with content fingerprint.
 
 use crate::calendar::JulianDate;
-use crate::utc_leaps::{
-    UtcClockTime, UtcDay, UtcLeapCatalog, UtcLeapError, VersionedUtcResult,
-};
+use crate::utc_leaps::{UtcClockTime, UtcDay, UtcLeapCatalog, UtcLeapError, VersionedUtcResult};
 
 /// Identifier of the experimental scalar-record schema.
 ///
