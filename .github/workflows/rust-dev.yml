@@ -74,3 +74,17 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  macos-native:
+    name: macOS native Rust tests
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run workspace tests natively on macOS
+        run: cargo test --workspace --locked
+      - name: Run Clippy natively on macOS
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
