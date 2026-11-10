@@ -15,4 +15,6 @@ The owner explicitly authorized GitHub Actions for this public repository on 202
 
 ## CI modification history
 
-- **2026-11-10:** Added a separate Windows-hosted test/Clippy job to complement the existing Ubuntu suite and Windows GNU cross-target check. This is an incremental CI change and does not modify scientific algorithms or third-party data. Await the actual GitHub job result before claiming Windows tests passed.
+- **2026-11-10:** Added a separate Windows-hosted test/Clippy job to complement the existing Ubuntu suite and Windows GNU cross-target check. This is an incremental CI change and does not modify scientific algorithms or third-party data. Verified successful in GitHub Actions run #42782149595 (both Ubuntu and native Windows jobs completed successfully).
+
+- **2026-11-10:** Added a macOS native job using `macos-latest` to execute locked Rust workspace tests and strict Clippy. This checks native macOS behavior without introducing additional crates or external data; the job's result must be checked separately before declaring it passed.
