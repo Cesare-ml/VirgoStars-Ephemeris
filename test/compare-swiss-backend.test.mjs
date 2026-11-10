@@ -24,10 +24,19 @@ const tolerances = {
   longitude: 0.003, latitude: 0.001, distance: 0.0001,
   longitudeSpeed: 0.0001, latitudeSpeed: 0.0001, distanceSpeed: 0.0001,
 };
+const resultContract = {
+  center: 'geocentric',
+  frame: 'true_ecliptic_of_date',
+  corrections: 'apparent',
+  inputTimeScale: 'UT',
+  angleUnit: 'degree',
+  distanceUnit: 'AU',
+  rateUnit: 'per_day',
+};
 const input = { jdUt: 2461355.5, bodyId: 4, flags: 258 };
 const reference = {
   schemaVersion: 1,
-  source: { binding: 'swisseph@0.5.17', ephemeris: 'SWIEPH', dataId: 'synthetic-only' },
+  source: { binding: 'swisseph@0.5.17', ephemeris: 'SWIEPH', dataId: 'synthetic-only', resultContract },
   cases: [{
     id: 'mars-wrap-synthetic', function: 'swe_calc_ut', input,
     effectiveFlags: 258, output: fields,
@@ -35,7 +44,7 @@ const reference = {
 };
 const candidate = {
   schemaVersion: 1,
-  source: { engine: 'VirgoStars-Ephemeris' },
+  source: { engine: 'VirgoStars-Ephemeris', resultContract },
   cases: [{
     id: 'mars-wrap-synthetic', function: 'swe_calc_ut', input,
     output: { ...fields, longitude: 0.001 },
@@ -45,6 +54,11 @@ const candidate = {
 test('shortest circular longitude distance at 0/360', () => {
   assert.ok(Math.abs(angularDistanceDeg(359.999, 0.001) - 0.002) < 1e-10);
   assert.equal(angularDistanceDeg(0, 360), 0);
+  assert.equal(angularDistanceDeg(0, -720), 0);
+  assert.equal(angularDistanceDeg(-720, 0), 0);
+  assert.equal(angularDistanceDeg(5, 725), 0);
+  assert.equal(angularDistanceDeg(0, 540), 180);
+  assert.equal(angularDistanceDeg(0, -181), 179);
 });
 
 test('identical inputs and synthetic six-field comparison pass', () => {
@@ -52,6 +66,9 @@ test('identical inputs and synthetic six-field comparison pass', () => {
   assert.equal(report.totalCases, 1);
   assert.equal(report.totalFields, 6);
   assert.deepEqual(report.failures, []);
+  assert.equal(report.maxErrors.longitude.id, 'mars-wrap-synthetic');
+  assert.ok(Math.abs(report.maxErrors.longitude.delta - 0.002) < 1e-10);
+  assert.equal(report.maxErrors.latitude.delta, 0);
 });
 
 test('retrograde speed sign differences fail', () => {
@@ -87,4 +104,76 @@ test('missing fields and duplicate case IDs fail', () => {
   altered.cases.push(structuredClone(candidate.cases[0]));
   assert.throws(() => compareRecordedCases(reference, altered, tolerances),
     /duplicate case id/);
+});
+
+test('a mislabeled geometric or J2000 candidate cannot masquerade as apparent-of-date', () => {
+  const altered = structuredClone(candidate);
+  altered.source.resultContract.corrections = 'geometric';
+  assert.throws(() => compareRecordedCases(reference, altered, tolerances),
+    /candidate: resultContract.corrections must be apparent/);
+  altered.source.resultContract.corrections = 'apparent';
+  altered.source.resultContract.frame = 'ICRF_J2000';
+  assert.throws(() => compareRecordedCases(reference, altered, tolerances),
+    /candidate: resultContract.frame must be true_ecliptic_of_date/);
+  altered.source.resultContract.frame = 'true_ecliptic_of_date';
+  altered.source.resultContract.distanceUnit = 'km';
+  assert.throws(() => compareRecordedCases(reference, altered, tolerances),
+    /candidate: resultContract.distanceUnit must be AU/);
+});
+
+test('source metadata must be asserted by Swiss as well as by the candidate', () => {
+  const altered = structuredClone(reference);
+  delete altered.source.resultContract;
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /reference: resultContract.center must be geocentric/);
+});
+
+test('only the observed backend P0 SWIEPH and SPEED flags are compared', () => {
+  const altered = structuredClone(reference);
+  altered.cases[0].input.flags = 2;
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /only P0 SWIEPH\|SPEED ecliptic mode is supported/);
+  altered.cases[0].input.flags = 258 | 2048; // EQUATORIAL: separate field contract needed
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /only P0 SWIEPH\|SPEED ecliptic mode is supported/);
+});
+
+test('Swiss source must confirm speed as well as SWIEPH, not just return six fields', () => {
+  const altered = structuredClone(reference);
+  altered.cases[0].effectiveFlags = 2; // SWIEPH, but SEFLG_SPEED was dropped
+  assert.throws(() => compareRecordedCases(altered, candidate, tolerances),
+    /did not honor requested speed flag/);
+});
+
+test('angular output is required to be normalized and distance nonnegative', () => {
+  const altered = structuredClone(candidate);
+  altered.cases[0].output.longitude = 360;
+  assert.throws(() => compareRecordedCases(reference, altered, tolerances),
+    /longitude outside/);
+  altered.cases[0].output.longitude = 0.001;
+  altered.cases[0].output.distance = -1;
+  assert.throws(() => compareRecordedCases(reference, altered, tolerances),
+    /invalid latitude\/distance/);
+});
+
+test('maximum errors identify the worst sample across multiple bodies/dates', () => {
+  const ref = structuredClone(reference);
+  const got = structuredClone(candidate);
+  const extraRef = structuredClone(ref.cases[0]);
+  const extraGot = structuredClone(got.cases[0]);
+  extraRef.id = 'another-date-body-4';
+  extraGot.id = 'another-date-body-4';
+  extraRef.input.jdUt += 1;
+  extraGot.input.jdUt += 1;
+  extraRef.output.longitude = 45;
+  extraGot.output.longitude = 45.05;
+  ref.cases.push(extraRef);
+  got.cases.push(extraGot);
+  const report = compareRecordedCases(ref, got, tolerances);
+  assert.equal(report.totalCases, 2);
+  assert.equal(report.totalFields, 12);
+  assert.equal(report.failures.length, 1);
+  assert.equal(report.failures[0].id, 'another-date-body-4');
+  assert.equal(report.maxErrors.longitude.id, 'another-date-body-4');
+  assert.ok(Math.abs(report.maxErrors.longitude.delta - 0.05) < 1e-9);
 });
