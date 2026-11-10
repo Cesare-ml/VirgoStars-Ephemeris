@@ -54,6 +54,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run deterministic workspace tests
         run: cargo test --workspace --locked
+      - name: Check offline Horizons reference parser
+        run: cargo test --workspace --example validate_horizons --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
