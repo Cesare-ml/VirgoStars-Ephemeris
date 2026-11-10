@@ -19,8 +19,9 @@ use std::f64::consts::{PI, TAU};
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
 use virgostars_ephemeris_core::lunisolar_arguments::{
-    lunisolar_fundamental_arguments, LuniSolarArguments, LuniSolarConvention, LuniSolarError, MOON_ASCENDING_NODE,
-    MOON_ARGUMENT_OF_LATITUDE, MOON_MEAN_ANOMALY, MOON_SUN_ELONGATION, SUN_MEAN_ANOMALY,
+    lunisolar_fundamental_arguments, LuniSolarArguments, LuniSolarConvention, LuniSolarError,
+    MOON_ARGUMENT_OF_LATITUDE, MOON_ASCENDING_NODE, MOON_MEAN_ANOMALY, MOON_SUN_ELONGATION,
+    SUN_MEAN_ANOMALY,
 };
 
 fn tdb_jd(value: f64) -> JulianDate {
@@ -106,10 +107,7 @@ fn j2000_angles_and_rates_match_published_arcsecond_coefficients() {
         (1_072_260.703_692, 1_602_961_601.209_0),
         (450_160.398_036, -6_962_890.543_1),
     ];
-    let actual = iers_arguments(
-        JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap(),
-    )
-    .unwrap();
+    let actual = iers_arguments(JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap()).unwrap();
     let radians_per_arcsec = PI / (180.0 * 3_600.0);
     for (i, (angle, slope)) in reference.into_iter().enumerate() {
         near(actual.angles_rad[i], angle * radians_per_arcsec, 1e-14);
@@ -130,15 +128,10 @@ fn analytic_rates_match_wrapped_centered_position_differences() {
     for centuries in [-1.5, -0.7, 0.0, 0.8, 1.6] {
         let day = 2_451_545.0 + centuries * 36_525.0;
         let current = iers_arguments(tdb_jd(day)).unwrap();
-        let before =
-            iers_arguments(tdb_jd(day - half_step_days)).unwrap();
-        let after =
-            iers_arguments(tdb_jd(day + half_step_days)).unwrap();
+        let before = iers_arguments(tdb_jd(day - half_step_days)).unwrap();
+        let after = iers_arguments(tdb_jd(day + half_step_days)).unwrap();
         for i in 0..5 {
-            let difference = shortest_angle_difference(
-                after.angles_rad[i],
-                before.angles_rad[i],
-            );
+            let difference = shortest_angle_difference(after.angles_rad[i], before.angles_rad[i]);
             near(
                 current.rates_rad_per_tdb_day[i],
                 difference / (2.0 * half_step_days),
@@ -162,11 +155,11 @@ fn argument_order_and_phase_multiplier_convention_are_stable() {
     // [l,l',F,D,Omega], and the phase speed is the matching linear sum.
     let coefficients = [2, -1, 1, -2, 1];
     let (phase, rate) = a.phase(coefficients);
-    let expected_angle = (2.0 * a.angles_rad[0] - a.angles_rad[1]
-        + a.angles_rad[2] - 2.0 * a.angles_rad[3]
-        + a.angles_rad[4]).rem_euclid(TAU);
-    let expected_rate = 2.0 * a.rates_rad_per_tdb_day[0]
-        - a.rates_rad_per_tdb_day[1]
+    let expected_angle = (2.0 * a.angles_rad[0] - a.angles_rad[1] + a.angles_rad[2]
+        - 2.0 * a.angles_rad[3]
+        + a.angles_rad[4])
+        .rem_euclid(TAU);
+    let expected_rate = 2.0 * a.rates_rad_per_tdb_day[0] - a.rates_rad_per_tdb_day[1]
         + a.rates_rad_per_tdb_day[2]
         - 2.0 * a.rates_rad_per_tdb_day[3]
         + a.rates_rad_per_tdb_day[4];
@@ -177,10 +170,7 @@ fn argument_order_and_phase_multiplier_convention_are_stable() {
 #[test]
 fn all_angles_are_normalized_but_rates_keep_their_physical_sign() {
     for centuries in [-2.0, -0.1, 0.0, 0.8, 2.0] {
-        let a = iers_arguments(tdb_jd(
-            2_451_545.0 + centuries * 36_525.0,
-        ))
-        .unwrap();
+        let a = iers_arguments(tdb_jd(2_451_545.0 + centuries * 36_525.0)).unwrap();
         for angle in a.angles_rad {
             assert!((0.0..TAU).contains(&angle), "unwrapped angle {angle}");
         }
@@ -196,13 +186,9 @@ fn all_angles_are_normalized_but_rates_keep_their_physical_sign() {
 fn rejects_tdb_mislabelling_and_unrepresentable_split_julian_dates() {
     for scale in [TimeScale::Tt, TimeScale::Tai, TimeScale::Ut1] {
         let epoch = JulianDate::new(2_451_545, 0.5, scale).unwrap();
-        assert_eq!(
-            iers_arguments(epoch),
-            Err(LuniSolarError::WrongTimeScale),
-        );
+        assert_eq!(iers_arguments(epoch), Err(LuniSolarError::WrongTimeScale),);
     }
-    let unrepresentable =
-        JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
+    let unrepresentable = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
     assert_eq!(
         iers_arguments(unrepresentable),
         Err(LuniSolarError::UnrepresentableEpoch),
