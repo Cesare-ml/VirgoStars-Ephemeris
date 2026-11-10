@@ -106,7 +106,10 @@ fn parse_reference(source: &str) -> Result<Reference, String> {
                 .parse::<f64>()
                 .map_err(|_| format!("line {number}: invalid number at column {}", i + 1))?;
             if !value.is_finite() {
-                return Err(format!("line {number}: non-finite value at column {}", i + 1));
+                return Err(format!(
+                    "line {number}: non-finite value at column {}",
+                    i + 1
+                ));
             }
             values[i] = value;
         }
@@ -200,12 +203,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         let mut position_error: f64 = 0.0;
         let mut velocity_error: f64 = 0.0;
         for axis in 0..3 {
-            position_error = position_error.max(
-                (state.position_km[axis] - case.expected[axis]).abs(),
-            );
-            velocity_error = velocity_error.max(
-                (state.velocity_km_per_day[axis] - case.expected[axis + 3]).abs(),
-            );
+            position_error =
+                position_error.max((state.position_km[axis] - case.expected[axis]).abs());
+            velocity_error = velocity_error
+                .max((state.velocity_km_per_day[axis] - case.expected[axis + 3]).abs());
         }
         if !position_error.is_finite() || !velocity_error.is_finite() {
             return Err(input_error("non-finite comparison error"));
@@ -229,7 +230,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         failing_cases
     );
     if failing_cases != 0 {
-        return Err(input_error("reference comparison exceeded explicit tolerances"));
+        return Err(input_error(
+            "reference comparison exceeded explicit tolerances",
+        ));
     }
     Ok(())
 }
