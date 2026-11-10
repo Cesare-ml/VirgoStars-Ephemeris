@@ -1,6 +1,6 @@
 # VirgoStars Ephemeris — implementation roadmap
 
-Status: **planning and experimental implementation**, updated 2026-11-10. The authoritative Rust reader on `dev/ephemeris` currently handles the **classic DE441 binary format**, not SPK `.bsp`; JavaScript SPK prototypes on `main` are research only. See [branch integration status](BRANCH_INTEGRATION_STATUS_2026-11-10.md). All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
+Status: **planning and experimental implementation**, updated 2026-11-10. The experimental Rust reader integrated from `dev/ephemeris` currently handles the **classic DE441 binary format**, not SPK `.bsp`; JavaScript SPK prototypes on `main` remain research only. See [branch integration status](BRANCH_INTEGRATION_STATUS_2026-11-10.md). All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
 
 | Phase | Scope | Exit gate |
 |---|---|---|

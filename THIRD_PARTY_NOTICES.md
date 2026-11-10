@@ -1,19 +1,13 @@
-# Third-party scientific coefficient attribution
+# Third-party scientific reference data
 
-The numerically published IAU 2000B 77-term nutation coefficient table
-in `src/data/iau2000b-terms.mjs` was transcribed from the ERFA
-`nut00b.c` table distributed under ERFA's BSD-style license.
+`crates/ephemeris-core/tests/geometric_projection.rs` uses a numerical
+position/velocity example and expected spherical results from the ERFA
+`t_pv2s` conformance test. ERFA is copyright 2013–2021 NumFOCUS Foundation;
+its license is reproduced in [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt).
+Reference: <https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c>.
+Only numerical test values are used; no ERFA implementation or library is
+included. The ERFA terms remain separate from VirgoStars' CPAL-1.0 license.
 
-- Copyright (C) 2013–2023 NumFOCUS Foundation
-- Repository: https://github.com/liberfa/erfa
-- Source: https://github.com/liberfa/erfa/blob/master/src/nut00b.c
-- License: see [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt)
-- Scientific theory: IAU 2000B (McCarthy & Luzum, 2003)
-- Original VirgoStars JavaScript calculation algorithms: `src/nutation.mjs` (not a port of the ERFA C code)
-- Reference benchmark values: ERFA `t_erfa_c.c` (nut00b / num00b)
-
-The VirgoStars MIT source license does not replace, invalidate or
-relicense any conditions attached to ERFA scientific tables, NASA/JPL
-kernels or other third-party material. Include required attribution and
-license notices in source and binary distributions. No ERFA software
-library is bundled.
+`crates/ephemeris-core/tests/calendar_contract.rs` also uses the numeric
+Gregorian date/JD reference from the ERFA `t_cal2jd` conformance test, under
+the same license and source attribution.

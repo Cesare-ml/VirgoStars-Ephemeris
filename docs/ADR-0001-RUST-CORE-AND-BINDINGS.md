@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision (design only; no implementation, package release, or production migration).
+**Status:** Accepted architectural decision; a limited experimental Rust Cargo core and classic DE441 reader are now included. No validated SPK engine, published bindings, release, or production migration.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -15,7 +15,7 @@ Implement the **only authoritative astronomical engine in Rust**. Do not maintai
 
 The astronomical engine is distinct from **`astrological-functions`**, which remains a framework-independent **TypeScript** package for zodiacs, house systems, aspects, chart/transit orchestration, and other astrological logic. Do not move astrological domain calculations into the Rust ephemeris crate by default.
 
-## Proposed monorepo layout (not yet created)
+## Current partial Rust workspace and future proposed modules
 
 ```text
 VirgoStars-Ephemeris/
@@ -33,7 +33,7 @@ VirgoStars-Ephemeris/
     ADR-0001-RUST-CORE-AND-BINDINGS.md
 ```
 
-The directory names above are proposals, not a claim that these packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
+Only `crates/ephemeris-core/` of this illustrative layout currently exists. The experimental Rust reader supports classic binary DE441, not NAIF SPK `.bsp`; the other crates, bindings and fixture directories remain proposals. Use feature boundaries that permit smaller artifacts and optional dependencies.
 
 ## Public result contract
 
