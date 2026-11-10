@@ -41,6 +41,15 @@ parity checks. The difference is minute but scientifically real. All five
 other polynomial coefficients per argument and all derivatives are identical.
 Only these two constant terms differ.
 
+**Numerical stability:** the unwrapped arguments can exceed one billion
+arcseconds across the supported interval. Adding a 2-µas correction to that
+huge number loses precision in binary64. The Rust implementation therefore
+reduces the common polynomial modulo one full turn **first**, then applies
+the explicit small MHB2000 constant correction to the reduced angle and
+normalizes again. This is mathematically equivalent to adding a constant
+before reduction but preserves the meaningful microarcsecond-scale
+difference; the regression suite detects this precision loss.
+
 ## API and contracts
 
 ```rust
