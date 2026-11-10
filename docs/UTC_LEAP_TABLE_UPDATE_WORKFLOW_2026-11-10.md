@@ -70,7 +70,13 @@ Official source for the current pin:
    this generated extract. Treat that checksum as integrity, **not
    cryptographic authentication** or proof that a maliciously substituted
    file is an official publication.
-5. **Review and land an atomic new version**: add an appropriately named
+5. **Review and land an atomic new version**: after the external IANA
+   source audit, parse the approved numeric extract using
+   `VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot` and retain
+   the old `VersionedUtcLeapSchedule::iana_2026b()` alongside it in Rust.
+   See [UTC_LEAP_VERSIONED_LOADING_2026-11-10.md](UTC_LEAP_VERSIONED_LOADING_2026-11-10.md)
+   for the version/provenance/expiry contract and regression tests.
+   Add an appropriately named
    *new* numeric snapshot under `crates/ephemeris-core/data/`, document
    third-party public-domain provenance, extend the Rust constructor with
    a new explicitly named pinned-version API, maintain existing old-version
