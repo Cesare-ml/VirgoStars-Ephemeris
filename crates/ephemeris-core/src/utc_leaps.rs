@@ -12,7 +12,6 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
-
 //! Explicit post-1972 UTC leap-second day schedule.
 //!
 //! This module does **not** convert a UTC clock reading into TAI/TT/TDB.
@@ -270,7 +269,10 @@ mod tests {
             UtcLeapSchedule::new(first, last, 36, vec![positive, positive]).unwrap_err(),
             UtcLeapError::InvalidTransition
         );
-        let jump = UtcLeapTransition { tai_minus_utc_seconds: 38, ..positive };
+        let jump = UtcLeapTransition {
+            tai_minus_utc_seconds: 38,
+            ..positive
+        };
         assert_eq!(
             UtcLeapSchedule::new(first, last, 36, vec![jump]).unwrap_err(),
             UtcLeapError::InvalidOffsetStep
@@ -295,7 +297,10 @@ mod tests {
 
     #[test]
     fn rejects_legacy_dates_and_invalid_gregorian_days() {
-        assert_eq!(UtcDay::from_gregorian(1971, 12, 31), Err(UtcLeapError::Before1972));
+        assert_eq!(
+            UtcDay::from_gregorian(1971, 12, 31),
+            Err(UtcLeapError::Before1972)
+        );
         assert_eq!(
             UtcDay::from_gregorian(2019, 2, 29),
             Err(UtcLeapError::InvalidGregorianDate)
