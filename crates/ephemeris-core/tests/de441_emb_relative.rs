@@ -41,9 +41,7 @@ fn fixture() -> Vec<u8> {
     write_f64(&mut bytes, 2688, 81.0);
     write_i32(&mut bytes, 2840, 441);
     // The last pointer keeps this synthetic record the required 3000 bytes.
-    for (index, first, coefficients, granules) in
-        [(2, 3, 1, 1), (9, 6, 2, 1), (12, 373, 1, 1)]
-    {
+    for (index, first, coefficients, granules) in [(2, 3, 1, 1), (9, 6, 2, 1), (12, 373, 1, 1)] {
         let at = if index == 12 { 2844 } else { 2696 + index * 12 };
         write_i32(&mut bytes, at, first);
         write_i32(&mut bytes, at + 4, coefficients);
@@ -88,10 +86,7 @@ fn earth_moon_emb_relative_states_preserve_small_positions_and_velocities() {
                 state.position_km,
                 [82.0 * scale, 164.0 * scale, 246.0 * scale],
             );
-            assert_close(
-                state.velocity_km_per_day,
-                [scale, 2.0 * scale, 3.0 * scale],
-            );
+            assert_close(state.velocity_km_per_day, [scale, 2.0 * scale, 3.0 * scale]);
         }
     }
 }
@@ -105,11 +100,7 @@ fn emb_relative_offsets_only_need_the_geocentric_moon_series() {
     }
     let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
     let state = ephemeris
-        .state(
-            Body::Moon,
-            Body::EarthMoonBarycenter,
-            JulianDateTdb(1016.0),
-        )
+        .state(Body::Moon, Body::EarthMoonBarycenter, JulianDateTdb(1016.0))
         .unwrap();
     assert_close(state.position_km, [81.0, 162.0, 243.0]);
 }
