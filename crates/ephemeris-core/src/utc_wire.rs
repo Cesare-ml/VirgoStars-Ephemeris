@@ -35,9 +35,9 @@ pub const UTC_TAI_RECORD_V1_SCHEMA: &str = "virgostars.utc-tai.v1";
 ///
 /// UTC fields describe a named Gregorian civil day and clock, **not** a
 /// uniform Julian date in UTC. TAI fields use the project's split JD
-/// convention: \`tai_day_number\` is the noon-based integer day number,
-/// \`tai_midnight_fraction\` is the fraction of an SI day since the
-/// preceding midnight, and the time scale is explicitly \`"TAI"\`.
+/// convention: `tai_day_number` is the noon-based integer day number,
+/// `tai_midnight_fraction` is the fraction of an SI day since the
+/// preceding midnight, and the time scale is explicitly `"TAI"`.
 ///
 /// All fields are owned/scalar to ease future binding to Python integers
 /// and TypeScript number/string fields without exposing Rust lifetimes.
@@ -101,7 +101,7 @@ impl UtcLeapCatalog {
     }
 
     /// Build the same v1 scalar record from TAI. It returns the *same*
-    /// field meanings as \`utc_to_tai_record_v1\`, regardless of direction,
+    /// field meanings as `utc_to_tai_record_v1`, regardless of direction,
     /// including reconstructing 23:59:60.x where valid.
     pub fn tai_to_utc_record_v1(
         &self,
@@ -169,7 +169,22 @@ mod tests {
         let reverse = catalog
             .tai_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, tai)
             .unwrap();
-        assert_eq!(forward, reverse);
+        // The inverse reconstructs UTC fractional seconds through
+        // floating-point division; compare the numeric field with a
+        // documented tolerance instead of requiring bitwise identity.
+        assert_eq!(forward.schema, reverse.schema);
+        assert_eq!(forward.leap_table_version, reverse.leap_table_version);
+        assert_eq!(forward.leap_table_sha256, reverse.leap_table_sha256);
+        assert_eq!(
+            forward.leap_expires_utc_day_number,
+            reverse.leap_expires_utc_day_number
+        );
+        assert_eq!(forward.utc_day_number, reverse.utc_day_number);
+        assert_eq!(forward.utc_hour, reverse.utc_hour);
+        assert_eq!(forward.utc_minute, reverse.utc_minute);
+        assert!((forward.utc_second - reverse.utc_second).abs() < 1e-8);
+        assert_eq!(forward.tai_day_number, reverse.tai_day_number);
+        assert_eq!(forward.tai_midnight_fraction, reverse.tai_midnight_fraction);
     }
 
     #[test]
