@@ -23,6 +23,9 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/compare-swiss-backend.mjs'
+      - 'scripts/record-swiss-backend-reference.cjs'
+      - 'test/compare-swiss-backend.test.mjs'
       - '.github/workflows/rust-dev.yml'
   push:
     branches: [dev/ephemeris]
@@ -30,6 +33,9 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/compare-swiss-backend.mjs'
+      - 'scripts/record-swiss-backend-reference.cjs'
+      - 'test/compare-swiss-backend.test.mjs'
       - '.github/workflows/rust-dev.yml'
   workflow_dispatch:
 
@@ -50,6 +56,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check optional Swiss oracle and comparator syntax
+        run: |
+          node --check scripts/record-swiss-backend-reference.cjs
+          node --check scripts/compare-swiss-backend.mjs
+      - name: Test offline Swiss parity comparator (synthetic only)
+        run: node --test test/compare-swiss-backend.test.mjs
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run deterministic workspace tests
