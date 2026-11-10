@@ -25,7 +25,25 @@ use virgostars_ephemeris_core::mhb_planetary_lunar::{
 };
 
 fn at(day_offset: f64) -> JulianDate {
-    JulianDate::from_f64(2_451_545.0 + day_offset, TimeScale::Tdb).unwrap()
+    // Keep fractional-day precision when finite-differencing speeds:
+    // collapsing JD 2451545 plus a small offset first would quantize time.
+    let whole_days = day_offset.floor();
+    let fractional_day = day_offset - whole_days;
+    if fractional_day < 0.5 {
+        JulianDate::new(
+            2_451_545 + whole_days as i64,
+            0.5 + fractional_day,
+            TimeScale::Tdb,
+        )
+        .unwrap()
+    } else {
+        JulianDate::new(
+            2_451_546 + whole_days as i64,
+            fractional_day - 0.5,
+            TimeScale::Tdb,
+        )
+        .unwrap()
+    }
 }
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
