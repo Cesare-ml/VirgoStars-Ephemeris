@@ -145,6 +145,74 @@ future validity, and ownership of result metadata beyond the catalog's
 lifetime. These are API and time-label checks, not proof of scientific
 ephemeris parity.
 
+## Exact-byte SHA-256 fingerprint for reproducible conversions
+
+The original source/version metadata alone could not distinguish two
+`leap-seconds.list` extracts given the **same caller-supplied version
+label**. The experimental Rust core now computes a **lowercase SHA-256
+digest of the exact bytes** in each curated numeric source:
+
+- `VersionedUtcLeapSchedule::source_sha256()`: the fingerprint attached
+  to the loaded table. The pinned IANA tzdb-2026b factory hashes the
+  embedded text directly; a reviewed table hashes its input `source`
+  text after numeric/calendar validation.
+- `VersionedUtcResult<T>::source_sha256`: an **owned copy of the same
+  digest** carried alongside each UTC→TAI or TAI→UTC conversion result.
+  It persists after the table/catalog object is dropped.
+- `UtcLeapCatalog::select_matching_sha256(version, expected)`: an
+  optional **fail-closed check** returning `SourceDigestMismatch` if
+  the exact selected content does not equal the independently recorded
+  expected lowercase digest. An unknown version is still rejected
+  without fallback.
+
+This fingerprint covers the complete **curated snapshot bytes**, including
+`#@` expiration, numeric rows, whitespace and comments. Two files with
+the same numeric transitions but different comments or line endings
+therefore have **different** SHA-256 digests. This is intentional: the hash
+identifies a concrete artifact, rather than only equivalent historical
+offset values. To compare data semantics across different snapshots,
+inspect and audit the numeric record history separately.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcClockTime, UtcDay, UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let expected = catalog.select("iana-tzdb-2026b")?
+    .source_sha256().to_owned();
+
+// Production callers should instead use an **independently recorded**
+// approved hash from their review/manifest, not take it on trust here.
+catalog.select_matching_sha256("iana-tzdb-2026b", &expected)?;
+let result = catalog.utc_to_tai(
+    "iana-tzdb-2026b",
+    UtcDay::from_gregorian(2016, 12, 31)?,
+    UtcClockTime::new(23, 59, 60.5)?,
+)?;
+assert_eq!(result.source_sha256, expected);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+SHA-256 follows the published FIPS 180-4 algorithm, implemented in the
+small independent Rust module `fingerprint.rs` without new dependencies.
+Regression tests cover well-known SHA-256 **empty**, **abc**,
+**multi-block** and **one-million-'a'** reference vectors, as well as
+padding boundaries and input mutation. Additional UTC tests check that
+a source-content hash is stable across a round-trip, distinguishes two
+different source files carrying the *same version name*, and changes
+when only a table's expiry is modified.
+
+**Important trust boundary:** SHA-256 helps detect accidental or
+unauthorized byte changes **relative to a separately trusted expected
+digest**. Computing a digest of attacker-supplied bytes does **not**
+authenticate the publisher, prove that the rows are official or replace
+the independent IANA upstream `#h` integrity audit, source-domain
+verification, review sign-off or source preservation. The upstream
+`#h` is a distinct SHA-1 calculated over the official NTP numeric
+tokens, *not* the SHA-256 of the curated VirgoStars snapshot.
+
 ## Tests and compatibility
 
 Four additional deterministic Rust tests cover:
@@ -201,3 +269,11 @@ dependencies. The old `UtcLeapSchedule` and
 `VersionedUtcLeapSchedule` signatures remain compatible. CPAL-1.0,
 the separately attributed public-domain IANA history, and
 `Powered by VirgoStars` attribution are unchanged.
+
+2026-11-10: added SHA-256 content fingerprints to pinned and reviewed
+`VersionedUtcLeapSchedule` objects, metadata-bearing
+`VersionedUtcResult<T>`, and catalog selection by an explicit expected
+SHA-256. New original, dependency-free `fingerprint.rs` and standard
+reference-vector tests are covered by the existing CPAL-1.0 source
+license; the public-domain IANA numeric snapshot is unmodified.
+No network access, automatic acceptance, hidden defaults or merge.
