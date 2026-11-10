@@ -94,6 +94,11 @@ Start with `de441.rs`, `state.rs`, `coordinates.rs`, `first_sky.rs`. The
 existing topocentric geometric output is useful foundation, not a compatible
 answer to `swe_calc_ut`.
 
+Progress: an independently testable geocentric reception light-time stage and
+velocity derivative is documented in [GEOCENTRIC_LIGHT_TIME_2026-11-10.md](GEOCENTRIC_LIGHT_TIME_2026-11-10.md).
+It does not yet supply apparent coordinates, rotating-frame speeds or a Node
+facade; the package remains open.
+
 - Build an explicit, modular position pipeline: observer and body center,
   light-time, frame bias/precession/nutation, aberration and deflection as
   required by the selected reference contract; derive position and velocity
