@@ -361,6 +361,37 @@ mod tests {
     }
 
     #[test]
+    fn rejects_ambiguous_reference_metadata_and_malformed_rows() {
+        // A duplicated metadata key must never silently override an earlier
+        // claim about the reference's scientific provenance.
+        assert!(parse_reference(&VALID.replace(
+            "# provider=JPL_HORIZONS\\n",
+            "# provider=JPL_HORIZONS\\n# provider=JPL_HORIZONS\\n",
+        ))
+        .is_err());
+        // Do not permit a metadata block to appear after numeric samples.
+        assert!(parse_reference(&format!("{VALID}# units=KM-D\\n")).is_err());
+        // Exact column count and order matter: no truncated or extra vector
+        // component can be interpreted as a valid comparison.
+        assert!(parse_reference(&VALID.replace(
+            "2451545.0,1,2,3,4,5,6\\n",
+            "2451545.0,1,2,3,4,5\\n",
+        ))
+        .is_err());
+        assert!(parse_reference(&VALID.replace(
+            "2451545.0,1,2,3,4,5,6\\n",
+            "2451545.0,1,2,3,4,5,6,7\\n",
+        ))
+        .is_err());
+        // A finite reference must not admit infinity in any component.
+        assert!(parse_reference(&VALID.replace(
+            "2451545.0,1,2,3,4,5,6\\n",
+            "2451545.0,1,2,3,4,5,inf\\n",
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn reports_signed_residuals_component_maxima_and_vector_norms() {
         let error = residuals(
             [10.0, -20.0, 30.0],
