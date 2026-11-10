@@ -373,22 +373,13 @@ mod tests {
         assert!(parse_reference(&format!("{VALID}# units=KM-D\\n")).is_err());
         // Exact column count and order matter: no truncated or extra vector
         // component can be interpreted as a valid comparison.
-        assert!(parse_reference(&VALID.replace(
-            "2451545.0,1,2,3,4,5,6\\n",
-            "2451545.0,1,2,3,4,5\\n",
-        ))
-        .is_err());
-        assert!(parse_reference(&VALID.replace(
-            "2451545.0,1,2,3,4,5,6\\n",
-            "2451545.0,1,2,3,4,5,6,7\\n",
-        ))
-        .is_err());
+        let short_row = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5\\n");
+        assert!(parse_reference(&short_row).is_err());
+        let long_row = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5,6,7\\n");
+        assert!(parse_reference(&long_row).is_err());
         // A finite reference must not admit infinity in any component.
-        assert!(parse_reference(&VALID.replace(
-            "2451545.0,1,2,3,4,5,6\\n",
-            "2451545.0,1,2,3,4,5,inf\\n",
-        ))
-        .is_err());
+        let infinite = VALID.replace("2451545.0,1,2,3,4,5,6\\n", "2451545.0,1,2,3,4,5,inf\\n");
+        assert!(parse_reference(&infinite).is_err());
     }
 
     #[test]
