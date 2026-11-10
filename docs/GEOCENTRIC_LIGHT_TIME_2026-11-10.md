@@ -81,3 +81,49 @@ invalid epoch, invalid velocity, no direction, error propagation and bounded
 iteration. Optional real-data tests are ignored by default and never download
 a kernel. 2026-11-10: added the independent Rust light-time module and tests;
 all existing CPAL notices and third-party attribution remain unchanged.
+
+## Additional angular-rate cross-stage regression — 2026-11-10
+
+A new Rust unit regression in `crates/ephemeris-core/src/light_time.rs`,
+`transverse_light_time_spherical_rates_match_reception_finite_difference`,
+links two existing stages of the **Rust** core: the geocentric reception
+light-time solution and the **fixed ICRF-axis geometric** projection
+`coordinates::project_fixed_axes`. It uses a deliberately constructed linear
+target/observer motion in three dimensions (not a Swiss or JPL fixture):
+both bodies have nonzero transverse velocities, the target is retarded to its
+emission TDB epoch, and the observer remains at the reception TDB epoch.
+
+For a reception-centered ±600-second step, the regression compares:
+the signed shortest-angle longitude rate (radians/TDB day), latitude rate
+(radians/TDB day), radial distance rate (km/TDB day), and light-time rate
+(seconds per reception second) against independent finite differences
+of newly solved reception positions. It checks that the example exhibits a
+negative/retrograde longitude rate. Numerical tolerances are respectively
+`3e-7` rad/day, `3e-7` rad/day, `0.1` km/day and `3e-8` s/s;
+these are conservative regression thresholds for this fixed synthetic sample
+and single-`f64` Julian-date resolution, **not** astronomical error budgets
+or Swiss Ephemeris parity. The same increment tests that zero Earth–target
+range and a non-finite observer velocity are rejected, never silently
+converted to a valid direction.
+
+Run the new regression and all existing tests with:
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --locked transverse_light_time
+cargo test --workspace --locked zero_relative_range
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+The core's `geocentric_light_time` and `project_fixed_axes` algorithms,
+public APIs, time-scale rules, ephemeris file formats, dependencies and
+CPAL-1.0 attribution remain unchanged. These tests do not add aberration,
+nutation, deflection or date-frame derivative handling. An independent
+NASA/JPL comparison and an **apparent-of-date** output are still required
+before treating any result as a Swiss-style `swe_calc_ut` replacement.
+
+**CPAL-1.0 modification record (2026-11-10):** expanded synthetic
+numerical/error-case tests in `crates/ephemeris-core/src/light_time.rs`
+and documented their limits here; initial developer and VirgoStars copyright
+notices preserved, no external source/data incorporated.
