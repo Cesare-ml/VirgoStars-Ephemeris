@@ -480,6 +480,38 @@ impl UtcLeapCatalog {
         Ok(selected)
     }
 
+    /// Convert UTC to TAI only when the selected table matches a trusted
+    /// expected SHA-256 of its exact curated snapshot bytes.
+    ///
+    /// Both version and digest are required on every call. This does not
+    /// authenticate the publisher: obtain the expected digest from a
+    /// separately reviewed manifest, not the same untrusted source.
+    /// An unknown version, then a mismatching digest, fails before the
+    /// clock/coverage conversion is attempted.
+    pub fn utc_to_tai_checked(
+        &self,
+        version: &str,
+        expected_sha256: &str,
+        day: UtcDay,
+        clock: UtcClockTime,
+    ) -> Result<VersionedUtcResult<JulianDate>, UtcLeapError> {
+        self.select_matching_sha256(version, expected_sha256)?;
+        self.utc_to_tai(version, day, clock)
+    }
+
+    /// Convert TAI to UTC only when the chosen table has the externally
+    /// expected SHA-256; this retains positive leap-second semantics and
+    /// the same explicit coverage checks as `tai_to_utc`.
+    pub fn tai_to_utc_checked(
+        &self,
+        version: &str,
+        expected_sha256: &str,
+        tai: JulianDate,
+    ) -> Result<VersionedUtcResult<(UtcDay, UtcClockTime)>, UtcLeapError> {
+        self.select_matching_sha256(version, expected_sha256)?;
+        self.tai_to_utc(version, tai)
+    }
+
     /// Convert UTC to TAI using precisely the requested version, preserving
     /// that version's provenance and exclusive expiry in the result.
     pub fn utc_to_tai(
@@ -1633,6 +1665,94 @@ mod tests {
         assert_ne!(future.source_sha256(), pinned.source_sha256());
         assert_eq!(pinned.expires_utc_day(), d(2026, 12, 28));
         assert_eq!(future.expires_utc_day(), d(2027, 7, 1));
+    }
+
+    #[test]
+    fn checked_bidirectional_conversion_roundtrips_with_expected_source_digest() {
+        let mut catalog = UtcLeapCatalog::new();
+        catalog
+            .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+            .unwrap();
+        let version = "iana-tzdb-2026b";
+        let hash = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+        let day = d(2016, 12, 31);
+        let tai = catalog
+            .utc_to_tai_checked(
+                version,
+                hash,
+                day,
+                UtcClockTime::new(23, 59, 60.25).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(tai.version, version);
+        assert_eq!(tai.source_sha256, hash);
+        let utc = catalog
+            .tai_to_utc_checked(version, hash, tai.value)
+            .unwrap();
+        assert_eq!(utc.source_sha256, hash);
+        assert_eq!(utc.value.0, day);
+        assert_eq!(utc.value.1.hour(), 23);
+        assert_eq!(utc.value.1.minute(), 59);
+        assert!((utc.value.1.second() - 60.25).abs() < 1e-8);
+    }
+
+    #[test]
+    fn checked_conversions_fail_closed_on_wrong_digest_and_unknown_version() {
+        let mut catalog = UtcLeapCatalog::new();
+        catalog
+            .register(VersionedUtcLeapSchedule::iana_2026b().unwrap())
+            .unwrap();
+        let version = "iana-tzdb-2026b";
+        let day = d(2017, 1, 1);
+        let zero = UtcClockTime::new(0, 0, 0.0).unwrap();
+        let tai = catalog.utc_to_tai(version, day, zero).unwrap().value;
+        for wrong_hash in ["", "f", "0".repeat(64).as_str()] {
+            assert_eq!(
+                catalog.utc_to_tai_checked(version, wrong_hash, day, zero),
+                Err(UtcLeapError::SourceDigestMismatch)
+            );
+            assert_eq!(
+                catalog.tai_to_utc_checked(version, wrong_hash, tai),
+                Err(UtcLeapError::SourceDigestMismatch)
+            );
+        }
+        assert_eq!(
+            catalog.utc_to_tai_checked("unknown", "wrong", day, zero),
+            Err(UtcLeapError::UnknownVersion)
+        );
+        assert_eq!(
+            catalog.tai_to_utc_checked("unknown", "wrong", tai),
+            Err(UtcLeapError::UnknownVersion)
+        );
+    }
+
+    #[test]
+    fn checked_conversion_rejects_reused_version_name_with_changed_bytes() {
+        let mut catalog = UtcLeapCatalog::new();
+        let pinned = VersionedUtcLeapSchedule::iana_2026b().unwrap();
+        let old_hash = pinned.source_sha256().to_owned();
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let altered = format!("{source}# harmless extra comment\\n");
+        catalog
+            .register(
+                VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                    "iana-tzdb-2026b",
+                    "synthetic-test-only; same label, changed bytes",
+                    &altered,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let day = d(2017, 1, 1);
+        assert_eq!(
+            catalog.utc_to_tai_checked(
+                "iana-tzdb-2026b",
+                &old_hash,
+                day,
+                UtcClockTime::new(0, 0, 0.0).unwrap()
+            ),
+            Err(UtcLeapError::SourceDigestMismatch)
+        );
     }
 
     #[test]
