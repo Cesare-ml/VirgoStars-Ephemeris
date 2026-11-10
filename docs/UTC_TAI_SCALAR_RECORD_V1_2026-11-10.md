@@ -170,9 +170,35 @@ TAI−UTC was 36 seconds and the next UTC midnight uses 37 seconds.
 - Do not use JavaScript `Date` or Python naive `datetime` to carry
   the `23:59:60` clock value; many libraries cannot represent it.
 
+### Negative leap seconds: explicit cross-language boundary
+
+The v1 scalar record is now also exercised with an **entirely
+hypothetical, test-only -1 second UTC transition at 2027-01-01**.
+No negative leap second is asserted as announced by IERS or published
+in an official IANA source.
+
+For that synthetic table, 2026-12-31 has only **86,399 seconds**:
+`23:59:58.5 UTC` maps to `2027-01-01 00:00:35.5 TAI`;
+the next valid UTC clock reading `2027-01-01 00:00:00 UTC`
+maps to `00:00:36 TAI`. The civil time `23:59:59 UTC` on
+the shortened day **does not exist** and must return the v1 code
+`clock_time_outside_day`.
+
+Two deterministic Rust integration-style unit tests verify those
+scalar record values and both inverse conversions, preservation of
+version/provenance/hash/expiry, rejection of the omitted UTC second,
+rejection of an old pinned SHA-256 for the synthetic new table, and
+non-extrapolation of the historical 2026b schedule. Future bindings
+must not infer that every UTC day has 86,400 seconds or convert UTC
+to a uniform JD by multiplying a day fraction by 86,400.
+
+These are software-boundary checks against a **synthetic** negative
+leap transition, not a substitute for verifying any future published
+IERS announcement or an independent astronomical JPL/Horizons gate.
+
 ### Deterministic acceptance gates
 
-Four record tests and two error-code tests in `crates/ephemeris-core/src/utc_wire.rs` check:
+Six record tests and two error-code tests in `crates/ephemeris-core/src/utc_wire.rs` check:
 1. Independent date anchors, the 2016 positive leap, and agreement
    of record metadata in UTC→TAI and TAI→UTC directions.
 2. Record fields remain owned after dropping the catalog.
@@ -209,3 +235,10 @@ with two deterministic Rust tests. The error codes are part of the
 experimental Rust-only contract and do not imply deployed PyO3/WASM
 bindings. CPAL-1.0 notices, IANA public-domain data provenance and
 `Powered by VirgoStars` attribution remain unchanged.
+
+2026-11-10: added two negative-leap scalar-record regression tests
+for a synthetic -1s transition on 2027-01-01, including both
+conversion directions, rejected missing 23:59:59 second, source-hash
+mismatch, and unchanged historical expiry of IANA 2026b. No actual
+future leap event is asserted; no production binding, ABI, or JSON
+serializer is implied.
