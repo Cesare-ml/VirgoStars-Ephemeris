@@ -1,23 +1,14 @@
-node_modules/
-dist/
-coverage/
-*.log
-.env
-.env.*
-!.env.example
-# Astronomical data: download separately after rights and provenance review
+# Rust build output
+/target/
+**/target/
+*.rs.bk
+
+# External kernels and Swiss ephemeris data are not distributed here.
 *.bsp
+*.eph
+*.se1
 *.bpc
-*.tls
 *.tpc
+*.tls
 *.tf
 *.tsc
-*.bc
-kernel-cache/
-data/kernels/
-# IDE and OS
-.DS_Store
-.vscode/
-*.0
-*.bin
-target/debug/
