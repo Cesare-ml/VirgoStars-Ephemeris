@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision. An experimental Rust DE441 reader exists; bindings, package release, independent numerical validation and production migration remain future work.
+**Status:** Accepted architectural decision. An experimental Rust classic-binary DE441 reader exists (not a NAIF SPK `.bsp` reader); bindings, package release, independent numerical validation and production migration remain future work.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -8,7 +8,7 @@
 
 Implement the **only authoritative astronomical engine in Rust**. Do not maintain separate astronomy algorithms in TypeScript, Python, or other languages. Public language interfaces are thin wrappers over that same Rust implementation, with explicit cross-language contracts and shared reference fixtures.
 
-- **Rust core**: input validation, time scales (UTC/TAI/TT/TDB as applicable), units, planetary SPK reading/interpolation, frame transformations, observer/geocentric/topocentric geometry and documented physical corrections; a future separately identified analytic **lite mode** for calculations without external kernel files.
+- **Rust core**: input validation, time scales (UTC/TAI/TT/TDB as applicable), units, current classic-DE441 reading/interpolation and planned SPK reading/interpolation, frame transformations, observer/geocentric/topocentric geometry and documented physical corrections; a future separately identified analytic **lite mode** for calculations without external kernel files.
 - **TypeScript / JavaScript**: wrapper around WebAssembly via `wasm-bindgen` for browsers and supported Node.js use. Consider an optional Node native addon through `napi-rs` *only if measurements justify the additional maintenance*; it still calls the same Rust core.
 - **Python**: a compiled extension using **PyO3**, packaged into installable wheels using **maturin**. This is a binding to the Rust core, **not** a Python rewrite. Depending on the published wheel/platform, users can `pip install` and import it without a separate Rust compiler; source builds may require Rust.
 - **Rust**: expose a stable public library API for native consumers. C ABI bindings for other languages are a possible future addition, subject to demand and ABI/versioning design.
@@ -76,7 +76,7 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 - NASA/JPL kernel availability is not permission to bundle or sublicense third-party data under the repository's CPAL-1.0 code license. Document provenance and distribution rights; default to externally supplied data where needed.
 - Original VirgoStars-Ephemeris code is licensed under **CPAL-1.0**, including Exhibits A/B; see `LICENSE`, `NOTICE`, and `docs/LICENSING_AND_CREDITS.md`. A Credits/About entry is recommended, but for graphical Larger Works the license's Section 14 launch/session display requirements must also be considered. Preserve third-party license notices and review dependency compatibility.
 - Do not change production VirgoStars/Astrolabio, migrate users, or publish npm/PyPI packages as a side effect of this documentation decision. The owner explicitly authorized non-deploying GitHub Actions CI on 2026-11-10; use least-privilege permissions and no unnecessary secrets.
-- Record tests for Windows, macOS and Linux (and WASM browser/Node) as support targets, not existing support.
+- The `dev/ephemeris` branch has a Rust development CI workflow targeting Linux, Windows and macOS; verify the specific commit's workflow results before claiming a successful run. WASM browser/Node checks remain future support targets, not completed validation.
 
 ## Sintesi italiana
 
