@@ -33,7 +33,7 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
 }
 
 fn near_vector(actual: [f64; 3], expected: [f64; 3], tolerance: f64) {
-    for (a, b) in actual.into_iter().zip(expected.into_iter()) {
+    for (a, b) in actual.into_iter().zip(expected) {
         near(a, b, tolerance);
     }
 }
@@ -141,7 +141,7 @@ fn published_iau_rate_and_wgs84_equatorial_radius_give_expected_spin_speed() {
     .unwrap();
     let equatorial_speed_m_per_second =
         state.spin_velocity_km_per_ut1_day[1] * 1_000.0 / 86_400.0;
-    near(equatorial_speed_m_per_second, 465.101_094_254_722_17, 1.0e-6);
+    near(equatorial_speed_m_per_second, 465.101_094_254_722_2, 1.0e-6);
 }
 
 #[test]
