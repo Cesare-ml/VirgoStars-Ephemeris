@@ -23,9 +23,11 @@ fn basis_endpoint_derivatives_follow_closed_form() {
 #[test]
 fn reflected_coefficients_preserve_values_and_reverse_derivatives() {
     let coefficients = [1.25, -2.0, 0.75, 3.5, -1.0, 0.125];
-    let reflected: Vec<f64> = coefficients.iter().enumerate().map(|(i, c)| {
-        if i % 2 == 0 { *c } else { -*c }
-    }).collect();
+    let reflected: Vec<f64> = coefficients
+        .iter()
+        .enumerate()
+        .map(|(i, c)| if i % 2 == 0 { *c } else { -*c })
+        .collect();
     for x in [-1.0, -0.75, -0.25, 0.0, 0.5, 1.0] {
         let a = evaluate_chebyshev(&coefficients, -x).unwrap();
         let b = evaluate_chebyshev(&reflected, x).unwrap();
