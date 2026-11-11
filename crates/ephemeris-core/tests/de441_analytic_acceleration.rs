@@ -83,6 +83,11 @@ fn quadratic_de441() -> Vec<u8> {
         set_series(&mut bytes, record, 3, [2_000_000.0, 80.0, 16.0]);
         set_series(&mut bytes, record, 12, [1_000_000.0, 3_200.0, 512.0]);
         set_series(&mut bytes, record, 21, [8_200.0, 320.0, 256.0]);
+        // Non-collinear Y motion makes the Earth's true acceleration
+        // affect the aberration direction and its differentiated rate.
+        set_series(&mut bytes, record, 6, [400_000.0, -200.0, 60.0]);
+        set_series(&mut bytes, record, 15, [300_000.0, 1_000.0, 128.0]);
+        set_series(&mut bytes, record, 24, [500.0, 64.0, 32.0]);
     }
     bytes
 }
@@ -111,10 +116,10 @@ fn quadratic_earth_and_mercury_have_known_exact_accelerations() {
     near(earth.velocity_km_per_day[0], 200.0 - 20.0 / 82.0, 1e-12);
     near(earth.acceleration_km_per_day2[0], 8.0 - 4.0 / 82.0, 1e-12);
     near(moon.acceleration_km_per_day2[0], 4.0, 1e-12);
-    for i in 1..3 {
-        near(earth.acceleration_km_per_day2[i], 0.0, 1e-12);
-        near(mercury.acceleration_km_per_day2[i], 0.0, 1e-12);
-    }
+    near(earth.acceleration_km_per_day2[1], 2.0 - 0.5 / 82.0, 1e-12);
+    near(mercury.acceleration_km_per_day2[1], 4.0 * 60.0 / 256.0, 1e-12);
+    near(earth.acceleration_km_per_day2[2], 0.0, 1e-12);
+    near(mercury.acceleration_km_per_day2[2], 0.0, 1e-12);
     assert_eq!(earth.epoch, t);
     assert_eq!(earth.center, Body::SolarSystemBarycenter);
     assert_eq!(earth.target, Body::Earth);
