@@ -413,3 +413,132 @@ release, package publication, main/dev merge or deployment.
 Required CPAL notices and **Powered by VirgoStars**
 (https://www.virgostars.it/) credit are preserved.
 
+## Follow-up — true-ecliptic-of-date TT matrix/rate composition (2026-11-11)
+
+**New mathematical frame stage on draft PR #47:** `RotatingFrame::from_tt_true_ecliptic`
+extends the prior GCRS → mean equator → true equator/equinox
+computation with the *positive passive X rotation by true obliquity*.
+This moves true equatorial Cartesian components into the conventional
+**ecliptic-of-date plane with the true equinox of date as origin**.
+
+Given **caller-supplied, same-epoch** TT matrices P (precession) and N
+(nutation), their TT-day derivatives, the true obliquity `ε_true`
+in radians, its **TT-day** derivative, and the required independently
+obtained `dTT/dTDB` ratio:
+
+```text
+E                 = passive_X(+epsilon_true)
+R_ecliptic        = E * N * P
+dR_ecliptic/dTT   = Edot * N * P + E * Ndot * P + E * N * Pdot
+dR_ecliptic/dTDB  = (dR_ecliptic/dTT) * (dTT/dTDB)
+r_ecliptic        = R_ecliptic * r_ICRF
+v_ecliptic        = R_ecliptic * v_ICRF
+                      + dR_ecliptic/dTDB * r_ICRF
+```
+
+In this project **passive X positive angle** maps
+`(x,y,z) → (x,cosε*y + sinε*z,-sinε*y + cosε*z)`.
+That means equatorial +Y acquires *negative* ecliptic latitude
+for positive `ε`, a sign convention explicitly checked by tests.
+The equinox-based nutation matrix from draft
+[#51](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/51)
+starts with the opposite **`passive_X(-ε_true)`** on its left,
+so the final ecliptic tilt is its inverse, not a duplicate.
+This ordering is consistent with conventional true-equator to
+ecliptic transformations described by
+[NASA GEONS 2024 §3.2.2](https://ntrs.nasa.gov/api/citations/20240004259/downloads/GEONSMS_R3_0_NASA-TP-20240004259.pdf)
+and [IERS Conventions Chapter 5](https://iers-conventions.obspm.fr/content/chapter5/icc5.pdf).
+This code was independently authored from vector rotation algebra;
+**no NASA/SOFA/Swiss source code was copied**.
+
+**Physical input contract:** when using classical equinox-based IAU
+nutation, `ε_true = ε_mean + Δε` and
+`dε_true/dTT = dε_mean/dTT + dΔε/dTT`. Inputs must use the same
+physical reception TT epoch and compatible ecliptic and equinox
+conventions. The constructor accepts a **caller-provided** positive
+finite true obliquity strictly below 90° and its finite derivative.
+It validates P, N and their tangent derivatives using the existing
+`RotatingFrame` validators. It has no astronomical validity
+certificate for values within that guard.
+
+### Example using already-calculated rotation inputs
+
+```rust
+use virgostars_ephemeris_core::rotating_frame::{RotatingFrame, TtPerTdbDay};
+
+# fn demo() -> Result<(), Box<dyn std::error::Error>> {
+let identity = [[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]];
+let zero = [[0.0;3];3];
+// Mathematical control case ONLY: P=N=identity at a synthetic epoch,
+// not an independently validated IAU orientation or time relation.
+let frame = RotatingFrame::from_tt_true_ecliptic(
+    identity, zero, identity, zero,
+    0.4, 0.001, TtPerTdbDay::new(1.0)?,
+)?;
+# let _ = frame;
+# Ok(())
+# }
+```
+
+The constant or evolving `ε_true` plus genuine IAU 2006 P and
+full IAU 2000A N can **eventually** establish an equinox-based
+true-ecliptic-of-date frame after scientific validation. This
+increment does **not** itself calculate P, N, `Δε`,
+`dTT/dTDB`, an actual physical `ε_true`, or any ephemeris.
+Those are independently developed components on unmerged draft
+PRs #48, #51, #52–#56 and #68 and require careful integration.
+The new constructor remains compatible with
+`moving_spherical_from_icrf_state`: it changes an existing
+pre-corrected inertial source's frame **once**. There is no
+duplicated light-time, aberration, gravitational deflection or
+spherical projection inside `RotatingFrame`.
+
+**What is still missing:** independently verified full nutation
+terms, real TT↔TDB conversion and derivative, IAU/Swiss exact
+ecliptic/equinox convention compatibility, gravitational
+light bending and other apparent corrections, actual physical
+outer planet centers and real multi-epoch JPL/SOFA/Swiss
+six-field/rate parity. In particular, synthetic moving-axis rates
+are **not** Swiss `swe_calc_ut` ecliptic apparent coordinates.
+
+### New offline verification
+
+`crates/ephemeris-core/tests/true_ecliptic_frame.rs`
+contains **seven** original synthetic checks:
+positive-X ecliptic rotation and latitude sign; nonzero
+obliquity drift contributing latitude speed on a stationary
+inertial source; P→N→E noncommuting order; equality of composed
+and sequential three-rotation Cartesian positions and rates;
+independent centered finite differences across all **six**
+spherical/Cartesian velocity components with a purposely synthetic
+TT(TDB) rate; guarded obliquity inputs; and invalid upstream
+precession/nutation matrices and derivatives.
+
+An **eighth** new regression in
+`crates/ephemeris-core/tests/moving_geocentric.rs`
+goes through the *actual original in-memory synthetic classic
+DE441 reader → Newtonian reception light-time → TT-derived
+ecliptic-of-date rotation → three signed spherical rates*, checking
+the expected latitude and its obliquity drift. The source is synthetic
+and stationary; the latitude speed is supplied by moving axes.
+This is structural and mathematical validation, **not**
+independent numeric NASA/JPL/IAU/Swiss physical reference parity.
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --locked --test true_ecliptic_frame
+cargo test --workspace --locked --test moving_geocentric
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+**2026-11-11 CPAL-1.0 modification record:** extended original
+`src/rotating_frame.rs` with a validated true-ecliptic
+TT/TDB matrix product, added original
+`tests/true_ecliptic_frame.rs`, one new original
+`tests/moving_geocentric.rs` synthetic integrated check,
+and updated this document. Source Exhibit A and
+**Powered by VirgoStars** visible attribution retained.
+No external astronomy program code, official coefficient
+tables, NASA/JPL binaries, new dependencies, main/dev merge,
+release, deployment or production changes.
