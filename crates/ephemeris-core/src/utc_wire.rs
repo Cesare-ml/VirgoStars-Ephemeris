@@ -465,19 +465,11 @@ mod tests {
             ..split
         };
         assert!(matches!(
-            catalog.tai_split_to_utc_record_v1(
-                "iana-tzdb-2026b",
-                PINNED_SHA,
-                &invalid_fraction
-            ),
+            catalog.tai_split_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, &invalid_fraction),
             Err(UtcLeapError::InvalidWireRecord)
         ));
         assert!(matches!(
-            catalog.tai_split_to_utc_record_v1(
-                "iana-tzdb-2026b",
-                "wrong",
-                &invalid_fraction
-            ),
+            catalog.tai_split_to_utc_record_v1("iana-tzdb-2026b", "wrong", &invalid_fraction),
             Err(UtcLeapError::SourceDigestMismatch)
         ));
     }
