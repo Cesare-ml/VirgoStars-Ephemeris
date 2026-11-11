@@ -35,11 +35,7 @@ fn agrees_with_independently_published_sofa_erfa_hd2ae_fixture() {
     // These are independently published output values, not produced by
     // this Rust implementation or the experimental first_sky module.
     let result = equatorial_to_horizontal(1.1, 1.2, 0.3).unwrap();
-    near(
-        result.azimuth_rad.unwrap(),
-        5.916_889_243_730_066,
-        1.0e-13,
-    );
+    near(result.azimuth_rad.unwrap(), 5.916_889_243_730_066, 1.0e-13);
     near(result.altitude_rad, 0.447_218_630_499_048_6, 1.0e-14);
 }
 
@@ -114,7 +110,7 @@ fn mirror_symmetry_preserves_altitude_and_reflects_azimuth() {
     near(eastward.altitude_rad, westward.altitude_rad, 1.0e-14);
     let a = eastward.azimuth_rad.unwrap();
     let b = westward.azimuth_rad.unwrap();
-    near((a + b).rem_euclid(TAU), 0.0, 1.0e-14);
+    near((a + b + PI).rem_euclid(TAU) - PI, 0.0, 1.0e-14);
 }
 
 #[test]
