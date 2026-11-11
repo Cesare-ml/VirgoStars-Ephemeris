@@ -32,7 +32,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental annual-aberration direction in fixed ICRF axes](docs/ANNUAL_ABERRATION.md)
 - [MVP-1 annual-aberration state with analytical reception-time velocities (not yet full apparent position)](docs/MVP1_ABERRATION_WITH_RATES_2026-11-11.md)
 - [MVP-1 analytic DE441 Chebyshev acceleration for aberration rates (no finite-difference step)](docs/MVP1_DE441_ANALYTIC_ACCELERATION_2026-11-11.md)
-- [MVP-1 complete light-time + aberration six fixed spherical fields/rates (not apparent of date)](docs/MVP1_ABERRATED_FIXED_SPHERICAL_2026-11-11.md)
+- [MVP-1 complete light-time + aberration six fixed spherical fields/rates and shared degrees/AU export (not apparent of date)](docs/MVP1_ABERRATED_FIXED_SPHERICAL_2026-11-11.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)
