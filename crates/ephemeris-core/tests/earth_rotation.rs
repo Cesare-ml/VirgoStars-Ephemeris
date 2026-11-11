@@ -54,7 +54,7 @@ fn j2000_noon_and_full_day_advancement_match_iau_definition() {
     let expected = TAU * 0.002_737_811_911_354_48;
     assert!((circular_difference(next_day.angle_rad, j2000.angle_rad) - expected).abs() < 1.0e-13);
 
-    let expected_rate = TAU * 1.002_737_811_911_354_48;
+    let expected_rate = TAU * 1.002_737_811_911_354_6;
     assert!((next_day.rate_rad_per_ut1_day - expected_rate).abs() < 1.0e-14);
     assert_eq!(next_day.rate_rad_per_ut1_day, j2000.rate_rad_per_ut1_day);
 }
