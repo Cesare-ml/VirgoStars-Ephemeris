@@ -30,6 +30,9 @@ pub mod de441;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod nutation_harmonics;
+pub mod nutation_table_import;
+pub mod nutation_usno_adapter;
 pub mod state;
 pub mod time;
 
