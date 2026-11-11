@@ -379,6 +379,22 @@ impl VersionedUtcLeapSchedule {
         }
         let schedule = UtcLeapSchedule::new(first, last_day, 10, transitions)
             .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
+
+        // The independently reviewed IANA 2026b history is immutable.
+        // Requiring its transition prefix alone is not enough: an added,
+        // syntactically valid leap could alter the already-approved
+        // 2017-2026 interval. Future data may only extend coverage and
+        // add transitions after the pinned historical coverage ends.
+        let pinned = UtcLeapSchedule::from_iana_2026b()?;
+        if expires_utc_day <= pinned.last_day
+            || !schedule.transitions.starts_with(&pinned.transitions)
+            || schedule
+                .transitions
+                .get(pinned.transitions.len())
+                .is_some_and(|next| next.effective_utc_day <= pinned.last_day)
+        {
+            return Err(UtcLeapError::InvalidReviewedSnapshot);
+        }
         Ok(Self {
             version: version.to_owned(),
             provenance: provenance.to_owned(),
@@ -1495,6 +1511,53 @@ mod tests {
             approved.source_sha256(),
             crate::fingerprint::sha256_hex(source.as_bytes())
         );
+    }
+
+    #[test]
+    fn reviewed_loader_preserves_full_2026b_history_and_coverage() {
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let load = |text: &str| {
+            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                "reviewed-future",
+                "synthetic-only",
+                text,
+            )
+        };
+
+        // These cases are numerically and calendrically well formed;
+        // only the comparison with approved 2026b detects their drift.
+        let historic_shift = source.replace("2287785600 11", "2290464000 11");
+        let final_shift = source.replace("3692217600 37", "3694896000 37");
+        let truncated = source.replace("3692217600 37\n", "");
+        let expired_early = source.replace("#@ 4007404800", "#@ 4007318400");
+        let extra_past_leap = format!("{source}4005072000 38\n");
+        for (reason, data) in [
+            ("changed 1972 leap month", historic_shift),
+            ("changed 2017 leap month", final_shift),
+            ("omitted 2017 leap", truncated),
+            ("coverage downgraded", expired_early),
+            ("fabricated extra leap in approved 2026 history", extra_past_leap),
+        ] {
+            assert_eq!(
+                load(&data).unwrap_err(),
+                UtcLeapError::InvalidReviewedSnapshot,
+                "must reject: {reason}"
+            );
+        }
+
+        // Pinned data and unchanged expiry remain valid, as does a
+        // *proposed* longer coverage interval pending separate review.
+        let original = load(source).unwrap();
+        assert_eq!(original.expires_utc_day(), d(2026, 12, 28));
+        let extended = source.replace("#@ 4007404800", "#@ 4023388800");
+        let updated = load(&extended).unwrap();
+        assert_eq!(updated.expires_utc_day(), d(2027, 7, 1));
+        assert_ne!(original.source_sha256(), updated.source_sha256());
+
+        // A hypothetical post-expiration leap is still representable,
+        // without rewriting the independently approved historic data.
+        let future = format!("{extended}4007750400 38\n");
+        assert!(load(&future).is_ok());
     }
 
     #[test]
