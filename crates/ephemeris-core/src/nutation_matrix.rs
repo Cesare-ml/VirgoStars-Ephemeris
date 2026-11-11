@@ -90,7 +90,10 @@ impl fmt::Display for NutationMatrixError {
                 write!(f, "derived true obliquity outside (0, pi/2)")
             }
             Self::ArithmeticOverflow => {
-                write!(f, "non-finite nutation orientation or TT derivative from finite inputs")
+                write!(
+                    f,
+                    "non-finite nutation orientation or TT derivative from finite inputs"
+                )
             }
         }
     }
@@ -235,4 +238,3 @@ pub fn nutation_with_true_obliquity(
         true_obliquity_rate_rad_per_tt_day,
     })
 }
-
