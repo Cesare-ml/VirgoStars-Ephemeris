@@ -17,9 +17,7 @@
 
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
-use virgostars_ephemeris_core::equatorial_horizontal::{
-    equatorial_to_horizontal, HorizontalError,
-};
+use virgostars_ephemeris_core::equatorial_horizontal::{equatorial_to_horizontal, HorizontalError};
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
     assert!(
