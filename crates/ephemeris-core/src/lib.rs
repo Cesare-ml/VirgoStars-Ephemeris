@@ -27,6 +27,7 @@ pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
+pub mod equatorial_horizontal;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
