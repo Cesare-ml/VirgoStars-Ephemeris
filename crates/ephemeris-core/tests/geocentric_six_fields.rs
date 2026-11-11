@@ -58,7 +58,11 @@ fn six_fields_have_explicit_iau_au_degrees_and_tdb_day_rates() {
     near(result.latitude_deg, 0.0, 1e-12);
     near(result.distance_au, 1.0, 1e-15);
     near(result.longitude_speed_deg_per_tdb_day, 2.0, 1e-12);
-    near(result.latitude_speed_deg_per_tdb_day, 0.01 * 180.0 / PI, 1e-12);
+    near(
+        result.latitude_speed_deg_per_tdb_day,
+        0.01 * 180.0 / PI,
+        1e-12,
+    );
     near(result.distance_speed_au_per_tdb_day, 0.02, 1e-15);
     assert_eq!(result.center, Body::Earth);
     assert_eq!(result.target, Body::Mercury);
@@ -77,7 +81,9 @@ fn explicit_fixed_tilt_rotates_position_and_velocity_without_a_date_frame() {
     let input = state([au, 0.0, au / 2.0], [0.0, au, 0.0]);
     let result = fields_from_light_time(
         &input,
-        GeocentricFixedAxes::TiltedIcrf { tilt_rad: FRAC_PI_2 },
+        GeocentricFixedAxes::TiltedIcrf {
+            tilt_rad: FRAC_PI_2,
+        },
     )
     .unwrap();
     near(result.longitude_deg, (0.5f64).atan() * 180.0 / PI, 1e-12);
@@ -90,7 +96,9 @@ fn explicit_fixed_tilt_rotates_position_and_velocity_without_a_date_frame() {
     );
     assert_eq!(
         result.axes,
-        GeocentricFixedAxes::TiltedIcrf { tilt_rad: FRAC_PI_2 }
+        GeocentricFixedAxes::TiltedIcrf {
+            tilt_rad: FRAC_PI_2
+        }
     );
 }
 
@@ -101,7 +109,11 @@ fn negative_longitude_is_normalized_and_retrograde_speed_is_preserved() {
     let result = fields_from_light_time(&input, GeocentricFixedAxes::IcrfEquatorial).unwrap();
     near(result.longitude_deg, 270.0, 1e-12);
     // dλ=(x*vy-y*vx)/(x²+y²) = -0.2 rad/day at (0,-AU).
-    near(result.longitude_speed_deg_per_tdb_day, -0.2 * 180.0 / PI, 1e-12);
+    near(
+        result.longitude_speed_deg_per_tdb_day,
+        -0.2 * 180.0 / PI,
+        1e-12,
+    );
 }
 
 #[test]
@@ -112,7 +124,11 @@ fn light_time_derivative_is_used_instead_of_undoing_it() {
     let au = ASTRONOMICAL_UNIT_KM;
     let input = state([au, 0.0, 0.0], [0.0, 0.2 * au, 0.0]);
     let result = fields_from_light_time(&input, GeocentricFixedAxes::IcrfEquatorial).unwrap();
-    near(result.longitude_speed_deg_per_tdb_day, 0.2 * 180.0 / PI, 1e-12);
+    near(
+        result.longitude_speed_deg_per_tdb_day,
+        0.2 * 180.0 / PI,
+        1e-12,
+    );
     near(result.distance_speed_au_per_tdb_day, 0.0, 1e-15);
 }
 
@@ -229,7 +245,11 @@ fn one_call_reads_synthetic_de441_solves_delay_and_outputs_all_six_fields() {
     near(answer.longitude_speed_deg_per_tdb_day, 0.0, 1e-12);
     near(answer.latitude_speed_deg_per_tdb_day, 0.0, 1e-12);
     near(answer.distance_speed_au_per_tdb_day, 0.0, 1e-14);
-    near(answer.light_time_seconds, 1_000.0 / SPEED_OF_LIGHT_KM_PER_SECOND, 1e-9);
+    near(
+        answer.light_time_seconds,
+        1_000.0 / SPEED_OF_LIGHT_KM_PER_SECOND,
+        1e-9,
+    );
     assert!(answer.emission_epoch.0 < answer.observation_epoch.0);
 }
 
@@ -244,16 +264,15 @@ fn one_call_propagates_missing_series_and_rejects_earth_observation_target() {
             jd,
             GeocentricFixedAxes::IcrfEquatorial,
         ),
-        Err(GeocentricFieldsError::LightTime(LightTimeError::UndefinedDirection))
+        Err(GeocentricFieldsError::LightTime(
+            LightTimeError::UndefinedDirection
+        ))
     ));
     assert!(matches!(
-        geocentric_fixed_six_fields(
-            &mut eph,
-            Body::Sun,
-            jd,
-            GeocentricFixedAxes::IcrfEquatorial,
-        ),
-        Err(GeocentricFieldsError::LightTime(LightTimeError::Ephemeris(_)))
+        geocentric_fixed_six_fields(&mut eph, Body::Sun, jd, GeocentricFixedAxes::IcrfEquatorial,),
+        Err(GeocentricFieldsError::LightTime(LightTimeError::Ephemeris(
+            _
+        )))
     ));
 }
 
@@ -279,5 +298,9 @@ fn longitude_rate_is_finite_difference_of_fixed_axis_angles() {
     let current = evaluate(0.0);
     let independent = (after.longitude_deg - before.longitude_deg) / (2.0 * h);
     near(current.longitude_speed_deg_per_tdb_day, independent, 1e-9);
-    near(current.longitude_speed_deg_per_tdb_day, rate * 180.0 / PI, 1e-12);
+    near(
+        current.longitude_speed_deg_per_tdb_day,
+        rate * 180.0 / PI,
+        1e-12,
+    );
 }
