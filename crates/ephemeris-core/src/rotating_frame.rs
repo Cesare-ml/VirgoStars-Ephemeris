@@ -77,9 +77,7 @@ fn mat_vec(matrix: [[f64; 3]; 3], vector: [f64; 3]) -> [f64; 3] {
 fn mat_mul(left: [[f64; 3]; 3], right: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     std::array::from_fn(|i| {
         std::array::from_fn(|j| {
-            left[i][0] * right[0][j]
-                + left[i][1] * right[1][j]
-                + left[i][2] * right[2][j]
+            left[i][0] * right[0][j] + left[i][1] * right[1][j] + left[i][2] * right[2][j]
         })
     })
 }
@@ -164,19 +162,14 @@ impl RotatingFrame {
         nutation_rate_per_tt_day: [[f64; 3]; 3],
         tt_days_per_tdb_day: TtPerTdbDay,
     ) -> Result<Self, RotatingFrameError> {
-        let p = Self::from_tt_day_rate(
-            precession,
-            precession_rate_per_tt_day,
-            tt_days_per_tdb_day,
-        )?;
-        let n =
-            Self::from_tt_day_rate(nutation, nutation_rate_per_tt_day, tt_days_per_tdb_day)?;
+        let p =
+            Self::from_tt_day_rate(precession, precession_rate_per_tt_day, tt_days_per_tdb_day)?;
+        let n = Self::from_tt_day_rate(nutation, nutation_rate_per_tt_day, tt_days_per_tdb_day)?;
         let rotation = mat_mul(n.rotation, p.rotation);
         let n_dot_p = mat_mul(n.rotation_rate_per_tdb_day, p.rotation);
         let n_p_dot = mat_mul(n.rotation, p.rotation_rate_per_tdb_day);
-        let rate_tdb = std::array::from_fn(|i| {
-            std::array::from_fn(|j| n_dot_p[i][j] + n_p_dot[i][j])
-        });
+        let rate_tdb =
+            std::array::from_fn(|i| std::array::from_fn(|j| n_dot_p[i][j] + n_p_dot[i][j]));
         Self::new(rotation, rate_tdb)
     }
 
