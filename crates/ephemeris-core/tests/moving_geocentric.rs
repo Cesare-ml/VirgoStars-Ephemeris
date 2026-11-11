@@ -411,18 +411,24 @@ fn full_de441_to_moving_ecliptic_latitude_and_rate_uses_true_obliquity() {
         geocentric_light_time_moving_spherical(&mut reader, Body::Mercury, epoch, &frame).unwrap();
     near(result.spherical.longitude_rad, 1.5 * PI, 1e-15);
     near(result.spherical.latitude_rad, eps, 1e-15);
-    near(result.spherical.latitude_rate_rad_per_day, epsdot_per_tt_day * ratio, 1e-15);
+    near(
+        result.spherical.latitude_rate_rad_per_day,
+        epsdot_per_tt_day * ratio,
+        1e-15,
+    );
     near(result.spherical.longitude_rate_rad_per_day, 0.0, 1e-15);
     near(result.spherical.distance_km, 1_000.0, 1e-8);
     near(result.spherical.distance_rate_km_per_day, 0.0, 1e-10);
     // The constant precession was only used to compute synthetic
     // axes; no source speed or second light-time correction exists.
-    let dummy = precession.rotate_state(&StateVector {
-        target: Body::Mercury,
-        center: Body::Earth,
-        epoch,
-        position_km: [1_000.0, 0.0, 0.0],
-        velocity_km_per_day: [0.0; 3],
-    }).unwrap();
+    let dummy = precession
+        .rotate_state(&StateVector {
+            target: Body::Mercury,
+            center: Body::Earth,
+            epoch,
+            position_km: [1_000.0, 0.0, 0.0],
+            velocity_km_per_day: [0.0; 3],
+        })
+        .unwrap();
     near(dummy.position_km[1], -1_000.0, 1e-10);
 }
