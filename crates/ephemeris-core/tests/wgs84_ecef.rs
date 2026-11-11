@@ -35,9 +35,9 @@ fn independent_erfa_wgs84_geodetic_reference_agrees() {
     // The independent published XYZ values are expressed in meters.
     // https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c
     let xyz = wgs84_geodetic_to_ecef(3.1, -0.5, 2500.0).unwrap();
-    near(xyz.x_m, -5_599_000.557_704_994_7, 1.0e-7);
+    near(xyz.x_m, -5_599_000.557_704_994, 1.0e-7);
     near(xyz.y_m, 233_011.672_234_792_03, 1.0e-7);
-    near(xyz.z_m, -3_040_909.470_698_336_3, 1.0e-7);
+    near(xyz.z_m, -3_040_909.470_698_336, 1.0e-7);
 }
 
 #[test]
