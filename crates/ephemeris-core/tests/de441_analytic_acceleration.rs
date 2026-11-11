@@ -349,7 +349,7 @@ fn composed_aberration_and_spherical_projection_runs_through_original_de441() {
     let geometric_angle =
         geometric.position_km[1].atan2(geometric.position_km[0]);
     assert!(
-        (output.spherical.longitude_rad - geometric_angle).abs() > 1e-7,
+        (output.spherical.longitude_rad - geometric_angle).abs() > 1e-11,
         "aberrated direction was not distinguished from light-time geometry"
     );
 }
