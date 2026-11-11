@@ -19,8 +19,10 @@
 use std::io::Cursor;
 
 use virgostars_ephemeris_core::aberrated_spherical::{
+    aberrated_spherical_to_degrees_au, geocentric_aberrated_fixed_six_fields,
     geocentric_aberrated_fixed_spherical, spherical_from_aberrated_state,
 };
+use virgostars_ephemeris_core::six_field_units::IAU_AU_KM;
 use virgostars_ephemeris_core::aberration_state::{
     geocentric_light_time_annual_aberration, geocentric_light_time_annual_aberration_analytic,
     ObserverAccelerationSource,
@@ -397,4 +399,51 @@ fn composed_spherical_pipeline_handles_geocentric_moon_and_rejects_earth_target(
             )
         )
     ));
+}
+
+#[test]
+fn one_call_six_fields_uses_same_synthetic_de441_aberrated_result_and_preserves_rates() {
+    let mut reader = eph();
+    let epoch = JulianDateTdb(1_016.0);
+    for target in [Body::Mercury, Body::Moon] {
+        let raw = geocentric_aberrated_fixed_spherical(
+            &mut reader,
+            target,
+            epoch,
+            0.0,
+        )
+        .unwrap();
+        let expected = aberrated_spherical_to_degrees_au(&raw).unwrap();
+        let combined = geocentric_aberrated_fixed_six_fields(
+            &mut reader,
+            target,
+            epoch,
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(combined, expected);
+        assert_eq!(combined.fields.target, target);
+        assert_eq!(combined.fields.center, Body::Earth);
+        assert_eq!(combined.fields.epoch, epoch);
+        assert_eq!(
+            combined.observer_acceleration_source,
+            ObserverAccelerationSource::AnalyticDe441Chebyshev
+        );
+        assert!(combined.fields.longitude_deg >= 0.0);
+        assert!(combined.fields.longitude_deg < 360.0);
+        assert!(combined.fields.distance_au > 0.0);
+        near(
+            combined.fields.distance_au,
+            raw.spherical.distance_km / IAU_AU_KM,
+            1e-14,
+        );
+        for value in [
+            combined.fields.latitude_deg,
+            combined.fields.longitude_speed_deg_per_tdb_day,
+            combined.fields.latitude_speed_deg_per_tdb_day,
+            combined.fields.distance_speed_au_per_tdb_day,
+        ] {
+            assert!(value.is_finite());
+        }
+    }
 }
