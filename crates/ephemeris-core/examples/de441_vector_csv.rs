@@ -3,7 +3,7 @@ The contents of this file are subject to the Common Public Attribution License
 Version 1.0 (CPAL-1.0). See LICENSE, NOTICE and the full Exhibit A notice in
 crates/ephemeris-core/src/de441.rs.
 Original contribution: Cesare-ml (VirgoStars project), 2026.
-Modification record: 2026-11-11 — add offline geometric vector export example.
+Modification record: 2026-11-11 — add offline geometric vector export example; preserve full f64 precision for vector components.
 */
 
 //! Offline CSV export for independently comparing classic DE441 states.
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let state = ephemeris.state(target, center, JulianDateTdb(epoch))?;
     println!("jd_tdb,target,center,frame,corrections,x_km,y_km,z_km,vx_km_day,vy_km_day,vz_km_day");
     println!(
-        "{:.16e},{},{},ICRF,GEOMETRIC,{:.15e},{:.15e},{:.15e},{:.15e},{:.15e},{:.15e}",
+        "{:.16e},{},{},ICRF,GEOMETRIC,{:.16e},{:.16e},{:.16e},{:.16e},{:.16e},{:.16e}",
         epoch,
         args[3],
         args[4],
@@ -78,6 +78,28 @@ mod tests {
         let encoded = format!("{epoch:.16e}");
         let decoded: f64 = encoded.parse().expect("valid floating-point JD");
         assert_eq!(decoded.to_bits(), epoch.to_bits());
+    }
+
+    #[test]
+    fn vector_components_roundtrip_at_full_f64_precision() {
+        let values = [
+            0.0_f64,
+            -0.0,
+            1.2345678901234567,
+            -1.2345678901234567e11,
+            1.0e-120,
+            f64::MIN_POSITIVE,
+            f64::MAX,
+        ];
+        for value in values {
+            let encoded = format!("{value:.16e}");
+            let decoded: f64 = encoded.parse().expect("valid finite component");
+            assert_eq!(
+                decoded.to_bits(),
+                value.to_bits(),
+                "CSV serialization changed component {value:?}"
+            );
+        }
     }
 
     #[test]
