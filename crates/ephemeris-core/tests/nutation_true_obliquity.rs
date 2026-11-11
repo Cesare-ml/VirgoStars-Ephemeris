@@ -228,3 +228,42 @@ fn extreme_but_finite_tt_rates_fail_closed_on_arithmetic_overflow() {
         Err(NutationMatrixError::ArithmeticOverflow)
     );
 }
+
+#[test]
+fn analytic_equatorial_to_ecliptic_rate_matches_independent_time_differences() {
+    let a = angles();
+    let output = nutation_with_true_obliquity(a).unwrap();
+    let eps = output.true_obliquity_rad;
+    let eps_rate = output.true_obliquity_rate_rad_per_tt_day;
+    let (s, c) = eps.sin_cos();
+    let e_dot: Matrix = [
+        [0.0; 3],
+        [0.0, -eps_rate * s, eps_rate * c],
+        [0.0, -eps_rate * c, -eps_rate * s],
+    ];
+    let e = passive_x(eps);
+    let from_e_dot = multiply(e_dot, output.nutation.rotation);
+    let from_n_dot = multiply(e, output.nutation.rate_per_tt_day);
+    let combined_rate: Matrix = std::array::from_fn(|i| {
+        std::array::from_fn(|j| from_e_dot[i][j] + from_n_dot[i][j])
+    });
+    let h = 0.1_f64;
+    let at = |dt: f64| {
+        let shifted = nutation_with_true_obliquity(shift_angles(a, dt)).unwrap();
+        multiply(
+            passive_x(shifted.true_obliquity_rad),
+            shifted.nutation.rotation,
+        )
+    };
+    let before = at(-h);
+    let after = at(h);
+    for i in 0..3 {
+        for j in 0..3 {
+            near(
+                combined_rate[i][j],
+                (after[i][j] - before[i][j]) / (2.0 * h),
+                4e-15,
+            );
+        }
+    }
+}
