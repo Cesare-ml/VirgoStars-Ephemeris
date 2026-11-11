@@ -192,3 +192,53 @@ source notices and mandatory **Powered by VirgoStars**
 (https://www.virgostars.it/) retained. No third-party software code,
 bulk coefficient tables, packages, NASA/JPL files, deployment or
 license modification was introduced.
+
+
+## Added complete-series sequencing gate — 2026-11-11
+
+The v1 source-specific adapter now additionally accepts *slices of*
+caller-supplied `UsnoPrintedHarmonicRow` records and enforces strict
+original printed numbering **before** emitting any converted terms:
+
+- `convert_usno_lunisolar_batch(rows, UsnoBatchMode)`: restricts
+  source indices to 1..=678, a maximum of 678 rows.
+- `convert_usno_planetary_batch(rows, UsnoBatchMode)`: restricts
+  source indices to 679..=1365, a maximum of 687 rows.
+- `UsnoBatchMode::ContiguousSubset` explicitly permits a **nonempty,
+  consecutive** fragment in the original global numbering. This does
+  not present a fragment as a complete model.
+- `UsnoBatchMode::CompleteFamily` requires exactly **678 or 687 rows**,
+  starting at original printed term 1 or 679 respectively, and
+  proceeding with no skips, duplicates, reversals or inserted rows.
+  No implicit sorting, truncating or fixing is performed.
+- `convert_usno_complete_series(lunar, planetary)` requires **both**
+  entire families and returns `StructurallyCompleteUsnoSeries`. The
+  `UsnoFullSeriesError` identifies which family is invalid.
+- All batch APIs **fail atomically**. A corrupt coefficient, wrong
+  family, nonzero planetary solar-anomaly coefficient, missing row or
+  repeated global term number returns a typed error identifying the
+  zero-based input row position; no partially converted output is
+  returned. Oversized/empty submissions are rejected before allocation.
+
+There are **nine additional synthetic batch regressions** covering
+single-family contiguous fragments, gaps/duplicates/reordering, incomplete
+or shifted full families, **all 1,365 synthetic rows**, corrupted entries,
+cross-family boundaries, empty/oversized sequences and correct failing
+family. Taken together with the ten earlier scalar converter tests this
+file now contains **19 tests**.
+
+**This is an integrity-of-order check only, not cryptographic source
+authenticity.** Any sequence of 1,365 synthetic zeros can pass these
+structural checks; the caller must still audit **each coefficient against
+a legally obtainable, exact-version source**, independently record
+cryptographic content hashes and licensing permissions, and compare the
+computed full Δψ/Δε with independent IAU reference values. No SHA-256
+digest is invented or hardcoded before acquiring an authoritative file.
+Neither a passed parser nor a passed test changes the TT-versus-TDB
+model convention.
+
+2026-11-11 CPAL modification record: updated the *original*
+`src/nutation_usno_adapter.rs`, its
+`tests/nutation_usno_adapter.rs` and this document to add the
+non-destructive, fail-closed sequence validation. No original external
+1,365-term table, third-party software or new dependency added.
