@@ -111,10 +111,13 @@ offline regressions**:
    directions** compared to the analytic spherical longitude rate.
 
 The existing synthetic quadratic `tests/de441_analytic_acceleration.rs`
-adds an eighth test, actually running the entire existing classic DE441
-reader → analytic Earth acceleration → Newtonian light-time →
-observer aberration → six fixed spherical fields, including a check
-that nonzero observer velocity changes the geometric source direction.
+adds **two** tests, including an eighth regression which runs the
+entire existing classic DE441 reader → analytic Earth acceleration →
+Newtonian light-time → observer aberration → six fixed spherical fields
+and confirms that nonzero observer velocity changes the geometric
+source direction. A ninth test exercises the geocentric **Moon**
+reconstruction through that same pipeline and rejects the undefined
+geocentric Earth-as-target direction.
 
 **These are synthetic/mathematical unit and composition tests, NOT a
 full numerical independent JPL/Horizons or Swiss Ephemeris validation
