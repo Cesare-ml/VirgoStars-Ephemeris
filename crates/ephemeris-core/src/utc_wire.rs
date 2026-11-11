@@ -134,6 +134,47 @@ pub struct UtcTaiRecordV1 {
     pub tai_time_scale: &'static str,
 }
 
+/// Untrusted scalar record received from a future Python/WASM boundary.
+///
+/// Unlike `UtcTaiRecordV1`, both schema and time-scale fields are owned
+/// strings: a receiver can pass arbitrary values without pretending they
+/// came from Rust's static schema constants. Validation never trusts the
+/// claimed UTC instant, source identity, expiry or TAI split fields.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReceivedUtcTaiRecordV1 {
+    pub schema: String,
+    pub leap_table_version: String,
+    pub leap_table_sha256: String,
+    pub leap_table_provenance: String,
+    pub leap_expires_utc_day_number: i64,
+    pub utc_day_number: i64,
+    pub utc_hour: u8,
+    pub utc_minute: u8,
+    pub utc_second: f64,
+    pub tai_day_number: i64,
+    pub tai_midnight_fraction: f64,
+    pub tai_time_scale: String,
+}
+
+impl From<&UtcTaiRecordV1> for ReceivedUtcTaiRecordV1 {
+    fn from(record: &UtcTaiRecordV1) -> Self {
+        Self {
+            schema: record.schema.to_owned(),
+            leap_table_version: record.leap_table_version.clone(),
+            leap_table_sha256: record.leap_table_sha256.clone(),
+            leap_table_provenance: record.leap_table_provenance.clone(),
+            leap_expires_utc_day_number: record.leap_expires_utc_day_number,
+            utc_day_number: record.utc_day_number,
+            utc_hour: record.utc_hour,
+            utc_minute: record.utc_minute,
+            utc_second: record.utc_second,
+            tai_day_number: record.tai_day_number,
+            tai_midnight_fraction: record.tai_midnight_fraction,
+            tai_time_scale: record.tai_time_scale.to_owned(),
+        }
+    }
+}
+
 impl UtcTaiRecordV1 {
     fn from_components(
         versioned: VersionedUtcResult<JulianDate>,
@@ -193,6 +234,45 @@ impl UtcLeapCatalog {
             return Err(UtcLeapError::InvalidWireRecord);
         }
         Ok(())
+    }
+
+    /// Validate an untrusted cross-language record and return the canonical
+    /// representation recalculated by the Rust core.
+    ///
+    /// Caller strings cannot impersonate static schema/time-scale tags;
+    /// exact version and source SHA-256 are verified before conversion.
+    /// Every UTC component, declared table provenance, expiry and the
+    /// original split TAI instant must agree with the canonical result.
+    /// Fractional UTC seconds use the same 1e-8 s round-trip tolerance as
+    /// `validate_record_v1`. This is not a serializer or IANA source audit.
+    pub fn validate_received_record_v1(
+        &self,
+        received: &ReceivedUtcTaiRecordV1,
+    ) -> Result<UtcTaiRecordV1, UtcLeapError> {
+        if received.schema != UTC_TAI_RECORD_V1_SCHEMA || received.tai_time_scale != "TAI" {
+            return Err(UtcLeapError::InvalidWireRecord);
+        }
+        let split = TaiSplitInputV1 {
+            day_number: received.tai_day_number,
+            midnight_fraction: received.tai_midnight_fraction,
+            time_scale: received.tai_time_scale.clone(),
+        };
+        let expected = self.tai_split_to_utc_record_v1(
+            &received.leap_table_version,
+            &received.leap_table_sha256,
+            &split,
+        )?;
+        if received.leap_table_provenance != expected.leap_table_provenance
+            || received.leap_expires_utc_day_number != expected.leap_expires_utc_day_number
+            || received.utc_day_number != expected.utc_day_number
+            || received.utc_hour != expected.utc_hour
+            || received.utc_minute != expected.utc_minute
+            || !received.utc_second.is_finite()
+            || (received.utc_second - expected.utc_second).abs() > 1e-8
+        {
+            return Err(UtcLeapError::InvalidWireRecord);
+        }
+        Ok(expected)
     }
 
     /// Convert untrusted UTC civil primitives through the authoritative
@@ -388,6 +468,125 @@ mod tests {
         assert_eq!(reverse.tai_midnight_fraction, forward.tai_midnight_fraction);
         assert_eq!(reverse.leap_table_sha256, forward.leap_table_sha256);
         assert_eq!(catalog.validate_record_v1(&reverse), Ok(()));
+    }
+
+    #[test]
+    fn received_record_revalidates_all_fields_and_returns_rust_canonical_output() {
+        let catalog = catalog();
+        let original = catalog
+            .utc_civil_to_tai_record_v1(
+                "iana-tzdb-2026b",
+                PINNED_SHA,
+                UtcCivilInputV1 {
+                    year: 2016,
+                    month: 12,
+                    day: 31,
+                    hour: 23,
+                    minute: 59,
+                    second: 60.5,
+                },
+            )
+            .unwrap();
+        let external = ReceivedUtcTaiRecordV1::from(&original);
+        let canonical = catalog.validate_received_record_v1(&external).unwrap();
+        assert_eq!(canonical.leap_table_sha256, PINNED_SHA);
+        assert_eq!(canonical.tai_day_number, original.tai_day_number);
+        assert_eq!(canonical.tai_midnight_fraction, original.tai_midnight_fraction);
+        assert!((canonical.utc_second - 60.5).abs() < 1e-8);
+        assert_eq!(catalog.validate_record_v1(&canonical), Ok(()));
+
+        let mut inconsistent = external.clone();
+        inconsistent.utc_second += 0.1;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&inconsistent),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        inconsistent = external.clone();
+        inconsistent.utc_hour = 22;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&inconsistent),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        inconsistent = external.clone();
+        inconsistent.utc_day_number += 1;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&inconsistent),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        inconsistent = external.clone();
+        inconsistent.leap_table_provenance.push_str(" altered");
+        assert!(matches!(
+            catalog.validate_received_record_v1(&inconsistent),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        inconsistent = external.clone();
+        inconsistent.leap_expires_utc_day_number -= 1;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&inconsistent),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+    }
+
+    #[test]
+    fn received_record_rejects_wrong_schema_digest_scale_and_nonfinite_time() {
+        let catalog = catalog();
+        let original = catalog
+            .utc_civil_to_tai_record_v1(
+                "iana-tzdb-2026b",
+                PINNED_SHA,
+                UtcCivilInputV1 {
+                    year: 2017,
+                    month: 1,
+                    day: 1,
+                    hour: 0,
+                    minute: 0,
+                    second: 0.0,
+                },
+            )
+            .unwrap();
+        let external = ReceivedUtcTaiRecordV1::from(&original);
+        let mut bad = external.clone();
+        bad.schema = "virgostars.utc-tai.v2".to_owned();
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        bad = external.clone();
+        bad.tai_time_scale = "TT".to_owned();
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        bad = external.clone();
+        bad.leap_table_sha256 = "0".repeat(64);
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::SourceDigestMismatch)
+        ));
+        bad = external.clone();
+        bad.leap_table_version = "unknown".to_owned();
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::UnknownVersion)
+        ));
+        bad = external.clone();
+        bad.tai_midnight_fraction = f64::NAN;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        bad = external.clone();
+        bad.tai_midnight_fraction = 1.0;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        bad = external.clone();
+        bad.utc_second = f64::NAN;
+        assert!(matches!(
+            catalog.validate_received_record_v1(&bad),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
     }
 
     #[test]
