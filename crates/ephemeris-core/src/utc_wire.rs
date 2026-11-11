@@ -491,7 +491,10 @@ mod tests {
         let canonical = catalog.validate_received_record_v1(&external).unwrap();
         assert_eq!(canonical.leap_table_sha256, PINNED_SHA);
         assert_eq!(canonical.tai_day_number, original.tai_day_number);
-        assert_eq!(canonical.tai_midnight_fraction, original.tai_midnight_fraction);
+        assert_eq!(
+            canonical.tai_midnight_fraction,
+            original.tai_midnight_fraction
+        );
         assert!((canonical.utc_second - 60.5).abs() < 1e-8);
         assert_eq!(catalog.validate_record_v1(&canonical), Ok(()));
 
