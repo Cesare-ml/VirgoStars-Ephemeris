@@ -275,3 +275,137 @@ link. Preserve source Exhibit A notices and **Powered by VirgoStars**
 (https://www.virgostars.it/) attribution. No external astronomy
 datasets, JPL files, third-party program code, new dependencies,
 production change, merge, release or deploy.
+
+## TT-day precession/nutation derivatives → TDB-day moving frames (2026-11-11)
+
+**Concrete integration gate implemented without copying other draft PRs.**
+`rotating_frame::RotatingFrame` now offers two original APIs:
+
+- `RotatingFrame::from_tt_day_rate(R, Rdot_per_tt_day, TtPerTdbDay)`
+  converts an already-computed **passive** frame's TT-day derivative
+  into the observation-time TDB-day derivative needed to propagate
+  planetary velocities;
+- `RotatingFrame::from_tt_precession_nutation(P, Pdot_per_tt_day,
+  N, Ndot_per_tt_day, TtPerTdbDay)` applies the
+  **noncommutative matrix product** `N*P` and its full
+  derivative **before** constructing a validated moving frame.
+
+### Time-base contract (mandatory, not a silent default)
+
+The new `TtPerTdbDay::new(f64)` captures the **instantaneous**
+dimensionless `d(JD_TT)/d(JD_TDB)`, evaluated at the **same physical
+observation instant** as the incoming position/velocity and the
+TT-parameterized matrices. It is NOT a scalar TT−TDB offset,
+`ΔT = TT−UT1`, a derivative in seconds rather than days, or
+`dTDB/dTT` (its reciprocal).
+
+The caller **must obtain this factor from an independently validated
+TT↔TDB time-scale model**; this branch supplies **no TT↔TDB model,
+default value, or inferred assumption that the ratio is exactly one**.
+As a basic unit/sanity guard the constructor accepts only finite
+values in `[0.999, 1.001]`. This is an intentionally wide engineering
+range intended to reject 86400/0/NaN and similar mistakes;
+**it is not an independent astronomical accuracy bound**. In
+particular, wrong-but-plausible factors may pass validation, and the
+API cannot verify that TT and TDB epochs represent the same instant.
+
+For rotation `R(TT(TDB))`, the actual reception-time rate is
+
+```text
+dR/d(TDB day) = [dR/d(TT day)] × [d(TT day)/d(TDB day)].
+```
+
+No input array is automatically mislabeled as TDB: the type
+`TtPerTdbDay` is required as an explicit argument to the TT-based
+constructors. The existing `RotatingFrame::new(R, Rdot_per_tdb_day)`
+remains unchanged for callers who already have a valid TDB-day rate.
+
+### Composition of IAU-style orientation stages
+
+The independent draft
+[#48](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/48)
+implements the GCRS → **mean equator/equinox of date** bias-precession
+matrix **P** and its `dP/dTT`; draft
+[#51](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/51)
+implements the **mean → true equator/equinox of date** nutation matrix
+**N** and `dN/dTT` from externally supplied angles. They are
+still unmerged and **neither has been copied or imported here**.
+This integration API precisely defines how to connect their
+outputs after review and matching TT epochs:
+
+```text
+ICRF/GCRS coordinates  -- P -->  mean-of-date  -- N -->  true-of-date
+R                  = N * P
+dR/dTT             = (dN/dTT) * P + N * (dP/dTT)
+dR/dTDB            = (dR/dTT) * (dTT/dTDB)
+rotated_position   = R*r
+rotated_velocity   = R*v + dR/dTDB*r
+```
+
+The implementation validates **each** input rotation/TT derivative
+pair, its right-handedness and tangent constraint before composing
+the two. It then validates the composed rotation/rate again using
+the original `RotatingFrame::new` safeguards. It reuses
+`RotatingFrame::rotate_state` and the already built
+`moving_geocentric` six-field projection; no new astronomy
+coefficients, event models or spherical derivative equations.
+
+**CRITICAL orientation limit:** `N*P` transforms from GCRS/ICRF to
+**true EQUATOR/equinox of date** only **if** P and N genuinely use
+matching IAU conventions, epoch, unit frames and rotations.
+A separate, correctly oriented *true ecliptic* rotation **and its
+TT/TDB-day derivative** is needed for the conventional Swiss
+`swe_calc_ut` ecliptic-of-date coordinates. The current input
+`RotatingFrame` is still a caller-supplied mathematical object:
+it does not invent P, N, `dTT/dTDB`, full IAU 2000A coefficients,
+Sun gravitational deflection, planet-center correction, or an
+independent real-JPL/Swiss numeric benchmark. The output must
+**not** be marketed as apparent ecliptic of date.
+
+### Synthetic regression coverage
+
+New `tests/tt_frame_composition.rs` has **eight** focused offline
+tests:
+
+1. Required finite, bounded `dTT/dTDB` ratio and rejected
+   seconds/day, impossible signs and NaN inputs.
+2. Exact reduction to the existing native-TDB rotation when the
+   caller explicitly supplies a mathematical ratio of 1.
+3. Independently calculable nonunity TT-rate conversion and
+   induced signed moving longitude rate.
+4. Noncommutative **N*P** ordering against hand-derived 90° X/Z
+   rotations (the reverse product would produce a different vector).
+5. Composite result versus **sequential** TT-scaled P then N
+   rotations for all three Cartesian positions and velocities.
+6. Independent centered finite differences of **synthetic**
+   `TT(TDB)=TDB+ε sin(TDB)`, moving source plus both noncommuting
+   frames, checking all three Cartesian rates and all three
+   spherical derivatives (angular and radial).
+7. Reject invalid/nonorthonormal precession or nutation
+   components and incompatible TT tangent derivatives.
+8. A synthetic positive inertial longitude rate becoming **negative**
+   after the correctly scaled moving-frame contribution.
+
+These are original, independent **mathematical model tests**, not
+independently validated physical IAU matrices or an empirical
+TT/TDB astronomy model. A deliberately nonunity synthetic time
+relation is used to demonstrate why silently equating TT and
+TDB rates is insufficient.
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --locked --test tt_frame_composition
+cargo test --workspace --locked --test moving_geocentric
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+**2026-11-11 CPAL-1.0 modification record:** updated original
+`src/rotating_frame.rs` and this document and added original
+`tests/tt_frame_composition.rs`. The implementation is
+source-independent and has no copied Swiss/ERFA/SOFA code, official
+nutation coefficient tables, source-kernel data, dependencies,
+release, package publication, main/dev merge or deployment.
+Required CPAL notices and **Powered by VirgoStars**
+(https://www.virgostars.it/) credit are preserved.
+
