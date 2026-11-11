@@ -25,9 +25,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::aberration::{
-    annual_aberration_icrf, AberrationError, SPEED_OF_LIGHT_KM_PER_DAY,
-};
+use crate::aberration::{annual_aberration_icrf, AberrationError, SPEED_OF_LIGHT_KM_PER_DAY};
 use crate::de441::{Body, De441, De441Error, JulianDateTdb};
 use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTimeError};
 
@@ -76,7 +74,10 @@ impl fmt::Display for AberratedStateError {
         match self {
             Self::InvalidIntermediate => write!(f, "invalid reception light-time state"),
             Self::InvalidAccelerationStep => {
-                write!(f, "acceleration step must be representable and 0 < h <= 0.5 TDB day")
+                write!(
+                    f,
+                    "acceleration step must be representable and 0 < h <= 0.5 TDB day"
+                )
             }
             Self::NonFiniteAcceleration => {
                 write!(f, "nonfinite barycentric Earth acceleration")
@@ -179,10 +180,8 @@ pub fn aberrate_light_time_state(
 
     // Reuse the existing independently tested Lorentz boost for the
     // actual direction and preserve the one-way reception radius.
-    let observed_direction = annual_aberration_icrf(
-        state.position_km,
-        earth_barycentric_velocity_km_per_tdb_day,
-    )?;
+    let observed_direction =
+        annual_aberration_icrf(state.position_km, earth_barycentric_velocity_km_per_tdb_day)?;
     let radius = norm(state.position_km);
     if !radius.is_finite() || radius == 0.0 {
         return Err(AberratedStateError::ArithmeticOverflow);
@@ -193,10 +192,9 @@ pub fn aberrate_light_time_state(
         (state.velocity_km_per_day[i] - n[i] * range_rate) / radius
     });
 
-    let beta = earth_barycentric_velocity_km_per_tdb_day
-        .map(|v| v / SPEED_OF_LIGHT_KM_PER_DAY);
-    let beta_rate = earth_barycentric_acceleration_km_per_tdb_day2
-        .map(|a| a / SPEED_OF_LIGHT_KM_PER_DAY);
+    let beta = earth_barycentric_velocity_km_per_tdb_day.map(|v| v / SPEED_OF_LIGHT_KM_PER_DAY);
+    let beta_rate =
+        earth_barycentric_acceleration_km_per_tdb_day2.map(|a| a / SPEED_OF_LIGHT_KM_PER_DAY);
     let bnorm = norm(beta);
     let inverse_gamma = (1.0 - bnorm * bnorm).sqrt();
     if !inverse_gamma.is_finite() || inverse_gamma <= 0.0 {
@@ -206,15 +204,12 @@ pub fn aberrate_light_time_state(
     let k = dot(n, beta);
     let k_rate = dot(n_rate, beta) + dot(n, beta_rate);
     let q = 1.0 + k / (1.0 + inverse_gamma);
-    let q_rate = k_rate / (1.0 + inverse_gamma)
-        - k * inverse_gamma_rate / (1.0 + inverse_gamma).powi(2);
+    let q_rate =
+        k_rate / (1.0 + inverse_gamma) - k * inverse_gamma_rate / (1.0 + inverse_gamma).powi(2);
 
     let y = std::array::from_fn::<_, 3, _>(|i| inverse_gamma * n[i] + q * beta[i]);
     let y_rate = std::array::from_fn::<_, 3, _>(|i| {
-        inverse_gamma_rate * n[i]
-            + inverse_gamma * n_rate[i]
-            + q_rate * beta[i]
-            + q * beta_rate[i]
+        inverse_gamma_rate * n[i] + inverse_gamma * n_rate[i] + q_rate * beta[i] + q * beta_rate[i]
     });
     let y_norm = norm(y);
     if !y_norm.is_finite() || y_norm == 0.0 {
@@ -282,11 +277,7 @@ pub fn geocentric_light_time_annual_aberration<R: Read + Seek>(
     }
 
     let earth_velocity = ephemeris
-        .state(
-            Body::Earth,
-            Body::SolarSystemBarycenter,
-            observation_epoch,
-        )?
+        .state(Body::Earth, Body::SolarSystemBarycenter, observation_epoch)?
         .velocity_km_per_day;
     let earlier = ephemeris
         .state(
