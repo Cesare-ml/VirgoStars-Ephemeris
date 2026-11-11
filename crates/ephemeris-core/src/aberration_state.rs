@@ -39,7 +39,9 @@ pub enum ObserverAccelerationSource {
     /// interpolation polynomial**, not independently verified physical
     /// acceleration against real JPL reference vectors.
     AnalyticDe441Chebyshev,
-    CenteredEphemerisVelocity { step_tdb_days: f64 },
+    CenteredEphemerisVelocity {
+        step_tdb_days: f64,
+    },
 }
 
 /// Light-time + special-relativistic annual-aberration vector and rate.
