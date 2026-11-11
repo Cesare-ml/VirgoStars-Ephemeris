@@ -188,7 +188,7 @@ case; it is not a substitute for a date-dependent frame.
 
 ### New synthetic validation
 
-`tests/moving_geocentric.rs` includes **9 deterministic offline
+`tests/moving_geocentric.rs` includes **10 deterministic offline
 mathematics/integration tests**:
 
 1. identity frame reproduces all six original fixed-axis fields,
@@ -208,12 +208,41 @@ mathematics/integration tests**:
 8. actual **synthetic classic-DE441 in-memory parser → reception
    light time → rotating frame → six spherical fields**;
 9. errors from an undefined Earth geocentric target or absent Sun
-   series propagate rather than inventing positions.
+   series propagate rather than inventing positions;
+10. **previously corrected Cartesian ICRF** input is projected with
+    `Rdot*r` exactly once, preserving source speeds, body identity,
+    signed retrograde angular rate and radial speed.
 
 All tests are **synthetic math/structural**, NOT independent
 NASA/JPL Horizons planet positions, valid IAU date-frame matrices,
 actual Swiss `swe_calc_ut` 6-value compatibility, or proof
 of real physical precession/nutation accuracy.
+
+### Reusable pre-corrected state entry point
+
+`moving_spherical_from_icrf_state(&StateVector, &RotatingFrame)`
+now exposes the **same moving-axis projection** directly for a
+caller-owned ICRF Cartesian position/velocity. It returns a
+`MovingSphericalState` wrapper to preserve the explicit *moving
+axes* meaning of the contained `SphericalState`, avoiding a false
+interpretation of `tilt_rad=0` as fixed ICRF.
+
+The existing `moving_spherical_from_light_time` delegates to this
+pure reusable function after validating the receiver/emitter metadata.
+When the independently developed #77 light-time + annual-aberration
+Cartesian state is eventually reviewed/integrated, a thin adapter
+can feed its **already corrected** state to
+`moving_spherical_from_icrf_state` and retain its original
+emission/time metadata outside the frame transformation.
+Neither light-time nor aberration is reapplied by this helper.
+
+The tenth regression uses an already corrected synthetic Venus
+state with +0.01 rad/TDB-day inertial longitude speed and axes
+rotating +0.05 rad/TDB-day: the moving result is
+**−0.04 rad/TDB-day**, with unchanged radial velocity and source
+identifiers. This is the precise product behavior needed near
+future apparent planetary stations, but **not** an actual
+Swiss planet station event or physical date-frame validation.
 
 ### Coordination and remaining gates
 
