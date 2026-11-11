@@ -25,9 +25,7 @@ use std::io::{Read, Seek};
 
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
 use crate::de441::{Body, De441, JulianDateTdb, StateVector};
-use crate::light_time::{
-    geocentric_light_time, GeocentricLightTimeState, LightTimeError,
-};
+use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTimeError};
 use crate::rotating_frame::{RotatingFrame, RotatingFrameError};
 
 /// The six spherical fields and three reception-time **TDB day** rates,
