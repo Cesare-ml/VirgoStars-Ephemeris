@@ -50,12 +50,33 @@ pub struct NutationMatrix {
     pub rate_per_tt_day: Matrix,
 }
 
+/// Nutation and its **matching true obliquity** derived from the same
+/// caller-supplied, single-epoch equinox-based angles and TT-day rates.
+///
+/// Pass `nutation.rotation` and `nutation.rate_per_tt_day`, together
+/// with `true_obliquity_rad` and
+/// `true_obliquity_rate_rad_per_tt_day`, to a separately validated
+/// true-ecliptic-of-date frame builder (draft PR #47) **only after**
+/// normal branch integration and a separately validated dTT/dTDB
+/// chain rule. This type does not claim that the source angles came
+/// from the full IAU 2000A series or that the result is apparent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NutationWithTrueObliquity {
+    pub nutation: NutationMatrix,
+    pub true_obliquity_rad: f64,
+    pub true_obliquity_rate_rad_per_tt_day: f64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NutationMatrixError {
     NonFiniteInput,
     /// Prevent values outside a physical obliquity interval or implausibly
     /// large nutation corrections from being labeled as astronomical.
     AngleOutsideGuardedRange,
+    /// Mean obliquity plus delta-epsilon is not a physical positive tilt.
+    InvalidTrueObliquity,
+    /// Finite inputs produced a nonrepresentable matrix or derivative.
+    ArithmeticOverflow,
 }
 
 impl fmt::Display for NutationMatrixError {
@@ -64,6 +85,12 @@ impl fmt::Display for NutationMatrixError {
             Self::NonFiniteInput => write!(f, "non-finite nutation angle or TT derivative"),
             Self::AngleOutsideGuardedRange => {
                 write!(f, "nutation angles outside conservative astronomical guard")
+            }
+            Self::InvalidTrueObliquity => {
+                write!(f, "derived true obliquity outside (0, pi/2)")
+            }
+            Self::ArithmeticOverflow => {
+                write!(f, "non-finite nutation orientation or TT derivative from finite inputs")
             }
         }
     }
@@ -158,8 +185,54 @@ pub fn nutation_matrix_from_angles(
         );
         rotation = multiply(factor, rotation);
     }
+    if rotation
+        .iter()
+        .flatten()
+        .chain(derivative.iter().flatten())
+        .any(|v| !v.is_finite())
+    {
+        return Err(NutationMatrixError::ArithmeticOverflow);
+    }
     Ok(NutationMatrix {
         rotation,
         rate_per_tt_day: derivative,
     })
 }
+
+/// Return both the nutation matrix and the **consistent true obliquity**
+/// with its TT derivative from one validated set of supplied angles.
+///
+/// The scalar pair is derived **once**:
+/// `epsilon_true = epsilon_mean + delta_epsilon` and
+/// `d(epsilon_true)/dTT = d(epsilon_mean)/dTT + d(delta_epsilon)/dTT`.
+/// These are the exact inverse-X-tilt parameters expected downstream
+/// after the classical `Rx(-epsilon_true)` factor of the nutation
+/// rotation. It is unsafe to substitute unrelated user inputs here.
+///
+/// No nutation series, precession matrix, TT/TDB rate, actual epoch
+/// conversion or apparent-source correction is calculated.
+/// Nonfinite and out-of-range results are rejected; this does
+/// not prove that caller-supplied angles were astronomically correct.
+pub fn nutation_with_true_obliquity(
+    angles: NutationAngles,
+) -> Result<NutationWithTrueObliquity, NutationMatrixError> {
+    // Reuse the exact single source of truth for all input guards and
+    // the analytically differentiated mean-to-true equatorial frame.
+    let nutation = nutation_matrix_from_angles(angles)?;
+    let true_obliquity_rad = angles.mean_obliquity_rad + angles.delta_epsilon_rad;
+    let true_obliquity_rate_rad_per_tt_day =
+        angles.mean_obliquity_rate_rad_per_tt_day + angles.delta_epsilon_rate_rad_per_tt_day;
+
+    if !true_obliquity_rad.is_finite() || !true_obliquity_rate_rad_per_tt_day.is_finite() {
+        return Err(NutationMatrixError::ArithmeticOverflow);
+    }
+    if true_obliquity_rad <= 0.0 || true_obliquity_rad >= std::f64::consts::FRAC_PI_2 {
+        return Err(NutationMatrixError::InvalidTrueObliquity);
+    }
+    Ok(NutationWithTrueObliquity {
+        nutation,
+        true_obliquity_rad,
+        true_obliquity_rate_rad_per_tt_day,
+    })
+}
+
