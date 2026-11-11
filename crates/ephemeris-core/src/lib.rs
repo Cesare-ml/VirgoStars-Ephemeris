@@ -23,6 +23,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod altitude_crossings;
 pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
