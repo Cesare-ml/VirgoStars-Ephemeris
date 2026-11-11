@@ -66,10 +66,18 @@ fn independent_usno_first_nutation_term_converts_to_radians_in_correct_fields() 
         .coefficients_arcseconds
         .map(|arcseconds| (arcseconds / 3_600.0).to_radians());
     near(result.longitude_sin_rad, expected[0], 1e-19);
-    near(result.longitude_sin_slope_rad_per_century, expected[1], 1e-19);
+    near(
+        result.longitude_sin_slope_rad_per_century,
+        expected[1],
+        1e-19,
+    );
     near(result.longitude_cos_rad, expected[2], 1e-19);
     near(result.obliquity_cos_rad, expected[3], 1e-19);
-    near(result.obliquity_cos_slope_rad_per_century, expected[4], 1e-19);
+    near(
+        result.obliquity_cos_slope_rad_per_century,
+        expected[4],
+        1e-19,
+    );
     near(result.obliquity_sin_rad, expected[5], 1e-19);
 }
 
@@ -235,7 +243,10 @@ fn converted_planetary_term_round_trips_with_exact_source_permutation() {
     printed.multipliers[13] = 3; // Omega -> internal index 4
     printed.coefficients_arcseconds = [0.000_2, 0.0, -0.000_3, 0.000_4, 0.0, 0.000_5];
     let term = convert_usno_planetary_row(printed).unwrap();
-    assert_eq!(term.multipliers, [-1, 0, 0, 0, 3, 2, 0, 0, 0, 0, 0, 0, 0, 1]);
+    assert_eq!(
+        term.multipliers,
+        [-1, 0, 0, 0, 3, 2, 0, 0, 0, 0, 0, 0, 0, 1]
+    );
     let multipliers = term.multipliers.map(|v| v.to_string()).join(",");
     let text = format!(
         "VIRGOSTARS_NUTATION_TERMS_V1\nfamily=planetary\narguments=l,lprime,F,D,Omega,Mercury,Venus,Earth,Mars,Jupiter,Saturn,Uranus,Neptune,pA\namplitudes=radians\nslopes=radians_per_tdb_century\nsource=synthetic\nreference=synthetic:usno-planetary-permutation\ncount=1\nDATA\n1,{multipliers},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e}\n",
