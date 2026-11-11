@@ -41,8 +41,8 @@ fn near_vector(actual: [f64; 3], expected: [f64; 3], tolerance: f64) {
 #[test]
 fn zero_era_aligns_tirs_with_cirs_and_sets_positive_eastward_spin() {
     let r = 6_378.137;
-    let state = tirs_to_cirs_earth_spin([r, 0.0, 0.0], 0.0, IAU2000_ERA_RATE_RAD_PER_UT1_DAY)
-        .unwrap();
+    let state =
+        tirs_to_cirs_earth_spin([r, 0.0, 0.0], 0.0, IAU2000_ERA_RATE_RAD_PER_UT1_DAY).unwrap();
     near_vector(state.position_km, [r, 0.0, 0.0], 1.0e-12);
     near_vector(
         state.spin_velocity_km_per_ut1_day,
@@ -58,7 +58,11 @@ fn quarter_turn_has_correct_iau_era_sign() {
     // when ERA = +pi/2. The spin rate points toward -X there.
     let state = tirs_to_cirs_earth_spin([1.0, 0.0, 3.0], FRAC_PI_2, 1.0).unwrap();
     near_vector(state.position_km, [0.0, 1.0, 3.0], 2.0e-15);
-    near_vector(state.spin_velocity_km_per_ut1_day, [-1.0, 0.0, 0.0], 2.0e-15);
+    near_vector(
+        state.spin_velocity_km_per_ut1_day,
+        [-1.0, 0.0, 0.0],
+        2.0e-15,
+    );
 }
 
 #[test]
@@ -76,12 +80,8 @@ fn inverse_position_rotation_closes_without_polar_motion() {
         [-5_700.0, 1_400.0, -2_100.0],
     ] {
         for era in [0.0, 0.3, FRAC_PI_2, PI, TAU - 1.0e-6] {
-            let state = tirs_to_cirs_earth_spin(
-                position,
-                era,
-                IAU2000_ERA_RATE_RAD_PER_UT1_DAY,
-            )
-            .unwrap();
+            let state =
+                tirs_to_cirs_earth_spin(position, era, IAU2000_ERA_RATE_RAD_PER_UT1_DAY).unwrap();
             let recovered = cirs_to_tirs_position(state.position_km, era).unwrap();
             near_vector(recovered, position, 3.0e-12);
         }
@@ -92,8 +92,7 @@ fn inverse_position_rotation_closes_without_polar_motion() {
 fn rotation_preserves_length_and_spin_is_tangent_to_circle() {
     let pos = [3_300.0, -2_500.0, 3_900.0];
     let original_length = pos.into_iter().map(|v| v * v).sum::<f64>().sqrt();
-    let state = tirs_to_cirs_earth_spin(pos, 2.1, IAU2000_ERA_RATE_RAD_PER_UT1_DAY)
-        .unwrap();
+    let state = tirs_to_cirs_earth_spin(pos, 2.1, IAU2000_ERA_RATE_RAD_PER_UT1_DAY).unwrap();
     let final_length = state
         .position_km
         .into_iter()
@@ -139,8 +138,7 @@ fn published_iau_rate_and_wgs84_equatorial_radius_give_expected_spin_speed() {
         IAU2000_ERA_RATE_RAD_PER_UT1_DAY,
     )
     .unwrap();
-    let equatorial_speed_m_per_second =
-        state.spin_velocity_km_per_ut1_day[1] * 1_000.0 / 86_400.0;
+    let equatorial_speed_m_per_second = state.spin_velocity_km_per_ut1_day[1] * 1_000.0 / 86_400.0;
     near(equatorial_speed_m_per_second, 465.101_094_254_722_2, 1.0e-6);
 }
 
