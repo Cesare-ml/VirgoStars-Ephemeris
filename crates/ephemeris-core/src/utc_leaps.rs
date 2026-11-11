@@ -259,9 +259,272 @@ impl VersionedUtcLeapSchedule {
     /// NTP seconds are counted from 1900-01-01 UTC. Each leap transition
     /// must occur at a month boundary and change TAI-UTC by exactly +/-1.
     ///
-    /// It does not verify an official IANA `#h` checksum or authenticate the
-    /// asserted `version`/`provenance`. Those checks belong to the separate
-    /// offline source audit *before* a curator approves this input. There is
+    /// The unprocessed official IANA `#// The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+//
+// Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+//
+// The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+//
+// The Original Developer is the Initial Developer.
+//
+// The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+//
+// Contributors retain applicable rights in their own contributions under the terms of this License.
+//
+// [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+
+//! Explicit post-1972 UTC leap-second day schedule.
+//!
+//! Models UTC day lengths, TAI-UTC offsets and bidirectional UTC/TAI
+//! conversions using caller-provided transitions or a strictly bounded
+//! public-domain IANA 2026b snapshot. It never implicitly converts to
+//! TT/TDB, downloads updates or extrapolates beyond declared coverage.
+
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt;
+
+use crate::calendar::{Calendar, CalendarDateTime, JulianDate, TimeScale};
+
+/// A Gregorian UTC calendar day (not a uniform-scale Julian date).
+///
+/// The stored integer is the Julian day number of the civil day at noon,
+/// matching the integer day number used by the split \`calendar::JulianDate\`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct UtcDay {
+    julian_day_number: i64,
+}
+
+/// A leap-second schedule error. None of these conditions can be repaired
+/// by silently extrapolating or assuming UTC has 86,400 seconds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UtcLeapError {
+    InvalidGregorianDate,
+    /// The integer leap-second model is not valid for pre-1972 UTC.
+    Before1972,
+    InvalidCoverage,
+    InvalidInitialOffset,
+    /// Duplicated, unordered, out-of-coverage or non-month-boundary transition.
+    InvalidTransition,
+    /// A leap event must change TAI-UTC by exactly +1 or -1 second.
+    InvalidOffsetStep,
+    OutsideCoverage,
+    /// Invalid hour, minute, fractional second, or leap-second placement.
+    InvalidClockTime,
+    /// This clock reading does not exist on the named UTC day.
+    ClockTimeOutsideDay,
+    /// Conversion to a normalized split TAI Julian date was not representable.
+    UnrepresentableTai,
+    /// Only a TAI-tagged JulianDate can be converted back to UTC.
+    WrongInputScale,
+    /// Bundled version-pinned IANA leap-second history is malformed.
+    InvalidPinnedLeapData,
+    /// Invalid or out-of-bounds reviewed numeric NTP leap snapshot.
+    InvalidReviewedSnapshot,
+    /// Version identifier or mandatory provenance field is missing/unsafe.
+    InvalidSnapshotProvenance,
+    /// An approved version ID was registered more than once in this catalog.
+    DuplicateVersion,
+    /// The requested version was not explicitly registered.
+    UnknownVersion,
+    /// The exact snapshot bytes disagree with the requested SHA-256.
+    SourceDigestMismatch,
+    /// An incoming v1 scalar record has inconsistent schema, fields or metadata.
+    InvalidWireRecord,
+}
+
+impl fmt::Display for UtcLeapError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidGregorianDate => write!(f, "invalid proleptic Gregorian UTC date"),
+            Self::Before1972 => write!(f, "integer UTC leap-second schedule begins in 1972"),
+            Self::InvalidCoverage => write!(f, "invalid UTC day coverage interval"),
+            Self::InvalidInitialOffset => write!(f, "invalid initial TAI minus UTC offset"),
+            Self::InvalidTransition => write!(f, "invalid UTC leap-second transition date/order"),
+            Self::InvalidOffsetStep => write!(f, "TAI minus UTC must change by exactly one second"),
+            Self::OutsideCoverage => write!(f, "UTC day lies outside approved schedule coverage"),
+            Self::InvalidClockTime => write!(f, "invalid UTC clock fields"),
+            Self::ClockTimeOutsideDay => write!(f, "UTC clock reading does not exist on this day"),
+            Self::UnrepresentableTai => {
+                write!(f, "TAI Julian date cannot represent this UTC instant")
+            }
+            Self::WrongInputScale => write!(f, "TAI input time scale is required"),
+            Self::InvalidPinnedLeapData => write!(f, "invalid pinned IANA leap-second snapshot"),
+            Self::InvalidReviewedSnapshot => write!(f, "invalid reviewed leap-second snapshot"),
+            Self::InvalidSnapshotProvenance => write!(f, "invalid leap-second snapshot provenance"),
+            Self::DuplicateVersion => write!(f, "leap-second schedule version already registered"),
+            Self::UnknownVersion => write!(f, "requested leap-second schedule version is unknown"),
+            Self::SourceDigestMismatch => {
+                write!(
+                    f,
+                    "leap-second source SHA-256 differs from the expected digest"
+                )
+            }
+            Self::InvalidWireRecord => write!(f, "invalid or inconsistent UTC/TAI v1 record"),
+        }
+    }
+}
+
+impl Error for UtcLeapError {}
+
+impl UtcDay {
+    /// Validate a Gregorian UTC day in the post-1972 leap-second regime.
+    ///
+    /// This uses the existing *calendar-only* conversion to a Julian day
+    /// number. The internal dummy TAI scale label is never exposed and never
+    /// interpreted as converting between UTC and TAI.
+    pub fn from_gregorian(year: i32, month: u8, day: u8) -> Result<Self, UtcLeapError> {
+        if year < 1972 {
+            return Err(UtcLeapError::Before1972);
+        }
+        let midnight = CalendarDateTime {
+            year,
+            month,
+            day,
+            hour: 0,
+            minute: 0,
+            second: 0.0,
+            scale: TimeScale::Tai,
+        }
+        .to_julian_date(Calendar::ProlepticGregorian)
+        .map_err(|_| UtcLeapError::InvalidGregorianDate)?;
+        Ok(Self {
+            julian_day_number: midnight.day_number(),
+        })
+    }
+
+    /// Integer Julian day number corresponding to the named Gregorian day.
+    pub fn julian_day_number(self) -> i64 {
+        self.julian_day_number
+    }
+
+    fn starts_month(self) -> Result<bool, UtcLeapError> {
+        let day = JulianDate::new(self.julian_day_number, 0.0, TimeScale::Tai)
+            .map_err(|_| UtcLeapError::InvalidGregorianDate)?;
+        let date = day
+            .to_calendar(Calendar::ProlepticGregorian)
+            .map_err(|_| UtcLeapError::InvalidGregorianDate)?;
+        Ok(date.day == 1)
+    }
+}
+
+/// A UTC civil-clock reading, independently of the named day.
+///
+/// Second 60 (including its fractional portion) is syntactically permitted
+/// **only at 23:59**. It is valid for a particular date only if the explicitly
+/// supplied leap-second schedule confirms a positive leap on that day.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UtcClockTime {
+    hour: u8,
+    minute: u8,
+    second: f64,
+}
+
+impl UtcClockTime {
+    /// Construct a UTC clock reading without assuming a leap-second calendar.
+    pub fn new(hour: u8, minute: u8, second: f64) -> Result<Self, UtcLeapError> {
+        if hour > 23
+            || minute > 59
+            || !second.is_finite()
+            || !(0.0..61.0).contains(&second)
+            || (second >= 60.0 && (hour != 23 || minute != 59))
+        {
+            return Err(UtcLeapError::InvalidClockTime);
+        }
+        Ok(Self {
+            hour,
+            minute,
+            second,
+        })
+    }
+
+    pub fn hour(self) -> u8 {
+        self.hour
+    }
+
+    pub fn minute(self) -> u8 {
+        self.minute
+    }
+
+    pub fn second(self) -> f64 {
+        self.second
+    }
+
+    fn seconds_since_midnight(self) -> f64 {
+        f64::from(self.hour) * 3_600.0 + f64::from(self.minute) * 60.0 + self.second
+    }
+}
+
+/// Transition effective at UTC 00:00 on a Gregorian day.
+///
+/// A positive leap second happens at 23:59:60 on the **preceding** day.
+/// At the effective midnight, TAI-UTC increases by one second. This type
+/// deliberately cannot be treated as a TDB/TT Julian date.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UtcLeapTransition {
+    pub effective_utc_day: UtcDay,
+    pub tai_minus_utc_seconds: i32,
+}
+
+/// Explicit, non-extrapolating schedule of post-1972 leap-second UTC days.
+///
+/// Input transitions must be provided in ascending effective-date order.
+/// The final covered day is inclusive; a transition on the following day
+/// may describe the leap second at the final covered midnight boundary.
+#[derive(Clone, Debug)]
+pub struct UtcLeapSchedule {
+    first_day: UtcDay,
+    last_day: UtcDay,
+    initial_tai_minus_utc_seconds: i32,
+    transitions: Vec<UtcLeapTransition>,
+}
+
+/// Immutable, provenance-bearing wrapper around a validated UTC leap schedule.
+///
+/// A caller's `version` and `provenance` are declared metadata, **not**
+/// independent proof of authenticity. Candidate files must first pass the
+/// offline official-source SHA-1 and historical-drift audit, and be reviewed.
+///
+/// Each instance owns its schedule and does not mutate other loaded versions.
+/// The historic `UtcLeapSchedule::from_iana_2026b()` remains unchanged.
+#[derive(Clone, Debug)]
+pub struct VersionedUtcLeapSchedule {
+    version: String,
+    provenance: String,
+    source_sha256: String,
+    expires_utc_day: UtcDay,
+    schedule: UtcLeapSchedule,
+}
+
+impl VersionedUtcLeapSchedule {
+    /// Construct a named, immutable view of the repository's pinned IANA
+    /// tzdb-2026b series, without changing the legacy schedule API.
+    pub fn iana_2026b() -> Result<Self, UtcLeapError> {
+        Ok(Self {
+            version: "iana-tzdb-2026b".to_owned(),
+            provenance: "https://data.iana.org/time-zones/tzdb-2026b/leap-seconds.list".to_owned(),
+            source_sha256: crate::fingerprint::sha256_hex(
+                include_str!("../data/iana-tzdb-2026b-leap-seconds.list").as_bytes(),
+            ),
+            expires_utc_day: UtcDay::from_gregorian(2026, 12, 28)?,
+            schedule: UtcLeapSchedule::from_iana_2026b()?,
+        })
+    }
+
+    /// Load **reviewed, curated numeric** NTP leap data from memory.
+    ///
+    /// This accepts the format produced by the offline update proposal:
+    /// comments, exactly one `#@ EXPIRY_NTP` marker, followed by ascending
+    /// `NTP_MIDNIGHT TAI_MINUS_UTC_SECONDS` rows starting at 1972-01-01.
+    /// NTP seconds are counted from 1900-01-01 UTC. Each leap transition
+    /// must occur at a month boundary and change TAI-UTC by exactly +/-1.
+    ///
+ update and `#h` checksum
+    /// markers are rejected rather than silently ignored. This importer
+    /// does not verify their values: the separate offline source audit must
+    /// verify the official input *before* the reviewed numeric extraction.
+    /// The asserted `version`/`provenance` is not authenticated. There is
     /// no filesystem, network, clock, or global "current version" access.
     pub fn from_reviewed_numeric_snapshot(
         version: &str,
@@ -296,6 +559,11 @@ impl VersionedUtcLeapSchedule {
                     .parse::<i64>()
                     .map_err(|_| UtcLeapError::InvalidReviewedSnapshot)?;
                 expiry = Some(value);
+            } else if matches!(text.split_whitespace().next(), Some("#$" | "#h")) {
+                // Raw upstream IANA metadata cannot be silently accepted:
+                // this importer verifies numeric format, not the official
+                // #h integrity checksum. Run the offline audit first.
+                return Err(UtcLeapError::InvalidReviewedSnapshot);
             } else if text.is_empty() || text.starts_with('#') {
                 continue;
             } else {
@@ -1451,6 +1719,45 @@ mod tests {
             VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot("reviewed-2026b", "", good)
                 .unwrap_err(),
             UtcLeapError::InvalidSnapshotProvenance
+        );
+    }
+
+    #[test]
+    fn reviewed_loader_rejects_raw_iana_integrity_markers_without_auditing_them() {
+        let source = include_str!("../data/iana-tzdb-2026b-leap-seconds.list");
+        let load = |text: &str| {
+            VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
+                "reviewed-fixture",
+                "synthetic-test-only",
+                text,
+            )
+        };
+        // Source authenticity and #h integrity are *not* handled by Rust.
+        // An official file must first go through the offline verifier,
+        // then be converted to the curated numeric proposal.
+        for raw_marker in [
+            "#$ 3976686858",
+            "#h 2e101270 4e6749f8 2f1792b7 14a0c188 36bb19d6",
+            "  #$ 3976686858",
+            "\t#h 2e101270 4e6749f8 2f1792b7 14a0c188 36bb19d6",
+        ] {
+            let raw = format!("{raw_marker}\n{source}");
+            assert_eq!(
+                load(&raw).unwrap_err(),
+                UtcLeapError::InvalidReviewedSnapshot,
+                "unverified official marker must be rejected: {raw_marker}"
+            );
+        }
+        // Ordinary descriptive comments mentioning upstream metadata are
+        // allowed: the pinned numeric snapshot uses these deliberately.
+        let annotated = format!(
+            "# Manual review references #h and #$ fields separately\n{source}"
+        );
+        let approved = load(&annotated).unwrap();
+        assert_eq!(approved.expires_utc_day(), d(2026, 12, 28));
+        assert_ne!(
+            approved.source_sha256(),
+            crate::fingerprint::sha256_hex(source.as_bytes())
         );
     }
 
