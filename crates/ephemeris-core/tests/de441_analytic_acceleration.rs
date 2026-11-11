@@ -18,6 +18,9 @@
 
 use std::io::Cursor;
 
+use virgostars_ephemeris_core::aberrated_spherical::{
+    geocentric_aberrated_fixed_spherical, spherical_from_aberrated_state,
+};
 use virgostars_ephemeris_core::aberration_state::{
     geocentric_light_time_annual_aberration, geocentric_light_time_annual_aberration_analytic,
     ObserverAccelerationSource,
@@ -291,4 +294,62 @@ fn invalid_epoch_and_unavailable_series_remain_explicit() {
         ),
         Err(De441Error::MissingSeries(_))
     ));
+}
+
+#[test]
+fn composed_aberration_and_spherical_projection_runs_through_original_de441() {
+    let mut ephemeris = eph();
+    let epoch = JulianDateTdb(1_016.0);
+    // One-call pipeline: read synthetic DE441, reconstruct Earth's
+    // barycentric velocity and analytic acceleration, iterate reception
+    // light-time, correct observer aberration, calculate all six spherical
+    // fields in fixed ICRF axes. No independent physical JPL parity implied.
+    let output = geocentric_aberrated_fixed_spherical(
+        &mut ephemeris,
+        Body::Mercury,
+        epoch,
+        0.0,
+    )
+    .unwrap();
+    let state = geocentric_light_time_annual_aberration_analytic(
+        &mut ephemeris,
+        Body::Mercury,
+        epoch,
+    )
+    .unwrap();
+    let separate = spherical_from_aberrated_state(&state, 0.0).unwrap();
+    assert_eq!(output, separate);
+    assert_eq!(output.spherical.target, Body::Mercury);
+    assert_eq!(output.spherical.center, Body::Earth);
+    assert_eq!(output.spherical.epoch, epoch);
+    assert_eq!(
+        output.observer_acceleration_source,
+        ObserverAccelerationSource::AnalyticDe441Chebyshev
+    );
+    assert!(output.emission_epoch.0 < epoch.0);
+    assert!(output.spherical.distance_km > 0.0);
+    for value in [
+        output.spherical.longitude_rad,
+        output.spherical.latitude_rad,
+        output.spherical.distance_km,
+        output.spherical.longitude_rate_rad_per_day,
+        output.spherical.latitude_rate_rad_per_day,
+        output.spherical.distance_rate_km_per_day,
+    ] {
+        assert!(value.is_finite());
+    }
+    // The synthetic non-collinear Earth motion ensures annual aberration
+    // actually changes the geometric source longitude.
+    let geometric = virgostars_ephemeris_core::light_time::geocentric_light_time(
+        &mut ephemeris,
+        Body::Mercury,
+        epoch,
+    )
+    .unwrap();
+    let geometric_angle =
+        geometric.position_km[1].atan2(geometric.position_km[0]);
+    assert!(
+        (output.spherical.longitude_rad - geometric_angle).abs() > 1e-7,
+        "aberrated direction was not distinguished from light-time geometry"
+    );
 }
