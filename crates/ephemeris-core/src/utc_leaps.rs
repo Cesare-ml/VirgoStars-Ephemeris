@@ -1536,7 +1536,10 @@ mod tests {
             ("changed 2017 leap month", final_shift),
             ("omitted 2017 leap", truncated),
             ("coverage downgraded", expired_early),
-            ("fabricated extra leap in approved 2026 history", extra_past_leap),
+            (
+                "fabricated extra leap in approved 2026 history",
+                extra_past_leap,
+            ),
         ] {
             assert_eq!(
                 load(&data).unwrap_err(),
