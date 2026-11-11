@@ -19,7 +19,7 @@
 //! UTC clock fields (including a possible leap second), a split TAI Julian
 //! date, and an explicit IANA schedule version with content fingerprint.
 
-use crate::calendar::JulianDate;
+use crate::calendar::{JulianDate, TimeScale};
 use crate::utc_leaps::{UtcClockTime, UtcDay, UtcLeapCatalog, UtcLeapError, VersionedUtcResult};
 
 /// Identifier of the experimental scalar-record schema.
@@ -74,6 +74,32 @@ impl From<UtcLeapError> for UtcTaiErrorV1 {
             code,
         }
     }
+}
+
+/// Language-neutral Gregorian UTC input for thin Python/WASM bindings.
+///
+/// A UTC time is kept as civil components instead of a uniform Julian date,
+/// so a real positive leap second (23:59:60.x) can be represented. This
+/// struct contains untrusted fields: validation happens in the Rust core.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UtcCivilInputV1 {
+    pub year: i32,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: f64,
+}
+
+/// Language-neutral split-date input for a TAI-to-UTC conversion.
+///
+/// The scale string is explicit and must equal "TAI"; a binding must not
+/// silently reinterpret a TT/TDB/UTC number as an atomic-time instant.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaiSplitInputV1 {
+    pub day_number: i64,
+    pub midnight_fraction: f64,
+    pub time_scale: String,
 }
 
 /// Language-neutral scalar record for one UTC ↔ TAI instant.
@@ -167,6 +193,45 @@ impl UtcLeapCatalog {
             return Err(UtcLeapError::InvalidWireRecord);
         }
         Ok(())
+    }
+
+    /// Convert untrusted UTC civil primitives through the authoritative
+    /// Rust calendar and leap-second schedule; no binding-side arithmetic.
+    ///
+    /// Version and SHA-256 are checked *before* interpreting civil fields.
+    /// The input may represent 23:59:60.x only on a genuinely covered
+    /// positive-leap UTC date. The result is the ordinary v1 record.
+    pub fn utc_civil_to_tai_record_v1(
+        &self,
+        version: &str,
+        expected_sha256: &str,
+        civil: UtcCivilInputV1,
+    ) -> Result<UtcTaiRecordV1, UtcLeapError> {
+        self.select_matching_sha256(version, expected_sha256)?;
+        let day = UtcDay::from_gregorian(civil.year, civil.month, civil.day)?;
+        let clock = UtcClockTime::new(civil.hour, civil.minute, civil.second)?;
+        self.utc_to_tai_record_v1(version, expected_sha256, day, clock)
+    }
+
+    /// Convert untrusted split TAI primitives without treating a UTC/TT/TDB
+    /// date as TAI, collapsing the split Julian date or using host clocks.
+    ///
+    /// The exact schedule version and expected source SHA-256 are checked
+    /// first; a malformed fraction returns the existing invalid-wire-record
+    /// code, and a non-TAI label returns wrong-input-scale.
+    pub fn tai_split_to_utc_record_v1(
+        &self,
+        version: &str,
+        expected_sha256: &str,
+        split: &TaiSplitInputV1,
+    ) -> Result<UtcTaiRecordV1, UtcLeapError> {
+        self.select_matching_sha256(version, expected_sha256)?;
+        if split.time_scale != "TAI" {
+            return Err(UtcLeapError::WrongInputScale);
+        }
+        let tai = JulianDate::new(split.day_number, split.midnight_fraction, TimeScale::Tai)
+            .map_err(|_| UtcLeapError::InvalidWireRecord)?;
+        self.tai_to_utc_record_v1(version, expected_sha256, tai)
     }
 
     /// Build a v1 wire-ready scalar record from UTC after exact-version and
@@ -285,6 +350,136 @@ mod tests {
         assert_eq!(record.tai_time_scale, "TAI");
         assert_eq!(record.tai_day_number, 2_457_755);
         assert!((record.tai_midnight_fraction * 86_400.0 - 37.0).abs() < 1e-8);
+    }
+
+    #[test]
+    fn civil_and_split_scalar_inputs_roundtrip_without_binding_side_arithmetic() {
+        let catalog = catalog();
+        let civil = UtcCivilInputV1 {
+            year: 2016,
+            month: 12,
+            day: 31,
+            hour: 23,
+            minute: 59,
+            second: 60.5,
+        };
+        let forward = catalog
+            .utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, civil)
+            .unwrap();
+        assert_eq!(forward.schema, UTC_TAI_RECORD_V1_SCHEMA);
+        assert_eq!(forward.utc_day_number, 2_457_754);
+        assert_eq!(forward.utc_second, 60.5);
+        assert_eq!(forward.tai_day_number, 2_457_755);
+        assert!((forward.tai_midnight_fraction * 86_400.0 - 36.5).abs() < 1e-8);
+        assert_eq!(forward.leap_table_sha256, PINNED_SHA);
+
+        let split = TaiSplitInputV1 {
+            day_number: forward.tai_day_number,
+            midnight_fraction: forward.tai_midnight_fraction,
+            time_scale: "TAI".to_owned(),
+        };
+        let reverse = catalog
+            .tai_split_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, &split)
+            .unwrap();
+        assert_eq!(reverse.utc_day_number, forward.utc_day_number);
+        assert_eq!(reverse.utc_hour, 23);
+        assert_eq!(reverse.utc_minute, 59);
+        assert!((reverse.utc_second - 60.5).abs() < 1e-8);
+        assert_eq!(reverse.tai_midnight_fraction, forward.tai_midnight_fraction);
+        assert_eq!(reverse.leap_table_sha256, forward.leap_table_sha256);
+        assert_eq!(catalog.validate_record_v1(&reverse), Ok(()));
+    }
+
+    #[test]
+    fn scalar_inputs_fail_closed_on_digest_calendar_clock_and_time_scale() {
+        let catalog = catalog();
+        let good = UtcCivilInputV1 {
+            year: 2017,
+            month: 1,
+            day: 1,
+            hour: 0,
+            minute: 0,
+            second: 0.0,
+        };
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("iana-tzdb-2026b", "wrong", good),
+            Err(UtcLeapError::SourceDigestMismatch)
+        ));
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("unknown", PINNED_SHA, good),
+            Err(UtcLeapError::UnknownVersion)
+        ));
+        let invalid_day = UtcCivilInputV1 {
+            month: 2,
+            day: 30,
+            ..good
+        };
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, invalid_day),
+            Err(UtcLeapError::InvalidGregorianDate)
+        ));
+        let nonexistent_leap = UtcCivilInputV1 {
+            hour: 23,
+            minute: 59,
+            second: 60.0,
+            ..good
+        };
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, nonexistent_leap),
+            Err(UtcLeapError::ClockTimeOutsideDay)
+        ));
+        let nan_clock = UtcCivilInputV1 {
+            second: f64::NAN,
+            ..good
+        };
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, nan_clock),
+            Err(UtcLeapError::InvalidClockTime)
+        ));
+        let expired = UtcCivilInputV1 {
+            year: 2026,
+            month: 12,
+            day: 28,
+            ..good
+        };
+        assert!(matches!(
+            catalog.utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, expired),
+            Err(UtcLeapError::OutsideCoverage)
+        ));
+
+        let accepted = catalog
+            .utc_civil_to_tai_record_v1("iana-tzdb-2026b", PINNED_SHA, good)
+            .unwrap();
+        let split = TaiSplitInputV1 {
+            day_number: accepted.tai_day_number,
+            midnight_fraction: accepted.tai_midnight_fraction,
+            time_scale: "TT".to_owned(),
+        };
+        assert!(matches!(
+            catalog.tai_split_to_utc_record_v1("iana-tzdb-2026b", PINNED_SHA, &split),
+            Err(UtcLeapError::WrongInputScale)
+        ));
+        let invalid_fraction = TaiSplitInputV1 {
+            midnight_fraction: f64::NAN,
+            time_scale: "TAI".to_owned(),
+            ..split
+        };
+        assert!(matches!(
+            catalog.tai_split_to_utc_record_v1(
+                "iana-tzdb-2026b",
+                PINNED_SHA,
+                &invalid_fraction
+            ),
+            Err(UtcLeapError::InvalidWireRecord)
+        ));
+        assert!(matches!(
+            catalog.tai_split_to_utc_record_v1(
+                "iana-tzdb-2026b",
+                "wrong",
+                &invalid_fraction
+            ),
+            Err(UtcLeapError::SourceDigestMismatch)
+        ));
     }
 
     #[test]
