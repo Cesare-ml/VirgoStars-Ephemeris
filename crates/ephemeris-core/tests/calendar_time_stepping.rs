@@ -42,14 +42,24 @@ fn forward_and_backward_steps_cross_midnight_without_changing_time_scale() {
     let next = start.checked_add_seconds(0.5).unwrap();
     let civil = next.to_calendar(Calendar::ProlepticGregorian).unwrap();
     assert_eq!(
-        (civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.scale),
+        (
+            civil.year,
+            civil.month,
+            civil.day,
+            civil.hour,
+            civil.minute,
+            civil.scale
+        ),
         (2026, 11, 12, 0, 0, TimeScale::Tt)
     );
     assert!((civil.second - 0.25).abs() < 1.0e-8);
 
     let previous = next.checked_add_seconds(-0.5).unwrap();
     let back = previous.to_calendar(Calendar::ProlepticGregorian).unwrap();
-    assert_eq!((back.year, back.month, back.day, back.hour, back.minute), (2026, 11, 11, 23, 59));
+    assert_eq!(
+        (back.year, back.month, back.day, back.hour, back.minute),
+        (2026, 11, 11, 23, 59)
+    );
     assert!((back.second - 59.75).abs() < 1.0e-8);
 }
 
@@ -63,7 +73,9 @@ fn negative_and_whole_day_offsets_follow_calendar_leap_rules() {
     assert_eq!((civil.year, civil.month, civil.day), (1999, 12, 31));
 
     let after_leap_year = start.checked_add_seconds(366.0 * 86_400.0).unwrap();
-    let civil = after_leap_year.to_calendar(Calendar::ProlepticGregorian).unwrap();
+    let civil = after_leap_year
+        .to_calendar(Calendar::ProlepticGregorian)
+        .unwrap();
     assert_eq!((civil.year, civil.month, civil.day), (2001, 1, 1));
 
     assert_eq!(start.checked_add_seconds(0.0).unwrap(), start);
@@ -93,7 +105,10 @@ fn incremental_one_second_steps_remain_close_to_one_hour() {
 fn rejects_nonfinite_and_unrepresentable_steps() {
     let base = JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap();
     for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert_eq!(base.checked_add_seconds(invalid), Err(CalendarError::InvalidTime));
+        assert_eq!(
+            base.checked_add_seconds(invalid),
+            Err(CalendarError::InvalidTime)
+        );
     }
 
     let too_large = ((1_u64 << 52) as f64) * 86_400.0;
