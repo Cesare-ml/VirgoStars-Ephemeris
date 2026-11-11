@@ -21,7 +21,7 @@
 //! intended observer and physical model.
 //!
 //! Independent formula reference:
-//! https://aa.usno.navy.mil/faq/alt_az
+//! <https://aa.usno.navy.mil/faq/alt_az>
 //! SOFA/ERFA hd2ae is used as a separately published numerical test reference.
 //!
 //! Created 2026-11-11. Original implementation, no external source copied.
