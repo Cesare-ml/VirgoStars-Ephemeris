@@ -188,7 +188,7 @@ case; it is not a substitute for a date-dependent frame.
 
 ### New synthetic validation
 
-`tests/moving_geocentric.rs` includes **10 deterministic offline
+`tests/moving_geocentric.rs` includes **11 deterministic offline
 mathematics/integration tests**:
 
 1. identity frame reproduces all six original fixed-axis fields,
@@ -211,7 +211,11 @@ mathematics/integration tests**:
    series propagate rather than inventing positions;
 10. **previously corrected Cartesian ICRF** input is projected with
     `Rdot*r` exactly once, preserving source speeds, body identity,
-    signed retrograde angular rate and radial speed.
+    signed retrograde angular rate and radial speed;
+11. **synthetic classic DE441 → reception light-time → TT-based**
+    precession/nutation composition with explicit nonunity
+    `dTT/dTDB`, producing the expected six moving-frame fields
+    without silently dropping the time-scale rate conversion.
 
 All tests are **synthetic math/structural**, NOT independent
 NASA/JPL Horizons planet positions, valid IAU date-frame matrices,
