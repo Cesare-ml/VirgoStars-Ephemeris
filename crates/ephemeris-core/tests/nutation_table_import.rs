@@ -305,6 +305,6 @@ fn complete_length_is_structural_only_not_a_certification() {
 #[test]
 fn oversized_input_is_rejected_before_row_allocation() {
     let sample = lunar(&[lunar_row(1, 1, "0.0001")]);
-    let huge = format!("{sample}{}", "X".repeat(260_000));
+    let huge = format!("{sample}{}", "X".repeat(280_000));
     assert_eq!(failure(&huge, false), TableParseErrorKind::FileTooLarge);
 }
