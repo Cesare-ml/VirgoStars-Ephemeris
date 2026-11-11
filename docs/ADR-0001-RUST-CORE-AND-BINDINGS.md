@@ -73,9 +73,9 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 ## Legal, operational and migration guardrails
 
 - Clean-room original implementation: no Swiss Ephemeris source, copied formulas/code, wrapper or vendored SPICE Toolkit without review. Cite scientific algorithms/specifications used.
-- NASA/JPL kernel availability is not permission to bundle or sublicense all data under our MIT code license. Document provenance and distribution rights; default to external user-provided/downloaded data where needed.
-- Rust library and bindings should remain free and open source, subject to final approved license and dependency/legal review. Credit attribution strategy is documented separately; avoid asserting that a nonbinding About/Credits entry is enforceable under stock MIT.
-- Do not change production VirgoStars/Astrolabio, migrate users, publish npm/PyPI packages or configure GitHub Actions as a side effect of this documentation decision.
+- NASA/JPL kernel availability is not permission to bundle or sublicense third-party data under the repository's CPAL-1.0 code license. Document provenance and distribution rights; default to externally supplied data where needed.
+- Original VirgoStars-Ephemeris code is licensed under **CPAL-1.0**, including Exhibits A/B; see `LICENSE`, `NOTICE`, and `docs/LICENSING_AND_CREDITS.md`. A Credits/About entry is recommended, but for graphical Larger Works the license's Section 14 launch/session display requirements must also be considered. Preserve third-party license notices and review dependency compatibility.
+- Do not change production VirgoStars/Astrolabio, migrate users, or publish npm/PyPI packages as a side effect of this documentation decision. The owner explicitly authorized non-deploying GitHub Actions CI on 2026-11-10; use least-privilege permissions and no unnecessary secrets.
 - Record tests for Windows, macOS and Linux (and WASM browser/Node) as support targets, not existing support.
 
 ## Sintesi italiana
