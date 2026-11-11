@@ -22,8 +22,8 @@ use virgostars_ephemeris_core::aberration::{
     annual_aberration_icrf, AberrationError, SPEED_OF_LIGHT_KM_PER_DAY,
 };
 use virgostars_ephemeris_core::aberration_state::{
-    aberrate_light_time_state, geocentric_light_time_annual_aberration,
-    AberratedStateError, ObserverAccelerationSource,
+    aberrate_light_time_state, geocentric_light_time_annual_aberration, AberratedStateError,
+    ObserverAccelerationSource,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
 use virgostars_ephemeris_core::light_time::{
@@ -63,7 +63,11 @@ fn zero_observer_velocity_acceleration_preserves_light_time_state_and_rate() {
     let output = aberrate_light_time_state(&input, [0.0; 3], [0.0; 3]).unwrap();
     for i in 0..3 {
         near(output.position_km[i], input.position_km[i], 1e-9);
-        near(output.velocity_km_per_tdb_day[i], input.velocity_km_per_day[i], 1e-10);
+        near(
+            output.velocity_km_per_tdb_day[i],
+            input.velocity_km_per_day[i],
+            1e-10,
+        );
     }
     assert_eq!(output.target, Body::Mercury);
     assert_eq!(output.observation_epoch, input.observation_epoch);
@@ -122,11 +126,7 @@ fn finite_difference_of_independently_aberrated_positions_matches_all_three_rate
             (0.13 * r0) + (0.008 * r0) * t,
         ]
     };
-    let src_rate = [
-        -r0 * omega * n0.sin(),
-        r0 * omega * n0.cos(),
-        0.008 * r0,
-    ];
+    let src_rate = [-r0 * omega * n0.sin(), r0 * omega * n0.cos(), 0.008 * r0];
     let input = state(src(0.0), src_rate);
     let result = aberrate_light_time_state(&input, earth_v, earth_acc).unwrap();
     let position = |dt: f64| {
@@ -149,28 +149,28 @@ fn full_relative_motion_preserves_range_and_radial_velocity() {
     let r = [8.0e7, -6.0e7, 2.0e7];
     let v = [-80_000.0, 30_000.0, 20_000.0];
     let input = state(r, v);
-    let output = aberrate_light_time_state(
-        &input,
-        [8.0e5, 2.5e6, -2.0e5],
-        [1_000.0, -9_500.0, 4_200.0],
-    )
-    .unwrap();
+    let output =
+        aberrate_light_time_state(&input, [8.0e5, 2.5e6, -2.0e5], [1_000.0, -9_500.0, 4_200.0])
+            .unwrap();
     near(norm(output.position_km), norm(r), 1e-7);
     let radial_original = dot(r, v) / norm(r);
-    let radial_aberrated = dot(output.position_km, output.velocity_km_per_tdb_day)
-        / norm(output.position_km);
+    let radial_aberrated =
+        dot(output.position_km, output.velocity_km_per_tdb_day) / norm(output.position_km);
     near(radial_aberrated, radial_original, 1e-8);
     let expected_direction = annual_aberration_icrf(r, [8.0e5, 2.5e6, -2.0e5]).unwrap();
-    for i in 0..3 {
-        near(output.position_km[i] / norm(r), expected_direction[i], 1e-15);
+    for (i, expected) in expected_direction.iter().enumerate() {
+        near(
+            output.position_km[i] / norm(r),
+            *expected,
+            1e-15,
+        );
     }
 }
 
 #[test]
 fn no_physical_motion_or_acceleration_causes_no_spurious_rate() {
     let input = state([50_000_000.0, 12_000_000.0, -8_000_000.0], [0.0; 3]);
-    let output = aberrate_light_time_state(&input, [1.2e6, -2.0e6, 0.0], [0.0; 3])
-        .unwrap();
+    let output = aberrate_light_time_state(&input, [1.2e6, -2.0e6, 0.0], [0.0; 3]).unwrap();
     for value in output.velocity_km_per_tdb_day {
         near(value, 0.0, 1e-10);
     }
@@ -181,18 +181,16 @@ fn refuses_nonfinite_and_unphysical_earth_motion_without_nan_fallback() {
     let input = state([1.0e7, 0.0, 0.0], [0.0; 3]);
     assert!(matches!(
         aberrate_light_time_state(&input, [f64::NAN, 0.0, 0.0], [0.0; 3]),
-        Err(AberratedStateError::Aberration(AberrationError::NonFiniteInput))
+        Err(AberratedStateError::Aberration(
+            AberrationError::NonFiniteInput
+        ))
     ));
     assert!(matches!(
         aberrate_light_time_state(&input, [0.0; 3], [f64::INFINITY, 0.0, 0.0]),
         Err(AberratedStateError::NonFiniteAcceleration)
     ));
     assert!(matches!(
-        aberrate_light_time_state(
-            &input,
-            [SPEED_OF_LIGHT_KM_PER_DAY, 0.0, 0.0],
-            [0.0; 3],
-        ),
+        aberrate_light_time_state(&input, [SPEED_OF_LIGHT_KM_PER_DAY, 0.0, 0.0], [0.0; 3],),
         Err(AberratedStateError::Aberration(
             AberrationError::SuperluminalObserver
         ))
@@ -315,9 +313,9 @@ fn explicit_fd_step_and_external_data_bounds_fail_closed() {
             JulianDateTdb(1_000.0),
             0.01
         ),
-        Err(AberratedStateError::Ephemeris(De441Error::OutsideCoverage {
-            ..
-        }))
+        Err(AberratedStateError::Ephemeris(
+            De441Error::OutsideCoverage { .. }
+        ))
     ));
     assert!(matches!(
         geocentric_light_time_annual_aberration(
