@@ -125,9 +125,7 @@ pub fn equatorial_to_horizontal(
         return Err(HorizontalError::NonFiniteDirection);
     }
 
-    let azimuth_rad = if latitude_rad.abs() == FRAC_PI_2
-        || planar <= 32.0 * f64::EPSILON
-    {
+    let azimuth_rad = if latitude_rad.abs() == FRAC_PI_2 || planar <= 32.0 * f64::EPSILON {
         None
     } else {
         Some(east.atan2(north).rem_euclid(TAU))
