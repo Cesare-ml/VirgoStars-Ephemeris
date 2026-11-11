@@ -123,3 +123,123 @@ documentation from README. No external code (Swiss, SOFA, ERFA, NAIF), no
 ephemeris files, private datasets or dependencies incorporated.
 All CPAL-1.0 notices and **Powered by VirgoStars**
 (https://www.virgostars.it/) attribution preserved.
+
+## Follow-up: consistent true-obliquity data for moving ecliptic frames — 2026-11-12
+
+The original `nutation_with_true_obliquity(NutationAngles)` function
+returns `NutationWithTrueObliquity`, bundling the existing exact
+**mean-equatorial → true-equatorial** nutation matrix **N** with its
+true obliquity `ε_true` and **TT-day rate**.
+
+```text
+ε_true                  = ε_mean + Δε
+dε_true / dTT           = dε_mean / dTT + d(Δε) / dTT
+N                       = Rx(-ε_true) Rz(-Δψ) Rx(ε_mean)
+R_true_equatorial       = N P            (P independently supplied)
+R_true_ecliptic         = Rx(+ε_true) N P
+dR_true_ecliptic / dTDB = (dR/dTT) × dTT/dTDB
+```
+
+**Why provide a single tuple?** The moving ecliptic-of-date frame
+builder on **independent, unmerged PR #47** accepts the nutation
+matrix and the true ecliptic tilt with its rate as separate inputs.
+Passing these quantities from unrelated epochs or formula variants
+would silently produce incorrect latitudes, longitudes and
+especially **moving-frame angular velocities**. The new tuple
+guarantees they come from *the same, already validated caller
+angle set*, although it cannot guarantee that the externally
+supplied angles are physically right at any date.
+
+No precession, complete IAU 2000A series, astronomical time-scale
+model, JPL file, true-frame `Rdot` or Swiss replacement has been
+added to this PR. A downstream caller must still obtain genuine
+precession P from draft #48, independently derive the physical
+nutation angles with cleared coefficient provenance, and supply
+the correct **TT epoch and dTT/dTDB** conversion when using #47.
+
+The tuple is usable as:
+
+```rust
+use virgostars_ephemeris_core::nutation_matrix::{
+    nutation_with_true_obliquity, NutationAngles,
+};
+
+# fn example(angles: NutationAngles) -> Result<(), Box<dyn std::error::Error>> {
+let state = nutation_with_true_obliquity(angles)?;
+let n_tt = state.nutation.rotation;
+let n_dot_tt = state.nutation.rate_per_tt_day;
+let true_tilt = state.true_obliquity_rad;
+let true_tilt_rate_tt = state.true_obliquity_rate_rad_per_tt_day;
+# let _ = (n_tt, n_dot_tt, true_tilt, true_tilt_rate_tt);
+# Ok(())
+# }
+```
+
+The original `nutation_matrix_from_angles` public API is preserved.
+The new adapter calls it directly, with no duplicated nutation
+algebra, and validates the **derived** obliquity lies strictly in
+`(0, π/2)`. It uses a new error `InvalidTrueObliquity` if
+`ε_mean + Δε` lies outside this interval, despite separately
+guarded input components. The original matrix evaluator is
+also hardened: even **finite** inputs must not produce
+nonfinite output matrix entries or TT derivatives. Such cases
+return a separate `ArithmeticOverflow` error, never a plausible
+looking matrix containing infinities or NaNs.
+
+### Exact cancellation invariant
+
+The three-factor equinox-based formulation has a useful, independently
+checkable identity:
+
+```text
+E N = Rx(+ε_true) Rx(-ε_true) Rz(-Δψ) Rx(ε_mean)
+    = Rz(-Δψ) Rx(ε_mean)
+```
+
+This means **Δε cancels** from the combined true-equatorial
+to conventional equinox-based ecliptic-plane orientation, and
+its TT derivative cancels too:
+
+```text
+d(E N)/dTT = Edot N + E Ndot
+```
+
+This is an exact result **of this equinox-based rotation convention**,
+not a claim that astronomical true ecliptic geometry is independent
+of every definition of ecliptic pole, nor an independent physical
+validation of the IAU precession/nutation models. The cancellation
+is particularly sensitive to sign conventions and the consistent
+time derivative of the true-obliquity tilt.
+
+The **nine** new offline Rust tests in
+`tests/nutation_true_obliquity.rs` verify the original matrix is
+unchanged; exact sum and TT-day scalar rate; independent
+time differences of ε; E×N cancellation of Δε; changes in Δε
+and its TT rate do not corrupt the final E×N matrix or its
+derivative; **analytical Edot×N + E×Ndot** matches numerical
+TT differences; zero-nutation handling; new physical
+ε_true bounds; invalid angle propagation; and finite-input
+arithmetic overflow rejection.
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --locked --test nutation_true_obliquity
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+All fixture angles are synthetic except the pre-existing
+independent ERFA matrix numbers in the older test; there are no
+physically verified real-date nutation angles or planetary positions
+in this change. **Software CI passing will not mean Swiss parity**.
+
+**2026-11-12 CPAL-1.0 modification record:** extended
+`crates/ephemeris-core/src/nutation_matrix.rs` with a
+paired nutation/true-obliquity output and strict nonfinite/physical
+output checks; added original
+`crates/ephemeris-core/tests/nutation_true_obliquity.rs`
+with 9 regressions; extended this documentation and README.
+Existing CPAL Exhibit A source headers and **Powered by VirgoStars**
+<https://www.virgostars.it/> attribution remain. No external
+program source, IAU coefficient table, ephemeris binary, new
+dependency, package release, merge or deployment.
