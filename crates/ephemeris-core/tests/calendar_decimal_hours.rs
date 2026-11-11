@@ -19,17 +19,10 @@
 
 use virgostars_ephemeris_core::calendar::{Calendar, CalendarError, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{
-    from_split_julian_date, julday_f64, revjul_f64, to_split_julian_date,
-    DecimalHourDateTime,
+    from_split_julian_date, julday_f64, revjul_f64, to_split_julian_date, DecimalHourDateTime,
 };
 
-fn date(
-    year: i32,
-    month: u8,
-    day: u8,
-    decimal_hour: f64,
-    scale: TimeScale,
-) -> DecimalHourDateTime {
+fn date(year: i32, month: u8, day: u8, decimal_hour: f64, scale: TimeScale) -> DecimalHourDateTime {
     DecimalHourDateTime {
         year,
         month,
@@ -65,7 +58,10 @@ fn julian_date_anchors_match_known_proleptic_calendars() {
         let actual_jd = julday_f64(input, calendar).unwrap();
         nearly(actual_jd, expected_jd, 1.0e-9);
         let reverse = revjul_f64(actual_jd, calendar, TimeScale::Ut1).unwrap();
-        assert_eq!((reverse.year, reverse.month, reverse.day), (year, month, day));
+        assert_eq!(
+            (reverse.year, reverse.month, reverse.day),
+            (year, month, day)
+        );
         nearly(reverse.decimal_hour, hour, 1.0e-7);
         assert_eq!(reverse.scale, TimeScale::Ut1);
     }
