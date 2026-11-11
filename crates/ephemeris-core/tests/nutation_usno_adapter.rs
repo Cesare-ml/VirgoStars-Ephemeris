@@ -208,7 +208,7 @@ fn converted_lunar_term_round_trips_through_v1_parser_and_evaluator() {
     let converted = convert_usno_lunisolar_row(printed).unwrap();
     let multipliers = converted.multipliers.map(|v| v.to_string()).join(",");
     let text = format!(
-        "VIRGOSTARS_NUTATION_TERMS_V1\nfamily=lunisolar\narguments=l,lprime,F,D,Omega\namplitudes=radians\nslopes=radians_per_tdb_century\nsource=synthetic\nreference=synthetic:single-usno-numeric-oracle\ncount=1\nDATA\n1,{multipliers},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e}\n",
+        "VIRGOSTARS_NUTATION_TERMS_V1\nfamily=lunisolar\narguments=l,lprime,F,D,Omega\namplitudes=radians\nslopes=radians_per_tdb_century\nsource=external_unverified\nreference=https://aa.usno.navy.mil/downloads/Circular_179_bw.pdf\ncount=1\nDATA\n1,{multipliers},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e}\n",
         converted.longitude_sin_rad,
         converted.longitude_sin_slope_rad_per_century,
         converted.longitude_cos_rad,
