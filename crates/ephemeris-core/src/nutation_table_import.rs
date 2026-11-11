@@ -83,7 +83,11 @@ pub struct TableParseError {
 
 impl fmt::Display for TableParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "nutation table error at line {}: {:?}", self.line, self.kind)
+        write!(
+            f,
+            "nutation table error at line {}: {:?}",
+            self.line, self.kind
+        )
     }
 }
 impl Error for TableParseError {}
@@ -99,11 +103,7 @@ fn read<'a>(lines: &[&'a str], index: usize) -> Result<&'a str, TableParseError>
         .ok_or_else(|| error(index + 1, TableParseErrorKind::MissingField))
 }
 
-fn header_equals(
-    lines: &[&str],
-    index: usize,
-    expected: &str,
-) -> Result<(), TableParseError> {
+fn header_equals(lines: &[&str], index: usize, expected: &str) -> Result<(), TableParseError> {
     if read(lines, index)? != expected {
         return Err(error(index + 1, TableParseErrorKind::InvalidHeader));
     }
@@ -188,10 +188,7 @@ fn parse_table<const N: usize>(
         }
         // The historical MHB2000 planetary terms have no l' multiplier.
         if N == 14 && multipliers[1] != 0 {
-            return Err(error(
-                line_number,
-                TableParseErrorKind::SolarAnomalyNotUsed,
-            ));
+            return Err(error(line_number, TableParseErrorKind::SolarAnomalyNotUsed));
         }
 
         let mut coefficients = [0.0_f64; 6];
@@ -200,13 +197,19 @@ fn parse_table<const N: usize>(
                 .parse::<f64>()
                 .map_err(|_| error(line_number, TableParseErrorKind::InvalidCoefficient))?;
             if !destination.is_finite() {
-                return Err(error(line_number, TableParseErrorKind::NonFiniteCoefficient));
+                return Err(error(
+                    line_number,
+                    TableParseErrorKind::NonFiniteCoefficient,
+                ));
             }
             // A deliberately wide safety guard catches accidental imports
             // of unconverted arcsecond or integer table units. This bound
             // is NOT a model completeness/precision certification.
             if destination.abs() > 1.0 {
-                return Err(error(line_number, TableParseErrorKind::ImplausibleCoefficient));
+                return Err(error(
+                    line_number,
+                    TableParseErrorKind::ImplausibleCoefficient,
+                ));
             }
         }
         if N == 14 && (coefficients[1] != 0.0 || coefficients[4] != 0.0) {
@@ -240,9 +243,7 @@ fn parse_table<const N: usize>(
 /// The caller must supply radians, not raw arcseconds. See the v1 schema
 /// in docs/NUTATION_TABLE_IMPORT.md. The returned data is **unverified**
 /// scientifically and legally, even for a full 678-row table.
-pub fn parse_lunisolar_table(
-    text: &str,
-) -> Result<ImportedNutationTable<5>, TableParseError> {
+pub fn parse_lunisolar_table(text: &str) -> Result<ImportedNutationTable<5>, TableParseError> {
     parse_table::<5>(
         text,
         "family=lunisolar",
@@ -256,9 +257,7 @@ pub fn parse_lunisolar_table(
 /// Requires historical planetary l' multiplier **zero** and secular
 /// amplitude slopes **zero**, with explicit canonical argument ordering.
 /// The returned data is **unverified**, not official IAU 2000A output.
-pub fn parse_planetary_table(
-    text: &str,
-) -> Result<ImportedNutationTable<14>, TableParseError> {
+pub fn parse_planetary_table(text: &str) -> Result<ImportedNutationTable<14>, TableParseError> {
     parse_table::<14>(
         text,
         "family=planetary",
