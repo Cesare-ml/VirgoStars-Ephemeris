@@ -215,7 +215,8 @@ impl RotatingFrame {
     ) -> Result<Self, RotatingFrameError> {
         if !true_obliquity_rad.is_finite()
             || !true_obliquity_rate_rad_per_tt_day.is_finite()
-            || !(0.0..FRAC_PI_2).contains(&true_obliquity_rad)
+            || true_obliquity_rad <= 0.0
+            || true_obliquity_rad >= FRAC_PI_2
         {
             return Err(RotatingFrameError::InvalidTrueObliquity);
         }
@@ -241,9 +242,8 @@ impl RotatingFrame {
         let rotation = mat_mul(ecliptic.rotation, equator.rotation);
         let e_dot_np = mat_mul(ecliptic.rotation_rate_per_tdb_day, equator.rotation);
         let e_np_dot = mat_mul(ecliptic.rotation, equator.rotation_rate_per_tdb_day);
-        let rate_tdb = std::array::from_fn(|i| {
-            std::array::from_fn(|j| e_dot_np[i][j] + e_np_dot[i][j])
-        });
+        let rate_tdb =
+            std::array::from_fn(|i| std::array::from_fn(|j| e_dot_np[i][j] + e_np_dot[i][j]));
         Self::new(rotation, rate_tdb)
     }
 
