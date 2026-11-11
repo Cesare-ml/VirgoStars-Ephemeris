@@ -140,7 +140,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn csv_body_names_are_unique_and_explicit_about_barycenters() {
         use virgostars_ephemeris_core::de441::Body;
@@ -161,14 +160,25 @@ mod tests {
             ("sun", Body::Sun),
         ];
         for (index, (name, expected)) in cases.iter().enumerate() {
-            assert_eq!(super::body(name), Some(*expected), "incorrect CSV body: {name}");
+            assert_eq!(
+                super::body(name),
+                Some(*expected),
+                "incorrect CSV body: {name}"
+            );
             for (other_name, _) in &cases[..index] {
                 assert_ne!(name, other_name, "duplicate CSV body identifier");
             }
         }
         for ambiguous in [
-            "mars", "jupiter", "saturn", "uranus", "neptune", "pluto",
-            "earth_moon_barycenter", "solar_system_barycenter", "",
+            "mars",
+            "jupiter",
+            "saturn",
+            "uranus",
+            "neptune",
+            "pluto",
+            "earth_moon_barycenter",
+            "solar_system_barycenter",
+            "",
         ] {
             assert!(
                 super::body(ambiguous).is_none(),
