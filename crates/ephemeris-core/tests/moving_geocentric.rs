@@ -157,12 +157,14 @@ fn independent_centered_differences_match_all_three_moving_spherical_rates() {
 #[test]
 fn rotation_preserves_distance_and_signed_radial_rate() {
     let source = input([4.0e7, -1.0e7, 2.0e7], [-11_000.0, 9_000.0, 8_000.0]);
-    let reference =
-        moving_spherical_from_light_time(&source, &passive_z(0.0, 0.0)).unwrap();
+    let reference = moving_spherical_from_light_time(&source, &passive_z(0.0, 0.0)).unwrap();
     for angle in [-PI, -0.2, 0.0, 0.8, PI] {
-        let actual =
-            moving_spherical_from_light_time(&source, &passive_z(angle, 0.15)).unwrap();
-        near(actual.spherical.distance_km, reference.spherical.distance_km, 1e-8);
+        let actual = moving_spherical_from_light_time(&source, &passive_z(angle, 0.15)).unwrap();
+        near(
+            actual.spherical.distance_km,
+            reference.spherical.distance_km,
+            1e-8,
+        );
         near(
             actual.spherical.distance_rate_km_per_day,
             reference.spherical.distance_rate_km_per_day,
@@ -296,24 +298,16 @@ fn one_call_returns_missing_ephemeris_body_and_undefined_earth_errors() {
     let reception = JulianDateTdb(1_016.0);
     let frame = passive_z(0.0, 0.1);
     assert!(matches!(
-        geocentric_light_time_moving_spherical(
-            &mut reader,
-            Body::Earth,
-            reception,
-            &frame,
-        ),
+        geocentric_light_time_moving_spherical(&mut reader, Body::Earth, reception, &frame,),
         Err(MovingGeocentricError::LightTime(
             LightTimeError::UndefinedDirection
         ))
     ));
     assert!(matches!(
-        geocentric_light_time_moving_spherical(
-            &mut reader,
-            Body::Sun,
-            reception,
-            &frame,
-        ),
-        Err(MovingGeocentricError::LightTime(LightTimeError::Ephemeris(_)))
+        geocentric_light_time_moving_spherical(&mut reader, Body::Sun, reception, &frame,),
+        Err(MovingGeocentricError::LightTime(LightTimeError::Ephemeris(
+            _
+        )))
     ));
 }
 
@@ -329,11 +323,8 @@ fn previously_corrected_cartesian_velocity_is_rotated_once_with_rdot_term() {
         position_km: [20_000.0, 0.0, 0.0],
         velocity_km_per_day: [100.0, 200.0, 0.0],
     };
-    let moved = moving_spherical_from_icrf_state(
-        &already_corrected,
-        &passive_z(0.0, 0.05),
-    )
-    .unwrap();
+    let moved =
+        moving_spherical_from_icrf_state(&already_corrected, &passive_z(0.0, 0.05)).unwrap();
     let s = moved.spherical;
     assert_eq!(s.target, Body::Venus);
     assert_eq!(s.center, Body::Earth);
@@ -361,16 +352,8 @@ fn full_light_time_pipeline_uses_explicit_tt_nutation_precession_rate() {
     let mut reader = De441::new(Cursor::new(synthetic_de441())).unwrap();
     let omega_tt = 0.125;
     let ratio = 1.000_2;
-    let precession = [
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ];
-    let p_rate_tt = [
-        [0.0, omega_tt, 0.0],
-        [-omega_tt, 0.0, 0.0],
-        [0.0; 3],
-    ];
+    let precession = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let p_rate_tt = [[0.0, omega_tt, 0.0], [-omega_tt, 0.0, 0.0], [0.0; 3]];
     let frame = RotatingFrame::from_tt_precession_nutation(
         precession,
         p_rate_tt,
@@ -384,7 +367,11 @@ fn full_light_time_pipeline_uses_explicit_tt_nutation_precession_rate() {
         geocentric_light_time_moving_spherical(&mut reader, Body::Mercury, epoch, &frame).unwrap();
     near(result.spherical.longitude_rad, 0.0, 1e-15);
     near(result.spherical.distance_km, 1_000.0, 1e-8);
-    near(result.spherical.longitude_rate_rad_per_day, -omega_tt * ratio, 1e-15);
+    near(
+        result.spherical.longitude_rate_rad_per_day,
+        -omega_tt * ratio,
+        1e-15,
+    );
     near(result.spherical.latitude_rate_rad_per_day, 0.0, 1e-15);
     near(result.spherical.distance_rate_km_per_day, 0.0, 1e-10);
     assert_eq!(result.spherical.epoch, epoch);
