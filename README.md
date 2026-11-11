@@ -21,6 +21,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 - [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Engineering roadmap](docs/ROADMAP.md)
+- [Three product MVPs for replacing Swiss Ephemeris — owner-approved priority order](docs/THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
 - [Proposed public contracts](docs/API_CONTRACTS.md)
