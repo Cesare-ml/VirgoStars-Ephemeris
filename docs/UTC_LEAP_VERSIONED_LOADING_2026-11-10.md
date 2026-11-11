@@ -67,100 +67,31 @@ The in-memory source must contain:
 - increasing numeric `NTP_MIDNIGHT TAI_MINUS_UTC` rows, beginning with
   `2272060800 10` (1972-01-01 00:00 UTC baseline), no duplicate epochs;
 - transitions at month starts with an **exact +1 or −1-second** change;
+- the **entire approved IANA 2026b historical transition prefix**, with
+  no deletions, moved dates, changed offsets or unapproved extra
+  transitions inside the already approved coverage interval;
+- expiration **not earlier than** the historical 2026b exclusive cutoff
+  (2026-12-28); future changes remain review-only proposals;
 - no more than 1,024 numeric entries and 128 KiB of input;
 - a nonempty, safe version ID of at most 80 ASCII characters and a
   nonempty provenance value of at most 1,024 bytes.
 
-Blank lines and ordinary descriptive comments are accepted. The format
-is intentionally the *curated numeric proposal* emitted by
-`scripts/audit_iana_leap_seconds.py --propose VERSION`, **not** a generic
-parser for arbitrary official IANA files. The Rust loader explicitly
-**rejects** unprocessed official `## Versioned UTC leap-second schedules — reviewed offline loading
+Blank lines and descriptive comments are accepted. The format is
+intentionally the *curated numeric proposal* emitted by
+`scripts/audit_iana_leap_seconds.py --propose VERSION`, **not** a parser
+for arbitrary original IANA files. In particular, Rust **rejects** raw
+IANA `#$` update and `#h` integrity marker lines instead of ignoring
+them as comments. Ordinary descriptive comments mentioning these fields
+remain valid. Run the offline verifier against the original source,
+then review and load only the curated numeric proposal.
 
-**Date:** 2026-11-10  
-**Status:** experimental Rust API on PR #40, not a production time service.
-
-## Objective
-
-Allow applications to **keep the original IANA tzdb-2026b schedule** while
-loading a separately reviewed, versioned future leap-second table into
-the same process. Historical results should be repeatable by using the
-**same version and the same content**. The Rust core must not silently
-replace older tables, choose a hidden 'latest' version, download data, or
-extend the validity interval of any snapshot.
-
-## Implemented Rust API
-
-`VersionedUtcLeapSchedule` in
-`crates/ephemeris-core/src/utc_leaps.rs` owns:
-
-- a literal **version ID**, such as `iana-tzdb-2026b`;
-- a declared **provenance string** (link and/or approved digest / dossier ID);
-- the exclusive **UTC expiration day**;
-- an independent, validated `UtcLeapSchedule` with bounded UTC↔TAI
-  conversion methods.
-
-The existing `UtcLeapSchedule::from_iana_2026b()` remains unchanged for
-existing callers. `VersionedUtcLeapSchedule::iana_2026b()` wraps that same
-pinned schedule with metadata, while
-`VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(version,
-provenance, source)` accepts a previously approved **curated numeric**
-NTP-style table from memory. The wrapper offers getters `version()`,
-`provenance()`, `expires_utc_day()` and `schedule()`.
-
-For example, callers can keep an old schedule and a new reviewed version
-side-by-side:
-
-```rust
-use virgostars_ephemeris_core::utc_leaps::{
-    UtcDay, VersionedUtcLeapSchedule,
-};
-
-let original = VersionedUtcLeapSchedule::iana_2026b()?;
-let original_expiry = UtcDay::from_gregorian(2026, 12, 28)?;
-assert_eq!(original.expires_utc_day(), original_expiry);
-
-// Only after externally verifying the official source, its SHA-1 integrity,
-// complete history, identity, retrieval and published expiration:
-// let reviewed_numeric = std::fs::read_to_string("reviewed-iana-2027a.list")?;
-// let updated = VersionedUtcLeapSchedule::from_reviewed_numeric_snapshot(
-//     "iana-tzdb-2027a",
-//     "source URL; retrieval timestamp; separately verified SHA-256",
-//     &reviewed_numeric,
-// )?;
-// original continues to exist unchanged in this scope.
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-The example's future version string is **illustrative**, not a claim that
-an IANA release named tzdb-2027a or any hypothetical 2027 leap exists.
-
-## Accepted format and guarantees
-
-The in-memory source must contain:
-
-- **exactly one** `#@ NTP_EXPIRY` line, with an integer NTP timestamp
-  divisible by 86,400 (a UTC midnight), strictly after its last record;
-- increasing numeric `NTP_MIDNIGHT TAI_MINUS_UTC` rows, beginning with
-  `2272060800 10` (1972-01-01 00:00 UTC baseline), no duplicate epochs;
-- transitions at month starts with an **exact +1 or −1-second** change;
-- no more than 1,024 numeric entries and 128 KiB of input;
-- a nonempty, safe version ID of at most 80 ASCII characters and a
-  nonempty provenance value of at most 1,024 bytes.
-
- (last-updated) and `#h` (SHA-1)
-metadata markers, including indented variants, rather than ignoring them
-as innocuous comments. An original IANA file must first pass the
-offline audit, including upstream integrity checks and historical review,
-before its numeric extract can be loaded.
-
-The Rust loader validates numeric/calendar structure, offset jumps,
-expiry and day range; it does **not** itself authenticate a publisher,
-verify an official `#h` checksum, or compare loaded historical rows
-against an approved source. Those checks must be completed by the
-**offline audit script, source review and a human-approved PR** before
-loading new data into a real app. Ordinary comments *mentioning* upstream
-metadata for attribution do not constitute raw checksum markers.
+The Rust loader checks the numeric structure, calendar/offset/expiry
+rules, immutable 2026b historical prefix and no changes anywhere before
+the 2026b expiration. It does **not** authenticate an official publisher,
+check the original source's `#h` checksum, or independently establish
+that proposed future rows are official. These checks remain the
+responsibility of the **offline audit script, independent source review
+and a human-approved PR** before adopting any new version.
 
 A proposal with a later expiration is **not an automatically approved
 upgrade**, even when leap offsets are unchanged. The software never
@@ -456,10 +387,11 @@ public-domain numeric file, preserving the exact-byte SHA-256 across
 Windows and Unix runners. The numeric source, expected digest and
 time-scale conversion behavior are unchanged.
 
-2026-11-11: the reviewed-numeric Rust constructor now fails closed
-if it encounters upstream IANA `#$` or `#h` marker lines, rather than
-silently ignoring unverified authenticity/integrity fields. Added a
-deterministic regression proving raw markers are rejected, while
-ordinary curated data and attribution comments remain accepted.
-The mandatory offline checksum/history audit remains separate and
-the numeric pinned IANA data is unchanged.
+2026-11-11: the Rust reviewed-numeric importer now rejects raw
+unverified IANA `#$` / `#h` markers and preserves the *complete*
+approved 2026b historical schedule, including the absence of any
+unannounced leap events through the pinned coverage interval. It rejects
+earlier expiry dates and historically shifted or omitted transitions,
+but still permits review-only future extensions. Deterministic tests
+cover those cases. The upstream identity/official checksum review
+remains external; no data files were changed.
