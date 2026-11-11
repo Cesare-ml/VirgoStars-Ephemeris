@@ -29,6 +29,7 @@ pub mod coordinates;
 pub mod de441;
 pub mod error;
 pub mod first_sky;
+pub mod geocentric_six_fields;
 pub mod light_time;
 pub mod state;
 pub mod time;

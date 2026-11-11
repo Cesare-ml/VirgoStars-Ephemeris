@@ -29,6 +29,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental DE441 reader](docs/DE441.md)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
+- [MVP-1 geocentric light-time six-field bridge in fixed axes (not yet apparent)](docs/MVP1_GEOCENTRIC_SIX_FIELDS_2026-11-11.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)
