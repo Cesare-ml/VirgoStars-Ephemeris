@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let state = ephemeris.state(target, center, JulianDateTdb(epoch))?;
     println!("jd_tdb,target,center,frame,corrections,x_km,y_km,z_km,vx_km_day,vy_km_day,vz_km_day");
     println!(
-        "{:.9},{},{},ICRF,GEOMETRIC,{:.15e},{:.15e},{:.15e},{:.15e},{:.15e},{:.15e}",
+        "{:.16e},{},{},ICRF,GEOMETRIC,{:.15e},{:.15e},{:.15e},{:.15e},{:.15e},{:.15e}",
         epoch,
         args[3],
         args[4],
@@ -68,4 +68,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         state.velocity_km_per_day[2],
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn exported_epoch_roundtrips_without_nine_decimal_truncation() {
+        let epoch = 2451545.123456789_f64;
+        let encoded = format!("{epoch:.16e}");
+        let decoded: f64 = encoded.parse().expect("valid floating-point JD");
+        assert_eq!(decoded.to_bits(), epoch.to_bits());
+    }
+
+    #[test]
+    fn unsupported_body_names_are_rejected() {
+        assert!(super::body("mars").is_none());
+        assert!(super::body("MERCURY").is_none());
+        assert!(super::body("mars_barycenter").is_some());
+    }
 }
