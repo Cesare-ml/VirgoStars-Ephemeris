@@ -247,6 +247,75 @@ leap-second round-trip, source identity, record verification, invalid
 calendar/clock/nonexistent leap/expired coverage, missing or mismatched
 source version/hash, wrong input scale and NaN fractions.
 
+## Untrusted incoming records and canonical Rust verification
+
+The additive `ReceivedUtcTaiRecordV1` input structure represents a
+**received record** using only owned strings and scalar fields. It has the
+same field names as `UtcTaiRecordV1`, but unlike the Rust-produced
+output it uses *owned `String` values* for `schema` and
+`tai_time_scale` rather than `&'static str` values. This is an
+experimental source contract for eventual Python/TypeScript consumers:
+it is **not** a JSON parser, serializer, PyO3 or WASM binding.
+
+`ReceivedUtcTaiRecordV1::from(&produced_record)` makes a complete
+owned representation for testing or passing through a future boundary.
+`UtcLeapCatalog::validate_received_record_v1(&received)` validates
+untrusted fields and returns a **new canonical `UtcTaiRecordV1`**
+reconstructed by the Rust UTC↔TAI engine, rather than returning the
+untrusted object. In particular it:
+
+- Requires the **exact** `virgostars.utc-tai.v1` schema and `TAI` label.
+- Checks the explicitly selected leap-table version and **exact-byte
+  SHA-256** against registered approved content before conversion.
+- Validates the normalized split TAI Julian day and fraction; NaN,
+  infinities or out-of-range fractions are not accepted.
+- Reconstructs the corresponding UTC day and clock from that TAI
+  instant using the registered leap-second schedule.
+- Compares all UTC fields, source provenance and exclusive expiry to the
+  newly calculated record; fractional UTC seconds use the same
+  **absolute 1e-8 second tolerance** already documented for
+  `validate_record_v1`.
+
+The returned canonical record is derived from the validated TAI input;
+no mismatching external fields are passed through. The existing
+`validate_record_v1` method remains available for Rust-produced
+records. Rejections use existing machine-mappable `UtcLeapError`
+variants (`invalid_wire_record`, `unknown_version`,
+`source_digest_mismatch`), not language-specific text messages.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+use virgostars_ephemeris_core::utc_wire::{
+    ReceivedUtcTaiRecordV1, UtcCivilInputV1,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let sha = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+let record = catalog.utc_civil_to_tai_record_v1(
+    "iana-tzdb-2026b",
+    sha,
+    UtcCivilInputV1 {
+        year: 2016, month: 12, day: 31,
+        hour: 23, minute: 59, second: 60.5,
+    },
+)?;
+let received = ReceivedUtcTaiRecordV1::from(&record);
+let canonical = catalog.validate_received_record_v1(&received)?;
+assert_eq!(canonical.leap_table_sha256, sha);
+assert!((canonical.utc_second - 60.5).abs() < 1e-8);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Two deterministic tests cover a real 2016 positive leap-second record,
+canonical reconstruction, and **fail-closed** corrupt fields:
+UTC second/hour/date, declared provenance, expiration, version/hash,
+schema/time scale, nonfinite UTC/TAI inputs and non-normalized TAI
+fractions. These are data-contract tests, **not** proof of official IANA
+source identity, JPL ephemeris parity or published bindings.
+
 ## Rust example
 
 ```rust
@@ -381,3 +450,12 @@ remain unchanged.
 bindings, with two deterministic Rust tests. No new dependencies,
 production bindings, data updates, merge or release. CPAL-1.0,
 public-domain IANA attribution and `Powered by VirgoStars` preserved.
+
+2026-11-11: introduced `ReceivedUtcTaiRecordV1` with independently
+owned incoming schema/time-scale strings and
+`UtcLeapCatalog::validate_received_record_v1`, which recalculates
+and returns a canonical Rust output rather than trusting external
+record fields. Added two deterministic regressions. No new
+dependencies, release, Python/WASM binding or automatic updates;
+CPAL-1.0, public-domain IANA attribution and `Powered by VirgoStars`
+remain unchanged.
