@@ -19,8 +19,7 @@
 use std::f64::consts::FRAC_PI_2;
 
 use virgostars_ephemeris_core::nutation_matrix::{
-    nutation_matrix_from_angles, nutation_with_true_obliquity, NutationAngles,
-    NutationMatrixError,
+    nutation_matrix_from_angles, nutation_with_true_obliquity, NutationAngles, NutationMatrixError,
 };
 
 type Matrix = [[f64; 3]; 3];
@@ -75,13 +74,12 @@ fn shift_angles(original: NutationAngles, elapsed_tt_days: f64) -> NutationAngle
 fn emitted_matrix_is_identical_to_existing_nutation_primitive() {
     let source = angles();
     let paired = nutation_with_true_obliquity(source).unwrap();
-    assert_eq!(paired.nutation, nutation_matrix_from_angles(source).unwrap());
-    near(paired.true_obliquity_rad, 0.409_03, 1e-15);
-    near(
-        paired.true_obliquity_rate_rad_per_tt_day,
-        -4.5e-7,
-        1e-21,
+    assert_eq!(
+        paired.nutation,
+        nutation_matrix_from_angles(source).unwrap()
     );
+    near(paired.true_obliquity_rad, 0.409_03, 1e-15);
+    near(paired.true_obliquity_rate_rad_per_tt_day, -4.5e-7, 1e-21);
 }
 
 #[test]
@@ -104,7 +102,10 @@ fn final_ecliptic_tilt_cancels_all_delta_epsilon_from_nutation_matrix() {
     // The cancellation must hold even when delta-epsilon != 0.
     let a = angles();
     let output = nutation_with_true_obliquity(a).unwrap();
-    let applied = multiply(passive_x(output.true_obliquity_rad), output.nutation.rotation);
+    let applied = multiply(
+        passive_x(output.true_obliquity_rad),
+        output.nutation.rotation,
+    );
     let expected = multiply(passive_z(-a.delta_psi_rad), passive_x(a.mean_obliquity_rad));
     for i in 0..3 {
         for j in 0..3 {
@@ -123,14 +124,16 @@ fn ecliptic_orientation_and_rates_are_independent_of_delta_epsilon_history() {
     let at = |tt_day: f64| {
         let input = shift_angles(a, tt_day);
         let paired = nutation_with_true_obliquity(input).unwrap();
-        multiply(passive_x(paired.true_obliquity_rad), paired.nutation.rotation)
+        multiply(
+            passive_x(paired.true_obliquity_rad),
+            paired.nutation.rotation,
+        )
     };
     let h = 0.1_f64;
     let before = at(-h);
     let after = at(h);
-    let finite_rate: Matrix = std::array::from_fn(|i| {
-        std::array::from_fn(|j| (after[i][j] - before[i][j]) / (2.0 * h))
-    });
+    let finite_rate: Matrix =
+        std::array::from_fn(|i| std::array::from_fn(|j| (after[i][j] - before[i][j]) / (2.0 * h)));
     // An independent analytical derivative of the simpler reduced
     // equinox-based product B=Rz(-psi)*Rx(eps_mean), evaluated by
     // centered differences, must match the full pipeline derivative.
@@ -244,9 +247,8 @@ fn analytic_equatorial_to_ecliptic_rate_matches_independent_time_differences() {
     let e = passive_x(eps);
     let from_e_dot = multiply(e_dot, output.nutation.rotation);
     let from_n_dot = multiply(e, output.nutation.rate_per_tt_day);
-    let combined_rate: Matrix = std::array::from_fn(|i| {
-        std::array::from_fn(|j| from_e_dot[i][j] + from_n_dot[i][j])
-    });
+    let combined_rate: Matrix =
+        std::array::from_fn(|i| std::array::from_fn(|j| from_e_dot[i][j] + from_n_dot[i][j]));
     let h = 0.1_f64;
     let at = |dt: f64| {
         let shifted = nutation_with_true_obliquity(shift_angles(a, dt)).unwrap();
