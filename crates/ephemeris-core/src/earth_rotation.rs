@@ -59,7 +59,10 @@ impl fmt::Display for EarthRotationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RequiresUt1(actual) => {
-                write!(f, "Earth rotation angle requires a UT1 Julian date, got {actual:?}")
+                write!(
+                    f,
+                    "Earth rotation angle requires a UT1 Julian date, got {actual:?}"
+                )
             }
             Self::InvalidDate(error) => write!(f, "invalid Earth rotation epoch: {error}"),
         }
@@ -89,9 +92,7 @@ impl Error for EarthRotationError {
 /// The integer `day_number` and sub-day fraction stay separate until the
 /// small correction is evaluated, avoiding the precision loss of collapsing
 /// a modern Julian date into one f64 first.
-pub fn earth_rotation_angle(
-    epoch: JulianDate,
-) -> Result<EarthRotation, EarthRotationError> {
+pub fn earth_rotation_angle(epoch: JulianDate) -> Result<EarthRotation, EarthRotationError> {
     if epoch.scale() != TimeScale::Ut1 {
         return Err(EarthRotationError::RequiresUt1(epoch.scale()));
     }
@@ -103,10 +104,9 @@ pub fn earth_rotation_angle(
     // Dropping whole days is exact modulo one rotation per UT1 day.
     let fractional_days = epoch.midnight_fraction() - 0.5;
     let days_since_j2000 = whole_days as f64 + fractional_days;
-    let turns = (ERA_TURNS_AT_J2000
-        + fractional_days
-        + ERA_EXCESS_TURNS_PER_UT1_DAY * days_since_j2000)
-        .rem_euclid(1.0);
+    let turns =
+        (ERA_TURNS_AT_J2000 + fractional_days + ERA_EXCESS_TURNS_PER_UT1_DAY * days_since_j2000)
+            .rem_euclid(1.0);
     let angle_rad = TAU * turns;
     let rate_rad_per_ut1_day = TAU * (1.0 + ERA_EXCESS_TURNS_PER_UT1_DAY);
 
