@@ -15,8 +15,10 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
-//! validated real-world astronomical positions are provided at this stage.
+//! The UTC ↔ TAI leap-second implementation and scalar v1 record are
+//! experimental; only caller-approved and explicitly bounded schedules are
+//! accepted. TT → TDB, independent DE441 scientific accuracy validation
+//! and production-ready bindings are not provided at this stage.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
@@ -28,10 +30,13 @@ pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
 pub mod error;
+mod fingerprint;
 pub mod first_sky;
 pub mod light_time;
 pub mod state;
 pub mod time;
+pub mod utc_leaps;
+pub mod utc_wire;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
