@@ -355,3 +355,29 @@ fn chebyshev_velocity_agrees_with_central_position_difference_inside_granules() 
         }
     }
 }
+
+#[test]
+fn relative_states_close_triangle_for_position_and_velocity_across_granules() {
+    // A->B + B->C = A->C, for independently requested center/target pairs.
+    // This catches inconsistent center subtraction and velocity units.
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    for jd in [1000.0, 1007.5, 1016.0, 1023.5, 1032.0, 1048.0, 1064.0] {
+        let epoch = JulianDateTdb(jd);
+        let mercury_earth = eph.state(Body::Mercury, Body::Earth, epoch).unwrap();
+        let earth_moon = eph.state(Body::Earth, Body::Moon, epoch).unwrap();
+        let mercury_moon = eph.state(Body::Mercury, Body::Moon, epoch).unwrap();
+        for axis in 0..3 {
+            let expected_position = mercury_earth.position_km[axis] + earth_moon.position_km[axis];
+            let expected_velocity =
+                mercury_earth.velocity_km_per_day[axis] + earth_moon.velocity_km_per_day[axis];
+            assert!(
+                (expected_position - mercury_moon.position_km[axis]).abs() < 1e-9,
+                "position closure at JD {jd}, axis {axis}"
+            );
+            assert!(
+                (expected_velocity - mercury_moon.velocity_km_per_day[axis]).abs() < 1e-9,
+                "velocity closure at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
