@@ -3,7 +3,7 @@ The contents of this file are subject to the Common Public Attribution License
 Version 1.0 (CPAL-1.0). See LICENSE, NOTICE and the full Exhibit A notice in
 crates/ephemeris-core/src/de441.rs.
 Original contribution: Cesare-ml (VirgoStars project), 2026.
-Modification record: 2026-11-11 — add offline geometric vector export example; preserve full f64 precision for vector components.
+Modification record: 2026-11-11 — add offline geometric vector export example; preserve full f64 precision for vector components; add deterministic bit-pattern serialization regressions.
 */
 
 //! Offline CSV export for independently comparing classic DE441 states.
@@ -99,6 +99,44 @@ mod tests {
                 value.to_bits(),
                 "CSV serialization changed component {value:?}"
             );
+        }
+    }
+
+    #[test]
+    fn finite_bit_patterns_roundtrip_through_csv_format() {
+        // Deterministic coverage across signs, exponents, mantissas and subnormals.
+        // These values test serialization only, not astronomical accuracy.
+        let mut bits = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut checked = 0_usize;
+        for _ in 0..10_000 {
+            bits ^= bits >> 12;
+            bits ^= bits << 25;
+            bits ^= bits >> 27;
+            let value = f64::from_bits(bits.wrapping_mul(0x2545_f491_4f6c_dd1d));
+            if !value.is_finite() {
+                continue;
+            }
+            let encoded = format!("{value:.16e}");
+            let decoded: f64 = encoded.parse().expect("formatted finite f64");
+            assert_eq!(
+                decoded.to_bits(),
+                value.to_bits(),
+                "CSV precision regression for bits {:016x}",
+                value.to_bits()
+            );
+            checked += 1;
+        }
+        assert!(checked > 9_000, "insufficient finite regression samples");
+
+        for value in [
+            f64::from_bits(1), // Smallest positive subnormal.
+            f64::from_bits(0x8000_0000_0000_0001), // Negative subnormal.
+            f64::from_bits(0x7fef_ffff_ffff_ffff), // Largest finite.
+            f64::from_bits(0xffef_ffff_ffff_ffff), // Most negative finite.
+        ] {
+            let encoded = format!("{value:.16e}");
+            let decoded: f64 = encoded.parse().expect("finite boundary value");
+            assert_eq!(decoded.to_bits(), value.to_bits());
         }
     }
 
