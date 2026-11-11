@@ -353,3 +353,48 @@ fn composed_aberration_and_spherical_projection_runs_through_original_de441() {
         "aberrated direction was not distinguished from light-time geometry"
     );
 }
+
+#[test]
+fn composed_spherical_pipeline_handles_geocentric_moon_and_rejects_earth_target() {
+    let mut ephemeris = eph();
+    let t = JulianDateTdb(1_016.0);
+    // Classic JPL Moon coefficients are relative to the Earth-Moon
+    // barycentric reconstruction. This follows the real Moon reading
+    // pathway, albeit against deterministic synthetic coefficients.
+    let moon = geocentric_aberrated_fixed_spherical(
+        &mut ephemeris,
+        Body::Moon,
+        t,
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(moon.spherical.target, Body::Moon);
+    assert_eq!(moon.spherical.center, Body::Earth);
+    assert_eq!(moon.spherical.epoch, t);
+    assert!(moon.emission_epoch.0 < t.0);
+    assert!(moon.spherical.distance_km > 0.0);
+    for value in [
+        moon.spherical.longitude_rad,
+        moon.spherical.latitude_rad,
+        moon.spherical.longitude_rate_rad_per_day,
+        moon.spherical.latitude_rate_rad_per_day,
+        moon.spherical.distance_rate_km_per_day,
+    ] {
+        assert!(value.is_finite());
+    }
+    assert!(matches!(
+        geocentric_aberrated_fixed_spherical(
+            &mut ephemeris,
+            Body::Earth,
+            t,
+            0.0,
+        ),
+        Err(
+            virgostars_ephemeris_core::aberrated_spherical::AberratedSphericalError::Aberration(
+                virgostars_ephemeris_core::aberration_state::AberratedStateError::LightTime(
+                    virgostars_ephemeris_core::light_time::LightTimeError::UndefinedDirection
+                )
+            )
+        )
+    ));
+}
