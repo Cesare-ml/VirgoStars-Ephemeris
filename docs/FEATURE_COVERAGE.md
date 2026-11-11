@@ -21,13 +21,17 @@ acceptance cases before a feature can be considered complete.
 | Tropical/sidereal zodiacs, ayanamshas, houses, house positions and Gauquelin sectors | Astrological Functions, backed by the Rust core | Not implemented in the inspected functions repository. |
 | Names, configuration, units, compatibility flags, lifecycle and API adapters | Core and language bindings | No stable Swiss-compatible facade or released bindings. |
 
+**Owner-approved product order (2026-11-11):** [MVP 1 essential calculations + stars/houses/loader, MVP 2 all remaining used calls, MVP 3 all remaining Swiss APIs](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md). The broader coverage table above remains a functional inventory, not a release-status or MVP priority checklist.
+
 Backend-first priorities, concrete call sites and acceptance cases are tracked
 in [the compatibility inventory](BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
-and [work packages](BACKEND_WORK_PACKAGES_2026-11-10.md). First target the
-backend's apparent geocentric Sun–Saturn positions **and speeds**, calendar and
-time policy, Rust-backed Node compatibility, houses and the remaining default
-chart bodies; then cover its observed horizons, rise/set, fixed-star and
-eclipse workflows. Independent reference work starts alongside implementation.
+and [work packages](BACKEND_WORK_PACKAGES_2026-11-10.md). Under the owner-approved MVP order,
+prioritize **Sun/Moon/physical planets and speeds**, Julian-day forward/reverse
+conversion, five used house systems, fixed stars and the Node load/compatibility
+interface **in MVP 1** (scaffolding interfaces in parallel). MVP 2 covers
+remaining currently used Swiss functionality, including nodes/apogees/Chiron,
+horizon/rise/transit and eclipse workflows. MVP 3 covers all other documented
+Swiss Ephemeris capabilities. Independent reference work starts alongside implementation.
 This ordering does not remove the long-term full-coverage target.
 A clean-room Rust engine and
 thin language bindings remain the architecture; public access to data does
