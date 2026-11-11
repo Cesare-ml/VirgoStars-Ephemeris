@@ -43,6 +43,8 @@ pub enum RotatingFrameError {
     InvalidRotation,
     /// dR/dt is inconsistent with the orthonormal constraint R*R^T=I.
     InconsistentDerivative,
+    /// No accurate caller-supplied TT days per TDB day conversion.
+    InvalidTimeScaleRate,
     /// Matrix multiplication produces a nonrepresentable state.
     ArithmeticOverflow,
 }
@@ -54,6 +56,9 @@ impl fmt::Display for RotatingFrameError {
             Self::InvalidRotation => write!(f, "moving-frame matrix is not a proper rotation"),
             Self::InconsistentDerivative => {
                 write!(f, "moving-frame derivative violates orthogonality")
+            }
+            Self::InvalidTimeScaleRate => {
+                write!(f, "invalid caller-supplied d(TT days)/d(TDB days)")
             }
             Self::ArithmeticOverflow => write!(f, "non-finite transformed Cartesian state"),
         }
@@ -69,7 +74,112 @@ fn mat_vec(matrix: [[f64; 3]; 3], vector: [f64; 3]) -> [f64; 3] {
     std::array::from_fn(|row| dot(matrix[row], vector))
 }
 
+fn mat_mul(left: [[f64; 3]; 3], right: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    std::array::from_fn(|i| {
+        std::array::from_fn(|j| {
+            left[i][0] * right[0][j]
+                + left[i][1] * right[1][j]
+                + left[i][2] * right[2][j]
+        })
+    })
+}
+
+/// Ratio of **TT days elapsed per TDB day elapsed at one epoch**.
+///
+/// Used only to convert a published matrix derivative per **TT day**
+/// to the reception-time derivative per **TDB day**. It is **not**
+/// the TT–TDB *epoch offset* or a ΔT (UT1–TT) value.
+///
+/// The ratio MUST be supplied by a separate, independently validated
+/// TT↔TDB rate model at the **same physical instant** as both matrices.
+/// No implicit unity assumption or unverified low-accuracy model is used.
+///
+/// The 0.999..1.001 bound is a wide engineering sanity guard against
+/// common unit confusions (e.g. seconds per day or an absolute epoch),
+/// **not** a precision certification or an error tolerance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TtPerTdbDay(f64);
+
+impl TtPerTdbDay {
+    pub fn new(rate: f64) -> Result<Self, RotatingFrameError> {
+        if !rate.is_finite() || !(0.999..=1.001).contains(&rate) {
+            return Err(RotatingFrameError::InvalidTimeScaleRate);
+        }
+        Ok(Self(rate))
+    }
+
+    pub fn value(self) -> f64 {
+        self.0
+    }
+}
+
 impl RotatingFrame {
+    /// Construct a moving frame from a caller-supplied **TT-day**
+    /// matrix derivative, converting its rate to observation TDB days.
+    ///
+    /// The rotation and TT derivative must be evaluated for the **same**
+    /// physical reception instant. The caller must provide the correct,
+    /// independently determined instantaneous `dTT/dTDB` factor and
+    /// must not confuse it with `TT-TDB`, `ΔT` or `dTDB/dTT`.
+    ///
+    /// The matrix may represent any independently computed passive
+    /// orientation: no precession/nutation model or time conversion is
+    /// inferred. All `RotatingFrame::new` orthogonality, determinant,
+    /// tangent derivative and nonfinite checks remain in force.
+    pub fn from_tt_day_rate(
+        rotation: [[f64; 3]; 3],
+        rotation_rate_per_tt_day: [[f64; 3]; 3],
+        tt_days_per_tdb_day: TtPerTdbDay,
+    ) -> Result<Self, RotatingFrameError> {
+        let factor = tt_days_per_tdb_day.value();
+        let rate_tdb = rotation_rate_per_tt_day.map(|row| row.map(|v| v * factor));
+        Self::new(rotation, rate_tdb)
+    }
+
+    /// Compose externally supplied **IAU-style** precession and nutation
+    /// matrices, including the full TT-day **product-rule derivative**.
+    ///
+    /// `precession` maps fixed GCRS/ICRF-aligned axes to **mean
+    /// equator/equinox of date**. `nutation` maps mean to **true
+    /// equator/equinox of date**. Thus the passive result is **N*P**:
+    ///
+    /// `R = N*P`
+    /// `dR/dTT = (dN/dTT)*P + N*(dP/dTT)`
+    /// `dR/dTDB = (dR/dTT) * (dTT/dTDB)`
+    ///
+    /// Each caller-supplied matrix and TT derivative is checked as a
+    /// valid proper rotation/tangent pair before composition. The
+    /// result is **true equator/equinox** only if the supplied inputs
+    /// are genuine, correctly dated IAU matrices: this API does not
+    /// compute or authenticate them. **True ecliptic of date** requires
+    /// another independently validated rotation and its derivative.
+    ///
+    /// The physical reception instant and `TtPerTdbDay` must match
+    /// the source vector's observation TDB instant; no epoch matching
+    /// can be verified from these raw matrices.
+    pub fn from_tt_precession_nutation(
+        precession: [[f64; 3]; 3],
+        precession_rate_per_tt_day: [[f64; 3]; 3],
+        nutation: [[f64; 3]; 3],
+        nutation_rate_per_tt_day: [[f64; 3]; 3],
+        tt_days_per_tdb_day: TtPerTdbDay,
+    ) -> Result<Self, RotatingFrameError> {
+        let p = Self::from_tt_day_rate(
+            precession,
+            precession_rate_per_tt_day,
+            tt_days_per_tdb_day,
+        )?;
+        let n =
+            Self::from_tt_day_rate(nutation, nutation_rate_per_tt_day, tt_days_per_tdb_day)?;
+        let rotation = mat_mul(n.rotation, p.rotation);
+        let n_dot_p = mat_mul(n.rotation_rate_per_tdb_day, p.rotation);
+        let n_p_dot = mat_mul(n.rotation, p.rotation_rate_per_tdb_day);
+        let rate_tdb = std::array::from_fn(|i| {
+            std::array::from_fn(|j| n_dot_p[i][j] + n_p_dot[i][j])
+        });
+        Self::new(rotation, rate_tdb)
+    }
+
     /// Validate a proper passive rotation and a compatible time derivative.
     ///
     /// The absolute orthonormal/determinant acceptance threshold is 1e-10.
