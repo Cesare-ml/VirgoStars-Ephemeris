@@ -97,6 +97,38 @@ impl From<ProjectionError> for MovingGeocentricError {
     }
 }
 
+/// A moving-axes spherical result whose origin and frame are supplied
+/// explicitly by its caller, WITHOUT assuming any physical correction.
+///
+/// This wrapper is important because the reused `SphericalState` field
+/// has `tilt_rad = 0` after a general moving-axis rotation. The zero
+/// means zero **extra** constant X tilt, not fixed ICRF axes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MovingSphericalState {
+    pub spherical: SphericalState,
+}
+
+/// Rotate an already-computed fixed-ICRF `StateVector` and its reception
+/// velocity into caller-declared **moving axes**, including `Rdot*r`,
+/// then reuse the existing spherical projector with zero *extra* tilt.
+///
+/// This is the future integration point for **already-aberrated**
+/// geocentric Cartesian position and rate vectors (from independent
+/// draft PR #77). It deliberately does not calculate or reapply
+/// light-time, annual aberration or any astronomical model. The caller
+/// must supply matching epoch/frame semantics for the input state and
+/// the per-reception-TDB-day `RotatingFrame` derivative. The target
+/// and center are copied without relabeling system barycenters.
+pub fn moving_spherical_from_icrf_state(
+    state: &StateVector,
+    frame: &RotatingFrame,
+) -> Result<MovingSphericalState, MovingGeocentricError> {
+    let moved = frame.rotate_state(state)?;
+    Ok(MovingSphericalState {
+        spherical: project_fixed_axes(&moved, 0.0)?,
+    })
+}
+
 /// Project an existing **ICRF** Earth-to-target light-time state through a
 /// caller-supplied `RotatingFrame` at the **same reception TDB epoch**.
 ///
@@ -138,8 +170,7 @@ pub fn moving_spherical_from_light_time(
         position_km: source.position_km,
         velocity_km_per_day: source.velocity_km_per_day,
     };
-    let moved = frame.rotate_state(&original)?;
-    let spherical = project_fixed_axes(&moved, 0.0)?;
+    let spherical = moving_spherical_from_icrf_state(&original, frame)?.spherical;
     Ok(MovingGeocentricSpherical {
         spherical,
         emission_epoch: source.emission_epoch,
