@@ -66,7 +66,10 @@ impl fmt::Display for TirsCirsError {
                 write!(f, "IAU Earth Rotation Angle must be in [0, 2pi) radians")
             }
             Self::InvalidEarthRotationRate => {
-                write!(f, "Earth rotation rate must be positive and finite in rad/UT1 day")
+                write!(
+                    f,
+                    "Earth rotation rate must be positive and finite in rad/UT1 day"
+                )
             }
             Self::NonFiniteResult => write!(f, "non-finite Earth rotation output"),
         }
@@ -121,9 +124,7 @@ pub fn tirs_to_cirs_earth_spin(
             0.0,
         ],
     };
-    if !valid_position(result.position_km)
-        || !valid_position(result.spin_velocity_km_per_ut1_day)
-    {
+    if !valid_position(result.position_km) || !valid_position(result.spin_velocity_km_per_ut1_day) {
         return Err(TirsCirsError::NonFiniteResult);
     }
     Ok(result)
