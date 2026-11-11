@@ -1,5 +1,7 @@
 # Backend-first work packages for contributors and AI agents
 
+> **Priority override (2026-11-11):** the [three-MVP owner decision](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md) replaces the P0/P1/P2 **work-order** labels in this older task inventory. Prioritize (1) apparent Sun/Moon/planet positions and **rates**, (2) `swe_julday`/`swe_revjul`, (3) houses and `swe_houses_pos` in `astrological-functions`, (4) fixed stars **moved up from the earlier P2 J package to MVP 1**, (5) full Node load/adapter. Build the adapter scaffold in parallel with the first calculations. MVP 2 completes the other existing backend uses (including nodes/apogees/Chiron, sky/horizon events and eclipses); MVP 3 covers every additional documented Swiss API. Work-package letters and their scientific gates below remain useful *technical dependencies*, not the owner-approved product sequence.
+
 **Status:** proposed work, 2026-11-10. Read [AGENTS.md](../AGENTS.md),
 [ADR-0001](ADR-0001-RUST-CORE-AND-BINDINGS.md), and the
 [backend compatibility inventory](BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
