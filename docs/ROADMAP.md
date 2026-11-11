@@ -1,5 +1,15 @@
 # VirgoStars Ephemeris — implementation roadmap
 
+## Owner-approved product priorities (2026-11-11)
+
+**New authoritative sequence: [three MVPs for Swiss replacement](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md).**
+
+- **MVP 1 — essential:** apparent geocentric Sun/Moon/planet positions **with velocities** first; then `swe_julday` and `swe_revjul`; then `swe_houses`/`swe_houses_pos` for the five systems actually used; then `swe_fixstar_ut`/`swe_fixstar_mag`; then a load/configuration and Node compatibility interface to use those computations in place of the existing binding. The thin binding scaffold may begin in parallel so positional results can be tested early. Houses belong to `astrological-functions` and need the Rust engine's orientation primitives.
+- **MVP 2 — all remaining Swiss features in the current VirgoStars/Astrolabio software:** additional chart bodies and points (lunar nodes/apogees, Chiron), alternate positions, orientation/ECL_NUT, azimuth/altitude, rise/set/transit, eclipses, names/flags and any other actually reachable `swe_*` pathway.
+- **MVP 3 — all remaining documented Swiss Ephemeris APIs**, even those not used by the application, with audited function/flag/variant coverage and independent validation. No blanket "100% compatible" claim without full evidence.
+
+These **product milestones** override older P0/P1/P2 ordering in the backend inventory/work packages (not their evidence) and are distinct from the **technical E0–E6 phases below**. Green Rust CI or synthetic fixtures do **not** satisfy scientific parity or authorize a production switch.
+
 Status: **planning and experimental implementation**, updated 2026-11-10. The experimental Rust reader integrated from `dev/ephemeris` currently handles the **classic DE441 binary format**, not SPK `.bsp`; JavaScript SPK prototypes on `main` remain research only. See [branch integration status](BRANCH_INTEGRATION_STATUS_2026-11-10.md). All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
 
 | Phase | Scope | Exit gate |

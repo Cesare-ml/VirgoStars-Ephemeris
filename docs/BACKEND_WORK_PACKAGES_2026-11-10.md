@@ -1,5 +1,7 @@
 # Backend-first work packages for contributors and AI agents
 
+> **Priority override (2026-11-11):** the [three-MVP owner decision](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md) replaces the P0/P1/P2 **work-order** labels in this older task inventory. Prioritize (1) apparent Sun/Moon/planet positions and **rates**, (2) `swe_julday`/`swe_revjul`, (3) houses and `swe_houses_pos` in `astrological-functions`, (4) fixed stars **moved up from the earlier P2 J package to MVP 1**, (5) full Node load/adapter. Build the adapter scaffold in parallel with the first calculations. MVP 2 completes the other existing backend uses (including nodes/apogees/Chiron, sky/horizon events and eclipses); MVP 3 covers every additional documented Swiss API. Work-package letters and their scientific gates below remain useful *technical dependencies*, not the owner-approved product sequence.
+
 **Status:** proposed work, 2026-11-10. Read [AGENTS.md](../AGENTS.md),
 [ADR-0001](ADR-0001-RUST-CORE-AND-BINDINGS.md), and the
 [backend compatibility inventory](BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
@@ -47,7 +49,7 @@ planet facade. G can design and test its contracts independently, using
 explicit inputs and fixtures, until orientation is available. J need not wait
 for every other capability if a self-contained reference/model is selected.
 
-## A — Calendar, UTC, UT1, TT and historical ΔT (P0)
+## A — Calendar, UTC, UT1, TT and historical ΔT (MVP 1)
 
 **Owner:** ephemeris core. **Start:** `calendar.rs`, `time.rs`,
 `first_sky.rs`, [calendar](CALENDAR_JULIAN_DATES_2026-11-10.md) and
@@ -59,13 +61,14 @@ existing leap-schedule work before starting.
   unsupported periods. Respect date-boundary and fractional-second behavior.
 - Define which version and coverage the first release supports; historical
   natal dates and eclipse range 0100–3000 need separate scoped acceptance.
+- Provide the MVP-1 `swe_julday` **and** `swe_revjul` compatibility contract and matching Node facade field shapes; keep inverse calendar arithmetic separate from clock-scale transformations.
 - Acceptance: independent Gregorian/Julian JD fixtures and reverse conversion;
   midnight, fractional hours, leap boundaries, expired tables and invalid inputs;
   documented independent time-scale references and tolerance. `swe_julday`
   arithmetic must not pretend it converts UTC to UT1. Unsupported eras error
   with actionable diagnostics. No implicit UTC=UT1 without explicit metadata.
 
-## B — Independent references and binding contract tests (P0)
+## B — Independent references and binding contract tests (MVP 1 prerequisite)
 
 **Owner:** ephemeris core/test tooling. **Start:** `examples/validate_horizons.rs`,
 [offline comparator](DE441_HORIZONS_OFFLINE_COMPARISON_2026-11-10.md).
@@ -87,7 +90,7 @@ existing leap-schedule work before starting.
   exact JS property names/flags and sync versus callback separately from numeric
   differences. Do not claim results for runs not actually performed.
 
-## C — Apparent geocentric Sun–Saturn and rates (P0)
+## C — Apparent geocentric Sun–Saturn and rates (MVP 1; extend through Pluto)
 
 **Owner:** ephemeris core. **Depends on:** A, B and D for complete parity.
 Start with `de441.rs`, `state.rs`, `coordinates.rs`, `first_sky.rs`. The
@@ -113,7 +116,7 @@ facade; the package remains open.
   dataset/model limitations and no-speed behavior. Do not expose unvalidated
   results through the facade as exact Swiss parity.
 
-## D — Earth orientation, nutation and ECL_NUT (P0/P1)
+## D — Earth orientation and nutation (MVP 1 prerequisite; ECL_NUT facade in MVP 2)
 
 **Owner:** ephemeris core. Start with mean IAU 2006 functions in `first_sky.rs`
 (and historical prototypes for context only). Provide reviewed independent
@@ -127,7 +130,7 @@ references and provenance for any adopted coefficient table.
   distinguish TT from UT. Verify orthogonality, angle boundaries and cases
   different from J2000. Do not equate a mean model to a true-of-date model.
 
-## E — Rust-backed Node compatibility facade (P0)
+## E — Rust-backed Node load/configuration and compatibility facade (MVP 1)
 
 **Owner:** ephemeris bindings; compose astrology-functions for houses. No
 existing Node/WASM binding is available on the inspected branch. Evaluate the
@@ -145,7 +148,7 @@ file size/IO and callback needs; record the choice and measured constraints.
   operation. Then run parity cases backed by C. Compatibility is incremental,
   never a promise of every upstream `swe_*` function.
 
-## F — Additional default chart bodies (P0)
+## F — Additional default chart bodies (MVP 2)
 
 **Owner:** ephemeris core; new data policy where needed. Start with actual
 backend default IDs in the inventory. Split nodes/apogees and Chiron into
@@ -159,7 +162,7 @@ separate PRs; data and models are different.
   the classic DE441 file lacks a required model or target. Include reference
   mode/flag differences and legally reviewed data acquisition.
 
-## G — Houses and house positions (P0; separate repository)
+## G — Houses and house positions (MVP 1; separate repository)
 
 **Owner:** `astrological-functions`, with ephemeris time/orientation inputs.
 
@@ -172,10 +175,11 @@ separate PRs; data and models are different.
   Binding arrays, axis fields and fractional `housePosition` must match the
   tested JS contract. Backend southern inversion belongs to chart assembly.
 
-## H — Horizon coordinates and solar rise/set/transit (P1)
+## H — Horizon coordinates and solar rise/set/transit (MVP 2; revjul is MVP 1)
 
 **Owner:** core + facade. **Depends on:** A, C, D as appropriate.
 
+- Reuse MVP-1 `swe_revjul` calendar conversion from A instead of delaying it until rise/transit support.
 - Add the explicit `swe_azalt` variants used by the backend, true/apparent
   altitude, refraction and atmospheric defaults; implement solar rise, set,
   upper culmination and `swe_revjul`. Handle no-event/polar behavior.
@@ -185,7 +189,7 @@ separate PRs; data and models are different.
   callback tests. Investigate the noon helper's inconsistent signature/result
   rather than canonizing it without a runtime check.
 
-## I — Backend integration proof (P0/P1, separate repository)
+## I — Backend integration proof (MVP 1/MVP 2, separate repository)
 
 **Owner:** VirgoStars/Astrolabio plus functions and facade maintainers.
 
@@ -199,7 +203,7 @@ separate PRs; data and models are different.
   sync/callback paths; reproducible rollback and a separately authorized
   deployment. No external service call or production mutation in tests.
 
-## J — Fixed stars and eclipses (P2)
+## J — Fixed stars (MVP 1) and eclipses (MVP 2)
 
 **Owner:** core/events + bindings, with catalog provenance review.
 
