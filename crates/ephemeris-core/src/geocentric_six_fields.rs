@@ -183,12 +183,9 @@ pub fn fields_from_light_time(
     let longitude_deg = (projected.longitude_rad * RADIANS_TO_DEGREES).rem_euclid(360.0);
     let latitude_deg = projected.latitude_rad * RADIANS_TO_DEGREES;
     let distance_au = projected.distance_km / ASTRONOMICAL_UNIT_KM;
-    let longitude_speed_deg_per_tdb_day =
-        projected.longitude_rate_rad_per_day * RADIANS_TO_DEGREES;
-    let latitude_speed_deg_per_tdb_day =
-        projected.latitude_rate_rad_per_day * RADIANS_TO_DEGREES;
-    let distance_speed_au_per_tdb_day =
-        projected.distance_rate_km_per_day / ASTRONOMICAL_UNIT_KM;
+    let longitude_speed_deg_per_tdb_day = projected.longitude_rate_rad_per_day * RADIANS_TO_DEGREES;
+    let latitude_speed_deg_per_tdb_day = projected.latitude_rate_rad_per_day * RADIANS_TO_DEGREES;
+    let distance_speed_au_per_tdb_day = projected.distance_rate_km_per_day / ASTRONOMICAL_UNIT_KM;
     if !longitude_deg.is_finite()
         || !latitude_deg.is_finite()
         || !distance_au.is_finite()
