@@ -357,6 +357,38 @@ impl<R: Read + Seek> De441<R> {
         })
     }
 
+    /// Return geometric ICRF states for multiple targets at one TDB epoch.
+    ///
+    /// Results follow the input target order, including duplicates. All
+    /// states share the caller's center and epoch; positions are km and
+    /// velocities are km/day. This delegates to the same validated scalar
+    /// reader and its one-record cache, so repeated targets in the current
+    /// record do not trigger additional file reads. No new numerical model,
+    /// apparent corrections or frame conversion are applied.
+    ///
+    /// Fail-closed: any unavailable series, invalid epoch or I/O failure
+    /// returns an error rather than exposing a partial vector. An empty
+    /// target list still validates the epoch but does not read coefficients.
+    ///
+    /// Modified 2026-11-11: add a bounded-by-input batch state convenience
+    /// interface for future language bindings and interactive charts.
+    pub fn states_at(
+        &mut self,
+        targets: &[Body],
+        center: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<Vec<StateVector>, De441Error> {
+        if targets.is_empty() {
+            self.state(center, center, epoch)?;
+            return Ok(Vec::new());
+        }
+        targets
+            .iter()
+            .copied()
+            .map(|target| self.state(target, center, epoch))
+            .collect()
+    }
+
     fn barycentric(
         &self,
         body: Body,
