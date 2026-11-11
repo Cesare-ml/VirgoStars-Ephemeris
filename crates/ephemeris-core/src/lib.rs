@@ -30,6 +30,8 @@ pub mod de441;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod moving_geocentric;
+pub mod rotating_frame;
 pub mod state;
 pub mod time;
 
