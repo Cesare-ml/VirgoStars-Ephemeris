@@ -219,12 +219,12 @@ impl fmt::Display for UsnoBatchError {
 }
 impl Error for UsnoBatchError {}
 
-fn validate_batch<'a>(
-    rows: &'a [UsnoPrintedHarmonicRow],
+fn validate_batch(
+    rows: &[UsnoPrintedHarmonicRow],
     first: usize,
     count: usize,
     mode: UsnoBatchMode,
-) -> Result<impl Iterator<Item = (usize, &'a UsnoPrintedHarmonicRow)>, UsnoBatchError> {
+) -> Result<impl Iterator<Item = (usize, &UsnoPrintedHarmonicRow)>, UsnoBatchError> {
     if rows.is_empty() {
         return Err(UsnoBatchError::EmptyInput);
     }
