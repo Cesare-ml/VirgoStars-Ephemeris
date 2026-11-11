@@ -14,4 +14,4 @@ For a scientifically meaningful comparison, record the external file's supplier,
 
 This tool is a reproducibility aid, **not a scientific validation result**. No external JPL/Horizons vectors or accuracy tolerances are bundled or claimed. See [VALIDATION.md](VALIDATION.md) and [DE441.md](DE441.md).
 
-Modification record: 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
+Modification record: 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
