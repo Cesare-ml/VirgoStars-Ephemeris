@@ -18,6 +18,7 @@
 //! model and not a Swiss-compatible apparent-of-date coordinate pipeline.
 
 use std::error::Error;
+use std::f64::consts::FRAC_PI_2;
 use std::fmt;
 
 use crate::de441::StateVector;
@@ -45,6 +46,8 @@ pub enum RotatingFrameError {
     InconsistentDerivative,
     /// No accurate caller-supplied TT days per TDB day conversion.
     InvalidTimeScaleRate,
+    /// Caller-supplied true obliquity or its TT-day derivative is invalid.
+    InvalidTrueObliquity,
     /// Matrix multiplication produces a nonrepresentable state.
     ArithmeticOverflow,
 }
@@ -59,6 +62,9 @@ impl fmt::Display for RotatingFrameError {
             }
             Self::InvalidTimeScaleRate => {
                 write!(f, "invalid caller-supplied d(TT days)/d(TDB days)")
+            }
+            Self::InvalidTrueObliquity => {
+                write!(f, "invalid caller-supplied true obliquity or TT derivative")
             }
             Self::ArithmeticOverflow => write!(f, "non-finite transformed Cartesian state"),
         }
@@ -170,6 +176,74 @@ impl RotatingFrame {
         let n_p_dot = mat_mul(n.rotation, p.rotation_rate_per_tdb_day);
         let rate_tdb =
             std::array::from_fn(|i| std::array::from_fn(|j| n_dot_p[i][j] + n_p_dot[i][j]));
+        Self::new(rotation, rate_tdb)
+    }
+
+    /// Add an **ecliptic-of-date** plane rotation to the supplied
+    /// **equatorial** precession/nutation matrices and all their rates.
+    ///
+    /// All matrices are passive; first `P` maps GCRS to mean equator/
+    /// equinox of date, then `N` maps mean to true equator/equinox
+    /// of date. Finally `E = Rx(+epsilon_true)` maps *true equatorial*
+    /// coordinates to conventional ecliptic-of-date coordinates with
+    /// the **true equinox** as longitude origin. In this crate the
+    /// passive X convention has R_yz=+sin(angle), R_zy=-sin(angle).
+    ///
+    /// `R = E*N*P`
+    /// `dR/dTT = Edot*N*P + E*Ndot*P + E*N*Pdot`
+    /// `dR/dTDB = (dR/dTT)*(dTT/dTDB)`
+    ///
+    /// The supplied `epsilon_true` and `d(epsilon_true)/dTT`
+    /// must represent the **same physical TT instant and convention**
+    /// as P/N. For IAU equinox-style nutation,
+    /// `epsilon_true = epsilon_mean + delta_epsilon` and its rate
+    /// is the **sum** of the two TT-day rates; no such data or
+    /// coefficient model is silently inferred here.
+    ///
+    /// This function reuses the original validated P/N TT product
+    /// and builds E using its same rate conversion. It does NOT
+    /// obtain full IAU 2000A nutation angles, TT↔TDB rate, or
+    /// independently demonstrate Swiss apparent ecliptic parity.
+    pub fn from_tt_true_ecliptic(
+        precession: [[f64; 3]; 3],
+        precession_rate_per_tt_day: [[f64; 3]; 3],
+        nutation: [[f64; 3]; 3],
+        nutation_rate_per_tt_day: [[f64; 3]; 3],
+        true_obliquity_rad: f64,
+        true_obliquity_rate_rad_per_tt_day: f64,
+        tt_days_per_tdb_day: TtPerTdbDay,
+    ) -> Result<Self, RotatingFrameError> {
+        if !true_obliquity_rad.is_finite()
+            || !true_obliquity_rate_rad_per_tt_day.is_finite()
+            || !(0.0..FRAC_PI_2).contains(&true_obliquity_rad)
+        {
+            return Err(RotatingFrameError::InvalidTrueObliquity);
+        }
+
+        let equator = Self::from_tt_precession_nutation(
+            precession,
+            precession_rate_per_tt_day,
+            nutation,
+            nutation_rate_per_tt_day,
+            tt_days_per_tdb_day,
+        )?;
+        let (sin, cos) = true_obliquity_rad.sin_cos();
+        let rate = true_obliquity_rate_rad_per_tt_day;
+        let ecliptic = Self::from_tt_day_rate(
+            [[1.0, 0.0, 0.0], [0.0, cos, sin], [0.0, -sin, cos]],
+            [
+                [0.0; 3],
+                [0.0, -rate * sin, rate * cos],
+                [0.0, -rate * cos, -rate * sin],
+            ],
+            tt_days_per_tdb_day,
+        )?;
+        let rotation = mat_mul(ecliptic.rotation, equator.rotation);
+        let e_dot_np = mat_mul(ecliptic.rotation_rate_per_tdb_day, equator.rotation);
+        let e_np_dot = mat_mul(ecliptic.rotation, equator.rotation_rate_per_tdb_day);
+        let rate_tdb = std::array::from_fn(|i| {
+            std::array::from_fn(|j| e_dot_np[i][j] + e_np_dot[i][j])
+        });
         Self::new(rotation, rate_tdb)
     }
 
