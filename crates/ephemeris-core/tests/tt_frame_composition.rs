@@ -20,9 +20,7 @@ use std::f64::consts::FRAC_PI_2;
 
 use virgostars_ephemeris_core::coordinates::project_fixed_axes;
 use virgostars_ephemeris_core::de441::{Body, JulianDateTdb, StateVector};
-use virgostars_ephemeris_core::rotating_frame::{
-    RotatingFrame, RotatingFrameError, TtPerTdbDay,
-};
+use virgostars_ephemeris_core::rotating_frame::{RotatingFrame, RotatingFrameError, TtPerTdbDay};
 
 type Matrix3 = [[f64; 3]; 3];
 
@@ -72,9 +70,7 @@ fn state(r: [f64; 3], v: [f64; 3]) -> StateVector {
 }
 
 fn mat_vec(m: Matrix3, r: [f64; 3]) -> [f64; 3] {
-    std::array::from_fn(|i| {
-        m[i][0] * r[0] + m[i][1] * r[1] + m[i][2] * r[2]
-    })
+    std::array::from_fn(|i| m[i][0] * r[0] + m[i][1] * r[1] + m[i][2] * r[2])
 }
 
 #[test]
@@ -94,8 +90,7 @@ fn tt_per_tdb_day_requires_an_explicit_finite_near_unit_rate() {
 fn unit_ratio_agrees_with_existing_native_tdb_rotation() {
     let (rotation, tt_rate) = z(0.3, 0.01);
     let from_tt =
-        RotatingFrame::from_tt_day_rate(rotation, tt_rate, TtPerTdbDay::new(1.0).unwrap())
-            .unwrap();
+        RotatingFrame::from_tt_day_rate(rotation, tt_rate, TtPerTdbDay::new(1.0).unwrap()).unwrap();
     let original = RotatingFrame::new(rotation, tt_rate).unwrap();
     let source = state([1.0e7, 5.0e6, -2.0e6], [-3_000.0, 600.0, 200.0]);
     assert_eq!(
@@ -111,14 +106,17 @@ fn nonunity_dttt_dt_tdb_changes_apparent_rotation_rate() {
     let tt_rate = 0.1;
     let ratio = 1.000_2;
     let (rotation, derivative_tt) = z(0.0, tt_rate);
-    let frame = RotatingFrame::from_tt_day_rate(
-        rotation,
-        derivative_tt,
-        TtPerTdbDay::new(ratio).unwrap(),
-    )
-    .unwrap();
-    let output = frame.rotate_state(&state([100_000.0, 0.0, 0.0], [0.0; 3])).unwrap();
-    near(output.velocity_km_per_day[1], -100_000.0 * tt_rate * ratio, 1e-10);
+    let frame =
+        RotatingFrame::from_tt_day_rate(rotation, derivative_tt, TtPerTdbDay::new(ratio).unwrap())
+            .unwrap();
+    let output = frame
+        .rotate_state(&state([100_000.0, 0.0, 0.0], [0.0; 3]))
+        .unwrap();
+    near(
+        output.velocity_km_per_day[1],
+        -100_000.0 * tt_rate * ratio,
+        1e-10,
+    );
     let sph = project_fixed_axes(&output, 0.0).unwrap();
     near(sph.longitude_rate_rad_per_day, -tt_rate * ratio, 1e-15);
 }
@@ -137,7 +135,9 @@ fn noncommuting_rotation_order_is_true_equator_nutation_after_precession() {
         TtPerTdbDay::new(1.0).unwrap(),
     )
     .unwrap();
-    let result = frame.rotate_state(&state([1.0, 0.0, 0.0], [0.0; 3])).unwrap();
+    let result = frame
+        .rotate_state(&state([1.0, 0.0, 0.0], [0.0; 3]))
+        .unwrap();
     near(result.position_km[0], 0.0, 1e-15);
     near(result.position_km[1], 0.0, 1e-15);
     near(result.position_km[2], 1.0, 1e-15);
@@ -150,10 +150,9 @@ fn composite_matches_sequential_rotations_of_position_and_rate() {
     let (nutation, n_rate) = x(0.1, -0.014);
     let p = RotatingFrame::from_tt_day_rate(precession, p_rate, ratio).unwrap();
     let n = RotatingFrame::from_tt_day_rate(nutation, n_rate, ratio).unwrap();
-    let combined = RotatingFrame::from_tt_precession_nutation(
-        precession, p_rate, nutation, n_rate, ratio,
-    )
-    .unwrap();
+    let combined =
+        RotatingFrame::from_tt_precession_nutation(precession, p_rate, nutation, n_rate, ratio)
+            .unwrap();
     let input = state([2.5e7, -6.0e7, 1.5e7], [11_000.0, -5_000.0, 900.0]);
     let stepwise = n.rotate_state(&p.rotate_state(&input).unwrap()).unwrap();
     let one_call = combined.rotate_state(&input).unwrap();
@@ -162,7 +161,11 @@ fn composite_matches_sequential_rotations_of_position_and_rate() {
     assert_eq!(one_call.epoch, input.epoch);
     for i in 0..3 {
         near(one_call.position_km[i], stepwise.position_km[i], 1e-7);
-        near(one_call.velocity_km_per_day[i], stepwise.velocity_km_per_day[i], 1e-7);
+        near(
+            one_call.velocity_km_per_day[i],
+            stepwise.velocity_km_per_day[i],
+            1e-7,
+        );
     }
 }
 
@@ -192,8 +195,7 @@ fn independent_finite_differences_of_tt_dependent_date_frames_match_all_rates() 
     let factor = TtPerTdbDay::new(1.0 + eps * t0.cos()).unwrap();
     let (p, pdot) = z(p0 + p_speed * tt(t0), p_speed);
     let (n, ndot) = x(n0 + n_speed * tt(t0), n_speed);
-    let frame =
-        RotatingFrame::from_tt_precession_nutation(p, pdot, n, ndot, factor).unwrap();
+    let frame = RotatingFrame::from_tt_precession_nutation(p, pdot, n, ndot, factor).unwrap();
     let output = frame.rotate_state(&state(src0, src_v)).unwrap();
     let before = at(t0 - h);
     let after = at(t0 + h);
@@ -239,20 +241,32 @@ fn rejects_invalid_component_rotation_or_tt_rate_instead_of_masking_it() {
     let invalid = [[1.0, 0.0, 0.0], [0.0, 1.01, 0.0], [0.0, 0.0, 1.0]];
     assert_eq!(
         RotatingFrame::from_tt_precession_nutation(
-            invalid, [[0.0; 3]; 3], identity(), [[0.0; 3]; 3], rate,
+            invalid,
+            [[0.0; 3]; 3],
+            identity(),
+            [[0.0; 3]; 3],
+            rate,
         ),
         Err(RotatingFrameError::InvalidRotation)
     );
     assert_eq!(
         RotatingFrame::from_tt_precession_nutation(
-            identity(), [[0.0; 3]; 3], invalid, [[0.0; 3]; 3], rate,
+            identity(),
+            [[0.0; 3]; 3],
+            invalid,
+            [[0.0; 3]; 3],
+            rate,
         ),
         Err(RotatingFrameError::InvalidRotation)
     );
     let bad_rate = [[0.01, 0.0, 0.0], [0.0; 3], [0.0; 3]];
     assert_eq!(
         RotatingFrame::from_tt_precession_nutation(
-            identity(), bad_rate, identity(), [[0.0; 3]; 3], rate,
+            identity(),
+            bad_rate,
+            identity(),
+            [[0.0; 3]; 3],
+            rate,
         ),
         Err(RotatingFrameError::InconsistentDerivative)
     );
