@@ -377,3 +377,52 @@ fn full_light_time_pipeline_uses_explicit_tt_nutation_precession_rate() {
     assert_eq!(result.spherical.epoch, epoch);
     assert!(result.emission_epoch.0 < epoch.0);
 }
+
+#[test]
+fn full_de441_to_moving_ecliptic_latitude_and_rate_uses_true_obliquity() {
+    // Synthetic classic-DE441 reader; the source is stationary along
+    // inertial +X relative to Earth. A +90° passive Z precession maps
+    // it to -Y; the *positive* true-obliquity ecliptic tilt maps it
+    // to +ecliptic latitude with rate +epsilon_dot*dTT/dTDB.
+    // This is math, not an independently validated IAU epoch.
+    let mut reader = De441::new(Cursor::new(synthetic_de441())).unwrap();
+    let angle = FRAC_PI_2;
+    let eps = 0.4_f64;
+    let epsdot_per_tt_day = 0.012_f64;
+    let ratio = 1.000_2_f64;
+    let precession = passive_z(angle, 0.0);
+    // RotatingFrame has no matrix getters: construct the same
+    // independently known +90° passive Z rotation from sin/cos.
+    let (s, c) = angle.sin_cos();
+    let p = [[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]];
+    let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let frame = RotatingFrame::from_tt_true_ecliptic(
+        p,
+        [[0.0; 3]; 3],
+        identity,
+        [[0.0; 3]; 3],
+        eps,
+        epsdot_per_tt_day,
+        TtPerTdbDay::new(ratio).unwrap(),
+    )
+    .unwrap();
+    let epoch = JulianDateTdb(1_016.0);
+    let result =
+        geocentric_light_time_moving_spherical(&mut reader, Body::Mercury, epoch, &frame).unwrap();
+    near(result.spherical.longitude_rad, 1.5 * PI, 1e-15);
+    near(result.spherical.latitude_rad, eps, 1e-15);
+    near(result.spherical.latitude_rate_rad_per_day, epsdot_per_tt_day * ratio, 1e-15);
+    near(result.spherical.longitude_rate_rad_per_day, 0.0, 1e-15);
+    near(result.spherical.distance_km, 1_000.0, 1e-8);
+    near(result.spherical.distance_rate_km_per_day, 0.0, 1e-10);
+    // The constant precession was only used to compute synthetic
+    // axes; no source speed or second light-time correction exists.
+    let dummy = precession.rotate_state(&StateVector {
+        target: Body::Mercury,
+        center: Body::Earth,
+        epoch,
+        position_km: [1_000.0, 0.0, 0.0],
+        velocity_km_per_day: [0.0; 3],
+    }).unwrap();
+    near(dummy.position_km[1], -1_000.0, 1e-10);
+}
