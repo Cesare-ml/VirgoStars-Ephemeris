@@ -159,11 +159,7 @@ fn full_relative_motion_preserves_range_and_radial_velocity() {
     near(radial_aberrated, radial_original, 1e-8);
     let expected_direction = annual_aberration_icrf(r, [8.0e5, 2.5e6, -2.0e5]).unwrap();
     for (i, expected) in expected_direction.iter().enumerate() {
-        near(
-            output.position_km[i] / norm(r),
-            *expected,
-            1e-15,
-        );
+        near(output.position_km[i] / norm(r), *expected, 1e-15);
     }
 }
 
