@@ -29,6 +29,9 @@ use crate::aberration_state::{
 };
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
 use crate::de441::{Body, De441, JulianDateTdb, StateVector};
+use crate::six_field_units::{
+    fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
+};
 
 /// A spherical result computed *after* one-way reception light-time and
 /// Earth's special-relativistic annual aberration. Source position/rate
@@ -50,12 +53,27 @@ pub struct AberratedFixedSpherical {
     pub observer_acceleration_source: ObserverAccelerationSource,
 }
 
+/// The same **fixed-axis** aberrated spherical six quantities in degrees/AU.
+///
+/// Not a Swiss `swe_calc_ut` result: the frame, input time-scale, target
+/// (including DE441 planet-system barycenters) and applied physical
+/// corrections are unchanged. `fields` always retains those labels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AberratedFixedSixFieldsDegreesAu {
+    pub fields: FixedSixFieldsDegreesAu,
+    pub emission_epoch: JulianDateTdb,
+    pub light_time_seconds: f64,
+    pub light_time_rate: f64,
+    pub observer_acceleration_source: ObserverAccelerationSource,
+}
+
 /// A bad intermediate cannot be passed off as a computed sky position.
 #[derive(Debug)]
 pub enum AberratedSphericalError {
     InvalidIntermediate,
     Aberration(AberratedStateError),
     Projection(ProjectionError),
+    Units(UnitConversionError),
 }
 
 impl fmt::Display for AberratedSphericalError {
@@ -64,6 +82,7 @@ impl fmt::Display for AberratedSphericalError {
             Self::InvalidIntermediate => write!(f, "invalid light-time and aberration metadata"),
             Self::Aberration(error) => write!(f, "aberration: {error}"),
             Self::Projection(error) => write!(f, "fixed-axis spherical projection: {error}"),
+            Self::Units(error) => write!(f, "fixed-axis six-field units: {error}"),
         }
     }
 }
@@ -73,6 +92,7 @@ impl Error for AberratedSphericalError {
         match self {
             Self::Aberration(error) => Some(error),
             Self::Projection(error) => Some(error),
+            Self::Units(error) => Some(error),
             Self::InvalidIntermediate => None,
         }
     }
@@ -87,6 +107,12 @@ impl From<AberratedStateError> for AberratedSphericalError {
 impl From<ProjectionError> for AberratedSphericalError {
     fn from(error: ProjectionError) -> Self {
         Self::Projection(error)
+    }
+}
+
+impl From<UnitConversionError> for AberratedSphericalError {
+    fn from(error: UnitConversionError) -> Self {
+        Self::Units(error)
     }
 }
 
@@ -147,4 +173,37 @@ pub fn geocentric_aberrated_fixed_spherical<R: Read + Seek>(
     let state =
         geocentric_light_time_annual_aberration_analytic(ephemeris, target, reception_epoch)?;
     spherical_from_aberrated_state(&state, fixed_tilt_rad)
+}
+
+/// Convert an already projected, aberrated fixed-frame `SphericalState`
+/// to degrees/AU, retaining emission/reception and observer-acceleration
+/// metadata. This is **only unit conversion** and does not redo aberration.
+pub fn aberrated_spherical_to_degrees_au(
+    result: &AberratedFixedSpherical,
+) -> Result<AberratedFixedSixFieldsDegreesAu, AberratedSphericalError> {
+    Ok(AberratedFixedSixFieldsDegreesAu {
+        fields: fixed_spherical_to_degrees_au(&result.spherical)?,
+        emission_epoch: result.emission_epoch,
+        light_time_seconds: result.light_time_seconds,
+        light_time_rate: result.light_time_rate,
+        observer_acceleration_source: result.observer_acceleration_source,
+    })
+}
+
+/// One-call classic-DE441 → Earth reception light-time → analytic
+/// Earth-acceleration annual aberration → six **fixed-frame** fields in
+/// degrees/AU, including all three signed reception-TDB-day rates.
+///
+/// This MUST NOT be described as apparent ecliptic-of-date or Swiss
+/// `swe_calc_ut` parity: frame bias/precession/nutation, moving-frame
+/// derivatives, solar deflection and several time/body models are absent.
+pub fn geocentric_aberrated_fixed_six_fields<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    fixed_tilt_rad: f64,
+) -> Result<AberratedFixedSixFieldsDegreesAu, AberratedSphericalError> {
+    let spherical =
+        geocentric_aberrated_fixed_spherical(ephemeris, target, reception_epoch, fixed_tilt_rad)?;
+    aberrated_spherical_to_degrees_au(&spherical)
 }
