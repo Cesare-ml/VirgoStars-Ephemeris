@@ -181,6 +181,72 @@ version and SHA-256. The 18th stable machine error code is
 `invalid_wire_record`. Existing record fields and prior error codes
 are unchanged.
 
+## Primitive-only input contract for future Python and WebAssembly
+
+Two additional Rust-only input structs are now available:
+
+- `UtcCivilInputV1 { year: i32, month: u8, day: u8, hour: u8,
+  minute: u8, second: f64 }`: explicitly named Gregorian UTC civil
+  fields, allowing a real `23:59:60.x` positive leap second.
+- `TaiSplitInputV1 { day_number: i64, midnight_fraction: f64,
+  time_scale: String }`: normalized two-part TAI JD inputs; the
+  time-scale string **must be** `"TAI"` (never inferred).
+
+`UtcLeapCatalog::utc_civil_to_tai_record_v1(version, expected_sha256, civil)`
+and `UtcLeapCatalog::tai_split_to_utc_record_v1(version,
+expected_sha256, &split)` take these field-only inputs and produce the
+same existing `UtcTaiRecordV1` output. They perform all calendar,
+leap-day and split-Julian-date validation **inside Rust**, not in a
+Python/TypeScript wrapper. Both check exact version and a separately
+trusted SHA-256 **before** interpreting untrusted input values.
+Invalid Gregorian dates, nonexistent leap seconds, nonfinite clock
+fields, wrong time scales and invalid split fractions fail with the
+existing v1 machine-mappable error variants.
+
+```rust
+use virgostars_ephemeris_core::utc_leaps::{
+    UtcLeapCatalog, VersionedUtcLeapSchedule,
+};
+use virgostars_ephemeris_core::utc_wire::{
+    TaiSplitInputV1, UtcCivilInputV1,
+};
+
+let mut catalog = UtcLeapCatalog::new();
+catalog.register(VersionedUtcLeapSchedule::iana_2026b()?)?;
+let sha = "e6120e71c65ff1969a4f63c285d6b99df8b02d9bdb90331669384d63534c41dd";
+let civil = UtcCivilInputV1 {
+    year: 2016, month: 12, day: 31, hour: 23, minute: 59,
+    second: 60.5,
+};
+let record = catalog.utc_civil_to_tai_record_v1(
+    "iana-tzdb-2026b", sha, civil
+)?;
+let split = TaiSplitInputV1 {
+    day_number: record.tai_day_number,
+    midnight_fraction: record.tai_midnight_fraction,
+    time_scale: "TAI".to_owned(),
+};
+let reverse = catalog.tai_split_to_utc_record_v1(
+    "iana-tzdb-2026b", sha, &split
+)?;
+assert_eq!(reverse.utc_hour, 23);
+assert_eq!(reverse.utc_minute, 59);
+assert!((reverse.utc_second - 60.5).abs() < 1e-8);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+These interfaces are an **experimental Rust contract only**. No
+compiled Python extension, WebAssembly module, published NPM/PyPI
+package, JSON schema/serializer or C ABI has been added.
+Bindings must still preserve input integer range and IEEE-754
+precision, expose the v1 error codes, and retain visible VirgoStars
+attribution according to CPAL-1.0 when applicable.
+
+Two deterministic Rust regressions cover the pinned 2016 positive
+leap-second round-trip, source identity, record verification, invalid
+calendar/clock/nonexistent leap/expired coverage, missing or mismatched
+source version/hash, wrong input scale and NaN fractions.
+
 ## Rust example
 
 ```rust
@@ -309,3 +375,9 @@ unchanged; validation is opt-in for incoming records and requires the
 reviewed schedule to be registered locally. No bindings or deployment
 are implied. Source CPAL-1.0 and `Powered by VirgoStars` attribution
 remain unchanged.
+
+2026-11-11: added primitive-only input types `UtcCivilInputV1` and
+`TaiSplitInputV1` plus checked catalog methods for future thin
+bindings, with two deterministic Rust tests. No new dependencies,
+production bindings, data updates, merge or release. CPAL-1.0,
+public-domain IANA attribution and `Powered by VirgoStars` preserved.
