@@ -129,7 +129,7 @@ mod tests {
         assert!(checked > 9_000, "insufficient finite regression samples");
 
         for value in [
-            f64::from_bits(1), // Smallest positive subnormal.
+            f64::from_bits(1),                     // Smallest positive subnormal.
             f64::from_bits(0x8000_0000_0000_0001), // Negative subnormal.
             f64::from_bits(0x7fef_ffff_ffff_ffff), // Largest finite.
             f64::from_bits(0xffef_ffff_ffff_ffff), // Most negative finite.
