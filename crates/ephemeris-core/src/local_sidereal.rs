@@ -44,7 +44,10 @@ impl fmt::Display for LocalSiderealError {
                 write!(f, "Greenwich mean sidereal angle must be in [0, 2pi) radians")
             }
             Self::InvalidObserverLongitude => {
-                write!(f, "observer longitude must be finite and in [-180, 180] degrees east")
+                write!(
+                    f,
+                    "observer longitude must be finite and in [-180, 180] degrees east"
+                )
             }
             Self::InvalidLocalMeanSiderealAngle => {
                 write!(f, "local mean sidereal angle must be in [0, 2pi) radians")
@@ -76,9 +79,7 @@ pub fn local_mean_sidereal_time(
     if !gmst_rad.is_finite() || !(0.0..TAU).contains(&gmst_rad) {
         return Err(LocalSiderealError::InvalidGreenwichMeanSiderealAngle);
     }
-    if !longitude_deg_east.is_finite()
-        || !(-180.0..=180.0).contains(&longitude_deg_east)
-    {
+    if !longitude_deg_east.is_finite() || !(-180.0..=180.0).contains(&longitude_deg_east) {
         return Err(LocalSiderealError::InvalidObserverLongitude);
     }
     Ok((gmst_rad + longitude_deg_east.to_radians()).rem_euclid(TAU))
@@ -98,14 +99,10 @@ pub fn local_mean_hour_angle(
     local_mean_sidereal_rad: f64,
     mean_right_ascension_rad: f64,
 ) -> Result<f64, LocalSiderealError> {
-    if !local_mean_sidereal_rad.is_finite()
-        || !(0.0..TAU).contains(&local_mean_sidereal_rad)
-    {
+    if !local_mean_sidereal_rad.is_finite() || !(0.0..TAU).contains(&local_mean_sidereal_rad) {
         return Err(LocalSiderealError::InvalidLocalMeanSiderealAngle);
     }
-    if !mean_right_ascension_rad.is_finite()
-        || !(0.0..TAU).contains(&mean_right_ascension_rad)
-    {
+    if !mean_right_ascension_rad.is_finite() || !(0.0..TAU).contains(&mean_right_ascension_rad) {
         return Err(LocalSiderealError::InvalidMeanRightAscension);
     }
 
