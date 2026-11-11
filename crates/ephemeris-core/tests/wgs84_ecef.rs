@@ -18,8 +18,7 @@
 use std::f64::consts::{FRAC_PI_2, PI};
 
 use virgostars_ephemeris_core::wgs84_ecef::{
-    wgs84_geodetic_to_ecef, Wgs84Error, WGS84_EQUATORIAL_RADIUS_M,
-    WGS84_INVERSE_FLATTENING,
+    wgs84_geodetic_to_ecef, Wgs84Error, WGS84_EQUATORIAL_RADIUS_M, WGS84_INVERSE_FLATTENING,
 };
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
@@ -78,8 +77,16 @@ fn ellipsoid_height_changes_ecef_position_along_geodetic_normal() {
     let lat: f64 = 0.6;
     let origin = wgs84_geodetic_to_ecef(lon, lat, 0.0).unwrap();
     let raised = wgs84_geodetic_to_ecef(lon, lat, 1000.0).unwrap();
-    near(raised.x_m - origin.x_m, 1000.0 * lat.cos() * lon.cos(), 2.0e-9);
-    near(raised.y_m - origin.y_m, 1000.0 * lat.cos() * lon.sin(), 2.0e-9);
+    near(
+        raised.x_m - origin.x_m,
+        1000.0 * lat.cos() * lon.cos(),
+        2.0e-9,
+    );
+    near(
+        raised.y_m - origin.y_m,
+        1000.0 * lat.cos() * lon.sin(),
+        2.0e-9,
+    );
     near(raised.z_m - origin.z_m, 1000.0 * lat.sin(), 2.0e-9);
 }
 
@@ -112,7 +119,13 @@ fn output_kilometers_retain_same_earth_fixed_axes() {
 
 #[test]
 fn invalid_angles_and_heights_are_rejected_explicitly() {
-    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, PI + 0.01, -PI - 0.01] {
+    for invalid in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        PI + 0.01,
+        -PI - 0.01,
+    ] {
         assert_eq!(
             wgs84_geodetic_to_ecef(invalid, 0.0, 0.0),
             Err(Wgs84Error::InvalidLongitude)
@@ -130,7 +143,13 @@ fn invalid_angles_and_heights_are_rejected_explicitly() {
             Err(Wgs84Error::InvalidLatitude)
         );
     }
-    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -12_000.1, 100_000.1] {
+    for invalid in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        -12_000.1,
+        100_000.1,
+    ] {
         assert_eq!(
             wgs84_geodetic_to_ecef(0.0, 0.0, invalid),
             Err(Wgs84Error::InvalidHeight)
