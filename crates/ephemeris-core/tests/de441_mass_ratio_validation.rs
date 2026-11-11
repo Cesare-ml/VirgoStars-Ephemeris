@@ -10,7 +10,6 @@ See LICENSE and NOTICE for the applicable CPAL-1.0 notices.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
 
-const HEADER_SIZE: usize = 2856;
 const RECORD_SIZE: usize = 3000;
 
 fn minimal_file(ratio: f64) -> Vec<u8> {
@@ -26,7 +25,6 @@ fn minimal_file(ratio: f64) -> Vec<u8> {
     bytes[2696..2700].copy_from_slice(&373i32.to_le_bytes());
     bytes[2700..2704].copy_from_slice(&1i32.to_le_bytes());
     bytes[2704..2708].copy_from_slice(&1i32.to_le_bytes());
-    assert!(RECORD_SIZE > HEADER_SIZE);
     bytes[6000..6008].copy_from_slice(&1000.0f64.to_le_bytes());
     bytes[6008..6016].copy_from_slice(&1032.0f64.to_le_bytes());
     bytes
@@ -38,7 +36,9 @@ fn rejects_nonpositive_or_nonfinite_earth_moon_mass_ratios() {
         assert!(
             matches!(
                 De441::new(Cursor::new(minimal_file(ratio))),
-                Err(De441Error::InvalidFile("invalid coverage or Earth/Moon mass ratio"))
+                Err(De441Error::InvalidFile(
+                    "invalid coverage or Earth/Moon mass ratio"
+                ))
             ),
             "ratio {ratio:?} should be rejected"
         );
