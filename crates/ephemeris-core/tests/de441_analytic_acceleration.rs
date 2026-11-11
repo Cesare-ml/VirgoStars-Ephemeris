@@ -19,12 +19,10 @@
 use std::io::Cursor;
 
 use virgostars_ephemeris_core::aberration_state::{
-    geocentric_light_time_annual_aberration,
-    geocentric_light_time_annual_aberration_analytic, ObserverAccelerationSource,
+    geocentric_light_time_annual_aberration, geocentric_light_time_annual_aberration_analytic,
+    ObserverAccelerationSource,
 };
-use virgostars_ephemeris_core::de441::{
-    Body, De441, De441Error, JulianDateTdb,
-};
+use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
 
 fn near(value: f64, expected: f64, tolerance: f64) {
     assert!(
@@ -44,11 +42,7 @@ fn write_i32(bytes: &mut [u8], offset: usize, value: i32) {
 fn set_series(bytes: &mut [u8], record: usize, first_word: usize, values: [f64; 3]) {
     let record_offset = 3_000 * (2 + record);
     for (index, value) in values.iter().enumerate() {
-        write_f64(
-            bytes,
-            record_offset + (first_word - 1 + index) * 8,
-            *value,
-        );
+        write_f64(bytes, record_offset + (first_word - 1 + index) * 8, *value);
     }
 }
 
@@ -111,13 +105,25 @@ fn quadratic_earth_and_mercury_have_known_exact_accelerations() {
         .unwrap();
     near(mercury.position_km[0], 2_000_000.0 - 16.0, 1e-9);
     near(mercury.velocity_km_per_day[0], 80.0 / 16.0, 1e-12);
-    near(mercury.acceleration_km_per_day2[0], 4.0 * 16.0 / 256.0, 1e-12);
-    near(earth.position_km[0], 1_000_000.0 - 512.0 - (8_200.0 - 256.0) / 82.0, 1e-9);
+    near(
+        mercury.acceleration_km_per_day2[0],
+        4.0 * 16.0 / 256.0,
+        1e-12,
+    );
+    near(
+        earth.position_km[0],
+        1_000_000.0 - 512.0 - (8_200.0 - 256.0) / 82.0,
+        1e-9,
+    );
     near(earth.velocity_km_per_day[0], 200.0 - 20.0 / 82.0, 1e-12);
     near(earth.acceleration_km_per_day2[0], 8.0 - 4.0 / 82.0, 1e-12);
     near(moon.acceleration_km_per_day2[0], 4.0, 1e-12);
     near(earth.acceleration_km_per_day2[1], 2.0 - 0.5 / 82.0, 1e-12);
-    near(mercury.acceleration_km_per_day2[1], 4.0 * 60.0 / 256.0, 1e-12);
+    near(
+        mercury.acceleration_km_per_day2[1],
+        4.0 * 60.0 / 256.0,
+        1e-12,
+    );
     near(earth.acceleration_km_per_day2[2], 0.0, 1e-12);
     near(mercury.acceleration_km_per_day2[2], 0.0, 1e-12);
     assert_eq!(earth.epoch, t);
@@ -128,7 +134,9 @@ fn quadratic_earth_and_mercury_have_known_exact_accelerations() {
 #[test]
 fn new_acceleration_api_preserves_original_position_and_speed_exactly() {
     let mut reader = eph();
-    for day in [1_000.0, 1_011.25, 1_016.0, 1_031.5, 1_032.0, 1_048.0, 1_064.0] {
+    for day in [
+        1_000.0, 1_011.25, 1_016.0, 1_031.5, 1_032.0, 1_048.0, 1_064.0,
+    ] {
         for (target, center) in [
             (Body::Earth, Body::SolarSystemBarycenter),
             (Body::Moon, Body::Earth),
@@ -153,8 +161,12 @@ fn acceleration_matches_independent_finite_differences_of_original_velocity() {
     for time in [1_003.0, 1_016.0, 1_029.0, 1_038.0, 1_048.0, 1_060.0] {
         let target = Body::Earth;
         let center = Body::SolarSystemBarycenter;
-        let left = reader.state(target, center, JulianDateTdb(time - h)).unwrap();
-        let right = reader.state(target, center, JulianDateTdb(time + h)).unwrap();
+        let left = reader
+            .state(target, center, JulianDateTdb(time - h))
+            .unwrap();
+        let right = reader
+            .state(target, center, JulianDateTdb(time + h))
+            .unwrap();
         let analytic = reader
             .state_with_acceleration(target, center, JulianDateTdb(time))
             .unwrap();
@@ -172,8 +184,12 @@ fn acceleration_matches_independent_finite_differences_of_original_velocity() {
 fn center_reversal_and_earth_moon_mass_weights_apply_to_second_derivative() {
     let mut reader = eph();
     let t = JulianDateTdb(1_016.0);
-    let earth_to_moon = reader.state_with_acceleration(Body::Moon, Body::Earth, t).unwrap();
-    let moon_to_earth = reader.state_with_acceleration(Body::Earth, Body::Moon, t).unwrap();
+    let earth_to_moon = reader
+        .state_with_acceleration(Body::Moon, Body::Earth, t)
+        .unwrap();
+    let moon_to_earth = reader
+        .state_with_acceleration(Body::Earth, Body::Moon, t)
+        .unwrap();
     let earth_to_emb = reader
         .state_with_acceleration(Body::EarthMoonBarycenter, Body::Earth, t)
         .unwrap();
@@ -214,19 +230,10 @@ fn identical_target_center_has_zero_second_derivative() {
 fn analytic_aberration_composes_with_existing_lighttime_without_timestep() {
     let mut reader = eph();
     let time = JulianDateTdb(1_016.0);
-    let analytic = geocentric_light_time_annual_aberration_analytic(
-        &mut reader,
-        Body::Mercury,
-        time,
-    )
-    .unwrap();
-    let approximated = geocentric_light_time_annual_aberration(
-        &mut reader,
-        Body::Mercury,
-        time,
-        0.02,
-    )
-    .unwrap();
+    let analytic =
+        geocentric_light_time_annual_aberration_analytic(&mut reader, Body::Mercury, time).unwrap();
+    let approximated =
+        geocentric_light_time_annual_aberration(&mut reader, Body::Mercury, time, 0.02).unwrap();
     assert_eq!(
         analytic.observer_acceleration_source,
         ObserverAccelerationSource::AnalyticDe441Chebyshev
@@ -257,19 +264,10 @@ fn analytic_acceleration_works_on_last_coverage_day_without_a_future_fd_sample()
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, t)
         .unwrap();
     near(direct.acceleration_km_per_day2[0], 8.0 - 4.0 / 82.0, 1e-12);
-    assert!(geocentric_light_time_annual_aberration_analytic(
-        &mut reader,
-        Body::Mercury,
-        t,
-    )
-    .is_ok());
-    assert!(geocentric_light_time_annual_aberration(
-        &mut reader,
-        Body::Mercury,
-        t,
-        0.01,
-    )
-    .is_err());
+    assert!(
+        geocentric_light_time_annual_aberration_analytic(&mut reader, Body::Mercury, t,).is_ok()
+    );
+    assert!(geocentric_light_time_annual_aberration(&mut reader, Body::Mercury, t, 0.01,).is_err());
 }
 
 #[test]
