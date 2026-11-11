@@ -28,7 +28,7 @@ use virgostars_ephemeris_core::moving_geocentric::{
     geocentric_light_time_moving_spherical, moving_spherical_from_icrf_state,
     moving_spherical_from_light_time, MovingGeocentricError,
 };
-use virgostars_ephemeris_core::rotating_frame::RotatingFrame;
+use virgostars_ephemeris_core::rotating_frame::{RotatingFrame, TtPerTdbDay};
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
     assert!(
@@ -350,4 +350,43 @@ fn previously_corrected_cartesian_velocity_is_rotated_once_with_rdot_term() {
     // Raw fixed-axis projection must NOT be mistaken for moving speed.
     let inertial = project_fixed_axes(&already_corrected, 0.0).unwrap();
     near(inertial.longitude_rate_rad_per_day, 0.01, 1e-15);
+}
+
+#[test]
+fn full_light_time_pipeline_uses_explicit_tt_nutation_precession_rate() {
+    // Synthetic P is a rotating Z axis, N is the identity matrix:
+    // not an IAU precession or nutation accuracy reference.
+    // This checks the actual DE441/light-time + rate-bridge
+    // integration and does not pretend that TT = TDB.
+    let mut reader = De441::new(Cursor::new(synthetic_de441())).unwrap();
+    let omega_tt = 0.125;
+    let ratio = 1.000_2;
+    let precession = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ];
+    let p_rate_tt = [
+        [0.0, omega_tt, 0.0],
+        [-omega_tt, 0.0, 0.0],
+        [0.0; 3],
+    ];
+    let frame = RotatingFrame::from_tt_precession_nutation(
+        precession,
+        p_rate_tt,
+        precession,
+        [[0.0; 3]; 3],
+        TtPerTdbDay::new(ratio).unwrap(),
+    )
+    .unwrap();
+    let epoch = JulianDateTdb(1_016.0);
+    let result =
+        geocentric_light_time_moving_spherical(&mut reader, Body::Mercury, epoch, &frame).unwrap();
+    near(result.spherical.longitude_rad, 0.0, 1e-15);
+    near(result.spherical.distance_km, 1_000.0, 1e-8);
+    near(result.spherical.longitude_rate_rad_per_day, -omega_tt * ratio, 1e-15);
+    near(result.spherical.latitude_rate_rad_per_day, 0.0, 1e-15);
+    near(result.spherical.distance_rate_km_per_day, 0.0, 1e-10);
+    assert_eq!(result.spherical.epoch, epoch);
+    assert!(result.emission_epoch.0 < epoch.0);
 }
