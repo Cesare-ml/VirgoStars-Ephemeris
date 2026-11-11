@@ -1488,9 +1488,7 @@ mod tests {
         }
         // Ordinary descriptive comments mentioning upstream metadata are
         // allowed: the pinned numeric snapshot uses these deliberately.
-        let annotated = format!(
-            "# Manual review references #h and #$ fields separately\n{source}"
-        );
+        let annotated = format!("# Manual review references #h and #$ fields separately\n{source}");
         let approved = load(&annotated).unwrap();
         assert_eq!(approved.expires_utc_day(), d(2026, 12, 28));
         assert_ne!(
