@@ -41,7 +41,7 @@ fn fixture() -> Vec<u8> {
     i32_field(&mut bytes, 2840, 441);
     // Mercury and Venus T0, plus a final pointer that fixes record size.
     for (index, first) in [(0, 3), (1, 6), (12, 373)] {
-        let offset = if index == 12 { 2844 } else { 2696 };
+        let offset = if index == 12 { 2844 } else { 2696 + index * 12 };
         i32_field(&mut bytes, offset, first);
         i32_field(&mut bytes, offset + 4, 1);
         i32_field(&mut bytes, offset + 8, 1);
@@ -191,7 +191,9 @@ fn batch_returns_error_instead_of_partial_results_for_missing_series() {
         Err(De441Error::MissingSeries(_))
     ));
     // A failed batch does not invalidate the previously valid cached record.
-    let valid = eph.states_at(&[Body::Venus, Body::Mercury], Body::Venus, epoch).unwrap();
+    let valid = eph
+        .states_at(&[Body::Venus, Body::Mercury], Body::Venus, epoch)
+        .unwrap();
     assert_eq!(valid.len(), 2);
     assert_eq!(valid[0].position_km, [0.0; 3]);
     assert_eq!(valid[1].position_km[0], -200.0);
