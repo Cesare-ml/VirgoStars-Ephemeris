@@ -20,9 +20,7 @@
 use std::f64::consts::TAU;
 
 use virgostars_ephemeris_core::calendar::{CalendarError, JulianDate, TimeScale};
-use virgostars_ephemeris_core::earth_rotation::{
-    earth_rotation_angle, EarthRotationError,
-};
+use virgostars_ephemeris_core::earth_rotation::{earth_rotation_angle, EarthRotationError};
 
 fn epoch(day_number: i64, fraction: f64) -> JulianDate {
     JulianDate::new(day_number, fraction, TimeScale::Ut1).unwrap()
@@ -86,8 +84,7 @@ fn midnight_boundary_and_negative_epochs_are_continuous_and_normalized() {
     let b = earth_rotation_angle(midnight).unwrap();
     assert!(a.angle_rad >= 0.0 && a.angle_rad < TAU);
     assert!(b.angle_rad >= 0.0 && b.angle_rad < TAU);
-    let expected_delta = a.rate_rad_per_ut1_day
-        * (1.0 - just_before.midnight_fraction());
+    let expected_delta = a.rate_rad_per_ut1_day * (1.0 - just_before.midnight_fraction());
     assert!((circular_difference(b.angle_rad, a.angle_rad) - expected_delta).abs() < 2.0e-14);
 
     for (day_number, fraction) in [(0, 0.0), (-1_000_000, 0.75), (1_000_000, 0.25)] {
@@ -110,6 +107,8 @@ fn refuses_mislabeled_scales_and_unrepresentable_dates() {
     let huge = epoch(1_i64 << 52, 0.5);
     assert_eq!(
         earth_rotation_angle(huge),
-        Err(EarthRotationError::InvalidDate(CalendarError::YearOutOfRange))
+        Err(EarthRotationError::InvalidDate(
+            CalendarError::YearOutOfRange
+        ))
     );
 }
