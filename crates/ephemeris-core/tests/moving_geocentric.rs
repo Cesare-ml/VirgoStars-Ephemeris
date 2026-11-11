@@ -25,7 +25,8 @@ use virgostars_ephemeris_core::light_time::{
     GeocentricLightTimeState, LightTimeError, SPEED_OF_LIGHT_KM_PER_SECOND,
 };
 use virgostars_ephemeris_core::moving_geocentric::{
-    geocentric_light_time_moving_spherical, moving_spherical_from_light_time, MovingGeocentricError,
+    geocentric_light_time_moving_spherical, moving_spherical_from_icrf_state,
+    moving_spherical_from_light_time, MovingGeocentricError,
 };
 use virgostars_ephemeris_core::rotating_frame::RotatingFrame;
 
@@ -314,4 +315,39 @@ fn one_call_returns_missing_ephemeris_body_and_undefined_earth_errors() {
         ),
         Err(MovingGeocentricError::LightTime(LightTimeError::Ephemeris(_)))
     ));
+}
+
+#[test]
+fn previously_corrected_cartesian_velocity_is_rotated_once_with_rdot_term() {
+    // Models a light-time/aberration-corrected ICRF Cartesian state,
+    // supplied by a separate astronomical stage. The moving-axis
+    // adapter must not add new light-time or aberration.
+    let already_corrected = StateVector {
+        target: Body::Venus,
+        center: Body::Earth,
+        epoch: JulianDateTdb(2_451_545.0),
+        position_km: [20_000.0, 0.0, 0.0],
+        velocity_km_per_day: [100.0, 200.0, 0.0],
+    };
+    let moved = moving_spherical_from_icrf_state(
+        &already_corrected,
+        &passive_z(0.0, 0.05),
+    )
+    .unwrap();
+    let s = moved.spherical;
+    assert_eq!(s.target, Body::Venus);
+    assert_eq!(s.center, Body::Earth);
+    assert_eq!(s.epoch, already_corrected.epoch);
+    assert_eq!(s.tilt_rad, 0.0);
+    near(s.longitude_rad, 0.0, 1e-15);
+    near(s.latitude_rad, 0.0, 1e-15);
+    near(s.distance_km, 20_000.0, 1e-9);
+    // The physical velocity creates +200/20_000 = 0.01 rad/day,
+    // but moving axes subtract 0.05 rad/day, leaving -0.04 rad/day.
+    near(s.longitude_rate_rad_per_day, -0.04, 1e-15);
+    near(s.distance_rate_km_per_day, 100.0, 1e-12);
+    near(s.latitude_rate_rad_per_day, 0.0, 1e-15);
+    // Raw fixed-axis projection must NOT be mistaken for moving speed.
+    let inertial = project_fixed_axes(&already_corrected, 0.0).unwrap();
+    near(inertial.longitude_rate_rad_per_day, 0.01, 1e-15);
 }
