@@ -367,8 +367,7 @@ fn relative_states_close_triangle_for_position_and_velocity_across_granules() {
         let earth_moon = eph.state(Body::Earth, Body::Moon, epoch).unwrap();
         let mercury_moon = eph.state(Body::Mercury, Body::Moon, epoch).unwrap();
         for axis in 0..3 {
-            let expected_position =
-                mercury_earth.position_km[axis] + earth_moon.position_km[axis];
+            let expected_position = mercury_earth.position_km[axis] + earth_moon.position_km[axis];
             let expected_velocity =
                 mercury_earth.velocity_km_per_day[axis] + earth_moon.velocity_km_per_day[axis];
             assert!(
