@@ -35,6 +35,10 @@ use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTi
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ObserverAccelerationSource {
     CallerProvided,
+    /// Exact second derivative of the selected **DE441 Chebyshev
+    /// interpolation polynomial**, not independently verified physical
+    /// acceleration against real JPL reference vectors.
+    AnalyticDe441Chebyshev,
     CenteredEphemerisVelocity { step_tdb_days: f64 },
 }
 
@@ -243,6 +247,41 @@ pub fn aberrate_light_time_state(
         position_km,
         velocity_km_per_tdb_day,
     })
+}
+
+/// Compose **analytic DE441 Earth acceleration** with existing reception
+/// light-time and observer aberration, including the three Cartesian rates.
+///
+/// This is the preferred, no-step-parameter version when a classic
+/// DE441 reader supports the polynomial second derivative. It reads
+/// Earth's barycentric state **once** at reception TDB, including the
+/// Chebyshev second time derivative in km/TDB day², then calls the
+/// existing light-time solver and original SR direction transform.
+/// Earth-Moon barycenter reconstruction uses the same center chain
+/// for position, velocity and acceleration; see `De441::state_with_acceleration`.
+///
+/// This provides an analytic derivative of **the interpolated file's**
+/// polynomial, not independent astronomical accuracy certification;
+/// no apparent ecliptic-of-date, Sun-deflection, time-scale or
+/// outer-planet-center corrections are applied.
+pub fn geocentric_light_time_annual_aberration_analytic<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+) -> Result<AberratedGeocentricState, AberratedStateError> {
+    let earth = ephemeris.state_with_acceleration(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        observation_epoch,
+    )?;
+    let light_time = geocentric_light_time(ephemeris, target, observation_epoch)?;
+    let mut result = aberrate_light_time_state(
+        &light_time,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )?;
+    result.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+    Ok(result)
 }
 
 /// Compose classic DE441 barycentric Earth samples, existing light-time
