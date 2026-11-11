@@ -25,8 +25,9 @@ use virgostars_ephemeris_core::nutation_table_import::{
     parse_lunisolar_table, parse_planetary_table,
 };
 use virgostars_ephemeris_core::nutation_usno_adapter::{
-    convert_usno_lunisolar_row, convert_usno_planetary_row, UsnoConversionError,
-    UsnoPrintedHarmonicRow,
+    convert_usno_complete_series, convert_usno_lunisolar_batch, convert_usno_lunisolar_row,
+    convert_usno_planetary_batch, convert_usno_planetary_row, UsnoBatchError, UsnoBatchMode,
+    UsnoConversionError, UsnoFullSeriesError, UsnoPrintedHarmonicRow,
 };
 
 fn blank_row(index: usize) -> UsnoPrintedHarmonicRow {
@@ -278,5 +279,203 @@ fn source_units_are_arcseconds_not_microarcseconds_or_degrees() {
         term.longitude_sin_slope_rad_per_century,
         PI / (180.0 * 7_200.0),
         1e-20,
+    );
+}
+
+fn synthetic_rows(start: usize, count: usize) -> Vec<UsnoPrintedHarmonicRow> {
+    (start..start + count).map(blank_row).collect()
+}
+
+#[test]
+fn batch_accepts_explicit_partial_contiguous_lunar_and_planetary_intervals() {
+    let lunar = synthetic_rows(29, 3);
+    let planetary = synthetic_rows(1_359, 7);
+    let a = convert_usno_lunisolar_batch(&lunar, UsnoBatchMode::ContiguousSubset).unwrap();
+    let b = convert_usno_planetary_batch(&planetary, UsnoBatchMode::ContiguousSubset).unwrap();
+    assert_eq!(a.len(), 3);
+    assert_eq!(b.len(), 7);
+    assert!(a.iter().all(|term| term.multipliers == [0; 5]));
+    assert!(b.iter().all(|term| term.multipliers == [0; 14]));
+}
+
+#[test]
+fn batch_detects_gaps_duplicate_indices_and_reordering_precisely() {
+    let base = synthetic_rows(100, 4);
+    for (position, actual) in [(1, 100), (2, 104), (3, 102)] {
+        let mut rows = base.clone();
+        rows[position].printed_term_number = actual;
+        assert_eq!(
+            convert_usno_lunisolar_batch(&rows, UsnoBatchMode::ContiguousSubset),
+            Err(UsnoBatchError::InvalidPrintedIndex {
+                position,
+                expected: 100 + position,
+                actual,
+            })
+        );
+    }
+    let mut planetary = synthetic_rows(700, 3);
+    planetary.swap(0, 1);
+    assert_eq!(
+        convert_usno_planetary_batch(&planetary, UsnoBatchMode::ContiguousSubset),
+        Err(UsnoBatchError::InvalidPrintedIndex {
+            position: 1,
+            expected: 702,
+            actual: 700,
+        })
+    );
+}
+
+#[test]
+fn full_family_never_accepts_a_truncated_or_shifted_input() {
+    let short_lunar = synthetic_rows(1, 677);
+    assert_eq!(
+        convert_usno_lunisolar_batch(&short_lunar, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::IncompleteFamily {
+            expected: 678,
+            actual: 677,
+        })
+    );
+    let short_planetary = synthetic_rows(679, 686);
+    assert_eq!(
+        convert_usno_planetary_batch(&short_planetary, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::IncompleteFamily {
+            expected: 687,
+            actual: 686,
+        })
+    );
+    let shifted_lunar = synthetic_rows(2, 678);
+    assert_eq!(
+        convert_usno_lunisolar_batch(&shifted_lunar, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::InvalidPrintedIndex {
+            position: 0,
+            expected: 1,
+            actual: 2,
+        })
+    );
+    let shifted_planetary = synthetic_rows(678, 687);
+    assert_eq!(
+        convert_usno_planetary_batch(&shifted_planetary, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::InvalidPrintedIndex {
+            position: 0,
+            expected: 679,
+            actual: 678,
+        })
+    );
+}
+
+#[test]
+fn both_complete_families_convert_all_1365_synthetic_indices_in_order() {
+    let mut lunar = synthetic_rows(1, 678);
+    let mut planetary = synthetic_rows(679, 687);
+    lunar[0].multipliers[13] = 1;
+    lunar[677].coefficients_arcseconds[0] = 0.05;
+    planetary[0].multipliers[0] = 2;
+    planetary[686].multipliers[8] = -3;
+    let converted = convert_usno_complete_series(&lunar, &planetary).unwrap();
+    assert_eq!(converted.lunisolar.len(), 678);
+    assert_eq!(converted.planetary.len(), 687);
+    assert_eq!(converted.lunisolar[0].multipliers, [0, 0, 0, 0, 1]);
+    assert!(converted.lunisolar[677].longitude_sin_rad > 0.0);
+    assert_eq!(converted.planetary[0].multipliers[5], 2);
+    assert_eq!(converted.planetary[686].multipliers[13], -3);
+}
+
+#[test]
+fn full_series_identifies_the_family_of_a_missing_middle_row() {
+    let lunar = synthetic_rows(1, 678);
+    let mut planetary = synthetic_rows(679, 687);
+    planetary[408].printed_term_number = 1_090;
+    assert_eq!(
+        convert_usno_complete_series(&lunar, &planetary),
+        Err(UsnoFullSeriesError::Planetary(
+            UsnoBatchError::InvalidPrintedIndex {
+                position: 408,
+                expected: 1_087,
+                actual: 1_090,
+            }
+        ))
+    );
+}
+
+#[test]
+fn a_corrupt_row_rejects_the_entire_batch_not_a_partial_success() {
+    let mut lunar = synthetic_rows(1, 678);
+    lunar[450].coefficients_arcseconds[0] = f64::NAN;
+    assert_eq!(
+        convert_usno_lunisolar_batch(&lunar, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::InvalidRow {
+            position: 450,
+            cause: UsnoConversionError::NonFiniteCoefficient,
+        })
+    );
+    let mut planet = synthetic_rows(679, 687);
+    planet[600].multipliers[10] = 1;
+    assert_eq!(
+        convert_usno_planetary_batch(&planet, UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::InvalidRow {
+            position: 600,
+            cause: UsnoConversionError::PlanetaryHasSolarAnomalyMultiplier,
+        })
+    );
+}
+
+#[test]
+fn partial_batches_cannot_cross_family_boundaries() {
+    let crossing_lunar = synthetic_rows(677, 3);
+    assert_eq!(
+        convert_usno_lunisolar_batch(&crossing_lunar, UsnoBatchMode::ContiguousSubset),
+        Err(UsnoBatchError::InvalidRow {
+            position: 2,
+            cause: UsnoConversionError::WrongPrintedTermRange,
+        })
+    );
+    let crossing_planet = synthetic_rows(1_364, 3);
+    assert_eq!(
+        convert_usno_planetary_batch(&crossing_planet, UsnoBatchMode::ContiguousSubset),
+        Err(UsnoBatchError::InvalidRow {
+            position: 2,
+            cause: UsnoConversionError::WrongPrintedTermRange,
+        })
+    );
+}
+
+#[test]
+fn empty_or_oversized_batches_fail_even_when_partial_import_is_enabled() {
+    assert_eq!(
+        convert_usno_lunisolar_batch(&[], UsnoBatchMode::ContiguousSubset),
+        Err(UsnoBatchError::EmptyInput)
+    );
+    assert_eq!(
+        convert_usno_planetary_batch(&[], UsnoBatchMode::CompleteFamily),
+        Err(UsnoBatchError::EmptyInput)
+    );
+    assert_eq!(
+        convert_usno_lunisolar_batch(
+            &synthetic_rows(1, 679),
+            UsnoBatchMode::ContiguousSubset,
+        ),
+        Err(UsnoBatchError::TooManyRows)
+    );
+    assert_eq!(
+        convert_usno_planetary_batch(
+            &synthetic_rows(679, 688),
+            UsnoBatchMode::ContiguousSubset,
+        ),
+        Err(UsnoBatchError::TooManyRows)
+    );
+}
+
+#[test]
+fn full_series_failure_is_familyspecific_even_when_lunars_incomplete() {
+    let lunar = synthetic_rows(1, 677);
+    let planetary = synthetic_rows(679, 687);
+    assert_eq!(
+        convert_usno_complete_series(&lunar, &planetary),
+        Err(UsnoFullSeriesError::Lunisolar(
+            UsnoBatchError::IncompleteFamily {
+                expected: 678,
+                actual: 677,
+            }
+        ))
     );
 }
