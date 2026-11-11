@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod aberration;
+pub mod aberration_state;
 pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
