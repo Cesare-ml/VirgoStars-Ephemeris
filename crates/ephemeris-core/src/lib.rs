@@ -27,6 +27,7 @@
 
 pub mod aberration;
 pub mod aberration_state;
+pub mod aberrated_spherical;
 pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
