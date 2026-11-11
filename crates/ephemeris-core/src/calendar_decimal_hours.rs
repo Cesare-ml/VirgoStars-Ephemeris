@@ -21,9 +21,7 @@
 //! Created 2026-11-11: independent API adapting the existing Rust calendar core.
 //! No numerical method or data from Swiss Ephemeris is incorporated.
 
-use crate::calendar::{
-    Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale,
-};
+use crate::calendar::{Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale};
 
 /// Proleptic calendar date with decimal hours measured since local midnight
 /// on the caller's already-declared uniform time scale.
@@ -98,10 +96,7 @@ pub fn from_split_julian_date(
 /// The single number necessarily loses submillisecond resolution around
 /// modern dates; prefer `to_split_julian_date` where possible. This function
 /// does not provide exact Swiss binding ABI, defaults or calendar leniency.
-pub fn julday_f64(
-    input: DecimalHourDateTime,
-    calendar: Calendar,
-) -> Result<f64, CalendarError> {
+pub fn julday_f64(input: DecimalHourDateTime, calendar: Calendar) -> Result<f64, CalendarError> {
     let epoch = to_split_julian_date(input, calendar)?;
     let (integer, fraction) = epoch.parts()?;
     Ok(integer + fraction)
