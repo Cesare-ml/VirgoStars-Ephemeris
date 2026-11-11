@@ -450,17 +450,11 @@ fn empty_or_oversized_batches_fail_even_when_partial_import_is_enabled() {
         Err(UsnoBatchError::EmptyInput)
     );
     assert_eq!(
-        convert_usno_lunisolar_batch(
-            &synthetic_rows(1, 679),
-            UsnoBatchMode::ContiguousSubset,
-        ),
+        convert_usno_lunisolar_batch(&synthetic_rows(1, 679), UsnoBatchMode::ContiguousSubset,),
         Err(UsnoBatchError::TooManyRows)
     );
     assert_eq!(
-        convert_usno_planetary_batch(
-            &synthetic_rows(679, 688),
-            UsnoBatchMode::ContiguousSubset,
-        ),
+        convert_usno_planetary_batch(&synthetic_rows(679, 688), UsnoBatchMode::ContiguousSubset,),
         Err(UsnoBatchError::TooManyRows)
     );
 }
