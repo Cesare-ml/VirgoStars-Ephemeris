@@ -69,7 +69,10 @@ impl fmt::Display for Wgs84Error {
         match self {
             Self::InvalidLongitude => write!(f, "WGS84 longitude must be in [-pi, pi] radians"),
             Self::InvalidLatitude => {
-                write!(f, "WGS84 geodetic latitude must be in [-pi/2, pi/2] radians")
+                write!(
+                    f,
+                    "WGS84 geodetic latitude must be in [-pi/2, pi/2] radians"
+                )
             }
             Self::InvalidHeight => write!(
                 f,
@@ -111,9 +114,7 @@ pub fn wgs84_geodetic_to_ecef(
     if !longitude_rad_east.is_finite() || !(-PI..=PI).contains(&longitude_rad_east) {
         return Err(Wgs84Error::InvalidLongitude);
     }
-    if !latitude_rad_north.is_finite()
-        || !(-FRAC_PI_2..=FRAC_PI_2).contains(&latitude_rad_north)
-    {
+    if !latitude_rad_north.is_finite() || !(-FRAC_PI_2..=FRAC_PI_2).contains(&latitude_rad_north) {
         return Err(Wgs84Error::InvalidLatitude);
     }
     if !height_m.is_finite() || !(-12_000.0..=100_000.0).contains(&height_m) {
@@ -124,8 +125,8 @@ pub fn wgs84_geodetic_to_ecef(
     let eccentricity_squared = flattening * (2.0 - flattening);
     let (sin_lat, cos_lat) = latitude_rad_north.sin_cos();
     let (sin_lon, cos_lon) = longitude_rad_east.sin_cos();
-    let radius_of_curvature = WGS84_EQUATORIAL_RADIUS_M
-        / (1.0 - eccentricity_squared * sin_lat * sin_lat).sqrt();
+    let radius_of_curvature =
+        WGS84_EQUATORIAL_RADIUS_M / (1.0 - eccentricity_squared * sin_lat * sin_lat).sqrt();
     let distance_from_spin_axis = (radius_of_curvature + height_m) * cos_lat;
     let xyz = Wgs84EcefPosition {
         x_m: distance_from_spin_axis * cos_lon,
