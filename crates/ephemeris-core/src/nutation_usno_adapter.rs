@@ -180,3 +180,157 @@ pub fn convert_usno_planetary_row(
         obliquity_sin_rad: coefficients[5],
     })
 }
+
+/// Required completeness policy for a caller-supplied sequence of printed
+/// USNO rows. A *complete* family still has no verified source provenance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsnoBatchMode {
+    /// A nonempty, strictly contiguous interval of global printed indices.
+    ContiguousSubset,
+    /// Exactly all 678 or 687 original global printed indices in order.
+    CompleteFamily,
+}
+
+/// Fail-closed batch conversion error. `position` is **zero-based within
+/// the caller's slice**, not the original USNO global printed index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsnoBatchError {
+    EmptyInput,
+    TooManyRows,
+    IncompleteFamily {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidPrintedIndex {
+        position: usize,
+        expected: usize,
+        actual: usize,
+    },
+    InvalidRow {
+        position: usize,
+        cause: UsnoConversionError,
+    },
+}
+
+impl fmt::Display for UsnoBatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "USNO printed-row batch rejected: {self:?}")
+    }
+}
+impl Error for UsnoBatchError {}
+
+fn validate_batch<'a>(
+    rows: &'a [UsnoPrintedHarmonicRow],
+    first: usize,
+    count: usize,
+    mode: UsnoBatchMode,
+) -> Result<impl Iterator<Item = (usize, &'a UsnoPrintedHarmonicRow)>, UsnoBatchError> {
+    if rows.is_empty() {
+        return Err(UsnoBatchError::EmptyInput);
+    }
+    if rows.len() > count {
+        return Err(UsnoBatchError::TooManyRows);
+    }
+    if mode == UsnoBatchMode::CompleteFamily && rows.len() != count {
+        return Err(UsnoBatchError::IncompleteFamily {
+            expected: count,
+            actual: rows.len(),
+        });
+    }
+    let first_index = if mode == UsnoBatchMode::CompleteFamily {
+        first
+    } else {
+        rows[0].printed_term_number
+    };
+    for (position, row) in rows.iter().enumerate() {
+        let expected = first_index.saturating_add(position);
+        if row.printed_term_number != expected {
+            return Err(UsnoBatchError::InvalidPrintedIndex {
+                position,
+                expected,
+                actual: row.printed_term_number,
+            });
+        }
+    }
+    Ok(rows.iter().enumerate())
+}
+
+/// Convert caller-supplied lunisolar rows **atomically**, with exact global
+/// printed-number sequencing. Partial intervals are visibly opt-in.
+///
+/// This validates only format/sequence and uses no official coefficient
+/// table, fingerprint, license check or network access.
+pub fn convert_usno_lunisolar_batch(
+    rows: &[UsnoPrintedHarmonicRow],
+    mode: UsnoBatchMode,
+) -> Result<Vec<LuniSolarHarmonicTerm>, UsnoBatchError> {
+    let validated = validate_batch(rows, 1, 678, mode)?;
+    let mut terms = Vec::with_capacity(rows.len());
+    for (position, row) in validated {
+        terms.push(convert_usno_lunisolar_row(*row).map_err(|cause| {
+            UsnoBatchError::InvalidRow { position, cause }
+        })?);
+    }
+    Ok(terms)
+}
+
+/// Convert caller-supplied planetary rows **atomically**, requiring printed
+/// indices 679..=1365 for full-family mode. The MHB2000 lprime and slope
+/// restrictions of the single-row converter are applied to **every** row.
+pub fn convert_usno_planetary_batch(
+    rows: &[UsnoPrintedHarmonicRow],
+    mode: UsnoBatchMode,
+) -> Result<Vec<PlanetaryHarmonicTerm>, UsnoBatchError> {
+    let validated = validate_batch(rows, 679, 687, mode)?;
+    let mut terms = Vec::with_capacity(rows.len());
+    for (position, row) in validated {
+        terms.push(convert_usno_planetary_row(*row).map_err(|cause| {
+            UsnoBatchError::InvalidRow { position, cause }
+        })?);
+    }
+    Ok(terms)
+}
+
+/// The two original USNO term families, **structurally complete** only.
+///
+/// The absence of data provenance, licensing clearance, and independently
+/// validated Δψ/Δε results means this type is NOT an official IAU 2000A
+/// model or an approval to redistribute a complete coefficient dataset.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructurallyCompleteUsnoSeries {
+    pub lunisolar: Vec<LuniSolarHarmonicTerm>,
+    pub planetary: Vec<PlanetaryHarmonicTerm>,
+}
+
+/// Reject incomplete or malformed families before returning any result.
+///
+/// A successful return proves both ordered source ranges (1..=678,
+/// 679..=1365) were supplied and converted. It does NOT prove the numeric
+/// values are genuine or that their use/distribution has been authorized.
+pub fn convert_usno_complete_series(
+    lunisolar: &[UsnoPrintedHarmonicRow],
+    planetary: &[UsnoPrintedHarmonicRow],
+) -> Result<StructurallyCompleteUsnoSeries, UsnoFullSeriesError> {
+    let lunisolar = convert_usno_lunisolar_batch(lunisolar, UsnoBatchMode::CompleteFamily)
+        .map_err(UsnoFullSeriesError::Lunisolar)?;
+    let planetary = convert_usno_planetary_batch(planetary, UsnoBatchMode::CompleteFamily)
+        .map_err(UsnoFullSeriesError::Planetary)?;
+    Ok(StructurallyCompleteUsnoSeries {
+        lunisolar,
+        planetary,
+    })
+}
+
+/// Identifies which USNO family caused a full-series rejection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsnoFullSeriesError {
+    Lunisolar(UsnoBatchError),
+    Planetary(UsnoBatchError),
+}
+
+impl fmt::Display for UsnoFullSeriesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "USNO full series rejected: {self:?}")
+    }
+}
+impl Error for UsnoFullSeriesError {}
