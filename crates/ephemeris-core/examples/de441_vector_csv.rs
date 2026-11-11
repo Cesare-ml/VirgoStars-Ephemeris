@@ -140,6 +140,43 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn csv_body_names_are_unique_and_explicit_about_barycenters() {
+        use virgostars_ephemeris_core::de441::Body;
+
+        let cases = [
+            ("ssb", Body::SolarSystemBarycenter),
+            ("mercury", Body::Mercury),
+            ("venus", Body::Venus),
+            ("emb", Body::EarthMoonBarycenter),
+            ("earth", Body::Earth),
+            ("moon", Body::Moon),
+            ("mars_barycenter", Body::MarsBarycenter),
+            ("jupiter_barycenter", Body::JupiterBarycenter),
+            ("saturn_barycenter", Body::SaturnBarycenter),
+            ("uranus_barycenter", Body::UranusBarycenter),
+            ("neptune_barycenter", Body::NeptuneBarycenter),
+            ("pluto_barycenter", Body::PlutoBarycenter),
+            ("sun", Body::Sun),
+        ];
+        for (index, (name, expected)) in cases.iter().enumerate() {
+            assert_eq!(super::body(name), Some(*expected), "incorrect CSV body: {name}");
+            for (other_name, _) in &cases[..index] {
+                assert_ne!(name, other_name, "duplicate CSV body identifier");
+            }
+        }
+        for ambiguous in [
+            "mars", "jupiter", "saturn", "uranus", "neptune", "pluto",
+            "earth_moon_barycenter", "solar_system_barycenter", "",
+        ] {
+            assert!(
+                super::body(ambiguous).is_none(),
+                "ambiguous or undocumented name accepted: {ambiguous}"
+            );
+        }
+    }
+
     #[test]
     fn unsupported_body_names_are_rejected() {
         assert!(super::body("mars").is_none());
