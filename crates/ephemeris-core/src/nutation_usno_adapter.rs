@@ -70,17 +70,29 @@ impl fmt::Display for UsnoConversionError {
                 write!(f, "term index does not belong to the requested USNO family")
             }
             Self::LunisolarHasPlanetaryMultiplier => {
-                write!(f, "lunisolar USNO term unexpectedly multiplies a planetary argument")
+                write!(
+                    f,
+                    "lunisolar USNO term unexpectedly multiplies a planetary argument"
+                )
             }
             Self::PlanetaryHasSolarAnomalyMultiplier => {
-                write!(f, "MHB2000 planetary term cannot multiply lunar argument lprime")
+                write!(
+                    f,
+                    "MHB2000 planetary term cannot multiply lunar argument lprime"
+                )
             }
             Self::PlanetaryHasAmplitudeSlope => {
-                write!(f, "MHB2000 planetary term must have zero secular amplitude slopes")
+                write!(
+                    f,
+                    "MHB2000 planetary term must have zero secular amplitude slopes"
+                )
             }
             Self::NonFiniteCoefficient => write!(f, "nonfinite USNO angular coefficient"),
             Self::ImplausibleCoefficient => {
-                write!(f, "USNO coefficient exceeds the canonical one-radian safety guard")
+                write!(
+                    f,
+                    "USNO coefficient exceeds the canonical one-radian safety guard"
+                )
             }
         }
     }
