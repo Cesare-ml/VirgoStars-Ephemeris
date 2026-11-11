@@ -154,3 +154,86 @@ official coefficient datasets, JPL binary, dependencies, license
 changes, package release, deploy or protected-branch merge. Preserve
 CPAL-1.0 Exhibit A notices and **Powered by VirgoStars**
 <https://www.virgostars.it/> attribution.
+
+## New shared consumer-unit projection — 2026-11-11
+
+The original `six_field_units.rs` module now provides the **reusable**
+pure `fixed_spherical_to_degrees_au(&SphericalState)` function. It maps
+the existing six astronomical scalar quantities into a typed
+`FixedSixFieldsDegreesAu` without recomputing positions, interpolating
+ephemeris data, applying light-time or reapplying aberration:
+
+| Source from `SphericalState` | New consumer-unit field |
+|---|---|
+| `longitude_rad` | `longitude_deg`, [0°, 360°) |
+| `latitude_rad` | `latitude_deg` |
+| `distance_km` | `distance_au` |
+| `longitude_rate_rad_per_day` | `longitude_speed_deg_per_tdb_day` |
+| `latitude_rate_rad_per_day` | `latitude_speed_deg_per_tdb_day` |
+| `distance_rate_km_per_day` | `distance_speed_au_per_tdb_day` |
+
+Angle scaling is exactly `180/PI`; distance scaling uses the
+**IAU 2012 defined astronomical unit = 149,597,870.7 km**. The
+rate denominator remains the **observation TDB day** — there is
+no implicit UTC/TT/UT1 conversion. Negative angular and radial rates
+are **not** made positive, preserving retrograde/station semantics.
+The returned object carries `target`, `center`, reception `epoch`
+and `fixed_tilt_rad`, so no planet-system barycenter is silently
+relabelled as a physical planet center and a constant tilt is not
+advertised as ecliptic-of-date.
+
+**Fail-closed checks:** the converter rejects nonfinite inputs, raw
+longitude outside [0, 2π) rather than silently wrapping them,
+latitude outside [−π/2,+π/2], zero/negative distance, and
+overflow/underflow yielding unrepresentable output distance or rates.
+The new `UnitConversionError` describes each case.
+
+In `aberrated_spherical.rs`, two thin wrappers use this one
+formatter:
+- `aberrated_spherical_to_degrees_au(&AberratedFixedSpherical)`
+  formats an already computed aberrated spherical result while
+  preserving target/emission epochs, light-time and acceleration
+  provenance.
+- `geocentric_aberrated_fixed_six_fields(&mut De441, target,
+  reception_tdb, fixed_tilt_rad)` is now a **single call** from a
+  caller-supplied *classic* external DE441 reader to the same six
+  formatted positions and rates.
+
+The existing rad/km `SphericalState` and `AberratedFixedSpherical`
+APIs are preserved; the pure unit formatter can also be reused by
+the **separate** [draft PR #70](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/70)
+after its review and staged integration, replacing its own small
+inline rad/km conversion. This branch neither copies #70's
+implementation nor changes its source. The new library module is
+not specific to either light-time or aberration, preventing further
+duplication in future date-frame pipelines.
+
+The new `tests/six_field_units.rs` contains **7** focused offline
+regressions covering independently computable six-value units,
+boundary wraps, out-of-range latitude/longitude, undefined distances,
+overflow/underflow, signed retrograde and radial speed, and
+metadata/body-identifier preservation after aberration.
+The existing `tests/de441_analytic_acceleration.rs` adds **one**
+end-to-end regression for Mercury **and** the Moon with the full
+synthetic classic DE441 → reception light-time → aberration →
+projection → pure consumer-unit formatter.
+
+**Do not mistake six consumer-style scalar units for scientific Swiss
+equivalence.** Results remain fixed **ICRF** (or a constant arbitrary
+X-tilt) after observer annual aberration, without full IAU precession,
+nutation, solar deflection, physical outer-planet centers, real JPL
+cross-validation or a Node binding. The separate priority roadmap
+still requires the latter before production migration. Numerical
+formatting and synthetic tests only establish *unit and interface*
+behavior, not actual apparent true-ecliptic-of-date parity.
+
+**CPAL-1.0 modification record — 2026-11-11:** added original
+`src/six_field_units.rs`, `tests/six_field_units.rs` and `lib.rs`
+export; extended original `src/aberrated_spherical.rs` with
+consumer-unit wrappers and its error variant, and appended one
+synthetic-DE441 regression to
+`tests/de441_analytic_acceleration.rs`. Updated this document and
+README. No dependency, JPL binary, third-party coefficient table,
+Swiss/ERFA/SOFA program source, license, release, merge or deployment
+change. Preserve CPAL-1.0 Exhibit A and **Powered by VirgoStars**
+<https://www.virgostars.it/>.
