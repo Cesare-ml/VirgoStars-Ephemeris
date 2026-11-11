@@ -27,13 +27,7 @@ const LUNAR_ORDER: &str = "arguments=l,lprime,F,D,Omega";
 const PLANETARY_ORDER: &str =
     "arguments=l,lprime,F,D,Omega,Mercury,Venus,Earth,Mars,Jupiter,Saturn,Uranus,Neptune,pA";
 
-fn fixture(
-    family: &str,
-    order: &str,
-    source: &str,
-    reference: &str,
-    rows: &[String],
-) -> String {
+fn fixture(family: &str, order: &str, source: &str, reference: &str, rows: &[String]) -> String {
     format!(
         "VIRGOSTARS_NUTATION_TERMS_V1\nfamily={family}\n{order}\namplitudes=radians\nslopes=radians_per_tdb_century\nsource={source}\nreference={reference}\ncount={}\nDATA\n{}\n",
         rows.len(),
@@ -147,8 +141,14 @@ fn rejects_raw_arcseconds_degrees_or_wrong_slope_units() {
     for wrong in [
         sample.replace("amplitudes=radians", "amplitudes=arcseconds"),
         sample.replace("amplitudes=radians", "amplitudes=degrees"),
-        sample.replace("slopes=radians_per_tdb_century", "slopes=arcseconds_per_century"),
-        sample.replace("VIRGOSTARS_NUTATION_TERMS_V1", "VIRGOSTARS_NUTATION_TERMS_V0"),
+        sample.replace(
+            "slopes=radians_per_tdb_century",
+            "slopes=arcseconds_per_century",
+        ),
+        sample.replace(
+            "VIRGOSTARS_NUTATION_TERMS_V1",
+            "VIRGOSTARS_NUTATION_TERMS_V0",
+        ),
     ] {
         assert_eq!(failure(&wrong, false), TableParseErrorKind::InvalidHeader);
     }
@@ -160,7 +160,10 @@ fn rejects_unsupported_or_missing_provenance_without_license_assertion() {
     for changed in [
         sample.replace("source=synthetic", "source=approved"),
         sample.replace("reference=synthetic:unit-test", "reference="),
-        sample.replace("reference=synthetic:unit-test", "reference=https://not-a-synthetic"),
+        sample.replace(
+            "reference=synthetic:unit-test",
+            "reference=https://not-a-synthetic",
+        ),
     ] {
         let reason = failure(&changed, false);
         assert!(
