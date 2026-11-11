@@ -32,6 +32,7 @@ pub mod first_sky;
 pub mod light_time;
 pub mod state;
 pub mod time;
+pub mod wgs84_ecef;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
