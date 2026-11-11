@@ -267,9 +267,10 @@ pub fn convert_usno_lunisolar_batch(
     let validated = validate_batch(rows, 1, 678, mode)?;
     let mut terms = Vec::with_capacity(rows.len());
     for (position, row) in validated {
-        terms.push(convert_usno_lunisolar_row(*row).map_err(|cause| {
-            UsnoBatchError::InvalidRow { position, cause }
-        })?);
+        terms.push(
+            convert_usno_lunisolar_row(*row)
+                .map_err(|cause| UsnoBatchError::InvalidRow { position, cause })?,
+        );
     }
     Ok(terms)
 }
@@ -284,9 +285,10 @@ pub fn convert_usno_planetary_batch(
     let validated = validate_batch(rows, 679, 687, mode)?;
     let mut terms = Vec::with_capacity(rows.len());
     for (position, row) in validated {
-        terms.push(convert_usno_planetary_row(*row).map_err(|cause| {
-            UsnoBatchError::InvalidRow { position, cause }
-        })?);
+        terms.push(
+            convert_usno_planetary_row(*row)
+                .map_err(|cause| UsnoBatchError::InvalidRow { position, cause })?,
+        );
     }
     Ok(terms)
 }
