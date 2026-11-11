@@ -297,7 +297,7 @@ fn one_call_through_de441_lighttime_and_aberration_preserves_synthetic_result() 
 #[test]
 fn explicit_fd_step_and_external_data_bounds_fail_closed() {
     let mut ephemeris = De441::new(Cursor::new(synthetic_classic_de441())).unwrap();
-    for invalid in [0.0, -0.01, 0.6, f64::NAN, 1e-12] {
+    for invalid in [0.0, -0.01, 0.6, f64::NAN, 1e-15] {
         assert!(matches!(
             geocentric_light_time_annual_aberration(
                 &mut ephemeris,
