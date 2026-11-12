@@ -32,12 +32,8 @@ use std::error::Error;
 use std::fmt;
 
 use crate::calendar::JulianDate;
-use crate::polar_motion::{
-    itrs_to_tirs_polar_motion_matrix, PolarMotionError, PolarMotionMatrix,
-};
-use crate::tio_locator::{
-    approximate_tio_locator_sp00, ApproximateTioLocator, TioLocatorError,
-};
+use crate::polar_motion::{itrs_to_tirs_polar_motion_matrix, PolarMotionError, PolarMotionMatrix};
+use crate::tio_locator::{approximate_tio_locator_sp00, ApproximateTioLocator, TioLocatorError};
 
 /// Matrix and provenance-aware approximation result for one TT epoch.
 ///
@@ -96,14 +92,10 @@ pub fn itrs_to_tirs_polar_motion_with_approximate_sp00(
     xp_rad: f64,
     yp_rad: f64,
 ) -> Result<ApproximateTioPolarMotion, ApproximateTioPolarMotionError> {
-    let locator = approximate_tio_locator_sp00(tt_epoch)
-        .map_err(ApproximateTioPolarMotionError::Locator)?;
-    let itrs_to_tirs = itrs_to_tirs_polar_motion_matrix(
-        xp_rad,
-        yp_rad,
-        locator.sp_rad,
-    )
-    .map_err(ApproximateTioPolarMotionError::PolarMotion)?;
+    let locator =
+        approximate_tio_locator_sp00(tt_epoch).map_err(ApproximateTioPolarMotionError::Locator)?;
+    let itrs_to_tirs = itrs_to_tirs_polar_motion_matrix(xp_rad, yp_rad, locator.sp_rad)
+        .map_err(ApproximateTioPolarMotionError::PolarMotion)?;
     Ok(ApproximateTioPolarMotion {
         locator,
         itrs_to_tirs,
