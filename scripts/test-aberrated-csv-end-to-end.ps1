@@ -129,6 +129,23 @@ try {
     }
     Save-Csv $utcCsv $utc.Lines
 
+    # Exercise the separate exact-TDB input path using the epoch actually
+    # emitted by the civil adapter (no guessed UTC/TT offset).
+    $jdTdb = $civil.Lines[1].Split(',')[2]
+    $tdb = Run-Cargo ($common + @('aberrated_csv', '--', $kernel, "tdb:$jdTdb") + $targets)
+    if ($tdb.ExitCode -ne 0) { throw "explicit TDB exporter exited $($tdb.ExitCode)" }
+    if (($tdb.Lines -join [Environment]::NewLine) -cne ($utc.Lines -join [Environment]::NewLine)) {
+        throw 'explicit TDB input did not reproduce equivalent UTC output'
+    }
+    Write-Host '[PASS] Explicit TDB JD and civil UTC produce identical exporter output'
+
+    # Reject an unknown physical planet center before writing partial CSV.
+    $badBody = Run-Cargo ($common + @('aberrated_csv', '--', $kernel, '2026-11-10T12:30:00Z', 'Moon', 'Mars'))
+    if ($badBody.ExitCode -eq 0 -or $badBody.Lines.Count -ne 0) {
+        throw 'ambiguous Mars center must fail without writing partial CSV'
+    }
+    Write-Host '[PASS] Unsupported physical planet center fails without CSV output'
+
     $compareBase = $common + @('compare_aberrated_csv', '--')
     $zeroTolerance = @('0', '0', '0', '0', '0', '0')
     $same = Run-Cargo ($compareBase + @($civilCsv, $utcCsv) + $zeroTolerance)
