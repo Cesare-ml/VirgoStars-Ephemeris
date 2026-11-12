@@ -61,7 +61,7 @@ python3 tools/check_de441_validation_manifest.py /path/to/validation-manifest.js
 python3 -m unittest discover -s tests -p 'test_de441_validation_manifest.py'
 ```
 
-The preflight rejects missing or incompatible metadata; it does **not** verify
+The preflight also rejects duplicate JSON object keys at every nesting level, including\nconflicting sample identifiers or reference solutions, instead of silently\naccepting the last value. This check applies to JSON input read by the CLI.\n\nThe preflight rejects missing or incompatible metadata; it does **not** verify
 that the URL/hash are authentic, that the Horizons query actually selected
 DE441, that the declared tolerance is scientifically justified, or that any
 numerical vector agrees. Those checks require human review and independent
