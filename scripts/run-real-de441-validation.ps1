@@ -192,6 +192,17 @@ function Invoke-CargoGate {
         [Text.UTF8Encoding]::new($false)
     )
     $pass = Test-GatePass -Lines $lines -ExitCode $code -ExpectedTests $ExpectedTests
+    $metrics = $null
+    $metricError = $null
+    if ($pass -and $Suite -in @('light_time_horizons', 'aberrated_real_de441')) {
+        try {
+            $metrics = Read-ScientificMetrics -Suite $Suite -Lines $lines
+        }
+        catch {
+            $metricError = $_.Exception.Message
+            $pass = $false
+        }
+    }
     return [pscustomobject]@{
         suite = $Suite
         command = ('cargo ' + ($cargoArguments -join ' '))
@@ -199,6 +210,8 @@ function Invoke-CargoGate {
         exit_code = $code
         status = $(if ($pass) { 'PASS' } else { 'FAIL' })
         log = $logName
+        metrics = $metrics
+        metric_parse_error = $metricError
     }
 }
 
