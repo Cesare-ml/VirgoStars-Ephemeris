@@ -78,3 +78,7 @@ metadata fields. Finite-looking JSON numeric literals that overflow binary64
 (e.g. `1e999` or `-1e999`) are also rejected, including in extra fields.
 This prevents malformed provenance from being silently
 accepted; it does not inspect kernel bytes or verify astronomical residuals.
+
+## Sample uniqueness guard (2026-11-12)
+
+The metadata preflight rejects repeated `(jd_tdb, target_id, center_id)` combinations, even if their other fields differ. This prevents duplicated observations from inflating the reported sample count. Distinct epochs, targets, or centers remain valid. This is a structural check only: it does not establish independent numerical accuracy or enforce the coverage matrix above.
