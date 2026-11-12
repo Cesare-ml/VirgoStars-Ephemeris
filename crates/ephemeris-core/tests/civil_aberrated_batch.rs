@@ -18,7 +18,8 @@
 use std::io::Cursor;
 
 use virgostars_ephemeris_core::aberrated_spherical::{
-    geocentric_aberrated_fixed_six_fields_many, AberratedSphericalError,
+    geocentric_aberrated_fixed_six_fields, geocentric_aberrated_fixed_six_fields_many,
+    AberratedSphericalError,
 };
 use virgostars_ephemeris_core::aberration_state::{
     AberratedStateError, ObserverAccelerationSource,
@@ -252,6 +253,113 @@ fn empty_batch_retains_tdb_epoch_and_rejects_nonfinite_tilt() {
         geocentric_aberrated_fixed_six_fields_many_from_civil(&mut eph, &[], civil, f64::NAN),
         Err(CivilAberratedError::Aberrated(
             AberratedSphericalError::Projection(ProjectionError::NonFinite)
+        ))
+    ));
+}
+
+
+#[test]
+fn optimized_civil_batch_matches_fresh_scalar_readers_at_multiple_epochs_and_tilts() {
+    // This exercises the #114 shared-Earth optimization through #110's
+    // complete civil→approximate TDB→DE441→aberration adapter. Every
+    // scalar reference has an independent fresh classic-DE441 reader,
+    // preventing shared file cache effects from masking a mismatch.
+    for label in [
+        "2026-11-03T12:30:00Z",
+        "2026-11-10T12:30:00Z",
+        "2026-11-20T12:30:00Z",
+        "2026-11-30T12:30:00Z",
+    ] {
+        for tilt in [0.0, std::f64::consts::FRAC_PI_6] {
+            let civil = timestamp(label);
+            let targets = [Body::Moon, Body::Mercury, Body::Moon];
+            let mut batch_reader = fictional_de441();
+            let batch = geocentric_aberrated_fixed_six_fields_many_from_civil(
+                &mut batch_reader,
+                &targets,
+                civil,
+                tilt,
+            )
+            .unwrap();
+
+            let expected_epoch = civil.to_approximate_tdb_julian_date().unwrap();
+            assert_eq!(batch.reception_epoch, expected_epoch);
+            assert_eq!(batch.results.len(), targets.len());
+            assert_eq!(batch.results[0], batch.results[2]);
+
+            for (actual, target) in batch.results.iter().zip(targets) {
+                let mut scalar_reader = fictional_de441();
+                let scalar = geocentric_aberrated_fixed_six_fields(
+                    &mut scalar_reader,
+                    target,
+                    expected_epoch,
+                    tilt,
+                )
+                .unwrap();
+                assert_eq!(*actual, scalar);
+                assert_eq!(actual.fields.target, target);
+                assert_eq!(actual.fields.center, Body::Earth);
+                assert_eq!(actual.fields.fixed_tilt_rad, tilt);
+                assert_eq!(
+                    actual.observer_acceleration_source,
+                    ObserverAccelerationSource::AnalyticDe441Chebyshev
+                );
+                for rate in [
+                    actual.fields.longitude_speed_deg_per_tdb_day,
+                    actual.fields.latitude_speed_deg_per_tdb_day,
+                    actual.fields.distance_speed_au_per_tdb_day,
+                ] {
+                    assert!(rate.is_finite());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn optimized_civil_batch_preserves_earth_and_emission_coverage_errors() {
+    let mut eph = fictional_de441();
+    let civil = timestamp("2026-11-10T12:30:00Z");
+    let earth = geocentric_aberrated_fixed_six_fields_many_from_civil(
+        &mut eph,
+        &[Body::Moon, Body::Earth],
+        civil,
+        0.0,
+    );
+    assert!(matches!(
+        earth,
+        Err(CivilAberratedError::Aberrated(
+            AberratedSphericalError::Aberration(
+                AberratedStateError::LightTime(LightTimeError::UndefinedDirection)
+            )
+        ))
+    ));
+
+    // The reader remains usable after the entire batch failed.
+    let recovered = geocentric_aberrated_fixed_six_fields_many_from_civil(
+        &mut eph,
+        &[Body::Moon, Body::Mercury],
+        civil,
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(recovered.results.len(), 2);
+
+    // Civil conversion is valid here, but the fictional DE441 kernel
+    // starts later. The original typed DE441 out-of-coverage error
+    // still propagates through the optimized batch path.
+    let outside = geocentric_aberrated_fixed_six_fields_many_from_civil(
+        &mut eph,
+        &[Body::Mercury],
+        timestamp("2026-10-01T12:30:00Z"),
+        0.0,
+    );
+    assert!(matches!(
+        outside,
+        Err(CivilAberratedError::Aberrated(
+            AberratedSphericalError::Aberration(
+                AberratedStateError::Ephemeris(De441Error::OutsideCoverage { .. })
+            )
         ))
     ));
 }
