@@ -263,5 +263,8 @@ fn celestial_delta_units_are_validated_without_confusing_them_with_poles() {
         Err(EopCsvError::InvalidCipOffset { line: 2 })
     );
     let nan_dx = PUBLISHED_SAMPLE.replace("-0.000005,-0.000050", "NaN,-0.000050");
-    assert_eq!(parse(&[&nan_dx]), Err(EopCsvError::MalformedRow { line: 2 }));
+    assert_eq!(
+        parse(&[&nan_dx]),
+        Err(EopCsvError::MalformedRow { line: 2 })
+    );
 }
