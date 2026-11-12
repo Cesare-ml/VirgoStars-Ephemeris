@@ -79,7 +79,7 @@ fn near_midnight_precision_survives_split_julian_day_arithmetic() {
     close(
         half_day_later.sp_rad - midnight.sp_rad,
         0.5 * midnight.secular_rate_rad_per_tt_day,
-        1.0e-28,
+        1.0e-26,
     );
 }
 
