@@ -39,3 +39,31 @@ Store a compact manifest with the query settings, reference provenance, data has
 Mark the independent validation gate **passed** only after executing the real-file comparison and reviewing the provenance, query settings and residuals. If Horizons cannot be configured for the same DE441 solution, mark the gate **blocked**, document why, and seek an independently generated DE441 reference from a suitable NAIF workflow. Keep production migration, release and numerical-parity claims blocked until this gate is complete.
 
 See [DE441.md](DE441.md), [VALIDATION.md](VALIDATION.md), [DATA_AND_LICENSING.md](DATA_AND_LICENSING.md), and [AGENTS.md](../AGENTS.md).
+
+## Machine-checkable metadata preflight
+
+Before running the independent vector comparison, prepare a JSON manifest with
+`kernel_url`, `kernel_sha256` (64 hexadecimal digits), `kernel_bytes`,
+`retrieved_utc`, `engine_commit`, `reference_source`,
+`reference_solution` (exactly `DE441`), `reference_query` (preserve
+the complete query/settings), positive finite `tolerance_position_km` and
+`tolerance_velocity_km_day`, and a nonempty `samples` array.
+
+Each sample must contain numeric `jd_tdb`, integer `target_id` and
+`center_id`, `frame: "ICRF"`, `correction: "NONE"`,
+`reference_plane: "FRAME"`, `position_unit: "km"`, and
+`velocity_unit: "km/day"`. Distinct target/center IDs are required.
+
+Run the offline standard-library-only preflight:
+
+```bash
+python3 tools/check_de441_validation_manifest.py /path/to/validation-manifest.json
+python3 -m unittest discover -s tests -p 'test_de441_validation_manifest.py'
+```
+
+The preflight rejects missing or incompatible metadata; it does **not** verify
+that the URL/hash are authentic, that the Horizons query actually selected
+DE441, that the declared tolerance is scientifically justified, or that any
+numerical vector agrees. Those checks require human review and independent
+real-kernel computation. Keep the manifest and reference evidence with the
+validation report, not with bundled ephemeris binaries.
