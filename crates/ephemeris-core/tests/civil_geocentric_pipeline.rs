@@ -249,7 +249,6 @@ fn conversion_kernel_and_projection_errors_remain_distinct() {
     ));
 }
 
-
 /// Add an independent fixed Venus series after Mercury, EMB and Moon,
 /// without changing the original one-body synthetic fixtures.
 fn synthetic_two_body_kernel(mercury_velocity: [f64; 3]) -> Vec<u8> {
@@ -271,14 +270,15 @@ fn batch_preserves_order_duplicates_metadata_and_exact_scalar_results() {
     .unwrap();
     let civil = stamp("2026-11-10T13:30:00+01:00");
     let targets = [Body::Venus, Body::Mercury, Body::Venus];
-    let batch =
-        geocentric_fixed_spherical_many_from_civil(&mut eph, &targets, civil, 0.0).unwrap();
+    let batch = geocentric_fixed_spherical_many_from_civil(&mut eph, &targets, civil, 0.0).unwrap();
     assert_eq!(batch.len(), targets.len());
     assert_eq!(batch[0], batch[2]);
-    assert_ne!(batch[0].spherical.distance_km, batch[1].spherical.distance_km);
+    assert_ne!(
+        batch[0].spherical.distance_km,
+        batch[1].spherical.distance_km
+    );
     for (actual, target) in batch.iter().zip(targets) {
-        let expected = geocentric_fixed_spherical_from_civil(&mut eph, target, civil, 0.0)
-            .unwrap();
+        let expected = geocentric_fixed_spherical_from_civil(&mut eph, target, civil, 0.0).unwrap();
         assert_eq!(*actual, expected);
         assert_eq!(actual.spherical.target, target);
         assert_eq!(actual.spherical.center, Body::Earth);
@@ -352,12 +352,7 @@ fn batch_fails_whole_call_on_missing_series_and_can_be_reused() {
     assert_eq!(resumed[0].spherical.target, Body::Mercury);
     assert_eq!(resumed[1].spherical.target, Body::Venus);
 
-    let earth = geocentric_fixed_spherical_many_from_civil(
-        &mut eph,
-        &[Body::Earth],
-        civil,
-        0.0,
-    );
+    let earth = geocentric_fixed_spherical_many_from_civil(&mut eph, &[Body::Earth], civil, 0.0);
     assert!(matches!(
         earth,
         Err(CivilGeocentricError::LightTime(
