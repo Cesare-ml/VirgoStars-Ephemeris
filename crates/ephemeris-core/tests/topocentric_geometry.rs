@@ -78,7 +78,11 @@ fn agrees_with_independent_sofa_erfa_cartesian_to_spherical_reference() {
     near(v.declination_rad, 0.219_987_977_395_459_45, 1.0e-14);
     near(v.distance_km, 114.564_392_373_896, 1.0e-12);
     near_vector(v.displacement_gcrs_km, [100.0, -50.0, 25.0], 0.0);
-    let norm = v.unit_direction_gcrs.into_iter().map(|x| x * x).sum::<f64>();
+    let norm = v
+        .unit_direction_gcrs
+        .into_iter()
+        .map(|x| x * x)
+        .sum::<f64>();
     near(norm, 1.0, 5.0e-16);
 }
 
@@ -94,7 +98,11 @@ fn analytic_lunar_distance_scale_has_expected_geometric_parallax() {
         geometric_topocentric_direction_gcrs([distance_km, 0.0, 0.0], [0.0, radius_km, 0.0])
             .unwrap();
     let parallax_rad = radius_km.atan2(distance_km);
-    near(result.right_ascension_rad.unwrap(), TAU - parallax_rad, 1.0e-14);
+    near(
+        result.right_ascension_rad.unwrap(),
+        TAU - parallax_rad,
+        1.0e-14,
+    );
     near(result.declination_rad, 0.0, 1.0e-14);
     near(result.distance_km, distance_km.hypot(radius_km), 1.0e-10);
     assert!(parallax_rad.to_degrees() > 0.9);
@@ -108,10 +116,13 @@ fn analytic_one_au_scale_produces_small_parallax_without_model_defaults() {
     let one_au_km = 149_597_870.7_f64;
     let radius_km = 6_378.137_f64;
     let result =
-        geometric_topocentric_direction_gcrs([one_au_km, 0.0, 0.0], [0.0, radius_km, 0.0])
-            .unwrap();
+        geometric_topocentric_direction_gcrs([one_au_km, 0.0, 0.0], [0.0, radius_km, 0.0]).unwrap();
     let angle_rad = radius_km.atan2(one_au_km);
-    near(result.right_ascension_rad.unwrap(), TAU - angle_rad, 1.0e-14);
+    near(
+        result.right_ascension_rad.unwrap(),
+        TAU - angle_rad,
+        1.0e-14,
+    );
     // Convert to arcseconds only for this analytic test, not in core API.
     let arcsec = angle_rad.to_degrees() * 3_600.0;
     assert!(arcsec > 8.7);
@@ -135,7 +146,10 @@ fn cardinal_quadrants_and_zero_ra_are_normalized() {
 
 #[test]
 fn exact_celestial_poles_return_undefined_ra_but_defined_declination() {
-    for (target, expected_dec) in [([0.0, 0.0, 10.0], FRAC_PI_2), ([0.0, 0.0, -5.0], -FRAC_PI_2)] {
+    for (target, expected_dec) in [
+        ([0.0, 0.0, 10.0], FRAC_PI_2),
+        ([0.0, 0.0, -5.0], -FRAC_PI_2),
+    ] {
         let result = geometric_topocentric_direction_gcrs(target, [0.0; 3]).unwrap();
         assert_eq!(result.right_ascension_rad, None);
         near(result.declination_rad, expected_dec, 0.0);
@@ -145,8 +159,7 @@ fn exact_celestial_poles_return_undefined_ra_but_defined_declination() {
 
 #[test]
 fn origin_translation_preserves_sightline_geometry() {
-    let first =
-        geometric_topocentric_direction_gcrs([100.0, -50.0, 25.0], [0.0; 3]).unwrap();
+    let first = geometric_topocentric_direction_gcrs([100.0, -50.0, 25.0], [0.0; 3]).unwrap();
     let second =
         geometric_topocentric_direction_gcrs([1100.0, 1950.0, 3025.0], [1000.0, 2000.0, 3000.0])
             .unwrap();
@@ -170,10 +183,7 @@ fn rejects_coincident_invalid_and_overflow_vectors_without_nan_outputs() {
         );
     }
     assert_eq!(
-        geometric_topocentric_direction_gcrs(
-            [f64::MAX, 0.0, 0.0],
-            [-f64::MAX, 0.0, 0.0]
-        ),
+        geometric_topocentric_direction_gcrs([f64::MAX, 0.0, 0.0], [-f64::MAX, 0.0, 0.0]),
         Err(TopocentricGeometryError::NonFiniteDisplacement)
     );
     assert_eq!(
@@ -192,7 +202,11 @@ fn wgs84_wrapper_uses_integrated_site_gcrs_at_supplied_ut1_epoch() {
     let target = std::array::from_fn(|i| observer.position_gcrs_km[i] + [100.0, -50.0, 25.0][i]);
     let result = wgs84_topocentric_geometric_direction_gcrs(site, params, target).unwrap();
     assert_eq!(result.observer, observer);
-    near_vector(result.direction.displacement_gcrs_km, [100.0, -50.0, 25.0], 2.0e-12);
+    near_vector(
+        result.direction.displacement_gcrs_km,
+        [100.0, -50.0, 25.0],
+        2.0e-12,
+    );
     near(result.direction.distance_km, 114.564_392_373_896, 5.0e-12);
     near(
         result.direction.right_ascension_rad.unwrap(),
@@ -206,11 +220,7 @@ fn high_level_wrapper_rejects_bad_epoch_and_nonfinite_target() {
     let mut params = synthetic_orientation();
     params.ut1_epoch = JulianDate::new(2_451_545, 0.5, TimeScale::Tt).unwrap();
     assert_eq!(
-        wgs84_topocentric_geometric_direction_gcrs(
-            equatorial_site(),
-            params,
-            [1.0, 0.0, 0.0]
-        ),
+        wgs84_topocentric_geometric_direction_gcrs(equatorial_site(), params, [1.0, 0.0, 0.0]),
         Err(TopocentricGeometryError::Observer(
             ObserverGcrsError::EarthRotation(EarthRotationError::RequiresUt1(TimeScale::Tt))
         ))
