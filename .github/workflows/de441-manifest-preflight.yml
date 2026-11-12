@@ -1,0 +1,26 @@
+# Offline validation of DE441 scientific-comparison metadata only.
+# This does not download kernels or establish astronomical numerical parity.
+name: DE441 validation manifest preflight
+
+on:
+  pull_request:
+    paths:
+      - 'tools/check_de441_validation_manifest.py'
+      - 'tests/test_de441_validation_manifest.py'
+      - '.github/workflows/de441-manifest-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run offline manifest regression tests
+        run: python -m unittest discover -s tests -p 'test_de441_validation_manifest.py' -v
