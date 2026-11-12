@@ -53,7 +53,11 @@ fn fixture() -> Vec<u8> {
     f64_at(&mut bytes, 2688, 81.0);
     i32_at(&mut bytes, 2840, 441);
     for (series, first) in [(9, 3), (12, 373)] {
-        let ptr = if series == 12 { 2844 } else { 2696 + series * 12 };
+        let ptr = if series == 12 {
+            2844
+        } else {
+            2696 + series * 12
+        };
         i32_at(&mut bytes, ptr, first);
         i32_at(&mut bytes, ptr + 4, 1);
         i32_at(&mut bytes, ptr + 8, 1);
@@ -141,10 +145,14 @@ fn explicit_non_identity_frame_rotation_composes_real_reader_and_site_pipeline()
         result.sightline_icrf.target_geocentric_icrf_km,
         [100_000.0, -50_000.0, 25_000.0]
     );
-    let offset: [f64; 3] = std::array::from_fn(|i| {
-        [100_000.0, -50_000.0, 25_000.0][i] - expected_observer[i]
-    });
-    for (actual, expected) in result.sightline_icrf.displacement_icrf_km.into_iter().zip(offset) {
+    let offset: [f64; 3] =
+        std::array::from_fn(|i| [100_000.0, -50_000.0, 25_000.0][i] - expected_observer[i]);
+    for (actual, expected) in result
+        .sightline_icrf
+        .displacement_icrf_km
+        .into_iter()
+        .zip(offset)
+    {
         near(actual, expected, 2.0e-11);
     }
     let expected_distance = offset[0].hypot(offset[1]).hypot(offset[2]);
@@ -163,13 +171,22 @@ fn tdb_ut1_offset_guard_rejects_mismatched_epochs() {
     inputs.tdb_minus_ut1_seconds += 0.01;
     assert!(matches!(
         wgs84_de441_geometric_sightline_with_alignment(
-            &mut eph, Body::Moon, site(), orientation(), EPOCH_TDB, inputs,
+            &mut eph,
+            Body::Moon,
+            site(),
+            orientation(),
+            EPOCH_TDB,
+            inputs,
         ),
         Err(ObserverFrameBridgeError::EpochMismatch)
     ));
     assert!(matches!(
         wgs84_de441_geometric_sightline_with_alignment(
-            &mut eph, Body::Moon, site(), orientation(), JulianDateTdb(1_017.0),
+            &mut eph,
+            Body::Moon,
+            site(),
+            orientation(),
+            JulianDateTdb(1_017.0),
             alignment("synthetic-input"),
         ),
         Err(ObserverFrameBridgeError::EpochMismatch)
@@ -182,7 +199,12 @@ fn rejects_unjustified_missing_alignment_label() {
     for label in ["", " ", "\n\t"] {
         assert!(matches!(
             wgs84_de441_geometric_sightline_with_alignment(
-                &mut eph, Body::Moon, site(), orientation(), EPOCH_TDB, alignment(label),
+                &mut eph,
+                Body::Moon,
+                site(),
+                orientation(),
+                EPOCH_TDB,
+                alignment(label),
             ),
             Err(ObserverFrameBridgeError::MissingAlignmentSource)
         ));
@@ -200,7 +222,12 @@ fn rejects_reflections_shears_nonfinite_and_nonorthogonal_frame_matrices() {
         frame.rotation_gcrs_to_icrf = invalid;
         assert!(matches!(
             wgs84_de441_geometric_sightline_with_alignment(
-                &mut eph, Body::Moon, site(), orientation(), EPOCH_TDB, frame,
+                &mut eph,
+                Body::Moon,
+                site(),
+                orientation(),
+                EPOCH_TDB,
+                frame,
             ),
             Err(ObserverFrameBridgeError::InvalidAlignmentRotation)
         ));
@@ -215,13 +242,22 @@ fn rejects_nonfinite_tdb_offset_and_time_coordinate() {
         frame.tdb_minus_ut1_seconds = invalid;
         assert!(matches!(
             wgs84_de441_geometric_sightline_with_alignment(
-                &mut eph, Body::Moon, site(), orientation(), EPOCH_TDB, frame,
+                &mut eph,
+                Body::Moon,
+                site(),
+                orientation(),
+                EPOCH_TDB,
+                frame,
             ),
             Err(ObserverFrameBridgeError::InvalidTdbMinusUt1Offset)
         ));
         assert!(matches!(
             wgs84_de441_geometric_sightline_with_alignment(
-                &mut eph, Body::Moon, site(), orientation(), JulianDateTdb(invalid),
+                &mut eph,
+                Body::Moon,
+                site(),
+                orientation(),
+                JulianDateTdb(invalid),
                 alignment("synthetic-input"),
             ),
             Err(ObserverFrameBridgeError::InvalidTdbEpoch)
@@ -240,9 +276,16 @@ fn rejects_tt_labeled_ut1_instead_of_silently_converting() {
     .unwrap();
     assert!(matches!(
         wgs84_de441_geometric_sightline_with_alignment(
-            &mut eph, Body::Moon, site(), inputs, EPOCH_TDB, alignment("synthetic-tt-error"),
+            &mut eph,
+            Body::Moon,
+            site(),
+            inputs,
+            EPOCH_TDB,
+            alignment("synthetic-tt-error"),
         ),
-        Err(ObserverFrameBridgeError::Observer(ObserverGcrsError::EarthRotation(_)))
+        Err(ObserverFrameBridgeError::Observer(
+            ObserverGcrsError::EarthRotation(_)
+        ))
     ));
 }
 
@@ -251,7 +294,11 @@ fn de441_target_errors_propagate_without_substituting_a_barycenter() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     assert!(matches!(
         wgs84_de441_geometric_sightline_with_alignment(
-            &mut eph, Body::MarsBarycenter, site(), orientation(), EPOCH_TDB,
+            &mut eph,
+            Body::MarsBarycenter,
+            site(),
+            orientation(),
+            EPOCH_TDB,
             alignment("synthetic-missing-planet"),
         ),
         Err(ObserverFrameBridgeError::De441(_))
@@ -262,11 +309,18 @@ fn de441_target_errors_propagate_without_substituting_a_barycenter() {
 fn caller_can_explicitly_request_synthetic_identity_without_implicit_default() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     let mut frame = alignment("explicit-identity-only-for-synthetic-fixture");
-    frame.rotation_gcrs_to_icrf =
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    frame.rotation_gcrs_to_icrf = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let result = wgs84_de441_geometric_sightline_with_alignment(
-        &mut eph, Body::Moon, site(), orientation(), EPOCH_TDB, frame,
+        &mut eph,
+        Body::Moon,
+        site(),
+        orientation(),
+        EPOCH_TDB,
+        frame,
     )
     .unwrap();
-    assert_eq!(result.observer_icrf_km, result.observer_gcrs.position_gcrs_km);
+    assert_eq!(
+        result.observer_icrf_km,
+        result.observer_gcrs.position_gcrs_km
+    );
 }
