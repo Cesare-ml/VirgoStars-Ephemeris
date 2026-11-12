@@ -17,7 +17,7 @@
 //! (BPN) matrix at an explicitly tagged TT instant.
 //!
 //! The third *row*, NOT column, of an SOFA/ERFA-convention BPN matrix
-//! is the CIP unit direction in GCRS: [X,Y,Z].
+//! is the CIP unit direction in GCRS: `[X,Y,Z]`.
 //!
 //! The date-dependent celestial CIO series q(TT)=s(TT)+X*Y/2
 //! remains independently supplied. Its value cannot be inferred
