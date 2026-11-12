@@ -28,3 +28,8 @@ name = "virgostars_ephemeris_core"
 name = "aberrated_csv"
 path = "examples/aberrated_csv.rs"
 test = true
+
+[[example]]
+name = "compare_aberrated_csv"
+path = "examples/compare_aberrated_csv.rs"
+test = true
