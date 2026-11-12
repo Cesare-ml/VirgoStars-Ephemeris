@@ -173,6 +173,78 @@ function Read-ScientificMetrics {
     throw "No metrics contract defined for suite '$Suite'."
 }
 
+# The thresholds below are TRANSCRIPTIONS of the current explicit Rust
+# asserts in tests/light_time_horizons.rs and tests/aberrated_real_de441.rs.
+# They do not establish independently justified scientific accuracy.
+# Rust computes on full f64 precision; its assertions remain the authority.
+# Decimal logs can round a value just below a strict bound up to equality.
+# Accordingly, this *secondary* envelope only rejects PRINTED values > bound.
+function Get-ReportedScientificLimits {
+    param([string]$Suite, [System.Collections.IDictionary]$Metrics)
+
+    $limits = [ordered]@{}
+    if ($Suite -eq 'light_time_horizons') {
+        $limits['horizons_lt_vectors'] = [ordered]@{
+            position_max_component_km = 0.01
+            horizons_velocity_max_component_km_per_s = 1e-6
+            lt_derivative_max_component_km_per_s = 3e-6
+            light_time_error_seconds = 1e-6
+        }
+    }
+    elseif ($Suite -eq 'aberrated_real_de441') {
+        $limits['recovered_lt_vectors'] = [ordered]@{
+            recovered_lt_vector_max_component_km = 0.01
+            lt_range_error_km = 0.01
+            light_time_error_seconds = 1e-6
+        }
+        # Rust checks angle_error < 2e-4 deg/TDB day. Report uses
+        # arcseconds/TDB day: 2e-4 * 3600 = 0.72.
+        $limits['full_pipeline_rate_consistency'] = [ordered]@{
+            angular_rate_error_arcsec_per_tdb_day = 0.72
+            radial_rate_error_au_per_tdb_day = 1e-7
+        }
+    }
+    else {
+        throw "No pinned scientific thresholds for suite $Suite."
+    }
+
+    $results = [ordered]@{}
+    foreach ($group in $limits.Keys) {
+        if (-not $Metrics.Contains($group)) {
+            throw "Required scientific metric group $group is missing."
+        }
+        $maxima = $Metrics[$group].maxima
+        $ratios = [ordered]@{}
+        foreach ($field in $limits[$group].Keys) {
+            if (-not $maxima.Contains($field)) {
+                throw "Missing maximum for scientific metric $group.$field."
+            }
+            [double]$observed = $maxima[$field]
+            [double]$upper = $limits[$group][$field]
+            if (-not [double]::IsFinite($observed) -or $observed -lt 0.0 -or
+                -not [double]::IsFinite($upper) -or $upper -le 0.0) {
+                throw "Invalid finite scientific limit check for $group.$field."
+            }
+            if ($observed -gt $upper) {
+                throw "Reported residual $group.$field = $observed exceeds the Rust-test threshold $upper."
+            }
+            $ratios[$field] = $observed / $upper
+        }
+        $results[$group] = [ordered]@{
+            source = $(if ($Suite -eq 'light_time_horizons') {
+                'crates/ephemeris-core/tests/light_time_horizons.rs'
+            } else {
+                'crates/ephemeris-core/tests/aberrated_real_de441.rs'
+            })
+            declared_strict_upper_limits = $limits[$group]
+            reported_maximum_fractions_of_limit = $ratios
+            printed_values_at_or_below_limit = $true
+            note = 'Secondary check on rounded logs only. The original Rust f64 strict inequalities decide PASS.'
+        }
+    }
+    return $results
+}
+
 function Invoke-CargoGate {
     param(
         [string]$Suite,
