@@ -257,11 +257,7 @@ pub fn geocentric_aberrated_fixed_six_fields_many<R: Read + Seek>(
     }
 
     let earth = ephemeris
-        .state_with_acceleration(
-            Body::Earth,
-            Body::SolarSystemBarycenter,
-            reception_epoch,
-        )
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
         .map_err(AberratedStateError::from)?;
 
     targets
