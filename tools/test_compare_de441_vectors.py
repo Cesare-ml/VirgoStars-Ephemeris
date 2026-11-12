@@ -6,6 +6,8 @@ No external kernel or Horizons download is required.
 import csv
 import importlib.util
 import math
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -161,6 +163,35 @@ class VectorComparisonTests(unittest.TestCase):
         reference = dict(BASE, x_km="0", y_km="0", z_km="0")
         with self.assertRaisesRegex(ValueError, "non-finite residual metric"):
             self.pair(ours, reference)
+
+    def test_cli_reports_zero_metrics_for_identical_vectors(self):
+        self.write(self.ours, [BASE])
+        self.write(self.reference, [BASE])
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), str(self.ours), str(self.reference)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 4)
+        self.assertEqual(
+            {line.split("=", 1)[0] for line in lines},
+            {"position_norm_km", "velocity_norm_km_per_day",
+             "max_position_component_km", "max_velocity_component_km_per_day"},
+        )
+        self.assertTrue(all(float(line.split("=", 1)[1]) == 0.0 for line in lines))
+
+    def test_cli_rejects_mismatched_metadata_without_metrics(self):
+        self.write(self.ours, [BASE])
+        self.write(self.reference, [dict(BASE, center="ssb")])
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), str(self.ours), str(self.reference)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("metadata mismatch for center", result.stderr)
+        self.assertEqual(result.stdout, "")
 
     def test_overflow_residual_rejected(self):
         ours = dict(BASE, x_km=str(1e308))
