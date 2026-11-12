@@ -25,6 +25,7 @@
 
 pub mod calendar;
 pub mod chebyshev;
+pub mod chebyshev_longitude_bounds;
 pub mod coordinates;
 pub mod de441;
 pub mod error;
