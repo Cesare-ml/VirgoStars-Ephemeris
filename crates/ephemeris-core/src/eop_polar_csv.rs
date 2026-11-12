@@ -16,7 +16,8 @@
 //! polar-motion values from the documented **CelesTrak EOP CSV** format.
 //!
 //! Header: DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE
-//! X/Y are arcseconds at 0h UTC; MJD is the integer UTC day number;
+//! X/Y are polar-motion arcseconds; DX/DY are celestial-pole
+//! offsets in arcseconds, all at 0h UTC. MJD is the UTC day number;
 //! O means observed and P means predicted. Conversion to radians is
 //! explicit. Predictions require an explicit opt-in at query time.
 //!
@@ -38,6 +39,8 @@ const HEADER: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE";
 const RADIANS_PER_ARCSECOND: f64 = PI / (180.0 * 3_600.0);
 /// Matches the polar-motion mathematical input guard; not an IERS physical bound.
 const MAX_POLE_ABS_RAD: f64 = 0.01;
+/// Conservative unit-mistake guard (1 arcsecond), not an IERS bound.
+const MAX_ABS_CIP_OFFSET_ARCSECONDS: f64 = 1.0;
 const MJD_ZERO_JULIAN_DAY_NUMBER: i64 = 2_400_001;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,6 +69,10 @@ pub struct DailyEopPolarMotion {
     pub mjd_utc: i64,
     pub xp_rad: f64,
     pub yp_rad: f64,
+    /// Celestial CIP X offset against the conventional IAU model (rad).
+    pub cip_dx_rad: f64,
+    /// Celestial CIP Y offset against the conventional IAU model (rad).
+    pub cip_dy_rad: f64,
     pub ut1_minus_utc_seconds_at_0h: f64,
     pub tai_minus_utc_seconds_at_0h: i32,
     pub record_type: EopRecordType,
@@ -82,6 +89,9 @@ pub struct InterpolatedEopPolarMotion {
     pub fraction_of_utc_day: f64,
     pub xp_rad: f64,
     pub yp_rad: f64,
+    /// Same UTC interpolation and observed/predicted quality as xp/yp.
+    pub cip_dx_rad: f64,
+    pub cip_dy_rad: f64,
     pub quality: EopPolarQuality,
 }
 
@@ -100,6 +110,7 @@ pub enum EopCsvError {
     EmptyCatalog,
     MalformedRow { line: usize },
     InvalidPolarCoordinate { line: usize },
+    InvalidCipOffset { line: usize },
     DateMjdMismatch { line: usize },
     UnsortedOrDuplicateDays { line: usize },
     InvalidUtcFraction,
@@ -117,6 +128,9 @@ impl fmt::Display for EopCsvError {
             Self::MalformedRow { line } => write!(f, "malformed EOP CSV row at line {line}"),
             Self::InvalidPolarCoordinate { line } => {
                 write!(f, "nonfinite or implausible EOP pole angle at line {line}")
+            }
+            Self::InvalidCipOffset { line } => {
+                write!(f, "invalid celestial CIP dX/dY offsets at line {line}")
             }
             Self::DateMjdMismatch { line } => {
                 write!(f, "UTC Gregorian date and MJD disagree at line {line}")
@@ -203,11 +217,19 @@ fn parse_row(line: &str, line_number: usize) -> Result<DailyEopPolarMotion, EopC
         return Err(EopCsvError::InvalidPolarCoordinate { line: line_number });
     }
     let ut1_minus_utc_seconds_at_0h = numeric(4)?;
-    // Validate all documented numeric fields, even if unused in this
-    // first polar-motion-only API. They cannot silently hold NaN.
-    for index in 5..=9 {
+    // Check the unused numeric LOD/DPSI/DEPS fields.
+    for index in 5..=7 {
         let _ = numeric(index)?;
     }
+    let dx_arcsec = numeric(8)?;
+    let dy_arcsec = numeric(9)?;
+    if dx_arcsec.abs() > MAX_ABS_CIP_OFFSET_ARCSECONDS
+        || dy_arcsec.abs() > MAX_ABS_CIP_OFFSET_ARCSECONDS
+    {
+        return Err(EopCsvError::InvalidCipOffset { line: line_number });
+    }
+    let cip_dx_rad = dx_arcsec * RADIANS_PER_ARCSECOND;
+    let cip_dy_rad = dy_arcsec * RADIANS_PER_ARCSECOND;
     let tai_minus_utc_seconds_at_0h = fields[10].parse().map_err(|_| invalid())?;
     let record_type = match fields[11] {
         "O" => EopRecordType::Observed,
@@ -218,6 +240,8 @@ fn parse_row(line: &str, line_number: usize) -> Result<DailyEopPolarMotion, EopC
         mjd_utc,
         xp_rad,
         yp_rad,
+        cip_dx_rad,
+        cip_dy_rad,
         ut1_minus_utc_seconds_at_0h,
         tai_minus_utc_seconds_at_0h,
         record_type,
@@ -339,11 +363,17 @@ impl CelestrakEopPolarCatalog {
         }
         let xp_rad = (upper.xp_rad - lower.xp_rad).mul_add(fraction_of_utc_day, lower.xp_rad);
         let yp_rad = (upper.yp_rad - lower.yp_rad).mul_add(fraction_of_utc_day, lower.yp_rad);
+        let cip_dx_rad = (upper.cip_dx_rad - lower.cip_dx_rad)
+            .mul_add(fraction_of_utc_day, lower.cip_dx_rad);
+        let cip_dy_rad = (upper.cip_dy_rad - lower.cip_dy_rad)
+            .mul_add(fraction_of_utc_day, lower.cip_dy_rad);
         Ok(InterpolatedEopPolarMotion {
             mjd_utc,
             fraction_of_utc_day,
             xp_rad,
             yp_rad,
+            cip_dx_rad,
+            cip_dy_rad,
             quality,
         })
     }
