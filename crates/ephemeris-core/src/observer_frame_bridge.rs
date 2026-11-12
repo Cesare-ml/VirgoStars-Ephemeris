@@ -35,8 +35,8 @@ use crate::de441_observer_geometry::{
     de441_geometric_observer_sightline_icrf, De441IcrfObserverError, De441IcrfObserverSightline,
 };
 use crate::observer_gcrs::{
-    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition,
-    ObserverOrientationInputs, Wgs84ObserverSite,
+    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition, ObserverOrientationInputs,
+    Wgs84ObserverSite,
 };
 
 const SECONDS_PER_DAY: f64 = 86_400.0;
@@ -94,7 +94,10 @@ impl fmt::Display for ObserverFrameBridgeError {
         match self {
             Self::MissingAlignmentSource => write!(f, "frame alignment requires a source label"),
             Self::InvalidAlignmentRotation => {
-                write!(f, "GCRS-to-ICRF matrix must be a proper orthogonal rotation")
+                write!(
+                    f,
+                    "GCRS-to-ICRF matrix must be a proper orthogonal rotation"
+                )
             }
             Self::InvalidTdbMinusUt1Offset => write!(f, "TDB-minus-UT1 seconds must be finite"),
             Self::InvalidTdbEpoch => write!(f, "TDB Julian date must be finite"),
@@ -183,8 +186,7 @@ pub fn wgs84_de441_geometric_sightline_with_alignment<R: Read + Seek>(
     let (ut1_day, ut1_fraction) = ut1
         .parts()
         .map_err(|_| ObserverFrameBridgeError::EpochMismatch)?;
-    let epoch_difference_seconds =
-        ((epoch_tdb.0 - ut1_day) - ut1_fraction) * SECONDS_PER_DAY;
+    let epoch_difference_seconds = ((epoch_tdb.0 - ut1_day) - ut1_fraction) * SECONDS_PER_DAY;
     if !epoch_difference_seconds.is_finite()
         || (epoch_difference_seconds - alignment.tdb_minus_ut1_seconds).abs()
             > EPOCH_MATCH_TOLERANCE_SECONDS
