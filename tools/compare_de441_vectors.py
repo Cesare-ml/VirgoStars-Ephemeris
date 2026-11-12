@@ -7,6 +7,12 @@ from pathlib import Path
 
 FIELDS = ("x_km", "y_km", "z_km", "vx_km_day", "vy_km_day", "vz_km_day")
 META = ("jd_tdb", "target", "center", "frame", "corrections")
+# Must match the Rust exporter CLI; reject invented or ambiguous body names.
+BODIES = frozenset((
+    "ssb", "mercury", "venus", "emb", "earth", "moon",
+    "mars_barycenter", "jupiter_barycenter", "saturn_barycenter",
+    "uranus_barycenter", "neptune_barycenter", "pluto_barycenter", "sun",
+))
 
 
 def read_state(path):
@@ -35,6 +41,9 @@ def read_state(path):
     if not math.isfinite(epoch):
         raise ValueError(f"{path}: non-finite epoch")
     row["jd_tdb"] = epoch
+    for field in ("target", "center"):
+        if row[field] not in BODIES:
+            raise ValueError(f"{path}: unsupported {field} body name: {row[field]!r}")
     return row, values
 
 
