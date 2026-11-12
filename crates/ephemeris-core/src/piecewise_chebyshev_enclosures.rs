@@ -236,9 +236,10 @@ pub fn enclose_piecewise_relative_chebyshev_longitude(
         }
         let travel = bound.max_abs_rate_deg_per_tdb_day * duration_days;
         total_variation += travel;
-        // A nonfinite total is non-informative; for a finite physical arc
-        // we conservatively saturate to 360 degrees after validating inputs.
-        if total_variation.is_nan() || travel.is_nan() {
+        // Never return nonfinite summary data or conceal arithmetic overflow
+        // by manufacturing a finite-looking rate. Finite >=180 degree
+        // uncertainty is handled separately by full-circle saturation.
+        if !travel.is_finite() || !total_variation.is_finite() {
             return Err(PiecewiseEnclosureError::NonFiniteVariation);
         }
         summaries.push(PiecewiseSegmentSummary {
@@ -421,6 +422,33 @@ mod tests {
             record(399,129_600.0,43_200.0,&[90.0],&[0.0]),86_400.0,172_800.0,Some(0.0));
         assert_eq!(enclose_piecewise_relative_chebyshev_longitude(&[a,b],0.0),
             Err(PiecewiseEnclosureError::InvalidPiece(OverlappingRecordError::CannotExcludeRelativeOrigin)));
+    }
+
+    #[test]
+    fn three_piece_stitch_keeps_all_jumps_and_temporal_order() {
+        let a=piece(record(499,43_200.0,43_200.0,&[100.0],&[0.0]),
+            record(399,43_200.0,43_200.0,&[90.0],&[0.0]),0.0,86_400.0,None);
+        let b=piece(record(499,129_600.0,43_200.0,&[100.0],&[1.0]),
+            record(399,129_600.0,43_200.0,&[90.0],&[0.0]),86_400.0,172_800.0,Some(6.0));
+        let c=piece(record(499,216_000.0,43_200.0,&[100.0],&[0.0]),
+            record(399,216_000.0,43_200.0,&[90.0],&[0.0]),172_800.0,259_200.0,Some(6.0));
+        let out=enclose_piecewise_relative_chebyshev_longitude(&[a,b,c],0.0).unwrap();
+        assert_eq!(out.segments.len(),3);
+        assert_eq!(out.total_declared_variation_deg,12.0);
+        assert_eq!(out.end_tdb_seconds,259_200.0);
+        assert!(contains(&out,1.0_f64.atan2(10.0).to_degrees()));
+    }
+
+    #[test]
+    fn invalid_junction_limit_cannot_be_accepted_as_coverage() {
+        let a=piece(record(499,43_200.0,43_200.0,&[100.0],&[0.0]),
+            record(399,43_200.0,43_200.0,&[90.0],&[0.0]),0.0,86_400.0,None);
+        for limit in [-1.0,180.1,f64::NAN,f64::INFINITY] {
+            let b=piece(record(499,129_600.0,43_200.0,&[100.0],&[0.0]),
+                record(399,129_600.0,43_200.0,&[90.0],&[0.0]),86_400.0,172_800.0,Some(limit));
+            assert_eq!(enclose_piecewise_relative_chebyshev_longitude(&[a,b],0.0),
+                Err(PiecewiseEnclosureError::InvalidBoundaryJumpLimit));
+        }
     }
 
     #[test]
