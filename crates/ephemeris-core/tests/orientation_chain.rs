@@ -24,8 +24,7 @@ use virgostars_ephemeris_core::orientation_chain::{
     compose_gcrs_to_itrs, GcrsToItrsMatrix, OrientationChainError,
 };
 
-const IDENTITY: [[f64; 3]; 3] =
-    [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 fn close(actual: f64, expected: f64, tolerance: f64) {
     assert!(
