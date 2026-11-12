@@ -138,7 +138,9 @@ class VectorComparisonTests(unittest.TestCase):
                 comparator.read_state(self.ours)
 
     def test_finite_components_with_overflowing_norm_rejected(self):
-        ours = dict(BASE, x_km=str(1e308), y_km=str(1e308), z_km=str(1e308))
+        # math.hypot is overflow-resistant: 1e308 * sqrt(3) remains finite.
+        # 1.5e308 * sqrt(3) exceeds the f64 maximum, exercising the guard.
+        ours = dict(BASE, x_km=str(1.5e308), y_km=str(1.5e308), z_km=str(1.5e308))
         reference = dict(BASE, x_km="0", y_km="0", z_km="0")
         with self.assertRaisesRegex(ValueError, "non-finite residual metric"):
             self.pair(ours, reference)
