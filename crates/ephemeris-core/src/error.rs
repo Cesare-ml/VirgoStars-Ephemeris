@@ -39,7 +39,7 @@ impl fmt::Display for EphemerisError {
                 )
             }
             Self::InvalidRadius => {
-                write!(f, "Chebyshev record radius must be finite and positive")
+                write!(f, "Chebyshev record radius must be finite, positive, and resolvable at the record midpoint")
             }
             Self::OutsideRecord { normalized_time } => write!(
                 f,
