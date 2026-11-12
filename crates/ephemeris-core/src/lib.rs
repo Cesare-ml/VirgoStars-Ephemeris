@@ -28,6 +28,7 @@ pub mod chebyshev;
 pub mod cio_orientation;
 pub mod coordinates;
 pub mod de441;
+pub mod de441_observer_geometry;
 pub mod earth_rotation;
 pub mod error;
 pub mod first_sky;
