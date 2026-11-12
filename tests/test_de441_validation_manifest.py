@@ -63,6 +63,20 @@ class ManifestPreflightTests(unittest.TestCase):
             {"extra": 1.25},
         )
 
+    def test_reject_overflowing_json_float_even_in_extra_fields(self):
+        for literal in ("1e999", "-1e999"):
+            with self.subTest(literal=literal):
+                raw = '{"extra": ' + literal + '}'
+                with self.assertRaisesRegex(ValueError, "outside finite float range"):
+                    json.loads(raw, parse_float=module.reject_nonfinite_json_float)
+
+    def test_accept_finite_json_float_boundaries(self):
+        for literal in ("1e308", "-1e308", "1e-999"):
+            with self.subTest(literal=literal):
+                result = json.loads('{"extra": ' + literal + '}',
+                                    parse_float=module.reject_nonfinite_json_float)
+                self.assertEqual(result["extra"], float(literal))
+
     def test_valid_metadata(self):
         self.assertEqual(module.validate_manifest(valid()), 1)
 
