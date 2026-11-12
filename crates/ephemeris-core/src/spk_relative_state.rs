@@ -33,9 +33,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::spk_direct_state::{
-    direct_spk_state, select_covering_segment, SpkStateError,
-};
+use crate::spk_direct_state::{direct_spk_state, select_covering_segment, SpkStateError};
 use crate::spk_index::SpkIndex;
 
 /// Geometric target-minus-center state in fixed NAIF frame 1 (J2000/ICRF).
@@ -192,7 +190,10 @@ pub fn relative_spk_state<R: Read + Seek>(
         .iter()
         .copied()
         .find(|node| center_path.contains(node))
-        .ok_or(SpkRelativeError::Disconnected { target_id, center_id })?;
+        .ok_or(SpkRelativeError::Disconnected {
+            target_id,
+            center_id,
+        })?;
 
     let (target_position, target_velocity) = to_ancestor(source, index, &target_path, common, et)?;
     let (center_position, center_velocity) = to_ancestor(source, index, &center_path, common, et)?;
@@ -291,7 +292,10 @@ mod tests {
                 spec.kind,
                 first as i32,
                 last as i32,
-            ].into_iter().enumerate() {
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 put_i32(&mut bytes, descriptor + 16 + 4 * j, value, order);
             }
             let record = (first - 1) * 8;
@@ -442,7 +446,9 @@ mod tests {
         specs[1].frame = 17;
         assert!(matches!(
             compute(SpkByteOrder::LittleEndian, &specs, 301, 399, 5.0),
-            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(17)))
+            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(
+                17
+            )))
         ));
         specs[1].frame = 1;
         specs[1].kind = 9;
