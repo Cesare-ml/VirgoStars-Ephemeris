@@ -34,7 +34,10 @@ const RAD_PER_ARCSEC: f64 = PI / (180.0 * 3_600.0);
 
 fn parse(rows: &[&str]) -> Result<CelestrakEopPolarCatalog, EopCsvError> {
     let contents = format!("{HEADER}\n{}\n", rows.join("\n"));
-    CelestrakEopPolarCatalog::parse_csv("CelesTrak CSV archived example, manually provided", &contents)
+    CelestrakEopPolarCatalog::parse_csv(
+        "CelesTrak CSV archived example, manually provided",
+        &contents,
+    )
 }
 
 fn near(value: f64, expected: f64, tolerance: f64) {
@@ -208,10 +211,8 @@ fn leap_second_metadata_are_not_automatically_interpolated_as_ut1() {
     // These two rows are SYNTHETIC. Their 0h UTC DAT fields straddle
     // a real leap-second date, but the numeric values are illustrative,
     // not a physical UT1-UTC reference.
-    let before =
-        "2016-12-31,57753,0.10,0.20,-0.20,0.0,0.0,0.0,0.0,0.0,36,O";
-    let after =
-        "2017-01-01,57754,0.30,0.40,0.80,0.0,0.0,0.0,0.0,0.0,37,O";
+    let before = "2016-12-31,57753,0.10,0.20,-0.20,0.0,0.0,0.0,0.0,0.0,36,O";
+    let after = "2017-01-01,57754,0.30,0.40,0.80,0.0,0.0,0.0,0.0,0.0,37,O";
     let catalog = parse(&[before, after]).unwrap();
     let a = catalog.samples()[0];
     let b = catalog.samples()[1];
