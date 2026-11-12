@@ -36,6 +36,7 @@ pub mod eop_polar_orientation;
 pub mod eop_ut1_era;
 pub mod error;
 pub mod first_sky;
+pub mod iau_cip_from_bpn;
 pub mod light_time;
 pub mod observer_gcrs;
 pub mod orientation_chain;
