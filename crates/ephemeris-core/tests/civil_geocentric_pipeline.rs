@@ -102,8 +102,12 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
 #[test]
 fn same_instant_different_timezones_and_analytic_radial_speed() {
     let radial_km_per_day = 120_000.0;
-    let mut eph =
-        De441::new(Cursor::new(synthetic_classic_de441([radial_km_per_day, 0.0, 0.0]))).unwrap();
+    let mut eph = De441::new(Cursor::new(synthetic_classic_de441([
+        radial_km_per_day,
+        0.0,
+        0.0,
+    ])))
+    .unwrap();
     let a = one_call(&mut eph, "2026-11-10T13:30:00+01:00", Body::Mercury, 0.0).unwrap();
     let b = one_call(&mut eph, "2026-11-10T12:30:00Z", Body::Mercury, 0.0).unwrap();
 
@@ -118,8 +122,7 @@ fn same_instant_different_timezones_and_analytic_radial_speed() {
     // With a stationary Earth and a radially departing linear target,
     // r(t_obs)=(r0+v*(t_obs-JD_MID))/(1+v/c_day).
     let c_day = SPEED_OF_LIGHT_KM_PER_SECOND * 86_400.0;
-    let unreduced_range =
-        BASE_RANGE_KM + radial_km_per_day * (a.spherical.epoch.0 - JD_MID);
+    let unreduced_range = BASE_RANGE_KM + radial_km_per_day * (a.spherical.epoch.0 - JD_MID);
     let expected_range = unreduced_range / (1.0 + radial_km_per_day / c_day);
     let expected_range_rate = radial_km_per_day / (1.0 + radial_km_per_day / c_day);
 
@@ -146,25 +149,37 @@ fn same_instant_different_timezones_and_analytic_radial_speed() {
 
 #[test]
 fn full_civil_to_six_field_angular_rates_match_independent_time_steps() {
-    let mut eph =
-        De441::new(Cursor::new(synthetic_classic_de441([50_000.0, 500_000.0, 175_000.0])))
-            .unwrap();
+    let mut eph = De441::new(Cursor::new(synthetic_classic_de441([
+        50_000.0, 500_000.0, 175_000.0,
+    ])))
+    .unwrap();
     let left = one_call(&mut eph, "2026-11-10T12:28:00Z", Body::Mercury, 0.0).unwrap();
     let center = one_call(&mut eph, "2026-11-10T12:30:00Z", Body::Mercury, 0.0).unwrap();
     let right = one_call(&mut eph, "2026-11-10T12:32:00Z", Body::Mercury, 0.0).unwrap();
     let h = right.spherical.epoch.0 - left.spherical.epoch.0;
     assert!(h > 0.0);
 
-    let signed_lon_delta = (right.spherical.longitude_rad - left.spherical.longitude_rad + PI)
-        .rem_euclid(TAU)
-        - PI;
+    let signed_lon_delta =
+        (right.spherical.longitude_rad - left.spherical.longitude_rad + PI).rem_euclid(TAU) - PI;
     let longitude_rate = signed_lon_delta / h;
     let latitude_rate = (right.spherical.latitude_rad - left.spherical.latitude_rad) / h;
     let distance_rate = (right.spherical.distance_km - left.spherical.distance_km) / h;
 
-    near(center.spherical.longitude_rate_rad_per_day, longitude_rate, 2.0e-7);
-    near(center.spherical.latitude_rate_rad_per_day, latitude_rate, 2.0e-7);
-    near(center.spherical.distance_rate_km_per_day, distance_rate, 2.0);
+    near(
+        center.spherical.longitude_rate_rad_per_day,
+        longitude_rate,
+        2.0e-7,
+    );
+    near(
+        center.spherical.latitude_rate_rad_per_day,
+        latitude_rate,
+        2.0e-7,
+    );
+    near(
+        center.spherical.distance_rate_km_per_day,
+        distance_rate,
+        2.0,
+    );
     assert!(center.spherical.longitude_rate_rad_per_day > 0.001);
     assert!(center.spherical.latitude_rate_rad_per_day > 0.0001);
     assert!(center.light_time_seconds > 0.0);
@@ -172,13 +187,16 @@ fn full_civil_to_six_field_angular_rates_match_independent_time_steps() {
 
 #[test]
 fn retrograde_speed_is_signed_and_fixed_rotation_is_explicit() {
-    let mut eph =
-        De441::new(Cursor::new(synthetic_classic_de441([0.0, -400_000.0, 0.0]))).unwrap();
+    let mut eph = De441::new(Cursor::new(synthetic_classic_de441([0.0, -400_000.0, 0.0]))).unwrap();
     let result = one_call(&mut eph, "2026-11-10T12:30:00Z", Body::Mercury, 0.0).unwrap();
     assert!(result.spherical.longitude_rate_rad_per_day < 0.0);
 
     let tilted = one_call(&mut eph, "2026-11-10T12:30:00Z", Body::Mercury, PI / 4.0).unwrap();
-    near(tilted.spherical.distance_km, result.spherical.distance_km, 1.0e-6);
+    near(
+        tilted.spherical.distance_km,
+        result.spherical.distance_km,
+        1.0e-6,
+    );
     near(
         tilted.spherical.distance_rate_km_per_day,
         result.spherical.distance_rate_km_per_day,
@@ -210,9 +228,9 @@ fn conversion_kernel_and_projection_errors_remain_distinct() {
 
     assert!(matches!(
         one_call(&mut eph, "2026-11-10T12:30:00Z", Body::Sun, 0.0),
-        Err(CivilGeocentricError::LightTime(
-            LightTimeError::Ephemeris(De441Error::MissingSeries(_))
-        ))
+        Err(CivilGeocentricError::LightTime(LightTimeError::Ephemeris(
+            De441Error::MissingSeries(_)
+        )))
     ));
 
     assert!(matches!(
@@ -224,8 +242,8 @@ fn conversion_kernel_and_projection_errors_remain_distinct() {
     // the retarded emission epoch falls outside the ephemeris.
     assert!(matches!(
         one_call(&mut eph, "2026-10-30T12:00:00Z", Body::Mercury, 0.0),
-        Err(CivilGeocentricError::LightTime(
-            LightTimeError::Ephemeris(De441Error::OutsideCoverage { .. })
-        ))
+        Err(CivilGeocentricError::LightTime(LightTimeError::Ephemeris(
+            De441Error::OutsideCoverage { .. }
+        )))
     ));
 }
