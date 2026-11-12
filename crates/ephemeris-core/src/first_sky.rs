@@ -394,6 +394,25 @@ fn epochs(civil: CivilTimestamp) -> Result<Epochs, SkyError> {
     })
 }
 
+/// Convert a civil timestamp with an explicit UTC offset to an **approximate**
+/// TDB Julian date for the classic DE441 and fixed-axis velocity APIs.
+///
+/// This exposes the same time conversion already used by `calculate`:
+/// proleptic Gregorian input -> UTC -> IERS TAI-UTC -> TT -> the truncated
+/// USNO TDB-TT series. It is valid only for UTC dates from 1972-01-01
+/// through 2027-06-27 inclusive (Bulletin C 72 coverage), and rejects
+/// leap-second labels rather than treating them as ordinary seconds.
+///
+/// The output is TDB JD, **not UT1 or TT**, and must not be presented as
+/// a validated high-precision TDB conversion. The single-f64 Julian date
+/// also has limited sub-second precision at modern epochs. This method
+/// neither reads an ephemeris file nor supplies missing apparent corrections.
+impl CivilTimestamp {
+    pub fn to_approximate_tdb_julian_date(self) -> Result<crate::de441::JulianDateTdb, SkyError> {
+        Ok(crate::de441::JulianDateTdb(epochs(self)?.tdb_jd))
+    }
+}
+
 type Matrix = [[f64; 3]; 3];
 fn multiply(a: Matrix, b: Matrix) -> Matrix {
     let mut output = [[0.0; 3]; 3];
