@@ -113,7 +113,7 @@ fn independent_erfa_utcut1_fixture_matches_split_jd_and_dut1() {
     assert_eq!(out.ut1_epoch.day_number(), 2_453_751);
     near(
         out.ut1_epoch.midnight_fraction(),
-        0.892_104_560_898_148_1,
+        0.892_104_560_898_148,
         1.0e-12,
     );
     near(out.ut1_minus_tai_seconds, -32.6659, 1.0e-12);
