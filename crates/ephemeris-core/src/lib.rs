@@ -33,6 +33,7 @@ pub mod first_sky;
 pub mod light_time;
 pub mod longitude_enclosures;
 pub mod relative_chebyshev_longitude_bounds;
+pub mod overlapping_chebyshev_longitude_bounds;
 pub mod state;
 pub mod time;
 
