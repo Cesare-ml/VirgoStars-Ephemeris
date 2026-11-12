@@ -33,7 +33,6 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 const RECORD_BYTES: usize = 1024;
 const WORD_BYTES: usize = 8;
-const WORDS_PER_RECORD: u64 = 128;
 const SUMMARY_WORDS: usize = 5;
 const MAX_SUMMARIES: usize = 25;
 
@@ -280,14 +279,13 @@ mod tests {
     fn write_segment(
         buf: &mut [u8],
         record: usize,
-        index: usize,
         order: SpkByteOrder,
         target: i32,
         start: f64,
         end: f64,
         data: i32,
     ) {
-        let offset = (record - 1) * RECORD_BYTES + (3 + index * SUMMARY_WORDS) * WORD_BYTES;
+        let offset = (record - 1) * RECORD_BYTES + 3 * WORD_BYTES;
         put_f64(buf, offset, start, order);
         put_f64(buf, offset + 8, end, order);
         for (i, value) in [target, 0, 1, 2, data, data + 3].into_iter().enumerate() {
@@ -325,12 +323,12 @@ mod tests {
         );
         put_f64(&mut b, 2 * RECORD_BYTES + 8, 0.0, order);
         put_f64(&mut b, 2 * RECORD_BYTES + 16, 1.0, order);
-        write_segment(&mut b, 3, 0, order, 399, -10.0, 100.0, 513);
+        write_segment(&mut b, 3, order, 399, -10.0, 100.0, 513);
         if chained {
             put_f64(&mut b, 5 * RECORD_BYTES, 0.0, order);
             put_f64(&mut b, 5 * RECORD_BYTES + 8, 3.0, order);
             put_f64(&mut b, 5 * RECORD_BYTES + 16, 1.0, order);
-            write_segment(&mut b, 6, 0, order, 301, 0.0, 300.0, 897);
+            write_segment(&mut b, 6, order, 301, 0.0, 300.0, 897);
         }
         b
     }
