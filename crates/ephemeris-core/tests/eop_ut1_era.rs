@@ -167,7 +167,7 @@ fn ordinary_day_interpolation_composes_parent_tt_and_polar_modules() {
         .zip(old.approximate_polar.itrs_to_tirs)
     {
         for (value_new, value_old) in row_new.iter().zip(row_old) {
-            near(*value_new, *value_old, 2.0e-16);
+            near(*value_new, value_old, 2.0e-16);
         }
     }
     near(half.ut1_minus_tai_seconds, -32.6659, 1.0e-12);
