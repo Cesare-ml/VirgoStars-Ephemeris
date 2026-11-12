@@ -63,6 +63,28 @@ pub struct StateVector {
     pub velocity_km_per_day: [f64; 3],
 }
 
+/// X/Y coefficients copied from one genuine classic DE441 body series granule.
+///
+/// The values are *geometric* ICRF equatorial coordinates, relative to the
+/// series' own JPL-defined center; they are NOT automatically Earth-centered
+/// or apparent ecliptic-of-date positions. See the Body mapping and center
+/// reconstruction in De441::barycentric before using them as relative states.
+///
+/// Added 2026-11-12 for read-only granule extraction; no kernel is bundled.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicDe441PlanarCoefficientRecord {
+    pub selection: crate::de441_granule_plan::ActiveSeriesGranule,
+    /// Inclusive mathematical domain of this one Chebyshev subrecord.
+    pub start_jd_tdb: JulianDateTdb,
+    pub end_jd_tdb: JulianDateTdb,
+    /// The polynomial is sum(c[k] * T_k(x)), with unhalved c0.
+    /// x = (JD_TDB - midpoint_jd_tdb) / radius_days.
+    pub midpoint_jd_tdb: JulianDateTdb,
+    pub radius_days: f64,
+    pub x_coefficients_km: Vec<f64>,
+    pub y_coefficients_km: Vec<f64>,
+}
+
 #[derive(Debug)]
 pub enum De441Error {
     Io(io::Error),
@@ -291,6 +313,108 @@ impl<R: Read + Seek> De441<R> {
         }
     }
 
+    /// Load and validate the exact principal coefficient record, using the
+    /// same cache for instantaneous states and read-only coefficient extracts.
+    ///
+    /// The index is never accepted without a range check, and failed I/O or
+    /// record-date validation invalidates the cache before any read.
+    fn load_record(&mut self, record_index: usize) -> Result<(), De441Error> {
+        if record_index >= self.record_count {
+            return Err(De441Error::InvalidFile("principal record index outside header coverage"));
+        }
+        if self.cached_record_index != Some(record_index) {
+            self.cached_record_index = None;
+            let offset = (record_index as u64 + 2) * self.record_size as u64;
+            self.source.seek(SeekFrom::Start(offset))?;
+            self.source.read_exact(&mut self.cached_record)?;
+            let record_start = f64_at(&self.cached_record, 0);
+            if record_start != self.start + record_index as f64 * self.step
+                || f64_at(&self.cached_record, 8) != record_start + self.step
+            {
+                return Err(De441Error::InvalidFile("coefficient record has unexpected dates"));
+            }
+            self.cached_record_index = Some(record_index);
+        }
+        Ok(())
+    }
+
+    /// Copy planar X/Y coefficients of a single explicitly selected classic
+    /// DE441 series subrecord, after validating its exact temporal domain.
+    ///
+    /// Intended to consume `ActiveSeriesGranule` selections from the
+    /// granule planner; still checks indices and slice coverage itself, so
+    /// stale/manually forged selections cannot read outside a subrecord.
+    /// Only geometric Cartesian *position* series 0..=10 are supported;
+    /// nutation/libration are not positions in kilometers.
+    ///
+    /// This method does not compose EMB with the geocentric Moon to obtain
+    /// Earth, does not calculate longitude, and does not assert continuity
+    /// between adjacent granules or physical model numerical accuracy.
+    pub fn planar_coefficients_for_granule(
+        &mut self,
+        selection: crate::de441_granule_plan::ActiveSeriesGranule,
+        requested_start: JulianDateTdb,
+        requested_end: JulianDateTdb,
+    ) -> Result<ClassicDe441PlanarCoefficientRecord, De441Error> {
+        if selection.series_index > 10 {
+            return Err(De441Error::InvalidFile("series is not a Cartesian position series"));
+        }
+        let pointer = self.pointers[selection.series_index];
+        if pointer.first == 0 {
+            return Err(De441Error::MissingSeries("requested Cartesian position series"));
+        }
+        if selection.principal_record_index >= self.record_count
+            || selection.subrecord_index >= pointer.granules
+        {
+            return Err(De441Error::InvalidFile("selected coefficient record or subrecord is out of range"));
+        }
+        if !requested_start.0.is_finite() || !requested_end.0.is_finite()
+            || requested_start.0 >= requested_end.0
+            || requested_start.0 < self.start || requested_end.0 > self.end
+        {
+            return Err(De441Error::InvalidFile("invalid or uncovered planar coefficient slice"));
+        }
+
+        let principal_start = self.start
+            + selection.principal_record_index as f64 * self.step;
+        let granule_days = self.step / pointer.granules as f64;
+        let start_jd = principal_start + selection.subrecord_index as f64 * granule_days;
+        let end_jd = principal_start + (selection.subrecord_index + 1) as f64 * granule_days;
+        let radius_days = (end_jd - start_jd) * 0.5;
+        let midpoint_jd = start_jd + radius_days;
+        if !start_jd.is_finite() || !end_jd.is_finite()
+            || !radius_days.is_finite() || radius_days <= 0.0
+            || !(start_jd < midpoint_jd && midpoint_jd < end_jd)
+            || requested_start.0 < start_jd || requested_end.0 > end_jd
+        {
+            return Err(De441Error::InvalidFile("slice crosses a granule or TDB precision is inadequate"));
+        }
+
+        self.load_record(selection.principal_record_index)?;
+        let mut axes = [Vec::with_capacity(pointer.coefficients), Vec::with_capacity(pointer.coefficients)];
+        for (axis, coefficients) in axes.iter_mut().enumerate() {
+            let first_word = pointer.first - 1
+                + (selection.subrecord_index * 3 + axis) * pointer.coefficients;
+            for k in 0..pointer.coefficients {
+                let coefficient = f64_at(&self.cached_record, (first_word + k) * 8);
+                if !coefficient.is_finite() {
+                    return Err(De441Error::InvalidFile("non-finite planar Chebyshev coefficient"));
+                }
+                coefficients.push(coefficient);
+            }
+        }
+        let [x_coefficients_km, y_coefficients_km] = axes;
+        Ok(ClassicDe441PlanarCoefficientRecord {
+            selection,
+            start_jd_tdb: JulianDateTdb(start_jd),
+            end_jd_tdb: JulianDateTdb(end_jd),
+            midpoint_jd_tdb: JulianDateTdb(midpoint_jd),
+            radius_days,
+            x_coefficients_km,
+            y_coefficients_km,
+        })
+    }
+
     /// Returns a geometric target-relative-to-center state at a TDB epoch.
     pub fn state(
         &mut self,
@@ -311,23 +435,7 @@ impl<R: Read + Seek> De441<R> {
         } else {
             let record_index =
                 (((jd - self.start) / self.step).floor() as usize).min(self.record_count - 1);
-            if self.cached_record_index != Some(record_index) {
-                // Invalidate before I/O: a short read may partially overwrite
-                // the buffer, including the previously cached record.
-                self.cached_record_index = None;
-                let offset = (record_index as u64 + 2) * self.record_size as u64;
-                self.source.seek(SeekFrom::Start(offset))?;
-                self.source.read_exact(&mut self.cached_record)?;
-                let record_start = f64_at(&self.cached_record, 0);
-                if record_start != self.start + record_index as f64 * self.step
-                    || f64_at(&self.cached_record, 8) != record_start + self.step
-                {
-                    return Err(De441Error::InvalidFile(
-                        "coefficient record has unexpected dates",
-                    ));
-                }
-                self.cached_record_index = Some(record_index);
-            }
+            self.load_record(record_index)?;
             let record = &self.cached_record;
             let record_start = f64_at(record, 0);
             // The Moon series is geocentric. Compute Earth/Moon/EMB-relative
