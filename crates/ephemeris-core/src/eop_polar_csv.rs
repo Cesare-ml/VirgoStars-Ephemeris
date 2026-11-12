@@ -132,7 +132,10 @@ impl fmt::Display for EopCsvError {
                 write!(f, "linear interpolation needs the next consecutive UTC day")
             }
             Self::PredictionNotAuthorized => {
-                write!(f, "EOP predicted data require explicit AllowPredicted policy")
+                write!(
+                    f,
+                    "EOP predicted data require explicit AllowPredicted policy"
+                )
             }
         }
     }
@@ -145,7 +148,10 @@ fn parse_utc_date_jdn(date: &str) -> Option<i64> {
     if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
         return None;
     }
-    if b.iter().enumerate().any(|(i, c)| i != 4 && i != 7 && !c.is_ascii_digit()) {
+    if b.iter()
+        .enumerate()
+        .any(|(i, c)| i != 4 && i != 7 && !c.is_ascii_digit())
+    {
         return None;
     }
     let year: i32 = date[0..4].parse().ok()?;
@@ -244,7 +250,10 @@ impl CelestrakEopPolarCatalog {
                 continue;
             }
             let parsed = parse_row(line, index + 1)?;
-            if samples.last().is_some_and(|last| parsed.mjd_utc <= last.mjd_utc) {
+            if samples
+                .last()
+                .is_some_and(|last| parsed.mjd_utc <= last.mjd_utc)
+            {
                 return Err(EopCsvError::UnsortedOrDuplicateDays { line: index + 1 });
             }
             samples.push(parsed);
@@ -277,7 +286,11 @@ impl CelestrakEopPolarCatalog {
         mjd_utc: i64,
         fraction_of_utc_day: f64,
     ) -> Result<InterpolatedEopPolarMotion, EopCsvError> {
-        self.interpolate(mjd_utc, fraction_of_utc_day, EopPredictionPolicy::ObservedOnly)
+        self.interpolate(
+            mjd_utc,
+            fraction_of_utc_day,
+            EopPredictionPolicy::ObservedOnly,
+        )
     }
 
     /// Explicitly configurable prediction policy; use only if an
@@ -288,9 +301,7 @@ impl CelestrakEopPolarCatalog {
         fraction_of_utc_day: f64,
         prediction_policy: EopPredictionPolicy,
     ) -> Result<InterpolatedEopPolarMotion, EopCsvError> {
-        if !fraction_of_utc_day.is_finite()
-            || !(0.0..1.0).contains(&fraction_of_utc_day)
-        {
+        if !fraction_of_utc_day.is_finite() || !(0.0..1.0).contains(&fraction_of_utc_day) {
             return Err(EopCsvError::InvalidUtcFraction);
         }
         let index = self
@@ -301,8 +312,15 @@ impl CelestrakEopPolarCatalog {
         let upper = if fraction_of_utc_day == 0.0 {
             lower
         } else {
-            let next = self.samples.get(index + 1).ok_or(EopCsvError::MissingFollowingDay)?;
-            if next.mjd_utc != mjd_utc.checked_add(1).ok_or(EopCsvError::MissingFollowingDay)? {
+            let next = self
+                .samples
+                .get(index + 1)
+                .ok_or(EopCsvError::MissingFollowingDay)?;
+            if next.mjd_utc
+                != mjd_utc
+                    .checked_add(1)
+                    .ok_or(EopCsvError::MissingFollowingDay)?
+            {
                 return Err(EopCsvError::MissingFollowingDay);
             }
             *next
