@@ -69,12 +69,12 @@ For every requested series, the grid is built using `record_start + subrecord_in
 - Invalid header geometry and absent required coefficient series fail.
 - No same-body longitude (undefined relative direction).
 - Limit requests to at most 512 principal records and 4096 output pieces; large historical ranges must be split at higher layers with separately verified coverage.
-- Sorting and deduplication of candidate grid boundaries only; each retained piece must have a **strictly interior representable f64 midpoint**. If the Julian-day resolution is too coarse to distinguish adjacent boundaries the function fails closed instead of claiming coverage.
+- Strictly increasing boundaries are required **within each per-series grid**; when two *different rational granule fractions* collapse to one rounded f64 Julian date, the planner rejects the request rather than silently deduplicating them. Sorting and deduplication are otherwise permitted for genuinely coincident fractions (e.g., 1/2 and 2/4). Each retained piece also requires a **strictly interior representable f64 midpoint**. If Julian-day resolution is insufficient, planning fails closed instead of claiming coverage.
 - The results are metadata/selection indices only. **They do not assert physical continuity or a bounded jump across a principal record or subrecord transition.** Record position and derivative evaluation, independent endpoint errors and valid center chains remain future work.
 
 ## Validation performed / not performed
 
-Eight **authored Rust unit tests** cover:
+Ten **authored Rust unit tests** cover:
 - Mars-barycenter vs Earth with combined EMB + geocentric-Moon grids (2 vs 4 subrecords);
 - crossing a principal-record boundary;
 - different granule counts including Sun;
@@ -82,9 +82,10 @@ Eight **authored Rust unit tests** cover:
 - invalid interval and same-body input;
 - invalid header count/radius;
 - fractional requested windows;
-- Solar-System-barycenter vs planetary series.
+- Solar-System-barycenter vs planetary series;
+- granule boundary precision loss and collisions between distinct rational subrecord grids at extreme Julian dates.
 
-**Separately executed** Python 3 reference stress test of the mathematical grid union: 11,911 random synthetic windows, totaling **4,450,734 sampled time-point/subrecord-index comparisons**, with **zero mismatches**. This is a check of the planner's design, not compilation/execution of the committed Rust code, not DE441 data validation, and not independent NASA/JPL positions.
+**Separately executed** Python 3 reference stress test of the mathematical grid union: 11,911 random synthetic windows, totaling **4,450,734 sampled time-point/subrecord-index comparisons**, with **zero mismatches**. This is a check of the planner's design, not compilation/execution of the committed Rust code, not DE441 data validation, and not independent NASA/JPL positions. Separately, two crafted extreme-JD floating-precision cases reproduced collapsed per-series dates and 16 collisions between distinct rational fractions; the Rust tests explicitly require rejection in both cases.
 
 The assistant environment lacks `cargo` and `rustc`. Therefore Rust compilation, native unit tests, fmt, Clippy and real scientific tests were **not run**.
 
