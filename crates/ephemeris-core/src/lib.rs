@@ -25,14 +25,19 @@
 
 pub mod calendar;
 pub mod chebyshev;
+pub mod cio_orientation;
 pub mod coordinates;
 pub mod de441;
+pub mod earth_rotation;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
 pub mod orientation_chain;
+pub mod polar_motion;
 pub mod state;
 pub mod time;
+pub mod tirs_cirs_era;
+pub mod wgs84_ecef;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
