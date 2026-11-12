@@ -11,7 +11,14 @@ META = ("jd_tdb", "target", "center", "frame", "corrections")
 
 def read_state(path):
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        header = reader.fieldnames
+        if header is None:
+            raise ValueError(f"{path}: missing CSV header")
+        expected = set(FIELDS + META)
+        if len(header) != len(expected) or set(header) != expected:
+            raise ValueError(f"{path}: CSV header must contain exactly the required unique columns")
+        rows = list(reader)
     if len(rows) != 1:
         raise ValueError(f"{path}: expected exactly one data row")
     row = rows[0]
