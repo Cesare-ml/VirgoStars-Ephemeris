@@ -363,10 +363,10 @@ impl CelestrakEopPolarCatalog {
         }
         let xp_rad = (upper.xp_rad - lower.xp_rad).mul_add(fraction_of_utc_day, lower.xp_rad);
         let yp_rad = (upper.yp_rad - lower.yp_rad).mul_add(fraction_of_utc_day, lower.yp_rad);
-        let cip_dx_rad = (upper.cip_dx_rad - lower.cip_dx_rad)
-            .mul_add(fraction_of_utc_day, lower.cip_dx_rad);
-        let cip_dy_rad = (upper.cip_dy_rad - lower.cip_dy_rad)
-            .mul_add(fraction_of_utc_day, lower.cip_dy_rad);
+        let cip_dx_rad =
+            (upper.cip_dx_rad - lower.cip_dx_rad).mul_add(fraction_of_utc_day, lower.cip_dx_rad);
+        let cip_dy_rad =
+            (upper.cip_dy_rad - lower.cip_dy_rad).mul_add(fraction_of_utc_day, lower.cip_dy_rad);
         Ok(InterpolatedEopPolarMotion {
             mjd_utc,
             fraction_of_utc_day,
