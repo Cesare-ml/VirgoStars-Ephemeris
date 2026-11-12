@@ -23,6 +23,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/run-real-de441-validation.ps1'
       - '.github/workflows/rust-dev.yml'
   push:
     branches: [dev/ephemeris]
@@ -30,6 +31,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/run-real-de441-validation.ps1'
       - '.github/workflows/rust-dev.yml'
   workflow_dispatch:
 
@@ -82,6 +84,9 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Horizons comparator regressions on Windows
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Verify real-kernel receipt rejects missing and synthetic data
+        shell: pwsh
+        run: ./scripts/run-real-de441-validation.ps1 -SelfTest
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
