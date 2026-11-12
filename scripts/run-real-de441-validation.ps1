@@ -389,7 +389,7 @@ $reportDirectory = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $identifier
 New-Item -ItemType Directory -Path $reportDirectory -ErrorAction Stop | Out-Null
 
 $receipt = [ordered]@{
-    schema_version = 2
+    schema_version = 3
     status = 'NOT_RUN'
     run_timestamp_utc = $timestamp
     tool = 'VirgoStars-Ephemeris real classic-DE441 receipt v1'
