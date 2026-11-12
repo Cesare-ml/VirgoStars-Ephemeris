@@ -29,8 +29,8 @@ use std::f64::consts::TAU;
 use std::fmt;
 
 use crate::observer_gcrs::{
-    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition,
-    ObserverOrientationInputs, Wgs84ObserverSite,
+    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition, ObserverOrientationInputs,
+    Wgs84ObserverSite,
 };
 
 /// **Geometric** direction from a fixed-epoch GCRS observer toward a
@@ -179,10 +179,8 @@ pub fn wgs84_topocentric_geometric_direction_gcrs(
     }
     let observer =
         wgs84_observer_to_gcrs(site, orientation).map_err(TopocentricGeometryError::Observer)?;
-    let direction = geometric_topocentric_direction_gcrs(
-        geocentric_target_gcrs_km,
-        observer.position_gcrs_km,
-    )?;
+    let direction =
+        geometric_topocentric_direction_gcrs(geocentric_target_gcrs_km, observer.position_gcrs_km)?;
     Ok(Wgs84GeometricTopocentricDirection {
         observer,
         direction,
