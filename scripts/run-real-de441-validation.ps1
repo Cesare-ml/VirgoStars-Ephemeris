@@ -90,6 +90,89 @@ function Assert-ExpectedKernelHash {
     return $true
 }
 
+# Parse only the four explicitly referenced body names, without deriving
+# science from a log with missing, duplicated or nonfinite measurements.
+function Read-ResidualGroup {
+    param([string]$Text, [string]$Pattern, [string[]]$Fields)
+    [string[]]$expected = @('Moon', 'Venus', 'MarsBarycenter', 'JupiterBarycenter')
+    $matches = [regex]::Matches($Text, $Pattern)
+    if ($matches.Count -ne $expected.Count) {
+        throw "Expected four numeric reference rows but found $($matches.Count)."
+    }
+    $seen = @{}
+    $rows = @()
+    foreach ($match in $matches) {
+        $body = $match.Groups['target'].Value
+        if ($seen.ContainsKey($body)) { throw "Repeated numeric row for $body." }
+        $seen[$body] = $true
+        $row = [ordered]@{ target = $body }
+        foreach ($field in $Fields) {
+            [double]$value = [double]::Parse(
+                $match.Groups[$field].Value,
+                [Globalization.NumberStyles]::Float,
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+            if (-not [double]::IsFinite($value) -or $value -lt 0.0) {
+                throw "Invalid numeric residual: $body / $field."
+            }
+            $row[$field] = $value
+        }
+        $rows += [pscustomobject]$row
+    }
+    foreach ($body in $expected) {
+        if (-not $seen.ContainsKey($body)) { throw "Missing $body numeric reference." }
+    }
+    $maximum = [ordered]@{}
+    foreach ($field in $Fields) {
+        [double]$highest = 0.0
+        foreach ($row in $rows) {
+            $highest = [math]::Max($highest, [double]$row.$field)
+        }
+        $maximum[$field] = $highest
+    }
+    return [pscustomobject]@{ measurements = $rows; maxima = $maximum }
+}
+
+function Read-ScientificMetrics {
+    param([string]$Suite, [string[]]$Lines)
+    $text = $Lines -join [Environment]::NewLine
+    $n = '[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'
+    $prefix = '(?m)^(?<target>Moon|Venus|MarsBarycenter|JupiterBarycenter):[ \t]*'
+    if ($Suite -eq 'light_time_horizons') {
+        $pattern = $prefix +
+            'position[ \t]+(?<position_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'Horizons velocity[ \t]+(?<horizons_velocity_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
+            'finite-difference derivative[ \t]+(?<lt_derivative_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
+            'delay[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*$'
+        return [ordered]@{
+            horizons_lt_vectors = Read-ResidualGroup -Text $text -Pattern $pattern -Fields @(
+                'position_max_component_km',
+                'horizons_velocity_max_component_km_per_s',
+                'lt_derivative_max_component_km_per_s',
+                'light_time_error_seconds'
+            )
+        }
+    }
+    if ($Suite -eq 'aberrated_real_de441') {
+        $vectorPattern = $prefix +
+            'recovered Horizons LT vector error[ \t]+(?<recovered_lt_vector_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'LT range error[ \t]+(?<lt_range_error_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'delay error[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*$'
+        $ratePattern = $prefix +
+            'max angular rate residual = [ \t]*(?<angular_rate_error_arcsec_per_tdb_day>' + $n + ')[ \t]+arcseconds/TDB-day;[ \t]+' +
+            'radial rate residual = [ \t]*(?<radial_rate_error_au_per_tdb_day>' + $n + ')[ \t]+AU/TDB-day[ \t]*$'
+        return [ordered]@{
+            recovered_lt_vectors = Read-ResidualGroup -Text $text -Pattern $vectorPattern -Fields @(
+                'recovered_lt_vector_max_component_km', 'lt_range_error_km', 'light_time_error_seconds'
+            )
+            full_pipeline_rate_consistency = Read-ResidualGroup -Text $text -Pattern $ratePattern -Fields @(
+                'angular_rate_error_arcsec_per_tdb_day', 'radial_rate_error_au_per_tdb_day'
+            )
+        }
+    }
+    throw "No metrics contract defined for suite '$Suite'."
+}
+
 function Invoke-CargoGate {
     param(
         [string]$Suite,
