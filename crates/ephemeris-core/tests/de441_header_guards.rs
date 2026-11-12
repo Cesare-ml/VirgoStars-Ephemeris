@@ -97,3 +97,39 @@ fn accepts_consistent_synthetic_header() {
     let (start, end) = reader.coverage();
     assert_eq!((start.0, end.0), (1000.0, 1064.0));
 }
+
+#[test]
+fn rejects_negative_and_partial_coefficient_pointers() {
+    for (offset, value) in [
+        (2844, -1),
+        (2844, 2),
+        (2848, 0),
+        (2848, 101),
+        (2852, 0),
+        (2852, 101),
+    ] {
+        let mut bytes = synthetic_header();
+        i32_field(&mut bytes, offset, value);
+        assert!(
+            matches!(
+                De441::new(Cursor::new(bytes)),
+                Err(De441Error::InvalidFile("invalid coefficient pointer"))
+            ),
+            "offset {offset}, value {value}"
+        );
+    }
+}
+
+#[test]
+fn rejects_overlapping_coefficient_series() {
+    let mut bytes = synthetic_header();
+    // Series 0 occupies coefficient words [373, 376). Give series 1
+    // a valid pointer whose three words overlap that interval.
+    i32_field(&mut bytes, 2696, 373);
+    i32_field(&mut bytes, 2700, 1);
+    i32_field(&mut bytes, 2704, 1);
+    assert!(matches!(
+        De441::new(Cursor::new(bytes)),
+        Err(De441Error::InvalidFile("overlapping coefficient pointers"))
+    ));
+}
