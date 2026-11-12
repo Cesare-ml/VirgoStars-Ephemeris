@@ -110,16 +110,8 @@ pub fn itrs_to_tirs_polar_motion_matrix(
     let (ss, cs) = sp_rad.sin_cos();
 
     let matrix = [
-        [
-            cs * cx,
-            cs * sx * sy - ss * cy,
-            -cs * sx * cy - ss * sy,
-        ],
-        [
-            ss * cx,
-            ss * sx * sy + cs * cy,
-            -ss * sx * cy + cs * sy,
-        ],
+        [cs * cx, cs * sx * sy - ss * cy, -cs * sx * cy - ss * sy],
+        [ss * cx, ss * sx * sy + cs * cy, -ss * sx * cy + cs * sy],
         [sx, -cx * sy, cx * cy],
     ];
     if matrix.iter().flatten().any(|v| !v.is_finite()) {
@@ -143,12 +135,7 @@ pub fn itrs_to_tirs_position(
         return Err(PolarMotionError::NonFinitePosition);
     }
     let w = itrs_to_tirs_polar_motion_matrix(xp_rad, yp_rad, sp_rad)?;
-    let transformed = w.map(|row| {
-        row.iter()
-            .zip(position_itrs_km)
-            .map(|(m, v)| m * v)
-            .sum()
-    });
+    let transformed = w.map(|row| row.iter().zip(position_itrs_km).map(|(m, v)| m * v).sum());
     if transformed.iter().any(|v| !v.is_finite()) {
         return Err(PolarMotionError::NonFiniteResult);
     }
@@ -168,11 +155,7 @@ pub fn tirs_to_itrs_position(
         return Err(PolarMotionError::NonFinitePosition);
     }
     let w = itrs_to_tirs_polar_motion_matrix(xp_rad, yp_rad, sp_rad)?;
-    let transformed = std::array::from_fn(|j| {
-        (0..3)
-            .map(|i| w[i][j] * position_tirs_km[i])
-            .sum()
-    });
+    let transformed = std::array::from_fn(|j| (0..3).map(|i| w[i][j] * position_tirs_km[i]).sum());
     if transformed.iter().any(|v| !v.is_finite()) {
         return Err(PolarMotionError::NonFiniteResult);
     }
