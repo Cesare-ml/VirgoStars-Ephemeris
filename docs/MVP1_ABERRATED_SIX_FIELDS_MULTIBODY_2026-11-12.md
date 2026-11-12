@@ -70,3 +70,15 @@ cargo clippy --workspace --all-targets -- -D warnings
 **Dependency chain:** this draft branches from **#77**, itself stacked on **#76 → #73 → #46**. The separate civil-time development chain **#96 → #101 → #103** is untouched. Review the scientific correctness and merge dependencies in their own order; do **not** merge this PR alone into `dev/ephemeris` or `main`. The public scalar API remains identical.
 
 **CPAL-1.0 modification record, 2026-11-12:** extended existing CPAL-covered `src/aberrated_spherical.rs` with a batch wrapper and `tests/de441_analytic_acceleration.rs` with four original synthetic tests, plus this English documentation file. Existing Exhibit A source headers and `LICENSE`/`NOTICE` are unchanged. There are no new dependencies, bundled JPL/NAIF/Swiss data/source, privilege escalations, automatic downloads, packages, releases or deployments. Applicable attribution remains **Powered by VirgoStars** — https://www.virgostars.it/.
+
+
+## Stacked rustfmt cleanup (2026-11-12)
+
+Read-only Linux CI on the original #77-derived stack exposed formatting deviations **already present in the unmerged #77 head**, plus the new batch wrapper's formatting. A separate series of mechanical, semantics-preserving `rustfmt` edits was applied to the feature branch to make full-workspace checks possible without modifying the #77 upstream branch:
+
+- `src/aberrated_spherical.rs`: only the batch function's error return layout changed.
+- `src/lib.rs`: pre-existing three module exports sorted alphabetically, **no export names altered**.
+- `tests/aberrated_spherical.rs` and `tests/six_field_units.rs`: original tests reformatted only, **no numeric assertions changed**.
+- `tests/de441_analytic_acceleration.rs`: the previous test bodies and the new tests reformatted; all calculations and test expectations remain unchanged.
+
+The rustfmt edits were transcribed from the GitHub read-only formatter's exact diff and kept separate from the substantive implementation commits. These inherited style fixes expand the *stacked PR file list* beyond the three original feature files, but do not constitute new scientific features, and they are not an authorization to merge or modify upstream #77. The final CI run must be reported independently after its completion.
