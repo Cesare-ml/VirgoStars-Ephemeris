@@ -118,9 +118,7 @@ pub fn modeled_cip_cio_from_complete_bpn<'a>(
         .tt_epoch
         .parts()
         .map_err(IauCipFromBpnError::InvalidEpoch)?;
-    if !supplied.cio_series_q_rad.is_finite()
-        || !(-PI..=PI).contains(&supplied.cio_series_q_rad)
-    {
+    if !supplied.cio_series_q_rad.is_finite() || !(-PI..=PI).contains(&supplied.cio_series_q_rad) {
         return Err(IauCipFromBpnError::InvalidCioSeries);
     }
     let b = supplied.gcrs_to_true_equator;
