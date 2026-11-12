@@ -172,11 +172,7 @@ pub fn cirs_to_gcrs_position(
         return Err(CioOrientationError::NonFinitePosition);
     }
     let matrix = gcrs_to_cirs_cio_matrix(cip_x, cip_y, cio_s_rad)?;
-    let rotated = std::array::from_fn(|j| {
-        (0..3)
-            .map(|i| matrix[i][j] * position_cirs_km[i])
-            .sum()
-    });
+    let rotated = std::array::from_fn(|j| (0..3).map(|i| matrix[i][j] * position_cirs_km[i]).sum());
     if !finite_vector(rotated) {
         return Err(CioOrientationError::NonFiniteResult);
     }
