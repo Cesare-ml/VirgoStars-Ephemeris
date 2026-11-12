@@ -25,6 +25,7 @@
 
 pub mod calendar;
 pub mod chebyshev;
+pub mod civil_geocentric;
 pub mod coordinates;
 pub mod de441;
 pub mod error;
