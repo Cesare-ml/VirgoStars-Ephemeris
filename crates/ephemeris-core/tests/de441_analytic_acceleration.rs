@@ -20,7 +20,8 @@ use std::io::Cursor;
 
 use virgostars_ephemeris_core::aberrated_spherical::{
     aberrated_spherical_to_degrees_au, geocentric_aberrated_fixed_six_fields,
-    geocentric_aberrated_fixed_spherical, spherical_from_aberrated_state,
+    geocentric_aberrated_fixed_six_fields_many, geocentric_aberrated_fixed_spherical,
+    spherical_from_aberrated_state, AberratedSphericalError,
 };
 use virgostars_ephemeris_core::six_field_units::IAU_AU_KM;
 use virgostars_ephemeris_core::aberration_state::{
@@ -446,4 +447,187 @@ fn one_call_six_fields_uses_same_synthetic_de441_aberrated_result_and_preserves_
             assert!(value.is_finite());
         }
     }
+}
+
+
+#[test]
+fn multi_body_aberrated_six_fields_match_scalar_results_and_keep_order() {
+    let mut reader = eph();
+    let epoch = JulianDateTdb(1_016.0);
+    let targets = [Body::Moon, Body::Mercury, Body::Moon];
+    let result =
+        geocentric_aberrated_fixed_six_fields_many(&mut reader, &targets, epoch, 0.0).unwrap();
+    assert_eq!(result.len(), targets.len());
+    assert_eq!(result[0], result[2]);
+    assert_ne!(result[0].fields.distance_au, result[1].fields.distance_au);
+
+    for (entry, target) in result.iter().zip(targets) {
+        let scalar =
+            geocentric_aberrated_fixed_six_fields(&mut reader, target, epoch, 0.0).unwrap();
+        assert_eq!(*entry, scalar);
+        assert_eq!(entry.fields.target, target);
+        assert_eq!(entry.fields.center, Body::Earth);
+        assert_eq!(entry.fields.epoch, epoch);
+        assert!(entry.emission_epoch.0 < epoch.0);
+        assert_eq!(
+            entry.observer_acceleration_source,
+            ObserverAccelerationSource::AnalyticDe441Chebyshev
+        );
+        assert!(entry.fields.distance_au > 0.0);
+        for speed in [
+            entry.fields.longitude_speed_deg_per_tdb_day,
+            entry.fields.latitude_speed_deg_per_tdb_day,
+            entry.fields.distance_speed_au_per_tdb_day,
+        ] {
+            assert!(speed.is_finite());
+        }
+    }
+}
+
+#[test]
+fn multi_body_aberrated_speeds_track_whole_pipeline_neighboring_epochs() {
+    // Independent derivatives of full DE441->light-time->aberration->
+    // projection->degrees/AU positions at neighboring observation times.
+    // No JPL kernel or Swiss reference is bundled; this is synthetic.
+    let mut reader = eph();
+    let epoch = 1_016.0;
+    let step = 0.01;
+    let targets = [Body::Mercury, Body::Moon];
+    let left = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &targets,
+        JulianDateTdb(epoch - step),
+        0.0,
+    )
+    .unwrap();
+    let center = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &targets,
+        JulianDateTdb(epoch),
+        0.0,
+    )
+    .unwrap();
+    let right = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &targets,
+        JulianDateTdb(epoch + step),
+        0.0,
+    )
+    .unwrap();
+
+    for index in 0..targets.len() {
+        let a = &left[index].fields;
+        let mid = &center[index].fields;
+        let b = &right[index].fields;
+        let signed_angle_delta =
+            (b.longitude_deg - a.longitude_deg + 540.0).rem_euclid(360.0) - 180.0;
+        near(
+            mid.longitude_speed_deg_per_tdb_day,
+            signed_angle_delta / (2.0 * step),
+            2.0e-6,
+        );
+        near(
+            mid.latitude_speed_deg_per_tdb_day,
+            (b.latitude_deg - a.latitude_deg) / (2.0 * step),
+            2.0e-6,
+        );
+        near(
+            mid.distance_speed_au_per_tdb_day,
+            (b.distance_au - a.distance_au) / (2.0 * step),
+            1.0e-8,
+        );
+    }
+}
+
+#[test]
+fn multi_body_aberrated_batch_fails_whole_call_and_keeps_reader_reusable() {
+    let mut reader = eph();
+    let epoch = JulianDateTdb(1_016.0);
+    // This fixture contains Mercury, EMB and the geocentric Moon, but
+    // intentionally omits the Sun coefficients.
+    let failed = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[Body::Mercury, Body::Sun, Body::Moon],
+        epoch,
+        0.0,
+    );
+    assert!(matches!(
+        failed,
+        Err(AberratedSphericalError::Aberration(
+            virgostars_ephemeris_core::aberration_state::AberratedStateError::LightTime(
+                virgostars_ephemeris_core::light_time::LightTimeError::Ephemeris(
+                    De441Error::MissingSeries(_)
+                )
+            )
+        ))
+    ));
+
+    let resumed = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[Body::Mercury, Body::Moon],
+        epoch,
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(resumed.len(), 2);
+    assert_eq!(resumed[0].fields.target, Body::Mercury);
+    assert_eq!(resumed[1].fields.target, Body::Moon);
+    let earth = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[Body::Earth],
+        epoch,
+        0.0,
+    );
+    assert!(matches!(
+        earth,
+        Err(AberratedSphericalError::Aberration(
+            virgostars_ephemeris_core::aberration_state::AberratedStateError::LightTime(
+                virgostars_ephemeris_core::light_time::LightTimeError::UndefinedDirection
+            )
+        ))
+    ));
+}
+
+#[test]
+fn empty_aberrated_batch_validates_epoch_and_tilt_without_reading_series() {
+    let mut reader = eph();
+    assert!(geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[],
+        JulianDateTdb(1_016.0),
+        0.0
+    )
+    .unwrap()
+    .is_empty());
+
+    // Empty input does not imply that a target is available at the epoch.
+    assert!(geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[],
+        JulianDateTdb(10.0),
+        0.0
+    )
+    .unwrap()
+    .is_empty());
+
+    assert!(matches!(
+        geocentric_aberrated_fixed_six_fields_many(
+            &mut reader,
+            &[],
+            JulianDateTdb(f64::NAN),
+            0.0
+        ),
+        Err(AberratedSphericalError::InvalidIntermediate)
+    ));
+    assert!(matches!(
+        geocentric_aberrated_fixed_six_fields_many(
+            &mut reader,
+            &[],
+            JulianDateTdb(1_016.0),
+            f64::INFINITY
+        ),
+        Err(AberratedSphericalError::Projection(
+            virgostars_ephemeris_core::coordinates::ProjectionError::NonFinite
+        ))
+    ));
 }
