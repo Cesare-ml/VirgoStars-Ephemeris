@@ -57,12 +57,22 @@ def validate_manifest(data):
     return len(samples)
 
 
+def reject_duplicate_keys(pairs):
+    """Reject ambiguous JSON objects rather than silently accepting the last key."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     args = parser.parse_args()
     try:
-        count = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8")))
+        count = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.exit(1, f"Invalid DE441 manifest: {exc}\n")
     print(f"Metadata preflight passed for {count} samples; numerical validation NOT performed.")
