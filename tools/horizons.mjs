@@ -45,7 +45,7 @@ export function parseHorizonsVector(text, { expectedJdTdb } = {}) {
   if (fields.length === 9 && fields[8] === '') fields.pop();
   if (fields.length !== 8 || !fields[1])
     throw new SpkError('INVALID_HORIZONS','Expected exactly JD, date, XYZ, VXYZ columns');
-  const decimal = /^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/;
+  const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
   if (!decimal.test(fields[0]) || fields.slice(2).some(x => !decimal.test(x)))
     throw new SpkError('INVALID_HORIZONS','Missing or invalid Horizons numeric field');
   const jdTdb=Number(fields[0]);
