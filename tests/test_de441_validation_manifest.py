@@ -110,6 +110,21 @@ class ManifestPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Julian date"):
             module.validate_manifest(value)
 
+    def test_reject_duplicate_epoch_target_center(self):
+        value = valid()
+        value["samples"].append(copy.deepcopy(value["samples"][0]))
+        with self.assertRaisesRegex(ValueError, "duplicate epoch/target/center"):
+            module.validate_manifest(value)
+
+    def test_allow_distinct_epoch_or_body(self):
+        for changed in ("jd_tdb", "target_id", "center_id"):
+            with self.subTest(changed=changed):
+                value = valid()
+                second = copy.deepcopy(value["samples"][0])
+                second[changed] += 1
+                value["samples"].append(second)
+                self.assertEqual(module.validate_manifest(value), 2)
+
     def test_reject_same_target_center(self):
         value = valid()
         value["samples"][0]["center_id"] = 301
