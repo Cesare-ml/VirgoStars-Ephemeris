@@ -213,7 +213,11 @@ mod tests {
         assert_eq!(checked.state.light_time_rate, 0.0);
         let delay = TARGET_DISTANCE_KM / SPEED_OF_LIGHT_KM_PER_SECOND;
         assert!((checked.state.light_time_seconds - delay).abs() < 1.0e-10);
-        assert_eq!(reads.get(), 1, "reused record should be cached after first read");
+        assert_eq!(
+            reads.get(),
+            1,
+            "reused record should be cached after first read"
+        );
     }
 
     #[test]
@@ -256,7 +260,9 @@ mod tests {
                     input,
                     1.0,
                 ),
-                Err(CheckedLightTimeError::Epoch(EpochBridgeError::WrongTimeScale))
+                Err(CheckedLightTimeError::Epoch(
+                    EpochBridgeError::WrongTimeScale
+                ))
             ));
         }
         for invalid in [f64::NAN, f64::INFINITY, -0.0001] {
@@ -279,12 +285,7 @@ mod tests {
     fn earth_as_geocentric_target_is_explicitly_undefined() {
         let (mut eph, reads) = reader();
         assert!(matches!(
-            checked_geocentric_light_time_at_split_tdb(
-                &mut eph,
-                Body::Earth,
-                observation(),
-                0.0,
-            ),
+            checked_geocentric_light_time_at_split_tdb(&mut eph, Body::Earth, observation(), 0.0,),
             Err(CheckedLightTimeError::LightTime(
                 LightTimeError::UndefinedDirection
             ))
@@ -297,15 +298,10 @@ mod tests {
         let (mut eph, _) = reader();
         let start = JulianDate::from_f64(START, TimeScale::Tdb).unwrap();
         assert!(matches!(
-            checked_geocentric_light_time_at_split_tdb(
-                &mut eph,
-                Body::MarsBarycenter,
-                start,
-                0.0,
-            ),
-            Err(CheckedLightTimeError::LightTime(
-                LightTimeError::Ephemeris(De441Error::OutsideCoverage { .. })
-            ))
+            checked_geocentric_light_time_at_split_tdb(&mut eph, Body::MarsBarycenter, start, 0.0,),
+            Err(CheckedLightTimeError::LightTime(LightTimeError::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            )))
         ));
     }
 
@@ -313,15 +309,10 @@ mod tests {
     fn missing_target_series_is_propagated_without_fallback() {
         let (mut eph, _) = reader();
         assert!(matches!(
-            checked_geocentric_light_time_at_split_tdb(
-                &mut eph,
-                Body::Venus,
-                observation(),
-                0.0,
-            ),
-            Err(CheckedLightTimeError::LightTime(
-                LightTimeError::Ephemeris(De441Error::MissingSeries(_))
-            ))
+            checked_geocentric_light_time_at_split_tdb(&mut eph, Body::Venus, observation(), 0.0,),
+            Err(CheckedLightTimeError::LightTime(LightTimeError::Ephemeris(
+                De441Error::MissingSeries(_)
+            )))
         ));
     }
 
