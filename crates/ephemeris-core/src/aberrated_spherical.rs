@@ -24,7 +24,8 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::aberration_state::{
-    geocentric_light_time_annual_aberration_analytic, AberratedGeocentricState,
+    geocentric_light_time_annual_aberration_analytic,
+    geocentric_light_time_annual_aberration_with_earth, AberratedGeocentricState,
     AberratedStateError, ObserverAccelerationSource,
 };
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
@@ -211,13 +212,15 @@ pub fn geocentric_aberrated_fixed_six_fields<R: Read + Seek>(
 /// Calculate observer-aberrated, fixed-axis geocentric six fields for
 /// several target bodies at **one already-TDB** reception Julian date.
 ///
-/// This is a convenience batch over the *existing* scalar
-/// `geocentric_aberrated_fixed_six_fields`: it preserves the exact input
-/// body order and duplicates, and performs no different astronomical
-/// interpolation, light-time solution, Lorentz boost or unit conversion.
-/// Each target is computed independently through the original pipeline,
-/// including Earth's analytic Chebyshev acceleration. This is **not**
-/// a claim of measured speedup or shared acceleration evaluation.
+/// This batch retains the scalar pipeline's light-time solution,
+/// Lorentz boost, spherical projection and unit conversion. It evaluates
+/// Earth's barycentric Chebyshev position/velocity/acceleration **once**
+/// at reception TDB, then reuses that validated observer state for each
+/// target's independent light-time and aberration calculation.
+/// Input order, duplicates and per-target metadata are preserved.
+/// This avoids repeated Earth-state interpolation but does **not**
+/// claim a measured runtime speedup; target evaluation still occurs
+/// separately for every requested body.
 ///
 /// All-or-error: a failed target (missing series, out-of-coverage
 /// emission epoch, Earth as target, pole singularity, etc.) rejects
@@ -247,16 +250,28 @@ pub fn geocentric_aberrated_fixed_six_fields_many<R: Read + Seek>(
         ));
     }
 
+    // Preserve the documented empty-batch contract without probing
+    // kernel coverage or performing an Earth interpolation.
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let earth = ephemeris
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+
     targets
         .iter()
         .copied()
         .map(|target| {
-            geocentric_aberrated_fixed_six_fields(
+            let aberrated = geocentric_light_time_annual_aberration_with_earth(
                 ephemeris,
                 target,
                 reception_epoch,
-                fixed_tilt_rad,
-            )
+                &earth,
+            )?;
+            let spherical = spherical_from_aberrated_state(&aberrated, fixed_tilt_rad)?;
+            aberrated_spherical_to_degrees_au(&spherical)
         })
         .collect()
 }

@@ -26,7 +26,7 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::aberration::{annual_aberration_icrf, AberrationError, SPEED_OF_LIGHT_KM_PER_DAY};
-use crate::de441::{Body, De441, De441Error, JulianDateTdb};
+use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVectorWithAcceleration};
 use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTimeError};
 
 /// Where the Earth's barycentric *acceleration* came from.
@@ -276,6 +276,29 @@ pub fn geocentric_light_time_annual_aberration_analytic<R: Read + Seek>(
         Body::SolarSystemBarycenter,
         observation_epoch,
     )?;
+    geocentric_light_time_annual_aberration_with_earth(ephemeris, target, observation_epoch, &earth)
+}
+
+/// Reuse a **reception-epoch Earth state** for several sightlines.
+///
+/// Both the original scalar pipeline and the multi-body batch call
+/// this private-to-crate helper, ensuring exactly the same light-time,
+/// relativistic aberration and analytic-rate calculations. A mismatched
+/// observer epoch/center is rejected instead of silently mixing frames.
+/// No astronomy arithmetic is duplicated and no observer state is kept
+/// in global/shared mutable storage.
+pub(crate) fn geocentric_light_time_annual_aberration_with_earth<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+    earth: &StateVectorWithAcceleration,
+) -> Result<AberratedGeocentricState, AberratedStateError> {
+    if earth.target != Body::Earth
+        || earth.center != Body::SolarSystemBarycenter
+        || earth.epoch != observation_epoch
+    {
+        return Err(AberratedStateError::InvalidIntermediate);
+    }
     let light_time = geocentric_light_time(ephemeris, target, observation_epoch)?;
     let mut result = aberrate_light_time_state(
         &light_time,
