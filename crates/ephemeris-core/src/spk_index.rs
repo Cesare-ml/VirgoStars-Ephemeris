@@ -23,8 +23,8 @@ SPDX-License-Identifier: CPAL-1.0
 //! evaluate SPK type-2/type-3 Chebyshev polynomials or produce astronomical
 //! states. Segment order is preserved for later priority selection.
 //!
-//! Format: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/daf.html
-//! SPK: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html
+//! Format: <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/daf.html>
+//! SPK: <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html>
 
 use std::collections::HashSet;
 use std::error::Error;
