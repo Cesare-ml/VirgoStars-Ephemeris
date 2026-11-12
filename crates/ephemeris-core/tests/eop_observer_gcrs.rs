@@ -27,25 +27,18 @@ use virgostars_ephemeris_core::eop_observer_gcrs::{
 use virgostars_ephemeris_core::eop_polar_csv::{
     CelestrakEopPolarCatalog, EopCsvError, EopPolarQuality, EopPredictionPolicy,
 };
-use virgostars_ephemeris_core::eop_ut1_era::{
-    eop_ut1_era_from_utc_si_seconds, EopUt1EraError,
-};
+use virgostars_ephemeris_core::eop_ut1_era::{eop_ut1_era_from_utc_si_seconds, EopUt1EraError};
 use virgostars_ephemeris_core::observer_gcrs::{
     wgs84_observer_to_gcrs, ObserverGcrsError, ObserverOrientationInputs, Wgs84ObserverSite,
 };
 use virgostars_ephemeris_core::wgs84_ecef::Wgs84Error;
 
 const HEADER: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE";
-const ORACLE_ERA_FIRST: &str =
-    "2007-10-15,54388,0.10,0.20,0.0,0,0,0,0,0,33,O";
-const ORACLE_ERA_SECOND: &str =
-    "2007-10-16,54389,0.30,0.40,0.0,0,0,0,0,0,33,O";
-const LEAP_FIRST: &str =
-    "2016-12-31,57753,0.10,0.20,-0.4,0,0,0,0,0,36,O";
-const LEAP_SECOND: &str =
-    "2017-01-01,57754,0.30,0.40,0.6,0,0,0,0,0,37,O";
-const LEAP_THIRD: &str =
-    "2017-01-02,57755,0.30,0.40,0.6,0,0,0,0,0,37,O";
+const ORACLE_ERA_FIRST: &str = "2007-10-15,54388,0.10,0.20,0.0,0,0,0,0,0,33,O";
+const ORACLE_ERA_SECOND: &str = "2007-10-16,54389,0.30,0.40,0.0,0,0,0,0,0,33,O";
+const LEAP_FIRST: &str = "2016-12-31,57753,0.10,0.20,-0.4,0,0,0,0,0,36,O";
+const LEAP_SECOND: &str = "2017-01-01,57754,0.30,0.40,0.6,0,0,0,0,0,37,O";
+const LEAP_THIRD: &str = "2017-01-02,57755,0.30,0.40,0.6,0,0,0,0,0,37,O";
 
 fn catalog(rows: &[&str]) -> CelestrakEopPolarCatalog {
     CelestrakEopPolarCatalog::parse_csv(
@@ -78,11 +71,9 @@ fn cip<'a>(epoch: JulianDate, label: &'a str) -> ExternalCipCioAtTt<'a> {
 }
 
 fn eop_tt(cat: &CelestrakEopPolarCatalog, mjd: i64, sec: f64) -> JulianDate {
-    eop_ut1_era_from_utc_si_seconds(
-        cat, mjd, sec, EopPredictionPolicy::ObservedOnly,
-    )
-    .unwrap()
-    .tt_epoch
+    eop_ut1_era_from_utc_si_seconds(cat, mjd, sec, EopPredictionPolicy::ObservedOnly)
+        .unwrap()
+        .tt_epoch
 }
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
@@ -107,16 +98,28 @@ fn independent_erfa_era00_and_gd2gc_numerical_oracles_survive_full_composition()
     let cat = catalog(&[ORACLE_ERA_FIRST, ORACLE_ERA_SECOND]);
     let params = cip(eop_tt(&cat, 54_388, 0.0), "synthetic CIP/CIO at derived TT");
     let out = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly,
-        sample_site(), params,
+        &cat,
+        54_388,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+        sample_site(),
+        params,
     )
     .unwrap();
 
-    near(out.eop.earth_rotation.angle_rad, 0.402_283_724_002_815_8, 1.0e-12);
+    near(
+        out.eop.earth_rotation.angle_rad,
+        0.402_283_724_002_815_8,
+        1.0e-12,
+    );
     near(out.observer_gcrs.era_rad, 0.402_283_724_002_815_8, 1.0e-12);
     near_xyz(
         out.observer_gcrs.position_itrs_km,
-        [-5_599.000_557_704_994, 233.011_672_234_792_03, -3_040.909_470_698_336],
+        [
+            -5_599.000_557_704_994,
+            233.011_672_234_792_03,
+            -3_040.909_470_698_336,
+        ],
         2.0e-10,
     );
     assert_eq!(out.eop.quality, EopPolarQuality::Observed);
@@ -125,30 +128,53 @@ fn independent_erfa_era00_and_gd2gc_numerical_oracles_survive_full_composition()
     assert_eq!(out.eop.ut1_epoch.scale(), TimeScale::Ut1);
     assert_eq!(out.eop.tt_epoch.scale(), TimeScale::Tt);
     let norm = |v: [f64; 3]| v.into_iter().map(|x| x * x).sum::<f64>().sqrt();
-    near(norm(out.observer_gcrs.position_itrs_km), norm(out.observer_gcrs.position_gcrs_km), 2.0e-11);
+    near(
+        norm(out.observer_gcrs.position_itrs_km),
+        norm(out.observer_gcrs.position_gcrs_km),
+        2.0e-11,
+    );
     assert!(out.observer_gcrs.era_rad < TAU);
 }
 
 #[test]
 fn complete_eop_wrapper_agrees_with_original_independently_implemented_site_pipeline() {
     let cat = catalog(&[ORACLE_ERA_FIRST, ORACLE_ERA_SECOND]);
-    let external = cip(eop_tt(&cat, 54_388, 24_000.5), "synthetic-CIP-direct-comparison");
+    let external = cip(
+        eop_tt(&cat, 54_388, 24_000.5),
+        "synthetic-CIP-direct-comparison",
+    );
     let out = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 54_388, 24_000.5, EopPredictionPolicy::ObservedOnly,
-        sample_site(), external,
+        &cat,
+        54_388,
+        24_000.5,
+        EopPredictionPolicy::ObservedOnly,
+        sample_site(),
+        external,
     )
     .unwrap();
-    let old = wgs84_observer_to_gcrs(sample_site(), ObserverOrientationInputs {
-        ut1_epoch: out.eop.ut1_epoch,
-        polar_xp_rad: out.eop.xp_rad,
-        polar_yp_rad: out.eop.yp_rad,
-        tio_locator_sp_rad: out.eop.approximate_polar.locator.sp_rad,
-        cip_x: external.cip_x,
-        cip_y: external.cip_y,
-        cio_locator_s_rad: external.cio_locator_s_rad,
-    }).unwrap();
-    near_xyz(out.observer_gcrs.position_itrs_km, old.position_itrs_km, 0.0);
-    near_xyz(out.observer_gcrs.position_gcrs_km, old.position_gcrs_km, 0.0);
+    let old = wgs84_observer_to_gcrs(
+        sample_site(),
+        ObserverOrientationInputs {
+            ut1_epoch: out.eop.ut1_epoch,
+            polar_xp_rad: out.eop.xp_rad,
+            polar_yp_rad: out.eop.yp_rad,
+            tio_locator_sp_rad: out.eop.approximate_polar.locator.sp_rad,
+            cip_x: external.cip_x,
+            cip_y: external.cip_y,
+            cio_locator_s_rad: external.cio_locator_s_rad,
+        },
+    )
+    .unwrap();
+    near_xyz(
+        out.observer_gcrs.position_itrs_km,
+        old.position_itrs_km,
+        0.0,
+    );
+    near_xyz(
+        out.observer_gcrs.position_gcrs_km,
+        old.position_gcrs_km,
+        0.0,
+    );
     assert_eq!(out.observer_gcrs.era_rad, old.era_rad);
 }
 
@@ -157,20 +183,38 @@ fn cip_cio_epoch_requires_tai_independent_exact_tt_provenance() {
     let cat = catalog(&[ORACLE_ERA_FIRST, ORACLE_ERA_SECOND]);
     let epoch = eop_tt(&cat, 54_388, 0.0);
     let mut wrong = cip(epoch, "synthetic");
-    wrong.tt_epoch = JulianDate::new(epoch.day_number(), epoch.midnight_fraction(), TimeScale::Ut1).unwrap();
+    wrong.tt_epoch = JulianDate::new(
+        epoch.day_number(),
+        epoch.midnight_fraction(),
+        TimeScale::Ut1,
+    )
+    .unwrap();
     assert!(matches!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly, sample_site(), wrong,
+            &cat,
+            54_388,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            wrong,
         ),
         Err(EopWgs84GcrsError::CipCioEpochRequiresTt(TimeScale::Ut1))
     ));
     let mut shifted = cip(epoch, "synthetic");
     shifted.tt_epoch = JulianDate::new(
-        epoch.day_number(), epoch.midnight_fraction() + 1.0e-5 / 86_400.0, TimeScale::Tt,
-    ).unwrap();
+        epoch.day_number(),
+        epoch.midnight_fraction() + 1.0e-5 / 86_400.0,
+        TimeScale::Tt,
+    )
+    .unwrap();
     assert_eq!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly, sample_site(), shifted,
+            &cat,
+            54_388,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            shifted,
         ),
         Err(EopWgs84GcrsError::CipCioEpochMismatch)
     );
@@ -184,8 +228,12 @@ fn blank_cip_cio_provenance_is_rejected_not_defaulted() {
     for label in ["", "  ", "\n\t"] {
         assert_eq!(
             wgs84_gcrs_from_eop_utc_and_cip_cio(
-                &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly,
-                sample_site(), cip(eop_tt(&cat, 54_388, 0.0), label),
+                &cat,
+                54_388,
+                0.0,
+                EopPredictionPolicy::ObservedOnly,
+                sample_site(),
+                cip(eop_tt(&cat, 54_388, 0.0), label),
             ),
             Err(EopWgs84GcrsError::MissingCipCioSource)
         );
@@ -199,24 +247,42 @@ fn malformed_cip_cio_geometry_is_rejected_by_original_checked_module() {
     c.cip_x = 1.2;
     assert!(matches!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly, sample_site(), c,
+            &cat,
+            54_388,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            c,
         ),
-        Err(EopWgs84GcrsError::Observer(ObserverGcrsError::CioOrientation(_)))
+        Err(EopWgs84GcrsError::Observer(
+            ObserverGcrsError::CioOrientation(_)
+        ))
     ));
     let mut c = cip(eop_tt(&cat, 54_388, 0.0), "synthetic bad CIO");
     c.cio_locator_s_rad = f64::NAN;
     assert!(matches!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly, sample_site(), c,
+            &cat,
+            54_388,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            c,
         ),
-        Err(EopWgs84GcrsError::Observer(ObserverGcrsError::CioOrientation(_)))
+        Err(EopWgs84GcrsError::Observer(
+            ObserverGcrsError::CioOrientation(_)
+        ))
     ));
     let mut bad_site = sample_site();
     bad_site.latitude_rad_north = 2.0;
     assert_eq!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 0.0, EopPredictionPolicy::ObservedOnly,
-            bad_site, cip(eop_tt(&cat, 54_388, 0.0), "synthetic"),
+            &cat,
+            54_388,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            bad_site,
+            cip(eop_tt(&cat, 54_388, 0.0), "synthetic"),
         ),
         Err(EopWgs84GcrsError::Observer(ObserverGcrsError::Geodesy(
             Wgs84Error::InvalidLatitude,
@@ -230,18 +296,29 @@ fn utc_leap_second_remains_continuous_in_gcrs_and_epoch_consistent() {
     let sec1 = 86_400.0;
     let tt1 = eop_tt(&cat, 57_753, sec1);
     let result = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 57_753, sec1, EopPredictionPolicy::ObservedOnly,
-        sample_site(), cip(tt1, "synthetic CIP at leap SI second"),
-    ).unwrap();
+        &cat,
+        57_753,
+        sec1,
+        EopPredictionPolicy::ObservedOnly,
+        sample_site(),
+        cip(tt1, "synthetic CIP at leap SI second"),
+    )
+    .unwrap();
     assert_eq!(result.eop.utc_day_length_seconds, 86_401.0);
     assert_eq!(result.eop.ut1_minus_tai_seconds, -36.4);
     let tt2 = eop_tt(&cat, 57_754, 0.0);
     let next = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 57_754, 0.0, EopPredictionPolicy::ObservedOnly,
-        sample_site(), cip(tt2, "synthetic CIP at next UTC midnight"),
-    ).unwrap();
+        &cat,
+        57_754,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+        sample_site(),
+        cip(tt2, "synthetic CIP at next UTC midnight"),
+    )
+    .unwrap();
     let diff = (next.eop.ut1_epoch.day_number() - result.eop.ut1_epoch.day_number()) as f64
-        + next.eop.ut1_epoch.midnight_fraction() - result.eop.ut1_epoch.midnight_fraction();
+        + next.eop.ut1_epoch.midnight_fraction()
+        - result.eop.ut1_epoch.midnight_fraction();
     near(diff * 86_400.0, 1.0, 4.0e-11);
     let a = result.observer_gcrs.position_gcrs_km;
     let b = next.observer_gcrs.position_gcrs_km;
@@ -255,23 +332,33 @@ fn utc_leap_second_remains_continuous_in_gcrs_and_epoch_consistent() {
 fn prediction_quality_and_provenance_survive_output() {
     let predicted = ORACLE_ERA_SECOND.replace(",33,O", ",33,P");
     let cat = catalog(&[ORACLE_ERA_FIRST, &predicted]);
-    let tt = eop_ut1_era_from_utc_si_seconds(
-        &cat, 54_388, 60.0, EopPredictionPolicy::AllowPredicted,
-    ).unwrap().tt_epoch;
+    let tt =
+        eop_ut1_era_from_utc_si_seconds(&cat, 54_388, 60.0, EopPredictionPolicy::AllowPredicted)
+            .unwrap()
+            .tt_epoch;
     let external = cip(tt, "provider:CIP/CIO-predicted-test");
     assert_eq!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, 60.0, EopPredictionPolicy::ObservedOnly,
-            sample_site(), external,
+            &cat,
+            54_388,
+            60.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            external,
         ),
         Err(EopWgs84GcrsError::Eop(EopUt1EraError::Eop(
             EopCsvError::PredictionNotAuthorized
         )))
     );
     let result = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 54_388, 60.0, EopPredictionPolicy::AllowPredicted,
-        sample_site(), external,
-    ).unwrap();
+        &cat,
+        54_388,
+        60.0,
+        EopPredictionPolicy::AllowPredicted,
+        sample_site(),
+        external,
+    )
+    .unwrap();
     assert_eq!(result.eop.quality, EopPolarQuality::IncludesPrediction);
     assert_eq!(result.cip_cio_source_label, external.source_label);
     assert_eq!(result.eop.source_label, cat.source_label);
@@ -283,8 +370,12 @@ fn missing_eop_data_and_invalid_elapsed_utc_seconds_propagate() {
     let epoch = eop_tt(&cat, 54_388, 0.0);
     assert_eq!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_389, 0.0, EopPredictionPolicy::ObservedOnly,
-            sample_site(), cip(epoch, "synthetic"),
+            &cat,
+            54_389,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            cip(epoch, "synthetic"),
         ),
         Err(EopWgs84GcrsError::Eop(EopUt1EraError::Eop(
             EopCsvError::MissingFollowingDay
@@ -292,9 +383,15 @@ fn missing_eop_data_and_invalid_elapsed_utc_seconds_propagate() {
     );
     assert_eq!(
         wgs84_gcrs_from_eop_utc_and_cip_cio(
-            &cat, 54_388, f64::NAN, EopPredictionPolicy::ObservedOnly,
-            sample_site(), cip(epoch, "synthetic"),
+            &cat,
+            54_388,
+            f64::NAN,
+            EopPredictionPolicy::ObservedOnly,
+            sample_site(),
+            cip(epoch, "synthetic"),
         ),
-        Err(EopWgs84GcrsError::Eop(EopUt1EraError::InvalidElapsedUtcSecond))
+        Err(EopWgs84GcrsError::Eop(
+            EopUt1EraError::InvalidElapsedUtcSecond
+        ))
     );
 }
