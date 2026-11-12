@@ -19,7 +19,8 @@ use std::f64::consts::{PI, TAU};
 use std::io::Cursor;
 
 use virgostars_ephemeris_core::civil_geocentric::{
-    geocentric_fixed_spherical_from_civil, CivilGeocentricError, CivilGeocentricFixedSpherical,
+    geocentric_fixed_spherical_from_civil, geocentric_fixed_spherical_many_from_civil,
+    CivilGeocentricError, CivilGeocentricFixedSpherical,
 };
 use virgostars_ephemeris_core::coordinates::ProjectionError;
 use virgostars_ephemeris_core::de441::{Body, De441, De441Error};
@@ -246,4 +247,142 @@ fn conversion_kernel_and_projection_errors_remain_distinct() {
             De441Error::OutsideCoverage { .. }
         )))
     ));
+}
+
+/// Add an independent fixed Venus series after Mercury, EMB and Moon,
+/// without changing the original one-body synthetic fixtures.
+fn synthetic_two_body_kernel(mercury_velocity: [f64; 3]) -> Vec<u8> {
+    let mut bytes = synthetic_classic_de441(mercury_velocity);
+    let venus_pointer = 2696 + 12;
+    write_i32(&mut bytes, venus_pointer, 15);
+    write_i32(&mut bytes, venus_pointer + 4, 1);
+    write_i32(&mut bytes, venus_pointer + 8, 1);
+    let venus_x = RECORD_SIZE * 2 + (15 - 1) * 8;
+    write_f64(&mut bytes, venus_x, 210_000_000.0);
+    bytes
+}
+
+#[test]
+fn batch_preserves_order_duplicates_metadata_and_exact_scalar_results() {
+    let mut eph = De441::new(Cursor::new(synthetic_two_body_kernel([
+        0.0, 300_000.0, 100_000.0,
+    ])))
+    .unwrap();
+    let civil = stamp("2026-11-10T13:30:00+01:00");
+    let targets = [Body::Venus, Body::Mercury, Body::Venus];
+    let batch = geocentric_fixed_spherical_many_from_civil(&mut eph, &targets, civil, 0.0).unwrap();
+    assert_eq!(batch.len(), targets.len());
+    assert_eq!(batch[0], batch[2]);
+    assert_ne!(
+        batch[0].spherical.distance_km,
+        batch[1].spherical.distance_km
+    );
+    for (actual, target) in batch.iter().zip(targets) {
+        let expected = geocentric_fixed_spherical_from_civil(&mut eph, target, civil, 0.0).unwrap();
+        assert_eq!(*actual, expected);
+        assert_eq!(actual.spherical.target, target);
+        assert_eq!(actual.spherical.center, Body::Earth);
+        assert!(actual.emission_epoch.0 < actual.spherical.epoch.0);
+    }
+}
+
+#[test]
+fn empty_batch_validates_civil_time_and_axes_without_reading_body_series() {
+    // This synthetic reader has no Sun series, but an empty request is valid.
+    let mut eph = De441::new(Cursor::new(synthetic_classic_de441([0.0; 3]))).unwrap();
+    let empty = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &[],
+        stamp("2026-11-10T12:30:00Z"),
+        0.0,
+    )
+    .unwrap();
+    assert!(empty.is_empty());
+
+    let bad_time = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &[],
+        stamp("1969-01-01T12:30:00Z"),
+        0.0,
+    );
+    assert!(matches!(
+        bad_time,
+        Err(CivilGeocentricError::CivilTime(SkyError::UnsupportedUtc))
+    ));
+
+    let bad_tilt = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &[],
+        stamp("2026-11-10T12:30:00Z"),
+        f64::NAN,
+    );
+    assert!(matches!(
+        bad_tilt,
+        Err(CivilGeocentricError::Projection(ProjectionError::NonFinite))
+    ));
+}
+
+#[test]
+fn batch_fails_whole_call_on_missing_series_and_can_be_reused() {
+    let mut eph = De441::new(Cursor::new(synthetic_two_body_kernel([0.0; 3]))).unwrap();
+    let civil = stamp("2026-11-10T12:30:00Z");
+    // The first requested body succeeds internally. A missing second
+    // body still rejects the entire result, never returning a partial Vec.
+    let failed = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &[Body::Mercury, Body::Sun, Body::Venus],
+        civil,
+        0.0,
+    );
+    assert!(matches!(
+        failed,
+        Err(CivilGeocentricError::LightTime(LightTimeError::Ephemeris(
+            De441Error::MissingSeries(_)
+        )))
+    ));
+
+    let resumed = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &[Body::Mercury, Body::Venus],
+        civil,
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(resumed.len(), 2);
+    assert_eq!(resumed[0].spherical.target, Body::Mercury);
+    assert_eq!(resumed[1].spherical.target, Body::Venus);
+
+    let earth = geocentric_fixed_spherical_many_from_civil(&mut eph, &[Body::Earth], civil, 0.0);
+    assert!(matches!(
+        earth,
+        Err(CivilGeocentricError::LightTime(
+            LightTimeError::UndefinedDirection
+        ))
+    ));
+}
+
+#[test]
+fn batch_timezone_equivalence_preserves_signed_retrograde_rates() {
+    let mut eph = De441::new(Cursor::new(synthetic_two_body_kernel([
+        0.0, -350_000.0, 0.0,
+    ])))
+    .unwrap();
+    let targets = [Body::Mercury, Body::Venus];
+    let local = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &targets,
+        stamp("2026-11-10T13:30:00+01:00"),
+        0.0,
+    )
+    .unwrap();
+    let utc = geocentric_fixed_spherical_many_from_civil(
+        &mut eph,
+        &targets,
+        stamp("2026-11-10T12:30:00Z"),
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(local, utc);
+    assert!(local[0].spherical.longitude_rate_rad_per_day < 0.0);
+    near(local[1].spherical.longitude_rate_rad_per_day, 0.0, 1.0e-15);
 }

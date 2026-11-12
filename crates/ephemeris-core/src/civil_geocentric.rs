@@ -119,6 +119,55 @@ pub fn geocentric_fixed_spherical_from_civil<R: Read + Seek>(
     fixed_tilt_rad: f64,
 ) -> Result<CivilGeocentricFixedSpherical, CivilGeocentricError> {
     let reception_epoch = civil.to_approximate_tdb_julian_date()?;
+    spherical_at_reception_tdb(ephemeris, target, reception_epoch, fixed_tilt_rad)
+}
+
+/// Calculate light-time-only geocentric spherical positions and velocities
+/// for several targets at the **same** civil instant.
+///
+/// UTC offset normalization and approximate TDB conversion are performed
+/// **once** for the batch. Each body is then handled by the same
+/// light-time and projection path as the scalar API; this is a convenience
+/// operation, not a different interpolation or astronomy algorithm.
+///
+/// Results retain the input order and duplicate targets, including precise
+/// body identifiers such as `JupiterBarycenter`. Any invalid target,
+/// missing DE441 series, emission epoch outside kernel coverage, or
+/// undefined direction fails the **entire** call; no partial vector is
+/// returned. An empty target list returns an empty vector after checking
+/// the civil date and finite constant axis tilt, without reading any
+/// coefficient records or claiming coverage for a particular target.
+///
+/// Epochs are approximate TDB Julian dates within the existing
+/// 1972-01-01..2027-06-27 UTC schedule. Fixed ICRF coordinates, arbitrary
+/// constant X tilt, one-way light-time only; there is **no** aberration,
+/// deflection, topocentric parallax or moving ecliptic-of-date correction.
+pub fn geocentric_fixed_spherical_many_from_civil<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    targets: &[Body],
+    civil: CivilTimestamp,
+    fixed_tilt_rad: f64,
+) -> Result<Vec<CivilGeocentricFixedSpherical>, CivilGeocentricError> {
+    let reception_epoch = civil.to_approximate_tdb_julian_date()?;
+    if !fixed_tilt_rad.is_finite() {
+        return Err(CivilGeocentricError::Projection(ProjectionError::NonFinite));
+    }
+
+    targets
+        .iter()
+        .copied()
+        .map(|target| {
+            spherical_at_reception_tdb(ephemeris, target, reception_epoch, fixed_tilt_rad)
+        })
+        .collect()
+}
+
+fn spherical_at_reception_tdb<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    fixed_tilt_rad: f64,
+) -> Result<CivilGeocentricFixedSpherical, CivilGeocentricError> {
     let state = geocentric_light_time(ephemeris, target, reception_epoch)?;
 
     let cartesian = StateVector {
