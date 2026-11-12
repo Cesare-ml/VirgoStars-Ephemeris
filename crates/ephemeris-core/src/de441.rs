@@ -63,6 +63,26 @@ pub struct StateVector {
     pub velocity_km_per_day: [f64; 3],
 }
 
+/// Three-axis Chebyshev position coefficients from one classic DE441 granule.
+///
+/// These are the native geometric ICRF X/Y/Z *series* coefficients in km,
+/// not necessarily body-center or Earth-relative coordinates. In particular,
+/// Earth requires both EMB and geocentric-Moon series, with center composition
+/// by the caller's validated geometry layer.
+///
+/// Added 2026-11-12: original VirgoStars read-only XYZ source extraction.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicDe441CartesianCoefficientRecord {
+    pub selection: crate::de441_granule_plan::ActiveSeriesGranule,
+    pub start_jd_tdb: JulianDateTdb,
+    pub end_jd_tdb: JulianDateTdb,
+    /// Polynomial normalization: tau=(JD_TDB-midpoint)/radius_days.
+    pub midpoint_jd_tdb: JulianDateTdb,
+    pub radius_days: f64,
+    /// Order is X,Y,Z, in kilometers. No implicit halving of c0.
+    pub xyz_coefficients_km: [Vec<f64>; 3],
+}
+
 /// X/Y coefficients copied from one genuine classic DE441 body series granule.
 ///
 /// The values are *geometric* ICRF equatorial coordinates, relative to the
@@ -338,78 +358,125 @@ impl<R: Read + Seek> De441<R> {
         Ok(())
     }
 
-    /// Copy planar X/Y coefficients of a single explicitly selected classic
-    /// DE441 series subrecord, after validating its exact temporal domain.
+    /// Copy all three geometric Cartesian position coefficient arrays from
+    /// one validated classic DE441 source-series granule.
     ///
-    /// Intended to consume `ActiveSeriesGranule` selections from the
-    /// granule planner; still checks indices and slice coverage itself, so
-    /// stale/manually forged selections cannot read outside a subrecord.
-    /// Only geometric Cartesian *position* series 0..=10 are supported;
-    /// nutation/libration are not positions in kilometers.
+    /// This is NOT an apparent or Earth-centered state builder: e.g. classic
+    /// series 2 is EMB, series 9 is the *geocentric Moon*. Values are copied
+    /// verbatim from the existing reader cache and checked for finiteness.
+    /// Caller-supplied selections, time windows, and record dates are checked.
     ///
-    /// This method does not compose EMB with the geocentric Moon to obtain
-    /// Earth, does not calculate longitude, and does not assert continuity
-    /// between adjacent granules or physical model numerical accuracy.
+    /// No DE441 data file is bundled and no independent JPL accuracy test is
+    /// claimed by this interface.
+    pub fn cartesian_coefficients_for_granule(
+        &mut self,
+        selection: crate::de441_granule_plan::ActiveSeriesGranule,
+        requested_start: JulianDateTdb,
+        requested_end: JulianDateTdb,
+    ) -> Result<ClassicDe441CartesianCoefficientRecord, De441Error> {
+        if selection.series_index > 10 {
+            return Err(De441Error::InvalidFile(
+                "series is not a Cartesian position series",
+            ));
+        }
+        let pointer = self.pointers[selection.series_index];
+        if pointer.first == 0 {
+            return Err(De441Error::MissingSeries(
+                "requested Cartesian position series",
+            ));
+        }
+        if selection.principal_record_index >= self.record_count
+            || selection.subrecord_index >= pointer.granules
+        {
+            return Err(De441Error::InvalidFile(
+                "selected coefficient record or subrecord is out of range",
+            ));
+        }
+        if !requested_start.0.is_finite()
+            || !requested_end.0.is_finite()
+            || requested_start.0 >= requested_end.0
+            || requested_start.0 < self.start
+            || requested_end.0 > self.end
+        {
+            return Err(De441Error::InvalidFile(
+                "invalid or uncovered Cartesian coefficient slice",
+            ));
+        }
+
+        let principal_start =
+            self.start + selection.principal_record_index as f64 * self.step;
+        let granule_days = self.step / pointer.granules as f64;
+        let start_jd = principal_start + selection.subrecord_index as f64 * granule_days;
+        let end_jd = principal_start + (selection.subrecord_index + 1) as f64 * granule_days;
+        let radius_days = (end_jd - start_jd) * 0.5;
+        let midpoint_jd = start_jd + radius_days;
+        if !start_jd.is_finite()
+            || !end_jd.is_finite()
+            || !radius_days.is_finite()
+            || radius_days <= 0.0
+            || !(start_jd < midpoint_jd && midpoint_jd < end_jd)
+            || requested_start.0 < start_jd
+            || requested_end.0 > end_jd
+        {
+            return Err(De441Error::InvalidFile(
+                "slice crosses a granule or TDB precision is inadequate",
+            ));
+        }
+
+        self.load_record(selection.principal_record_index)?;
+
+        // Source bytes are read from one already validated principal record:
+        // 1-based word pointers and three component coefficient blocks per
+        // classic Cartesian series granule, in X/Y/Z order.
+        let mut xyz_coefficients_km: [Vec<f64>; 3] =
+            std::array::from_fn(|_| Vec::with_capacity(pointer.coefficients));
+        for (axis, coefficients) in xyz_coefficients_km.iter_mut().enumerate() {
+            let first_word = pointer.first - 1
+                + (selection.subrecord_index * 3 + axis) * pointer.coefficients;
+            for k in 0..pointer.coefficients {
+                let coefficient = f64_at(&self.cached_record, (first_word + k) * 8);
+                if !coefficient.is_finite() {
+                    return Err(De441Error::InvalidFile(
+                        "non-finite Cartesian Chebyshev coefficient",
+                    ));
+                }
+                coefficients.push(coefficient);
+            }
+        }
+        Ok(ClassicDe441CartesianCoefficientRecord {
+            selection,
+            start_jd_tdb: JulianDateTdb(start_jd),
+            end_jd_tdb: JulianDateTdb(end_jd),
+            midpoint_jd_tdb: JulianDateTdb(midpoint_jd),
+            radius_days,
+            xyz_coefficients_km,
+        })
+    }
+
+    /// Backward-compatible planar X/Y extraction, using the same strict XYZ
+    /// source-record validation and cache path as the Cartesian reader.
+    ///
+    /// The Z coefficients are validated but not returned. This is a strict
+    /// extension of the earlier X/Y-only semantics: a corrupt Z coefficient
+    /// now also causes this method to fail closed instead of returning an
+    /// incompletely validated source-series record.
     pub fn planar_coefficients_for_granule(
         &mut self,
         selection: crate::de441_granule_plan::ActiveSeriesGranule,
         requested_start: JulianDateTdb,
         requested_end: JulianDateTdb,
     ) -> Result<ClassicDe441PlanarCoefficientRecord, De441Error> {
-        if selection.series_index > 10 {
-            return Err(De441Error::InvalidFile("series is not a Cartesian position series"));
-        }
-        let pointer = self.pointers[selection.series_index];
-        if pointer.first == 0 {
-            return Err(De441Error::MissingSeries("requested Cartesian position series"));
-        }
-        if selection.principal_record_index >= self.record_count
-            || selection.subrecord_index >= pointer.granules
-        {
-            return Err(De441Error::InvalidFile("selected coefficient record or subrecord is out of range"));
-        }
-        if !requested_start.0.is_finite() || !requested_end.0.is_finite()
-            || requested_start.0 >= requested_end.0
-            || requested_start.0 < self.start || requested_end.0 > self.end
-        {
-            return Err(De441Error::InvalidFile("invalid or uncovered planar coefficient slice"));
-        }
-
-        let principal_start = self.start
-            + selection.principal_record_index as f64 * self.step;
-        let granule_days = self.step / pointer.granules as f64;
-        let start_jd = principal_start + selection.subrecord_index as f64 * granule_days;
-        let end_jd = principal_start + (selection.subrecord_index + 1) as f64 * granule_days;
-        let radius_days = (end_jd - start_jd) * 0.5;
-        let midpoint_jd = start_jd + radius_days;
-        if !start_jd.is_finite() || !end_jd.is_finite()
-            || !radius_days.is_finite() || radius_days <= 0.0
-            || !(start_jd < midpoint_jd && midpoint_jd < end_jd)
-            || requested_start.0 < start_jd || requested_end.0 > end_jd
-        {
-            return Err(De441Error::InvalidFile("slice crosses a granule or TDB precision is inadequate"));
-        }
-
-        self.load_record(selection.principal_record_index)?;
-        let mut axes = [Vec::with_capacity(pointer.coefficients), Vec::with_capacity(pointer.coefficients)];
-        for (axis, coefficients) in axes.iter_mut().enumerate() {
-            let first_word = pointer.first - 1
-                + (selection.subrecord_index * 3 + axis) * pointer.coefficients;
-            for k in 0..pointer.coefficients {
-                let coefficient = f64_at(&self.cached_record, (first_word + k) * 8);
-                if !coefficient.is_finite() {
-                    return Err(De441Error::InvalidFile("non-finite planar Chebyshev coefficient"));
-                }
-                coefficients.push(coefficient);
-            }
-        }
-        let [x_coefficients_km, y_coefficients_km] = axes;
+        let xyz = self.cartesian_coefficients_for_granule(
+            selection, requested_start, requested_end,
+        )?;
+        let [x_coefficients_km, y_coefficients_km, _z_coefficients_km] =
+            xyz.xyz_coefficients_km;
         Ok(ClassicDe441PlanarCoefficientRecord {
-            selection,
-            start_jd_tdb: JulianDateTdb(start_jd),
-            end_jd_tdb: JulianDateTdb(end_jd),
-            midpoint_jd_tdb: JulianDateTdb(midpoint_jd),
-            radius_days,
+            selection: xyz.selection,
+            start_jd_tdb: xyz.start_jd_tdb,
+            end_jd_tdb: xyz.end_jd_tdb,
+            midpoint_jd_tdb: xyz.midpoint_jd_tdb,
+            radius_days: xyz.radius_days,
             x_coefficients_km,
             y_coefficients_km,
         })
