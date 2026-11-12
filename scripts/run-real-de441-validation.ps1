@@ -19,6 +19,7 @@
 param(
     [string]$De441Path,
     [string]$OutputRoot,
+    [string]$ExpectedSha256,
     [switch]$SelfTest
 )
 
@@ -68,6 +69,25 @@ function Test-GatePass {
         $body,
         '(?m)^test result: ok\. 2 passed; 0 failed; 0 ignored;'
     )
+}
+
+# Optional match against an out-of-band fingerprint supplied by caller.
+# Merely recording SHA-256 is identity evidence, not authentication.
+function Assert-ExpectedKernelHash {
+    param([string]$ActualHash, [string]$ExpectedHash)
+    if ([string]::IsNullOrWhiteSpace($ExpectedHash)) {
+        return $false
+    }
+    if ($ExpectedHash -cnotmatch '^[0-9a-fA-F]{64}$') {
+        throw '-ExpectedSha256 must have exactly 64 hexadecimal characters.'
+    }
+    if ($ActualHash -cnotmatch '^[0-9a-fA-F]{64}$') {
+        throw 'Calculated DE441 SHA-256 is absent or malformed.'
+    }
+    if (-not [string]::Equals($ActualHash, $ExpectedHash, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The local DE441 SHA-256 differs from the expected fingerprint.'
+    }
+    return $true
 }
 
 function Invoke-CargoGate {
@@ -179,6 +199,23 @@ function Invoke-PreflightSelfTest {
             $env:PATH = $originalPath
         }
         Write-Host '[PASS] Real Cargo wrapper passes exact --ignored arguments to a mock executable.'
+
+        $knownHash = 'a' * 64
+        if (Assert-ExpectedKernelHash -ActualHash $knownHash -ExpectedHash '') {
+            throw 'No expected SHA-256 must remain unverified.'
+        }
+        if (-not (Assert-ExpectedKernelHash -ActualHash $knownHash -ExpectedHash ('A' * 64))) {
+            throw 'Case-insensitive valid SHA-256 match was rejected.'
+        }
+        foreach ($bad in @('a' * 63, 'z' * 64, 'b' * 64)) {
+            $rejected = $false
+            try {
+                $null = Assert-ExpectedKernelHash -ActualHash $knownHash -ExpectedHash $bad
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) { throw 'Malformed or mismatched SHA-256 was accepted.' }
+        }
+        Write-Host '[PASS] Expected SHA-256 gate rejects mismatch/malformed and records no expectation.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
@@ -200,16 +237,19 @@ $reportDirectory = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $identifier
 New-Item -ItemType Directory -Path $reportDirectory -ErrorAction Stop | Out-Null
 
 $receipt = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     status = 'NOT_RUN'
     run_timestamp_utc = $timestamp
     tool = 'VirgoStars-Ephemeris real classic-DE441 receipt v1'
     repository = 'https://github.com/Cesare-ml/VirgoStars-Ephemeris'
     source_commit = $null
+    source_tree_clean = $false
     file = [ordered]@{
         filename = $null
         bytes = $null
         sha256 = $null
+        expected_sha256 = $null
+        sha256_matched_expected = $false
         content_released_or_copied = $false
     }
     reference = [ordered]@{
@@ -243,14 +283,28 @@ try {
     $receipt.file.filename = $file.Name
     $receipt.file.bytes = [long]$file.Length
     $receipt.file.sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+        $receipt.file.expected_sha256 = $ExpectedSha256.ToLowerInvariant()
+    }
+    $receipt.file.sha256_matched_expected = Assert-ExpectedKernelHash -ActualHash $receipt.file.sha256 -ExpectedHash $ExpectedSha256
     $receipt.rustc_version = ((& rustc --version) -join '')
     $receipt.cargo_version = ((& cargo --version) -join '')
-    if (Get-Command git -ErrorAction SilentlyContinue) {
-        $rev = @(& git rev-parse HEAD 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $rev.Count -eq 1) {
-            $receipt.source_commit = $rev[0].Trim()
-        }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw 'Git is unavailable; a reproducible source commit is required.'
     }
+    $rev = @(& git rev-parse --verify HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $rev.Count -ne 1 -or $rev[0] -notmatch '^[0-9a-fA-F]{40}$') {
+        throw 'Cannot identify the Git source commit for scientific reproducibility.'
+    }
+    $receipt.source_commit = $rev[0].Trim()
+    $dirty = @(& git status --porcelain --untracked-files=normal 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Cannot inspect the Git worktree for uncommitted changes.'
+    }
+    if ($dirty.Count -ne 0) {
+        throw 'Git worktree is dirty. Commit or remove local code changes before scientific validation.'
+    }
+    $receipt.source_tree_clean = $true
 
     $env:DE441_PATH = $file.FullName
     foreach ($gate in @(
