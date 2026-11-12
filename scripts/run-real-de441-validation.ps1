@@ -173,6 +173,78 @@ function Read-ScientificMetrics {
     throw "No metrics contract defined for suite '$Suite'."
 }
 
+# The thresholds below are TRANSCRIPTIONS of the current explicit Rust
+# asserts in tests/light_time_horizons.rs and tests/aberrated_real_de441.rs.
+# They do not establish independently justified scientific accuracy.
+# Rust computes on full f64 precision; its assertions remain the authority.
+# Decimal logs can round a value just below a strict bound up to equality.
+# Accordingly, this *secondary* envelope only rejects PRINTED values > bound.
+function Get-ReportedScientificLimits {
+    param([string]$Suite, [System.Collections.IDictionary]$Metrics)
+
+    $limits = [ordered]@{}
+    if ($Suite -eq 'light_time_horizons') {
+        $limits['horizons_lt_vectors'] = [ordered]@{
+            position_max_component_km = 0.01
+            horizons_velocity_max_component_km_per_s = 1e-6
+            lt_derivative_max_component_km_per_s = 3e-6
+            light_time_error_seconds = 1e-6
+        }
+    }
+    elseif ($Suite -eq 'aberrated_real_de441') {
+        $limits['recovered_lt_vectors'] = [ordered]@{
+            recovered_lt_vector_max_component_km = 0.01
+            lt_range_error_km = 0.01
+            light_time_error_seconds = 1e-6
+        }
+        # Rust checks angle_error < 2e-4 deg/TDB day. Report uses
+        # arcseconds/TDB day: 2e-4 * 3600 = 0.72.
+        $limits['full_pipeline_rate_consistency'] = [ordered]@{
+            angular_rate_error_arcsec_per_tdb_day = 0.72
+            radial_rate_error_au_per_tdb_day = 1e-7
+        }
+    }
+    else {
+        throw "No pinned scientific thresholds for suite $Suite."
+    }
+
+    $results = [ordered]@{}
+    foreach ($group in $limits.Keys) {
+        if (-not $Metrics.Contains($group)) {
+            throw "Required scientific metric group $group is missing."
+        }
+        $maxima = $Metrics[$group].maxima
+        $ratios = [ordered]@{}
+        foreach ($field in $limits[$group].Keys) {
+            if (-not $maxima.Contains($field)) {
+                throw "Missing maximum for scientific metric $group.$field."
+            }
+            [double]$observed = $maxima[$field]
+            [double]$upper = $limits[$group][$field]
+            if (-not [double]::IsFinite($observed) -or $observed -lt 0.0 -or
+                -not [double]::IsFinite($upper) -or $upper -le 0.0) {
+                throw "Invalid finite scientific limit check for $group.$field."
+            }
+            if ($observed -gt $upper) {
+                throw "Reported residual $group.$field = $observed exceeds the Rust-test threshold $upper."
+            }
+            $ratios[$field] = $observed / $upper
+        }
+        $results[$group] = [ordered]@{
+            source = $(if ($Suite -eq 'light_time_horizons') {
+                'crates/ephemeris-core/tests/light_time_horizons.rs'
+            } else {
+                'crates/ephemeris-core/tests/aberrated_real_de441.rs'
+            })
+            declared_strict_upper_limits = $limits[$group]
+            reported_maximum_fractions_of_limit = $ratios
+            printed_values_at_or_below_limit = $true
+            note = 'Secondary check on rounded logs only. The original Rust f64 strict inequalities decide PASS.'
+        }
+    }
+    return $results
+}
+
 function Invoke-CargoGate {
     param(
         [string]$Suite,
@@ -193,10 +265,12 @@ function Invoke-CargoGate {
     )
     $pass = Test-GatePass -Lines $lines -ExitCode $code -ExpectedTests $ExpectedTests
     $metrics = $null
+    $criteria = $null
     $metricError = $null
     if ($pass -and $Suite -in @('light_time_horizons', 'aberrated_real_de441')) {
         try {
             $metrics = Read-ScientificMetrics -Suite $Suite -Lines $lines
+            $criteria = Get-ReportedScientificLimits -Suite $Suite -Metrics $metrics
         }
         catch {
             $metricError = $_.Exception.Message
@@ -211,6 +285,7 @@ function Invoke-CargoGate {
         status = $(if ($pass) { 'PASS' } else { 'FAIL' })
         log = $logName
         metrics = $metrics
+        scientific_criteria = $criteria
         metric_parse_error = $metricError
     }
 }
@@ -368,6 +443,42 @@ function Invoke-PreflightSelfTest {
             }
         }
         Write-Host '[PASS] Numeric Horizons LT and aberrated-rate receipts require four finite body records each.'
+
+        # The original Rust test suites own all scientific tolerances.
+        # The receipt must *also* flag a printed residual exceeding one.
+        # All these lines are invented selftest data, NEVER real DE441.
+        $ltCriteria = Get-ReportedScientificLimits -Suite 'light_time_horizons' -Metrics $ltMetrics
+        $apparentCriteria = Get-ReportedScientificLimits -Suite 'aberrated_real_de441' -Metrics $apparentMetrics
+        if ($ltCriteria.horizons_lt_vectors.declared_strict_upper_limits.position_max_component_km -ne 0.01 -or
+            $ltCriteria.horizons_lt_vectors.declared_strict_upper_limits.lt_derivative_max_component_km_per_s -ne 3e-6 -or
+            $apparentCriteria.recovered_lt_vectors.declared_strict_upper_limits.light_time_error_seconds -ne 1e-6 -or
+            $apparentCriteria.full_pipeline_rate_consistency.declared_strict_upper_limits.angular_rate_error_arcsec_per_tdb_day -ne 0.72 -or
+            $apparentCriteria.full_pipeline_rate_consistency.declared_strict_upper_limits.radial_rate_error_au_per_tdb_day -ne 1e-7) {
+            throw 'Recorded thresholds differ from the referenced Rust test source.'
+        }
+        $aboveLimitFixtures = @(
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000005', '0.020000000') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000001 km/s', '0.000002000000 km/s') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000002 km/s', '0.000004000000 km/s') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000001 s', '0.000002000000 s') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000006 km', '0.020000000 km') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000007 km', '0.020000000 km') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000000003 s', '0.000002000000 s') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000008 arcseconds', '0.800000000 arcseconds') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('1.0000000000e-10 AU', '2.0000000000e-7 AU') }) }
+        )
+        foreach ($case in $aboveLimitFixtures) {
+            $rejected = $false
+            try {
+                $parsed = Read-ScientificMetrics -Suite $case.suite -Lines $case.lines
+                $null = Get-ReportedScientificLimits -Suite $case.suite -Metrics $parsed
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw "Above-limit fixture was accepted for suite $($case.suite)."
+            }
+        }
+        Write-Host '[PASS] All nine numeric scientific limit overflows fail closed with exact units.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
@@ -389,7 +500,7 @@ $reportDirectory = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $identifier
 New-Item -ItemType Directory -Path $reportDirectory -ErrorAction Stop | Out-Null
 
 $receipt = [ordered]@{
-    schema_version = 3
+    schema_version = 4
     status = 'NOT_RUN'
     run_timestamp_utc = $timestamp
     tool = 'VirgoStars-Ephemeris real classic-DE441 receipt v1'

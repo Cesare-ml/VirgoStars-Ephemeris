@@ -47,12 +47,12 @@ The script refuses to mark a gate as successful based solely on `cargo` exiting 
 
 Its report directory contains:
 
-- `receipt.json` — **schema 3**, UTC execution timestamp, **mandatory Git source commit and clean-worktree flag**, filename/size/streaming SHA-256, **optional supplied expected SHA-256 and match flag**, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
+- `receipt.json` — **schema 4**, UTC execution timestamp, **mandatory Git source commit and clean-worktree flag**, filename/size/streaming SHA-256, **optional supplied expected SHA-256 and match flag**, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
 - `light_time_horizons.log` — full stdout/stderr of the original independent-LT-reference suite.
 - `aberrated_real_de441.log` — full stdout/stderr of the new reconstructed-LT and derivative tests.
 - Each passing scientific suite now includes machine-readable **metrics** in `receipt.json`: a measurement row per target (`Moon`, `Venus`, `MarsBarycenter`, `JupiterBarycenter`) plus the per-field maximum. A `metric_parse_error` is recorded for malformed results. Missing, duplicated, negative, nonfinite or overflowed metric values make the scientific gate **FAIL** even if Cargo reports 2/2 test cases passed.
 
-**Schema-3 numeric measurements (parsed from existing test logs, no new astronomy code):**
+**Schema-4 numeric measurements (parsed from existing test logs, no new astronomy code):**
 
 | Suite / group | Recorded fields | Units and scientific meaning |
 | --- | --- | --- |
@@ -60,8 +60,25 @@ Its report directory contains:
 | `aberrated_real_de441` / `recovered_lt_vectors` | `recovered_lt_vector_max_component_km`, `lt_range_error_km`, `light_time_error_seconds` | LT geometry reconstructed by undoing **the same** Rust special-relativistic aberration; recovered position, distance and delay compared to independent Horizons LT |
 | `aberrated_real_de441` / `full_pipeline_rate_consistency` | `angular_rate_error_arcsec_per_tdb_day`, `radial_rate_error_au_per_tdb_day` | Full Rust correction pipeline rate versus finite differences, an **internal consistency** check, not independent apparent velocity parity |
 
-The values are parsed using invariant decimal/scientific notation and the four pinned body IDs, retaining the precision actually printed by the original Rust tests. **Only the Rust tests enforce the numerical acceptance thresholds**; the parser checks coverage, formatting and finite nonnegative residuals. The complete original log files remain authoritative for peer review. Do not mistake mocked selftest numeric examples for real DE441 evidence.
+The values are parsed using invariant decimal/scientific notation and the four pinned body IDs, retaining the precision actually printed by the original Rust tests. **The original Rust f64 assertions remain authoritative for scientific PASS/FAIL.** The receipt also checks that **printed rounded maxima are at or below** the corresponding thresholds copied from those exact Rust test files. An above-limit printed residual forces the gate to FAIL; it cannot override a Rust test failure or establish more accuracy than the source test. Equality at a printed boundary is allowed because the Rust source requires a strict less-than comparison at full precision, while its decimal log may round up to exactly the boundary. The complete original log files remain authoritative for peer review. Do not mistake mocked selftest numeric examples for real DE441 evidence.
 
+### Numeric acceptance contract in `scientific_criteria` (schema 4)
+
+Each successful real-file suite now includes a `scientific_criteria` map beside `metrics`, with the exact source-test path, `declared_strict_upper_limits`, `reported_maximum_fractions_of_limit`, `printed_values_at_or_below_limit` and a precision caveat. The limits are **copied from the already existing Rust assertions**, not independently calibrated tolerance choices:
+
+| Existing Rust test | Metric | Strict full-precision upper limit |
+| --- | --- | ---: |
+| `light_time_horizons.rs` | LT Cartesian XYZ max-component error | 0.01 km |
+| `light_time_horizons.rs` | Horizons LT instantaneous velocity max-component error | 0.000001 km/s |
+| `light_time_horizons.rs` | LT reception-derivative consistency error | 0.000003 km/s |
+| `light_time_horizons.rs` | One-way LT delay error | 0.000001 s |
+| `aberrated_real_de441.rs` | Recovered Horizons LT vector max-component error | 0.01 km |
+| `aberrated_real_de441.rs` | Recovered LT range error | 0.01 km |
+| `aberrated_real_de441.rs` | Recovered LT delay error | 0.000001 s |
+| `aberrated_real_de441.rs` | Full-pipeline angular-rate consistency | 0.72 arcsec/TDB day (equivalent to 0.0002 degrees/TDB day) |
+| `aberrated_real_de441.rs` | Full-pipeline radial-rate consistency | 0.0000001 AU/TDB day |
+
+The threshold-ratio map divides the **maximum of the four printed residuals** by the matching source limit. The log lines carry limited decimal precision, so these ratios are **descriptive**, not independent precision estimates. Rust's original strict comparison to its internal f64 output is always decisive. This check is a secondary guard against a malformed or misleading receipt and cannot make a previously failed Rust test pass. The selftest uses **nine independently corrupted numerical mock cases**, one for every metric, and verifies they are all rejected. The full tests still require a separately supplied authentic classic DE441 and independently recorded Horizons LT reference.
 Every failure produces **a nonzero exit code and `status=FAIL`** in the receipt; if validation stops before tests, it records `NOT_RUN` only until the first error and never writes a misleading `PASS`. Logs that are not executed are not invented. The runner restores any pre-existing process `DE441_PATH` variable on completion, and does not overwrite existing reports.
 
 **Important verification limitation:** the 1 GB size check and SHA256 fingerprint provide a minimum format guard and **identity** for a supplied binary, not proof the file truly originated from NASA/JPL. The optional `-ExpectedSha256` argument enforces an **exact 64-hex fingerprint match** before any scientific tests; without it `sha256_matched_expected=false` and the receipt makes no trusted-source hash claim. **The expected hash must be independently authenticated** against a trusted distributor: entering the runner's own freshly printed hash as the expectation provides no scientific provenance. Invalid or wrong expected hashes fail with a nonzero exit and a `FAIL` receipt. The runner also requires **Git installed, a resolvable 40-character commit SHA and no tracked or untracked changes**, to avoid recording an unrepeatable source version; choose an output directory **outside the Git checkout**, so the receipt itself does not dirty the worktree. Do not interpret a simulated/selftest pass as evidence of real-file scientific accuracy.
@@ -85,3 +102,5 @@ Required attribution for applicable users: **Powered by VirgoStars** — https:/
 This PR is draft above the independent real-kernel scientific gate [#122](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/122), itself stacked on #118/#114/#107/#77 with civil-time #96/#110 dependency review outstanding. It does not merge into `dev/ephemeris` or `main`, change production, add third-party file redistribution, or assert that the complete apparent-coordinate pipeline is validated.
 
 **Quantitative receipt CPAL-1.0 modification record (2026-11-12):** added numeric parsing and stricter fail-closed selftests to the original PowerShell validation runner, with versioned schema-3 JSON evidence and updated English docs. This increment does not alter ephemeris calculations, third-party data, the license or the existing CI permissions.
+
+**Scientific acceptance metadata CPAL-1.0 modification record (2026-11-12):** added source-derived threshold envelopes, printed-value fractions and nine adversarial numeric selftests to the PowerShell runner; updated this English documentation to schema 4 and explicit precision caveats. No astronomical algorithms, reference vectors, third-party data, licenses, permissions, deployments or protected branch integration changed.
