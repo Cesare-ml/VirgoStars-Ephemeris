@@ -61,12 +61,7 @@ fn fictional_de441() -> De441<Cursor<Vec<u8>>> {
     put_f64(&mut bytes, 2668, 32.0);
     put_f64(&mut bytes, 2688, 81.0);
     put_i32(&mut bytes, 2840, 441);
-    for (index, first, coeff) in [
-        (0usize, 3, 3),
-        (2, 12, 3),
-        (9, 21, 3),
-        (12, 373, 1),
-    ] {
+    for (index, first, coeff) in [(0usize, 3, 3), (2, 12, 3), (9, 21, 3), (12, 373, 1)] {
         let at = if index == 12 { 2844 } else { 2696 + index * 12 };
         put_i32(&mut bytes, at, first);
         put_i32(&mut bytes, at + 4, coeff);
@@ -225,11 +220,9 @@ fn invalid_civil_utc_and_missing_target_series_have_separate_error_provenance() 
     assert!(matches!(
         missing,
         Err(CivilAberratedError::Aberrated(
-            AberratedSphericalError::Aberration(
-                AberratedStateError::LightTime(LightTimeError::Ephemeris(
-                    De441Error::MissingSeries(_)
-                ))
-            )
+            AberratedSphericalError::Aberration(AberratedStateError::LightTime(
+                LightTimeError::Ephemeris(De441Error::MissingSeries(_))
+            ))
         ))
     ));
 
@@ -248,8 +241,7 @@ fn empty_batch_retains_tdb_epoch_and_rejects_nonfinite_tilt() {
     let mut eph = fictional_de441();
     let civil = timestamp("2026-11-10T12:30:00Z");
     let valid =
-        geocentric_aberrated_fixed_six_fields_many_from_civil(&mut eph, &[], civil, 0.0)
-            .unwrap();
+        geocentric_aberrated_fixed_six_fields_many_from_civil(&mut eph, &[], civil, 0.0).unwrap();
     assert!(valid.results.is_empty());
     assert_eq!(
         valid.reception_epoch,
@@ -257,12 +249,7 @@ fn empty_batch_retains_tdb_epoch_and_rejects_nonfinite_tilt() {
     );
 
     assert!(matches!(
-        geocentric_aberrated_fixed_six_fields_many_from_civil(
-            &mut eph,
-            &[],
-            civil,
-            f64::NAN
-        ),
+        geocentric_aberrated_fixed_six_fields_many_from_civil(&mut eph, &[], civil, f64::NAN),
         Err(CivilAberratedError::Aberrated(
             AberratedSphericalError::Projection(ProjectionError::NonFinite)
         ))
