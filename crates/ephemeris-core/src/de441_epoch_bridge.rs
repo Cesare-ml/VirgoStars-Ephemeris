@@ -154,8 +154,8 @@ mod tests {
             checked_de441_epoch(split, 0.000_001),
             Err(EpochBridgeError::PrecisionLoss {
                 error_seconds,
-                max_error_seconds: 0.000_001
-            }) if error_seconds > 0.000_001
+                max_error_seconds
+            }) if error_seconds > 0.000_001 && max_error_seconds == 0.000_001
         ));
     }
 
