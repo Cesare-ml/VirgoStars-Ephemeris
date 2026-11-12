@@ -28,6 +28,7 @@ pub mod chebyshev;
 pub mod chebyshev_longitude_bounds;
 pub mod coordinates;
 pub mod de441;
+pub mod de441_granule_plan;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
