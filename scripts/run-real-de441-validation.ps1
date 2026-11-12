@@ -90,6 +90,89 @@ function Assert-ExpectedKernelHash {
     return $true
 }
 
+# Parse only the four explicitly referenced body names, without deriving
+# science from a log with missing, duplicated or nonfinite measurements.
+function Read-ResidualGroup {
+    param([string]$Text, [string]$Pattern, [string[]]$Fields)
+    [string[]]$expected = @('Moon', 'Venus', 'MarsBarycenter', 'JupiterBarycenter')
+    $records = [regex]::Matches($Text, $Pattern)
+    if ($records.Count -ne $expected.Count) {
+        throw "Expected four numeric reference rows but found $($records.Count)."
+    }
+    $seen = @{}
+    $rows = @()
+    foreach ($match in $records) {
+        $body = $match.Groups['target'].Value
+        if ($seen.ContainsKey($body)) { throw "Repeated numeric row for $body." }
+        $seen[$body] = $true
+        $row = [ordered]@{ target = $body }
+        foreach ($field in $Fields) {
+            [double]$value = [double]::Parse(
+                $match.Groups[$field].Value,
+                [Globalization.NumberStyles]::Float,
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+            if (-not [double]::IsFinite($value) -or $value -lt 0.0) {
+                throw "Invalid numeric residual: $body / $field."
+            }
+            $row[$field] = $value
+        }
+        $rows += [pscustomobject]$row
+    }
+    foreach ($body in $expected) {
+        if (-not $seen.ContainsKey($body)) { throw "Missing $body numeric reference." }
+    }
+    $maximum = [ordered]@{}
+    foreach ($field in $Fields) {
+        [double]$highest = 0.0
+        foreach ($row in $rows) {
+            $highest = [math]::Max($highest, [double]$row.$field)
+        }
+        $maximum[$field] = $highest
+    }
+    return [pscustomobject]@{ measurements = $rows; maxima = $maximum }
+}
+
+function Read-ScientificMetrics {
+    param([string]$Suite, [string[]]$Lines)
+    $text = $Lines -join [Environment]::NewLine
+    $n = '[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'
+    $prefix = '(?m)^(?<target>Moon|Venus|MarsBarycenter|JupiterBarycenter):[ \t]*'
+    if ($Suite -eq 'light_time_horizons') {
+        $pattern = $prefix +
+            'position[ \t]+(?<position_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'Horizons velocity[ \t]+(?<horizons_velocity_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
+            'finite-difference derivative[ \t]+(?<lt_derivative_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
+            'delay[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*\r?$'
+        return [ordered]@{
+            horizons_lt_vectors = Read-ResidualGroup -Text $text -Pattern $pattern -Fields @(
+                'position_max_component_km',
+                'horizons_velocity_max_component_km_per_s',
+                'lt_derivative_max_component_km_per_s',
+                'light_time_error_seconds'
+            )
+        }
+    }
+    if ($Suite -eq 'aberrated_real_de441') {
+        $vectorPattern = $prefix +
+            'recovered Horizons LT vector error[ \t]+(?<recovered_lt_vector_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'LT range error[ \t]+(?<lt_range_error_km>' + $n + ')[ \t]+km,[ \t]+' +
+            'delay error[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*\r?$'
+        $ratePattern = $prefix +
+            'max angular rate residual = [ \t]*(?<angular_rate_error_arcsec_per_tdb_day>' + $n + ')[ \t]+arcseconds/TDB-day;[ \t]+' +
+            'radial rate residual = [ \t]*(?<radial_rate_error_au_per_tdb_day>' + $n + ')[ \t]+AU/TDB-day[ \t]*\r?$'
+        return [ordered]@{
+            recovered_lt_vectors = Read-ResidualGroup -Text $text -Pattern $vectorPattern -Fields @(
+                'recovered_lt_vector_max_component_km', 'lt_range_error_km', 'light_time_error_seconds'
+            )
+            full_pipeline_rate_consistency = Read-ResidualGroup -Text $text -Pattern $ratePattern -Fields @(
+                'angular_rate_error_arcsec_per_tdb_day', 'radial_rate_error_au_per_tdb_day'
+            )
+        }
+    }
+    throw "No metrics contract defined for suite '$Suite'."
+}
+
 function Invoke-CargoGate {
     param(
         [string]$Suite,
@@ -109,6 +192,17 @@ function Invoke-CargoGate {
         [Text.UTF8Encoding]::new($false)
     )
     $pass = Test-GatePass -Lines $lines -ExitCode $code -ExpectedTests $ExpectedTests
+    $metrics = $null
+    $metricError = $null
+    if ($pass -and $Suite -in @('light_time_horizons', 'aberrated_real_de441')) {
+        try {
+            $metrics = Read-ScientificMetrics -Suite $Suite -Lines $lines
+        }
+        catch {
+            $metricError = $_.Exception.Message
+            $pass = $false
+        }
+    }
     return [pscustomobject]@{
         suite = $Suite
         command = ('cargo ' + ($cargoArguments -join ' '))
@@ -116,6 +210,8 @@ function Invoke-CargoGate {
         exit_code = $code
         status = $(if ($pass) { 'PASS' } else { 'FAIL' })
         log = $logName
+        metrics = $metrics
+        metric_parse_error = $metricError
     }
 }
 
@@ -218,6 +314,60 @@ function Invoke-PreflightSelfTest {
             if (-not $rejected) { throw 'Malformed or mismatched SHA-256 was accepted.' }
         }
         Write-Host '[PASS] Expected SHA-256 gate rejects mismatch/malformed and records no expectation.'
+        # These are invented METRIC LOG LINES, not real observations.
+        # Validate parsing and fail-closed behavior on partial duplicates.
+        $metricBodies = @('Moon', 'Venus', 'MarsBarycenter', 'JupiterBarycenter')
+        [string[]]$ltLines = @($metricBodies | ForEach-Object {
+            "$($_): position 0.000000005 km, Horizons velocity 0.000000000001 km/s, finite-difference derivative 0.000000000002 km/s, delay 0.000000000001 s"
+        })
+        [string[]]$apparentLines = @($metricBodies | ForEach-Object {
+            "$($_): recovered Horizons LT vector error 0.000000006 km,              LT range error 0.000000007 km, delay error 0.000000000003 s"
+            "$($_): max angular rate residual = 0.000000008 arcseconds/TDB-day;              radial rate residual = 1.0000000000e-10 AU/TDB-day"
+        })
+        $ltMetrics = Read-ScientificMetrics -Suite 'light_time_horizons' -Lines $ltLines
+        $apparentMetrics = Read-ScientificMetrics -Suite 'aberrated_real_de441' -Lines $apparentLines
+        if ($ltMetrics.horizons_lt_vectors.measurements.Count -ne 4 -or
+            $apparentMetrics.recovered_lt_vectors.measurements.Count -ne 4 -or
+            $apparentMetrics.full_pipeline_rate_consistency.measurements.Count -ne 4) {
+            throw 'Expected all four reference bodies in all three numeric groups.'
+        }
+        if ($ltMetrics.horizons_lt_vectors.maxima.position_max_component_km -ne 0.000000005 -or
+            $apparentMetrics.recovered_lt_vectors.maxima.lt_range_error_km -ne 0.000000007 -or
+            $apparentMetrics.full_pipeline_rate_consistency.maxima.radial_rate_error_au_per_tdb_day -ne 1e-10) {
+            throw 'The metric maxima or scientific unit fields were parsed incorrectly.'
+        }
+        foreach ($corrupt in @(
+            $ltLines[0..2],
+            ($ltLines[0..2] + $ltLines[0]),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', 'NaN') }),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', '-0.000000005') }),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', '1e999') })
+        )) {
+            $rejected = $false
+            try {
+                $null = Read-ScientificMetrics -Suite 'light_time_horizons' -Lines $corrupt
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw 'Incomplete, duplicated, NaN, negative or overflowed metrics were accepted.'
+            }
+        }
+        foreach ($corrupt in @(
+            $apparentLines[0..6],
+            @($apparentLines | ForEach-Object {
+                $_.Replace('1.0000000000e-10', 'NaN')
+            })
+        )) {
+            $rejected = $false
+            try {
+                $null = Read-ScientificMetrics -Suite 'aberrated_real_de441' -Lines $corrupt
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw 'Missing or malformed apparent/rate metric group was accepted.'
+            }
+        }
+        Write-Host '[PASS] Numeric Horizons LT and aberrated-rate receipts require four finite body records each.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
@@ -239,7 +389,7 @@ $reportDirectory = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $identifier
 New-Item -ItemType Directory -Path $reportDirectory -ErrorAction Stop | Out-Null
 
 $receipt = [ordered]@{
-    schema_version = 2
+    schema_version = 3
     status = 'NOT_RUN'
     run_timestamp_utc = $timestamp
     tool = 'VirgoStars-Ephemeris real classic-DE441 receipt v1'
