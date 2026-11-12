@@ -135,7 +135,7 @@ pub fn itrs_to_tirs_position(
         return Err(PolarMotionError::NonFinitePosition);
     }
     let w = itrs_to_tirs_polar_motion_matrix(xp_rad, yp_rad, sp_rad)?;
-    let transformed = w.map(|row| row.iter().zip(position_itrs_km).map(|(m, v)| m * v).sum());
+    let transformed: [f64; 3] = w.map(|row| row.iter().zip(position_itrs_km).map(|(m, v)| m * v).sum());
     if transformed.iter().any(|v| !v.is_finite()) {
         return Err(PolarMotionError::NonFiniteResult);
     }
@@ -155,7 +155,7 @@ pub fn tirs_to_itrs_position(
         return Err(PolarMotionError::NonFinitePosition);
     }
     let w = itrs_to_tirs_polar_motion_matrix(xp_rad, yp_rad, sp_rad)?;
-    let transformed = std::array::from_fn(|j| (0..3).map(|i| w[i][j] * position_tirs_km[i]).sum());
+    let transformed: [f64; 3] = std::array::from_fn(|j| (0..3).map(|i| w[i][j] * position_tirs_km[i]).sum());
     if transformed.iter().any(|v| !v.is_finite()) {
         return Err(PolarMotionError::NonFiniteResult);
     }
