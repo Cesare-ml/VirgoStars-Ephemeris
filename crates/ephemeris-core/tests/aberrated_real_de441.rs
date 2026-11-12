@@ -20,8 +20,6 @@
 //! independent LT vectors. This cannot certify independent LT+S parity.
 //! File and astronomical source data are NOT redistributed.
 
-use std::f64::consts::PI;
-
 use virgostars_ephemeris_core::aberrated_spherical::{
     geocentric_aberrated_fixed_six_fields_many, geocentric_aberrated_fixed_spherical,
 };
@@ -197,7 +195,7 @@ fn real_de441_aberrated_batch_rates_follow_neighboring_full_pipeline_states() {
             "{:?}: real-kernel radial speed mismatch",
             targets[i]
         );
-        assert!(at.longitude_deg >= 0.0 && at.longitude_deg < 2.0 * PI * 180.0 / PI);
+        assert!(at.longitude_deg >= 0.0 && at.longitude_deg < 360.0);
         assert!(at.distance_au > 0.0);
     }
 }
