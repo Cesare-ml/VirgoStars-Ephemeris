@@ -15,8 +15,9 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
-//! validated real-world astronomical positions are provided at this stage.
+//! Only experimental SPK segment indexing and primitive type-2/3 J2000 evaluation
+//! are available; frame/center-chain resolution, independently validated SPK states,
+//! and stable production-grade astronomy are not provided at this stage.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
@@ -30,6 +31,7 @@ pub mod de441;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod spk_direct_state;
 pub mod spk_index;
 pub mod state;
 pub mod time;
