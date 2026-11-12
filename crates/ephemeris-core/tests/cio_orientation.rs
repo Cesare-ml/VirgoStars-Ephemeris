@@ -20,8 +20,7 @@
 use std::f64::consts::{FRAC_PI_2, PI};
 
 use virgostars_ephemeris_core::cio_orientation::{
-    cirs_to_gcrs_position, gcrs_to_cirs_cio_matrix, gcrs_to_cirs_position,
-    CioOrientationError,
+    cirs_to_gcrs_position, gcrs_to_cirs_cio_matrix, gcrs_to_cirs_position, CioOrientationError,
 };
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
@@ -82,8 +81,16 @@ fn cip_unit_vector_maps_exactly_to_intermediate_positive_pole() {
     ] {
         let z = (1.0_f64 - x * x - y * y).sqrt();
         let cip = [x, y, z];
-        near_vector(gcrs_to_cirs_position(cip, x, y, s).unwrap(), [0.0, 0.0, 1.0], 4.0e-15);
-        near_vector(cirs_to_gcrs_position([0.0, 0.0, 1.0], x, y, s).unwrap(), cip, 4.0e-15);
+        near_vector(
+            gcrs_to_cirs_position(cip, x, y, s).unwrap(),
+            [0.0, 0.0, 1.0],
+            4.0e-15,
+        );
+        near_vector(
+            cirs_to_gcrs_position([0.0, 0.0, 1.0], x, y, s).unwrap(),
+            cip,
+            4.0e-15,
+        );
     }
 }
 
@@ -170,7 +177,13 @@ fn invalid_cip_locator_and_positions_are_strictly_rejected() {
         gcrs_to_cirs_cio_matrix(0.8, 0.8, 0.0),
         Err(CioOrientationError::InvalidCipCoordinates)
     );
-    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, PI + 0.01, -PI - 0.01] {
+    for invalid in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        PI + 0.01,
+        -PI - 0.01,
+    ] {
         assert_eq!(
             gcrs_to_cirs_cio_matrix(0.0, 0.0, invalid),
             Err(CioOrientationError::InvalidCioLocator)
