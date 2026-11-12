@@ -127,11 +127,7 @@ fn moving_radial_target_matches_independent_closed_form_reception_solution() {
         expected_range / SPEED_OF_LIGHT_KM_PER_SECOND,
         5.0e-5,
     );
-    near(
-        result.light_time_rate,
-        speed / (c_day + speed),
-        1.0e-12,
-    );
+    near(result.light_time_rate, speed / (c_day + speed), 1.0e-12);
     near(result.longitude_deg, 0.0, 1.0e-12);
     near(result.latitude_deg, 0.0, 1.0e-12);
     near(result.longitude_speed_deg_per_tdb_day, 0.0, 1.0e-12);
@@ -195,7 +191,11 @@ fn retrograde_direction_and_system_barycenter_names_are_not_lost() {
     near(mars.distance_speed_au_per_tdb_day, 0.0, 1.0e-12);
     assert!(mars.distance_au > 1.0);
     assert!(mars.light_time_seconds > 0.0);
-    near(mars.distance_au * ASTRONOMICAL_UNIT_KM, 180_000_000.0, 1.0e-3);
+    near(
+        mars.distance_au * ASTRONOMICAL_UNIT_KM,
+        180_000_000.0,
+        1.0e-3,
+    );
 }
 
 #[test]
@@ -203,9 +203,9 @@ fn reception_time_inside_kernel_does_not_hide_missing_emission_coverage() {
     let mut eph = De441::new(Cursor::new(synthetic_kernel([0.0; 3]))).unwrap();
     assert!(matches!(
         six_at(&mut eph, JD_START, Body::Mercury),
-        Err(GeocentricFieldsError::LightTime(
-            LightTimeError::Ephemeris(De441Error::OutsideCoverage { .. })
-        ))
+        Err(GeocentricFieldsError::LightTime(LightTimeError::Ephemeris(
+            De441Error::OutsideCoverage { .. }
+        )))
     ));
     let valid = six_at(&mut eph, JD_END, Body::Mercury).unwrap();
     assert_eq!(valid.target, Body::Mercury);
