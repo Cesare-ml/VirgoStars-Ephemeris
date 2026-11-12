@@ -70,7 +70,10 @@ impl fmt::Display for TioLocatorError {
             }
             Self::InvalidEpoch => write!(f, "unrepresentable split-Julian-date epoch"),
             Self::BeyondApproximationRange => {
-                write!(f, "TIO s-prime secular model is limited to ±2 TT Julian centuries")
+                write!(
+                    f,
+                    "TIO s-prime secular model is limited to ±2 TT Julian centuries"
+                )
             }
             Self::NonFiniteResult => write!(f, "non-finite TIO locator approximation"),
         }
@@ -127,8 +130,7 @@ pub fn approximate_tio_locator_sp00(
     // JulianDate day_number is the integral noon JD number, while
     // midnight_fraction counts forward from the preceding midnight:
     // conventional JD = day_number - 0.5 + midnight_fraction.
-    let days_since_j2000 =
-        whole_days as f64 + (tt_epoch.midnight_fraction() - 0.5);
+    let days_since_j2000 = whole_days as f64 + (tt_epoch.midnight_fraction() - 0.5);
     let centuries_since_j2000 = days_since_j2000 / JULIAN_DAYS_PER_CENTURY;
     if !centuries_since_j2000.is_finite() {
         return Err(TioLocatorError::NonFiniteResult);
@@ -137,8 +139,7 @@ pub fn approximate_tio_locator_sp00(
         return Err(TioLocatorError::BeyondApproximationRange);
     }
 
-    let radians_per_century =
-        SECULAR_MICROARCSECONDS_PER_CENTURY * 1e-6 * RADIANS_PER_ARCSECOND;
+    let radians_per_century = SECULAR_MICROARCSECONDS_PER_CENTURY * 1e-6 * RADIANS_PER_ARCSECOND;
     let sp_rad = radians_per_century * centuries_since_j2000;
     let secular_rate_rad_per_tt_day = radians_per_century / JULIAN_DAYS_PER_CENTURY;
     if !sp_rad.is_finite() || !secular_rate_rad_per_tt_day.is_finite() {
