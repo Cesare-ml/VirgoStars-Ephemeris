@@ -287,7 +287,8 @@ mod tests {
         format!("{HEADER}\n{line}\n")
     }
     fn zero() -> Thresholds {
-        Thresholds::parse(&["0".to_string(); 6]).unwrap()
+        let args: [String; 6] = std::array::from_fn(|_| "0".to_string());
+        Thresholds::parse(&args).unwrap()
     }
 
     #[test]
@@ -368,7 +369,7 @@ mod tests {
     fn tolerance_values_must_be_finite_and_nonnegative() {
         assert!(Thresholds::parse(&["0".to_string(); 5]).is_err());
         for value in ["NaN", "inf", "-0.001", "not-a-number"] {
-            let mut args = ["0".to_string(); 6];
+            let mut args: [String; 6] = std::array::from_fn(|_| "0".to_string());
             args[3] = value.to_string();
             assert!(Thresholds::parse(&args).is_err());
         }
