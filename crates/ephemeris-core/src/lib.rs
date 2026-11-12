@@ -30,6 +30,7 @@ pub mod aberration;
 pub mod aberration_state;
 pub mod calendar;
 pub mod chebyshev;
+pub mod civil_aberrated;
 pub mod coordinates;
 pub mod de441;
 pub mod error;
