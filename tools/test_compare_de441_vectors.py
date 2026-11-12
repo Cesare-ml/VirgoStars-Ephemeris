@@ -99,6 +99,25 @@ class VectorComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing required columns"):
             comparator.read_state(self.ours)
 
+    def test_duplicate_and_extra_csv_headers_rejected(self):
+        for header in (
+            (*HEADER, "x_km"),
+            (*HEADER, "unexpected"),
+            tuple(name for name in HEADER if name != "x_km"),
+        ):
+            with self.subTest(header=header):
+                with self.ours.open("w", newline="", encoding="utf-8") as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(header)
+                    writer.writerow([BASE.get(name, "0") for name in header])
+                with self.assertRaisesRegex(ValueError, "CSV header"):
+                    comparator.read_state(self.ours)
+
+    def test_headerless_csv_rejected(self):
+        self.ours.write_text("", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "missing CSV header"):
+            comparator.read_state(self.ours)
+
     def test_multiple_or_zero_rows_rejected(self):
         for rows in ([], [BASE, BASE]):
             self.write(self.ours, rows)
