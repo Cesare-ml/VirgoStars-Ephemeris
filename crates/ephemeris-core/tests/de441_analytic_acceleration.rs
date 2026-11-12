@@ -586,3 +586,106 @@ fn empty_aberrated_batch_validates_epoch_and_tilt_without_reading_series() {
         ))
     ));
 }
+
+
+#[test]
+fn cached_earth_batch_is_exactly_equivalent_to_scalar_across_records_and_tilts() {
+    // Quadratic Earth acceleration is different in the two records.
+    // At JD 1032 the target emission is in the previous record while
+    // the observer reception is in the next one. The final JD 1064 is
+    // valid for analytic Earth acceleration without a future sample.
+    for reception in [1_016.0, 1_024.75, 1_032.0, 1_048.0, 1_064.0] {
+        for tilt in [0.0, std::f64::consts::FRAC_PI_6] {
+            let epoch = JulianDateTdb(reception);
+            let targets = [Body::Moon, Body::Mercury, Body::Moon];
+            let mut batch_reader = eph();
+            let batch = geocentric_aberrated_fixed_six_fields_many(
+                &mut batch_reader,
+                &targets,
+                epoch,
+                tilt,
+            )
+            .unwrap();
+
+            // Use a *fresh* reader for each scalar call so these are not
+            // incidental matches from the same cached interpolation state.
+            assert_eq!(batch.len(), targets.len());
+            assert_eq!(batch[0], batch[2]);
+            for (actual, body) in batch.iter().zip(targets) {
+                let mut single_reader = eph();
+                let single = geocentric_aberrated_fixed_six_fields(
+                    &mut single_reader,
+                    body,
+                    epoch,
+                    tilt,
+                )
+                .unwrap();
+                assert_eq!(*actual, single);
+                assert_eq!(
+                    actual.observer_acceleration_source,
+                    ObserverAccelerationSource::AnalyticDe441Chebyshev
+                );
+                assert_eq!(actual.fields.center, Body::Earth);
+                assert_eq!(actual.fields.epoch, epoch);
+                assert_eq!(actual.fields.fixed_tilt_rad, tilt);
+                assert!(actual.emission_epoch.0 < epoch.0);
+            }
+        }
+    }
+}
+
+#[test]
+fn shared_earth_batch_preserves_missing_series_and_coverage_errors() {
+    let mut reader = eph();
+    let epoch = JulianDateTdb(1_016.0);
+
+    // The Earth state succeeds, Mercury succeeds, and then Sun fails:
+    // a batch must still fail atomically with its original nested error.
+    let error = geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[Body::Mercury, Body::Sun, Body::Moon],
+        epoch,
+        0.0,
+    );
+    assert!(matches!(
+        error,
+        Err(AberratedSphericalError::Aberration(
+            virgostars_ephemeris_core::aberration_state::AberratedStateError::LightTime(
+                virgostars_ephemeris_core::light_time::LightTimeError::Ephemeris(
+                    De441Error::MissingSeries(_)
+                )
+            )
+        ))
+    ));
+    assert!(geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[Body::Moon, Body::Mercury],
+        epoch,
+        0.0
+    )
+    .is_ok());
+
+    // A nonempty request checks actual Earth reception-epoch coverage.
+    // An empty batch intentionally does not claim any body coverage.
+    assert!(matches!(
+        geocentric_aberrated_fixed_six_fields_many(
+            &mut reader,
+            &[Body::Mercury],
+            JulianDateTdb(1_065.0),
+            0.0
+        ),
+        Err(AberratedSphericalError::Aberration(
+            virgostars_ephemeris_core::aberration_state::AberratedStateError::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            )
+        ))
+    ));
+    assert!(geocentric_aberrated_fixed_six_fields_many(
+        &mut reader,
+        &[],
+        JulianDateTdb(1_065.0),
+        0.0
+    )
+    .unwrap()
+    .is_empty());
+}
