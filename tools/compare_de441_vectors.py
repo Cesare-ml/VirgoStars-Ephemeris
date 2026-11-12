@@ -5,7 +5,7 @@ import csv
 import math
 from pathlib import Path
 
-FIELDS = ("x_km", "y_km", "z_km", "vx_km_per_day", "vy_km_per_day", "vz_km_per_day")
+FIELDS = ("x_km", "y_km", "z_km", "vx_km_day", "vy_km_day", "vz_km_day")
 META = ("jd_tdb", "target", "center", "frame", "corrections")
 
 
