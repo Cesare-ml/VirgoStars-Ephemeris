@@ -19,9 +19,7 @@
 //! These tests do NOT validate live EOP sourcing or physical epochs.
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
-use virgostars_ephemeris_core::polar_motion::{
-    itrs_to_tirs_polar_motion_matrix, PolarMotionError,
-};
+use virgostars_ephemeris_core::polar_motion::{itrs_to_tirs_polar_motion_matrix, PolarMotionError};
 use virgostars_ephemeris_core::tio_locator::{approximate_tio_locator_sp00, TioLocatorError};
 use virgostars_ephemeris_core::tio_polar_motion::{
     itrs_to_tirs_polar_motion_with_approximate_sp00, ApproximateTioPolarMotionError,
@@ -52,7 +50,11 @@ fn published_erfa_sp00_and_pom00_fixtures_match_in_one_real_composition() {
     // so published rpom MUST be transposed.
     let output =
         itrs_to_tirs_polar_motion_with_approximate_sp00(tt(2_453_737, 0.0), XP, YP).unwrap();
-    near(output.locator.sp_rad, -0.136_717_458_072_889_15e-10, 1.0e-22);
+    near(
+        output.locator.sp_rad,
+        -0.136_717_458_072_889_15e-10,
+        1.0e-22,
+    );
     let rpom = [
         [
             0.999_999_999_999_967_5,
@@ -81,8 +83,7 @@ fn published_erfa_sp00_and_pom00_fixtures_match_in_one_real_composition() {
 fn another_independent_erfa_sp00_epoch_preserves_matrix_signs() {
     // ERFA t_sp00: TT=2400000.5+52541 = JD2452541.5.
     let result =
-        itrs_to_tirs_polar_motion_with_approximate_sp00(tt(2_452_542, 0.0), 0.0, 0.0)
-            .unwrap();
+        itrs_to_tirs_polar_motion_with_approximate_sp00(tt(2_452_542, 0.0), 0.0, 0.0).unwrap();
     near(result.locator.sp_rad, -0.621_669_846_998_101_9e-11, 1.0e-21);
     let s = result.locator.sp_rad;
     near(result.itrs_to_tirs[0][0], s.cos(), 2.0e-16);
@@ -95,8 +96,7 @@ fn another_independent_erfa_sp00_epoch_preserves_matrix_signs() {
 fn j2000_synthetic_zero_poles_have_identity_without_hidden_models() {
     // Only these explicitly supplied *synthetic* xp/yp values are zero.
     let output =
-        itrs_to_tirs_polar_motion_with_approximate_sp00(tt(2_451_545, 0.5), 0.0, 0.0)
-            .unwrap();
+        itrs_to_tirs_polar_motion_with_approximate_sp00(tt(2_451_545, 0.5), 0.0, 0.0).unwrap();
     assert_eq!(output.locator.sp_rad, 0.0);
     assert_eq!(
         output.itrs_to_tirs,
@@ -113,11 +113,9 @@ fn opt_in_wrapper_matches_two_separately_implemented_modules() {
         tt(2_451_545 + 36_525, 0.123_456),
     ] {
         for (xp, yp) in [(0.0, 0.0), (XP, YP), (-0.005, 0.002)] {
-            let output =
-                itrs_to_tirs_polar_motion_with_approximate_sp00(epoch, xp, yp).unwrap();
+            let output = itrs_to_tirs_polar_motion_with_approximate_sp00(epoch, xp, yp).unwrap();
             let from_tt = approximate_tio_locator_sp00(epoch).unwrap();
-            let from_poles =
-                itrs_to_tirs_polar_motion_matrix(xp, yp, from_tt.sp_rad).unwrap();
+            let from_poles = itrs_to_tirs_polar_motion_matrix(xp, yp, from_tt.sp_rad).unwrap();
             assert_eq!(output.locator, from_tt);
             assert_eq!(output.itrs_to_tirs, from_poles);
         }
@@ -178,18 +176,19 @@ fn composed_polar_matrix_preserves_position_norm_and_inverse_transpose() {
     let w = output.itrs_to_tirs;
     for input in [
         [6_378.137, -500.0, 2_000.0],
-        [-5_599.000_557_704_994, 233.011_672_234_792, -3_040.909_470_698],
+        [
+            -5_599.000_557_704_994,
+            233.011_672_234_792,
+            -3_040.909_470_698,
+        ],
     ] {
-        let rotated: [f64; 3] =
-            w.map(|row| row.iter().zip(input).map(|(x, y)| x * y).sum());
+        let rotated: [f64; 3] = w.map(|row| row.iter().zip(input).map(|(x, y)| x * y).sum());
         let recovered: [f64; 3] =
             std::array::from_fn(|j| (0..3).map(|i| w[i][j] * rotated[i]).sum());
         for (value, expected) in recovered.into_iter().zip(input) {
             near(value, expected, 5.0e-12);
         }
-        let norm = |position: [f64; 3]| {
-            position.into_iter().map(|x| x * x).sum::<f64>().sqrt()
-        };
+        let norm = |position: [f64; 3]| position.into_iter().map(|x| x * x).sum::<f64>().sqrt();
         near(norm(rotated), norm(input), 5.0e-12);
     }
 }
