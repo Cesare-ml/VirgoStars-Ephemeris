@@ -31,8 +31,8 @@ use std::fmt;
 
 use crate::calendar::{JulianDate, TimeScale};
 use crate::eop_observer_gcrs::{
-    wgs84_gcrs_from_eop_utc_and_cip_cio, EopWgs84GcrsError,
-    EopWgs84GcrsObserver, ExternalCipCioAtTt,
+    wgs84_gcrs_from_eop_utc_and_cip_cio, EopWgs84GcrsError, EopWgs84GcrsObserver,
+    ExternalCipCioAtTt,
 };
 use crate::eop_polar_csv::{
     CelestrakEopPolarCatalog, EopCsvError, EopPolarQuality, EopPredictionPolicy,
@@ -97,9 +97,13 @@ impl fmt::Display for EopCipCioError {
             Self::ModelEpochRequiresTt(scale) => {
                 write!(f, "CIP/CIO source must be TT, got {scale:?}")
             }
-            Self::ModelEpochMismatch => write!(f, "CIP/CIO model TT epoch differs from EOP-derived TT"),
+            Self::ModelEpochMismatch => {
+                write!(f, "CIP/CIO model TT epoch differs from EOP-derived TT")
+            }
             Self::InvalidModeledCoordinates => write!(f, "invalid external model X, Y or s+XY/2"),
-            Self::InvalidCorrectedCoordinates => write!(f, "invalid EOP-corrected CIP/CIO quantities"),
+            Self::InvalidCorrectedCoordinates => {
+                write!(f, "invalid EOP-corrected CIP/CIO quantities")
+            }
             Self::Eop(error) => write!(f, "EOP UTC/UT1/TT: {error}"),
             Self::Offsets(error) => write!(f, "EOP celestial pole offsets: {error}"),
             Self::Observer(error) => write!(f, "EOP-adjusted WGS84 GCRS observer: {error}"),
@@ -149,7 +153,9 @@ pub fn wgs84_gcrs_with_eop_corrected_iau_cip(
         return Err(EopCipCioError::MissingModelSource);
     }
     if modeled.tt_epoch.scale() != TimeScale::Tt {
-        return Err(EopCipCioError::ModelEpochRequiresTt(modeled.tt_epoch.scale()));
+        return Err(EopCipCioError::ModelEpochRequiresTt(
+            modeled.tt_epoch.scale(),
+        ));
     }
     if !modeled.model_x.is_finite()
         || !modeled.model_y.is_finite()
@@ -158,10 +164,8 @@ pub fn wgs84_gcrs_with_eop_corrected_iau_cip(
     {
         return Err(EopCipCioError::InvalidModeledCoordinates);
     }
-    let eop = eop_ut1_era_from_utc_si_seconds(
-        catalog, utc_mjd, elapsed_utc_si_seconds, policy,
-    )
-    .map_err(EopCipCioError::Eop)?;
+    let eop = eop_ut1_era_from_utc_si_seconds(catalog, utc_mjd, elapsed_utc_si_seconds, policy)
+        .map_err(EopCipCioError::Eop)?;
     if modeled.tt_epoch != eop.tt_epoch {
         return Err(EopCipCioError::ModelEpochMismatch);
     }
@@ -171,8 +175,7 @@ pub fn wgs84_gcrs_with_eop_corrected_iau_cip(
         .map_err(EopCipCioError::Offsets)?;
     let corrected_x = modeled.model_x + poles.cip_dx_rad;
     let corrected_y = modeled.model_y + poles.cip_dy_rad;
-    let corrected_cio_s_rad =
-        modeled.cio_s_plus_xy_half_rad - corrected_x * corrected_y / 2.0;
+    let corrected_cio_s_rad = modeled.cio_s_plus_xy_half_rad - corrected_x * corrected_y / 2.0;
     if !corrected_x.is_finite()
         || !corrected_y.is_finite()
         || !corrected_cio_s_rad.is_finite()
