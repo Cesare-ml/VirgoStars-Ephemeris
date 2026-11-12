@@ -66,6 +66,7 @@ fn parse_body(input: &str) -> Result<Body, io::Error> {
     }
 }
 
+#[derive(Debug)]
 enum EpochInput {
     Civil(CivilTimestamp),
     Tdb(JulianDateTdb),
