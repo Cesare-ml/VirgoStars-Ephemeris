@@ -659,10 +659,7 @@ mod tests {
 
         // The same local dates can be outside coverage after applying
         // the offset; the limit is inclusive through the final UTC day.
-        for timestamp in [
-            "1972-01-01T00:00:00+01:00",
-            "2027-06-27T10:00:00-14:00",
-        ] {
+        for timestamp in ["1972-01-01T00:00:00+01:00", "2027-06-27T10:00:00-14:00"] {
             assert!(
                 matches!(
                     epochs(CivilTimestamp::parse(timestamp).unwrap()),
