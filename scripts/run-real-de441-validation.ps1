@@ -80,7 +80,7 @@ function Invoke-CargoGate {
         'test', '--workspace', '--locked',
         '--test', $Suite, '--', '--ignored', '--nocapture'
     )
-    [string[]]$lines = @(& cargo @args 2>&1 | ForEach-Object { "$_" })
+    [string[]]$lines = @(& cargo @cargoArguments 2>&1 | ForEach-Object { "$_" })
     [int]$code = $LASTEXITCODE
     $logName = ($Suite + '.log')
     [IO.File]::WriteAllLines(
@@ -141,6 +141,44 @@ function Invoke-PreflightSelfTest {
         if (Test-GatePass -Lines $valid -ExitCode 101 -ExpectedTests $tests) {
             throw 'Receipt parser ignored a nonzero Cargo exit code.'
         }
+        # Actually invoke the same Cargo wrapper with a deliberately fake
+        # native cargo.cmd. The Windows-only fake verifies every argument,
+        # including --ignored, before emitting two simulated PASS lines.
+        # This catches a missing / wrong splatted argument variable.
+        $mockCargo = Join-Path $temp 'cargo.cmd'
+        [string[]]$mockLines = @(
+            '@echo off',
+            'if not "%1"=="test" exit /b 91',
+            'if not "%2"=="--workspace" exit /b 92',
+            'if not "%3"=="--locked" exit /b 93',
+            'if not "%4"=="--test" exit /b 94',
+            'if not "%5"=="fake_suite" exit /b 95',
+            'if not "%6"=="--" exit /b 96',
+            'if not "%7"=="--ignored" exit /b 97',
+            'if not "%8"=="--nocapture" exit /b 98',
+            'if not "%9"=="" exit /b 99',
+            'echo running 2 tests',
+            'echo test real_first ... ok',
+            'echo test real_second ... ok',
+            'echo test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured',
+            'exit /b 0'
+        )
+        [IO.File]::WriteAllLines($mockCargo, $mockLines, [Text.Encoding]::ASCII)
+        [string]$originalPath = $env:PATH
+        try {
+            $env:PATH = $temp + [IO.Path]::PathSeparator + $originalPath
+            $mock = Invoke-CargoGate -Suite 'fake_suite' -ExpectedTests $tests -Directory $temp
+            if ($mock.status -ne 'PASS' -or $mock.exit_code -ne 0) {
+                throw 'Cargo invocation did not pass the complete explicit argument list.'
+            }
+            if (-not (Test-Path -LiteralPath (Join-Path $temp 'fake_suite.log'))) {
+                throw 'Mock Cargo invocation did not preserve its test transcript.'
+            }
+        }
+        finally {
+            $env:PATH = $originalPath
+        }
+        Write-Host '[PASS] Real Cargo wrapper passes exact --ignored arguments to a mock executable.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
