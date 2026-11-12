@@ -16,12 +16,12 @@
 //! six geometric fixed-axis fields and all three reception-time speeds.
 //! Not scientific JPL/Horizons or Swiss Ephemeris accuracy evidence.
 
-use std::f64::consts::PI;
 use std::io::Cursor;
 
 use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
 use virgostars_ephemeris_core::geocentric_six_fields::{
-    geocentric_fixed_six_fields, GeocentricFieldsError, GeocentricFixedAxes, ASTRONOMICAL_UNIT_KM,
+    geocentric_fixed_six_fields, GeocentricFieldsError, GeocentricFixedAxes,
+    GeocentricFixedSixFields, ASTRONOMICAL_UNIT_KM,
 };
 use virgostars_ephemeris_core::light_time::{LightTimeError, SPEED_OF_LIGHT_KM_PER_SECOND};
 
@@ -77,9 +77,11 @@ fn synthetic_kernel(mercury_velocity_km_per_day: [f64; 3]) -> Vec<u8> {
     bytes
 }
 
-fn six_at(eph: &mut De441<Cursor<Vec<u8>>>, jd: f64, target: Body) ->
-    Result<virgostars_ephemeris_core::geocentric_six_fields::GeocentricFixedSixFields, GeocentricFieldsError>
-{
+fn six_at(
+    eph: &mut De441<Cursor<Vec<u8>>>,
+    jd: f64,
+    target: Body,
+) -> Result<GeocentricFixedSixFields, GeocentricFieldsError> {
     geocentric_fixed_six_fields(
         eph,
         target,
@@ -141,8 +143,7 @@ fn moving_radial_target_matches_independent_closed_form_reception_solution() {
 
 #[test]
 fn retarded_angular_and_radial_speeds_match_neighboring_full_kernel_evaluations() {
-    let mut eph =
-        De441::new(Cursor::new(synthetic_kernel([0.0, 500_000.0, 200_000.0]))).unwrap();
+    let mut eph = De441::new(Cursor::new(synthetic_kernel([0.0, 500_000.0, 200_000.0]))).unwrap();
     let h = 0.02;
     let before = six_at(&mut eph, JD_MID - h, Body::Mercury).unwrap();
     let center = six_at(&mut eph, JD_MID, Body::Mercury).unwrap();
@@ -178,8 +179,7 @@ fn retarded_angular_and_radial_speeds_match_neighboring_full_kernel_evaluations(
 
 #[test]
 fn retrograde_direction_and_system_barycenter_names_are_not_lost() {
-    let mut eph =
-        De441::new(Cursor::new(synthetic_kernel([0.0, -500_000.0, 0.0]))).unwrap();
+    let mut eph = De441::new(Cursor::new(synthetic_kernel([0.0, -500_000.0, 0.0]))).unwrap();
     let mercury = six_at(&mut eph, JD_MID, Body::Mercury).unwrap();
     assert!(mercury.longitude_speed_deg_per_tdb_day < 0.0);
     near(mercury.latitude_speed_deg_per_tdb_day, 0.0, 1.0e-12);
