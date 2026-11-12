@@ -28,12 +28,10 @@ use std::fmt;
 
 use crate::calendar::{JulianDate, TimeScale};
 use crate::eop_polar_csv::{CelestrakEopPolarCatalog, EopPredictionPolicy};
-use crate::eop_ut1_era::{
-    eop_ut1_era_from_utc_si_seconds, EopUt1EraError, EopUt1EraOrientation,
-};
+use crate::eop_ut1_era::{eop_ut1_era_from_utc_si_seconds, EopUt1EraError, EopUt1EraOrientation};
 use crate::observer_gcrs::{
-    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition,
-    ObserverOrientationInputs, Wgs84ObserverSite,
+    wgs84_observer_to_gcrs, ObserverGcrsError, ObserverGcrsPosition, ObserverOrientationInputs,
+    Wgs84ObserverSite,
 };
 
 /// Explicit externally sourced CIP/CIO orientation at a **TT** epoch.
@@ -83,7 +81,10 @@ impl fmt::Display for EopWgs84GcrsError {
                 write!(f, "CIP/CIO epoch requires TT, got {scale:?}")
             }
             Self::CipCioEpochMismatch => {
-                write!(f, "CIP/CIO split TT epoch differs from the EOP-derived TT epoch")
+                write!(
+                    f,
+                    "CIP/CIO split TT epoch differs from the EOP-derived TT epoch"
+                )
             }
             Self::Observer(error) => write!(f, "WGS84 observer transformation: {error}"),
         }
