@@ -95,13 +95,13 @@ function Assert-ExpectedKernelHash {
 function Read-ResidualGroup {
     param([string]$Text, [string]$Pattern, [string[]]$Fields)
     [string[]]$expected = @('Moon', 'Venus', 'MarsBarycenter', 'JupiterBarycenter')
-    $matches = [regex]::Matches($Text, $Pattern)
-    if ($matches.Count -ne $expected.Count) {
-        throw "Expected four numeric reference rows but found $($matches.Count)."
+    $records = [regex]::Matches($Text, $Pattern)
+    if ($records.Count -ne $expected.Count) {
+        throw "Expected four numeric reference rows but found $($records.Count)."
     }
     $seen = @{}
     $rows = @()
-    foreach ($match in $matches) {
+    foreach ($match in $records) {
         $body = $match.Groups['target'].Value
         if ($seen.ContainsKey($body)) { throw "Repeated numeric row for $body." }
         $seen[$body] = $true
@@ -314,6 +314,60 @@ function Invoke-PreflightSelfTest {
             if (-not $rejected) { throw 'Malformed or mismatched SHA-256 was accepted.' }
         }
         Write-Host '[PASS] Expected SHA-256 gate rejects mismatch/malformed and records no expectation.'
+        # These are invented METRIC LOG LINES, not real observations.
+        # Validate parsing and fail-closed behavior on partial duplicates.
+        $metricBodies = @('Moon', 'Venus', 'MarsBarycenter', 'JupiterBarycenter')
+        [string[]]$ltLines = @($metricBodies | ForEach-Object {
+            "$($_): position 0.000000005 km, Horizons velocity 0.000000000001 km/s, finite-difference derivative 0.000000000002 km/s, delay 0.000000000001 s"
+        })
+        [string[]]$apparentLines = @($metricBodies | ForEach-Object {
+            "$($_): recovered Horizons LT vector error 0.000000006 km,              LT range error 0.000000007 km, delay error 0.000000000003 s"
+            "$($_): max angular rate residual = 0.000000008 arcseconds/TDB-day;              radial rate residual = 1.0000000000e-10 AU/TDB-day"
+        })
+        $ltMetrics = Read-ScientificMetrics -Suite 'light_time_horizons' -Lines $ltLines
+        $apparentMetrics = Read-ScientificMetrics -Suite 'aberrated_real_de441' -Lines $apparentLines
+        if ($ltMetrics.horizons_lt_vectors.measurements.Count -ne 4 -or
+            $apparentMetrics.recovered_lt_vectors.measurements.Count -ne 4 -or
+            $apparentMetrics.full_pipeline_rate_consistency.measurements.Count -ne 4) {
+            throw 'Expected all four reference bodies in all three numeric groups.'
+        }
+        if ($ltMetrics.horizons_lt_vectors.maxima.position_max_component_km -ne 0.000000005 -or
+            $apparentMetrics.recovered_lt_vectors.maxima.lt_range_error_km -ne 0.000000007 -or
+            $apparentMetrics.full_pipeline_rate_consistency.maxima.radial_rate_error_au_per_tdb_day -ne 1e-10) {
+            throw 'The metric maxima or scientific unit fields were parsed incorrectly.'
+        }
+        foreach ($corrupt in @(
+            $ltLines[0..2],
+            ($ltLines[0..2] + $ltLines[0]),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', 'NaN') }),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', '-0.000000005') }),
+            @($ltLines | ForEach-Object { $_.Replace('0.000000005', '1e999') })
+        )) {
+            $rejected = $false
+            try {
+                $null = Read-ScientificMetrics -Suite 'light_time_horizons' -Lines $corrupt
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw 'Incomplete, duplicated, NaN, negative or overflowed metrics were accepted.'
+            }
+        }
+        foreach ($corrupt in @(
+            $apparentLines[0..6],
+            @($apparentLines | ForEach-Object {
+                $_.Replace('1.0000000000e-10', 'NaN')
+            })
+        )) {
+            $rejected = $false
+            try {
+                $null = Read-ScientificMetrics -Suite 'aberrated_real_de441' -Lines $corrupt
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw 'Missing or malformed apparent/rate metric group was accepted.'
+            }
+        }
+        Write-Host '[PASS] Numeric Horizons LT and aberrated-rate receipts require four finite body records each.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
