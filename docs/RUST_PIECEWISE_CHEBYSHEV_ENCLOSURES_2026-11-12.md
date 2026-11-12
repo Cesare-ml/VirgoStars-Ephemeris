@@ -46,7 +46,7 @@ The implementation:
 4. Adds the **declared limit** `J_i` (not merely the observed value) to the variation.
 5. Computes the reference longitude at the start of the first piece, then returns a symmetric circular arc with the derived total variation radius and an explicitly documented small floating-point padding. If the finite radius reaches 180° or above, returns a full-circle `{start_deg:0,span_deg:360}`. Nonfinite arithmetic and invalid records fail closed.
 
-The return value includes the full requested time window, both body IDs and common origin, `total_declared_variation_deg`, the resulting arc, and frozen-by-value segment summaries (new Rust value vector) with per-piece rate, travel budget, declared boundary jump and diagnostically evaluated boundary jump.
+The return value includes the full requested time window, both body IDs and common origin, `total_declared_variation_deg`, the resulting arc, and owned segment summaries (a newly allocated Rust value vector) with per-piece rate, travel budget, declared boundary jump and diagnostically evaluated boundary jump.
 
 **Crucially, `coverage: CallerAssertedBoundaryJumpsUnverified` is mandatory.** It is not `VerifiedContinuousEphemeris`, nor an assertion that `L_i` and `J_i` are correctly bounded for a real NASA/JPL ephemeris dataset. The diagnostic boundary evaluation does not establish rounding error limits or physical endpoint continuity.
 
