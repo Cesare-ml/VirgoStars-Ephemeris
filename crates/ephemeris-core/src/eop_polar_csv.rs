@@ -25,7 +25,7 @@
 //! metadata only*, not interpolated across potential leap seconds.
 //!
 //! Format and independent historical sample: CelesTrak EOP docs
-//! https://celestrak.org/SpaceData/EOP-format.php
+//! <https://celestrak.org/SpaceData/EOP-format.php>
 //! Original VirgoStars parser and interpolation, 2026-11-12.
 
 use std::error::Error;
