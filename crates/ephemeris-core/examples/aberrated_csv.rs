@@ -142,8 +142,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut eph = De441::open(&args[0])?;
     let (epoch, results) = match instant {
         EpochInput::Civil(civil) => {
-            let result =
-                geocentric_aberrated_fixed_six_fields_many_from_civil(&mut eph, &targets, civil, 0.0)?;
+            let result = geocentric_aberrated_fixed_six_fields_many_from_civil(
+                &mut eph, &targets, civil, 0.0,
+            )?;
             (result.reception_epoch, result.results)
         }
         EpochInput::Tdb(epoch) => (
@@ -197,7 +198,10 @@ mod tests {
     #[test]
     fn body_parser_retains_system_barycenter_identity_and_rejects_earth() {
         assert_eq!(parse_body("MarsBarycenter").unwrap(), Body::MarsBarycenter);
-        assert_eq!(parse_body("JupiterBarycenter").unwrap(), Body::JupiterBarycenter);
+        assert_eq!(
+            parse_body("JupiterBarycenter").unwrap(),
+            Body::JupiterBarycenter
+        );
         assert_eq!(parse_body("Moon").unwrap(), Body::Moon);
         assert!(parse_body("Earth").is_err());
         assert!(parse_body("Mars").is_err());
