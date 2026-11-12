@@ -39,6 +39,7 @@ def validate_manifest(data):
     samples = data["samples"]
     if not isinstance(samples, list) or not samples:
         raise ValueError("samples must be a nonempty array")
+    seen_samples = set()
     for index, sample in enumerate(samples):
         if not isinstance(sample, dict) or any(key not in sample for key in SAMPLE_FIELDS):
             raise ValueError(f"sample {index}: missing required fields")
@@ -54,6 +55,10 @@ def validate_manifest(data):
                 raise ValueError(f"sample {index}: {key} must be {value}")
         if sample["target_id"] == sample["center_id"]:
             raise ValueError(f"sample {index}: target and center must differ")
+        identity = (sample["jd_tdb"], sample["target_id"], sample["center_id"])
+        if identity in seen_samples:
+            raise ValueError(f"sample {index}: duplicate epoch/target/center combination")
+        seen_samples.add(identity)
     return len(samples)
 
 
