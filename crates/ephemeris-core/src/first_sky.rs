@@ -637,6 +637,67 @@ mod tests {
     }
 
     #[test]
+    fn utc_offset_normalization_guards_both_iers_coverage_edges() {
+        // The IERS table's coverage is a property of the UTC instant,
+        // never of the original local calendar date.
+        let first_utc = at("1972-01-01T00:00:00Z");
+        let first_local = at("1972-01-01T14:00:00+14:00");
+        assert_eq!(first_utc.tai_utc, 10);
+        assert_eq!(first_utc.utc.day_number(), first_local.utc.day_number());
+        near(
+            first_utc.utc.midnight_fraction(),
+            first_local.utc.midnight_fraction(),
+            1e-15,
+        );
+        near(first_utc.tt_jd, first_local.tt_jd, 1e-12);
+
+        let last_utc = at("2027-06-27T23:59:59Z");
+        let last_local = at("2027-06-28T13:59:59+14:00");
+        assert_eq!(last_utc.tai_utc, 37);
+        assert_eq!(last_utc.utc.day_number(), last_local.utc.day_number());
+        near(last_utc.tt_jd, last_local.tt_jd, 1e-12);
+
+        // The same local dates can be outside coverage after applying
+        // the offset; the limit is inclusive through the final UTC day.
+        for timestamp in [
+            "1972-01-01T00:00:00+01:00",
+            "2027-06-27T10:00:00-14:00",
+        ] {
+            assert!(
+                matches!(
+                    epochs(CivilTimestamp::parse(timestamp).unwrap()),
+                    Err(SkyError::UnsupportedUtc)
+                ),
+                "{timestamp} must be rejected after UTC normalization"
+            );
+        }
+
+        // A date before 1972 in local civil time may still be a valid
+        // 1972 UTC instant, provided it uses an explicit negative offset.
+        let shifted = at("1971-12-31T23:59:59-01:00");
+        assert_eq!(shifted.tai_utc, 10);
+        near(shifted.tt_jd, at("1972-01-01T00:59:59Z").tt_jd, 1e-12);
+    }
+
+    #[test]
+    fn leap_second_schedule_is_selected_from_utc_not_local_midnight() {
+        // 2017-01-01 00:30 in a +01 zone is still 2016-12-31 UTC:
+        // the post-2016 leap-second TAI-UTC offset is not yet in effect.
+        let before = at("2017-01-01T00:30:00+01:00");
+        let before_utc = at("2016-12-31T23:30:00Z");
+        assert_eq!(before.tai_utc, 36);
+        near(before.tt_jd, before_utc.tt_jd, 1e-12);
+
+        // Conversely, local 2016-12-31 with a -01 offset can already be
+        // 2017-01-01 UTC; the new offset must apply.
+        let after = at("2016-12-31T23:30:00-01:00");
+        let after_utc = at("2017-01-01T00:30:00Z");
+        assert_eq!(after.tai_utc, 37);
+        near(after.tt_jd, after_utc.tt_jd, 1e-12);
+        assert_eq!(after.utc.day_number(), before.utc.day_number() + 1);
+    }
+
+    #[test]
     fn timestamp_validation_rejects_unsupported_and_ambiguous_inputs() {
         for value in [
             "2026-11-10T12:00:00",
