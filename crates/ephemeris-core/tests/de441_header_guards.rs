@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: CPAL-1.0
 // Modification (2026-11-12): deterministic malformed-header regression cases.
+// Modification (2026-11-13): adjacent-series and incomplete-pointer boundary cases.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -132,4 +133,30 @@ fn rejects_overlapping_coefficient_series() {
         De441::new(Cursor::new(bytes)),
         Err(De441Error::InvalidFile("overlapping coefficient pointers"))
     ));
+}
+
+#[test]
+fn accepts_adjacent_nonoverlapping_coefficient_series() {
+    let mut bytes = synthetic_header();
+    // Series 1 occupies [370, 373), immediately before series 0 [373, 376).
+    // This must not be rejected as an overlap, and the record size is unchanged.
+    i32_field(&mut bytes, 2696, 370);
+    i32_field(&mut bytes, 2700, 1);
+    i32_field(&mut bytes, 2704, 1);
+    assert!(De441::new(Cursor::new(bytes)).is_ok());
+}
+
+#[test]
+fn rejects_incomplete_zero_first_pointer() {
+    for (offset, value) in [(2848, 1), (2852, 1)] {
+        let mut bytes = synthetic_header();
+        i32_field(&mut bytes, 2844, 0);
+        i32_field(&mut bytes, 2848, 0);
+        i32_field(&mut bytes, 2852, 0);
+        i32_field(&mut bytes, offset, value);
+        assert!(matches!(
+            De441::new(Cursor::new(bytes)),
+            Err(De441Error::InvalidFile("invalid coefficient pointer"))
+        ));
+    }
 }
