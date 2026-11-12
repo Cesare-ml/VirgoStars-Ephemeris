@@ -101,9 +101,7 @@ pub fn checked_de441_epoch(
     if split.scale() != TimeScale::Tdb {
         return Err(EpochBridgeError::WrongTimeScale);
     }
-    let (day_part, subday_part) = split
-        .parts()
-        .map_err(EpochBridgeError::InvalidJulianDate)?;
+    let (day_part, subday_part) = split.parts().map_err(EpochBridgeError::InvalidJulianDate)?;
     let rounded = day_part + subday_part;
     if !rounded.is_finite() {
         return Err(EpochBridgeError::InvalidJulianDate(
