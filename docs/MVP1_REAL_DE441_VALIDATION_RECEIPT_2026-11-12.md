@@ -47,9 +47,20 @@ The script refuses to mark a gate as successful based solely on `cargo` exiting 
 
 Its report directory contains:
 
-- `receipt.json` — **schema 2**, UTC execution timestamp, **mandatory Git source commit and clean-worktree flag**, filename/size/streaming SHA-256, **optional supplied expected SHA-256 and match flag**, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
+- `receipt.json` — **schema 3**, UTC execution timestamp, **mandatory Git source commit and clean-worktree flag**, filename/size/streaming SHA-256, **optional supplied expected SHA-256 and match flag**, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
 - `light_time_horizons.log` — full stdout/stderr of the original independent-LT-reference suite.
 - `aberrated_real_de441.log` — full stdout/stderr of the new reconstructed-LT and derivative tests.
+- Each passing scientific suite now includes machine-readable **metrics** in `receipt.json`: a measurement row per target (`Moon`, `Venus`, `MarsBarycenter`, `JupiterBarycenter`) plus the per-field maximum. A `metric_parse_error` is recorded for malformed results. Missing, duplicated, negative, nonfinite or overflowed metric values make the scientific gate **FAIL** even if Cargo reports 2/2 test cases passed.
+
+**Schema-3 numeric measurements (parsed from existing test logs, no new astronomy code):**
+
+| Suite / group | Recorded fields | Units and scientific meaning |
+| --- | --- | --- |
+| `light_time_horizons` / `horizons_lt_vectors` | `position_max_component_km`, `horizons_velocity_max_component_km_per_s`, `lt_derivative_max_component_km_per_s`, `light_time_error_seconds` | Independent Horizons **LT-only** geometric position error; instantaneous reference velocity error; self-consistency of LT derivative; one-way delay error |
+| `aberrated_real_de441` / `recovered_lt_vectors` | `recovered_lt_vector_max_component_km`, `lt_range_error_km`, `light_time_error_seconds` | LT geometry reconstructed by undoing **the same** Rust special-relativistic aberration; recovered position, distance and delay compared to independent Horizons LT |
+| `aberrated_real_de441` / `full_pipeline_rate_consistency` | `angular_rate_error_arcsec_per_tdb_day`, `radial_rate_error_au_per_tdb_day` | Full Rust correction pipeline rate versus finite differences, an **internal consistency** check, not independent apparent velocity parity |
+
+The values are parsed using invariant decimal/scientific notation and the four pinned body IDs, retaining the precision actually printed by the original Rust tests. **Only the Rust tests enforce the numerical acceptance thresholds**; the parser checks coverage, formatting and finite nonnegative residuals. The complete original log files remain authoritative for peer review. Do not mistake mocked selftest numeric examples for real DE441 evidence.
 
 Every failure produces **a nonzero exit code and `status=FAIL`** in the receipt; if validation stops before tests, it records `NOT_RUN` only until the first error and never writes a misleading `PASS`. Logs that are not executed are not invented. The runner restores any pre-existing process `DE441_PATH` variable on completion, and does not overwrite existing reports.
 
@@ -61,7 +72,7 @@ Every failure produces **a nonzero exit code and `status=FAIL`** in the receipt;
 pwsh -NoProfile -File ./scripts/run-real-de441-validation.ps1 -SelfTest
 ```
 
-The selftest checks that the validation preflight rejects a missing file and a fictional **9 KB** kernel. It also uses **invented log lines** to verify that the receipt parser rejects skipped tests, partial test executions, failed assertions and nonzero Cargo exit codes, while accepting precisely two successful cases. A **mock Windows native `cargo.cmd` executable** additionally verifies the wrapper really passes all eight command arguments (including `--ignored`), writes logs, and receives two simulated successful test lines; this guards against the previously observed `@args` vs `@cargoArguments` bug. The selftest also checks absent, matching, malformed and mismatched expected SHA-256 values. It **does not invoke Cargo's real-file tests**, calculate real planets, hash gigabytes of data or claim independent accuracy.
+The selftest checks that the validation preflight rejects a missing file and a fictional **9 KB** kernel. It also uses **invented log lines** to verify that the receipt parser rejects skipped tests, partial test executions, failed assertions and nonzero Cargo exit codes, while accepting precisely two successful cases. The metric parser selftest additionally checks four-body finite maxima and rejects missing/duplicated rows, NaN, negative values, numeric overflow and incomplete corrected-rate groups. A **mock Windows native `cargo.cmd` executable** additionally verifies the wrapper really passes all eight command arguments (including `--ignored`), writes logs, and receives two simulated successful test lines; this guards against the previously observed `@args` vs `@cargoArguments` bug. The selftest also checks absent, matching, malformed and mismatched expected SHA-256 values. It **does not invoke Cargo's real-file tests**, calculate real planets, hash gigabytes of data or claim independent accuracy.
 
 The existing authorized **read-only Windows GitHub CI job** runs only this `-SelfTest`; ordinary Linux and macOS Rust tests remain unchanged. The CI still has `permissions: contents: read`, no secret, no external download, no privileged workflow, no package publishing and no release. Because the real scientific PR is stacked, a temporary validation-only draft PR to `dev/ephemeris` may trigger these already-approved checks; that temporary PR must be **closed without merging**.
 
@@ -72,3 +83,5 @@ The existing authorized **read-only Windows GitHub CI job** runs only this `-Sel
 Required attribution for applicable users: **Powered by VirgoStars** — https://www.virgostars.it/.
 
 This PR is draft above the independent real-kernel scientific gate [#122](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/122), itself stacked on #118/#114/#107/#77 with civil-time #96/#110 dependency review outstanding. It does not merge into `dev/ephemeris` or `main`, change production, add third-party file redistribution, or assert that the complete apparent-coordinate pipeline is validated.
+
+**Quantitative receipt CPAL-1.0 modification record (2026-11-12):** added numeric parsing and stricter fail-closed selftests to the original PowerShell validation runner, with versioned schema-3 JSON evidence and updated English docs. This increment does not alter ephemeris calculations, third-party data, the license or the existing CI permissions.
