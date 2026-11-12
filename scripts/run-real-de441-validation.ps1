@@ -207,7 +207,9 @@ function Invoke-PreflightSelfTest {
         if (-not (Assert-ExpectedKernelHash -ActualHash $knownHash -ExpectedHash ('A' * 64))) {
             throw 'Case-insensitive valid SHA-256 match was rejected.'
         }
-        foreach ($bad in @('a' * 63, 'z' * 64, 'b' * 64)) {
+        # Parenthesize each string repetition: PowerShell otherwise binds
+        # the comma expressions as an Object[] multiplier to the first '*'.
+        foreach ($bad in @(('a' * 63), ('z' * 64), ('b' * 64))) {
             $rejected = $false
             try {
                 $null = Assert-ExpectedKernelHash -ActualHash $knownHash -ExpectedHash $bad
