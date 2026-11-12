@@ -29,6 +29,7 @@ pub mod cio_orientation;
 pub mod coordinates;
 pub mod de441;
 pub mod earth_rotation;
+pub mod eop_observer_gcrs;
 pub mod eop_polar_csv;
 pub mod eop_polar_orientation;
 pub mod eop_ut1_era;
