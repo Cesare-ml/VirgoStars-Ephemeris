@@ -257,7 +257,6 @@ fn empty_batch_retains_tdb_epoch_and_rejects_nonfinite_tilt() {
     ));
 }
 
-
 #[test]
 fn optimized_civil_batch_matches_fresh_scalar_readers_at_multiple_epochs_and_tilts() {
     // This exercises the #114 shared-Earth optimization through #110's
@@ -329,9 +328,9 @@ fn optimized_civil_batch_preserves_earth_and_emission_coverage_errors() {
     assert!(matches!(
         earth,
         Err(CivilAberratedError::Aberrated(
-            AberratedSphericalError::Aberration(
-                AberratedStateError::LightTime(LightTimeError::UndefinedDirection)
-            )
+            AberratedSphericalError::Aberration(AberratedStateError::LightTime(
+                LightTimeError::UndefinedDirection
+            ))
         ))
     ));
 
@@ -357,9 +356,9 @@ fn optimized_civil_batch_preserves_earth_and_emission_coverage_errors() {
     assert!(matches!(
         outside,
         Err(CivilAberratedError::Aberrated(
-            AberratedSphericalError::Aberration(
-                AberratedStateError::Ephemeris(De441Error::OutsideCoverage { .. })
-            )
+            AberratedSphericalError::Aberration(AberratedStateError::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            ))
         ))
     ));
 }
