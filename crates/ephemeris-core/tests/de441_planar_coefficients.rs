@@ -267,3 +267,131 @@ fn corrupt_coefficient_and_corrupt_record_dates_are_not_cached_as_success() {
         JulianDateTdb(1000.25),
     ), Err(De441Error::InvalidFile(_))));
 }
+
+
+#[test]
+fn cartesian_xyz_coefficients_match_all_geometric_position_and_velocity_axes() {
+    let mut reader = De441::new(Cursor::new(fixture())).unwrap();
+    for (granule, jd, expected_x, expected_y) in [
+        (0, 1000.25_f64, vec![100.0, 2.0], vec![0.0, 1.0]),
+        (1, 1001.25_f64, vec![110.0, 3.0], vec![2.0, -1.0]),
+    ] {
+        let selected = selection(3, granule);
+        let start = 1000.0 + granule as f64;
+        let record = reader.cartesian_coefficients_for_granule(
+            selected, JulianDateTdb(start), JulianDateTdb(start + 1.0),
+        ).unwrap();
+        assert_eq!(record.selection, selected);
+        assert_eq!(record.xyz_coefficients_km[0], expected_x);
+        assert_eq!(record.xyz_coefficients_km[1], expected_y);
+        assert_eq!(record.xyz_coefficients_km[2], vec![5.0, 0.0]);
+        near(record.midpoint_jd_tdb.0, start + 0.5);
+        near(record.radius_days, 0.5);
+        let tau = (jd - record.midpoint_jd_tdb.0) / record.radius_days;
+        let state = reader.state(
+            Body::MarsBarycenter,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(jd),
+        ).unwrap();
+        for axis in 0..3 {
+            let s = evaluate_chebyshev(&record.xyz_coefficients_km[axis], tau).unwrap();
+            near(s.value, state.position_km[axis]);
+            near(s.derivative_dx / record.radius_days, state.velocity_km_per_day[axis]);
+        }
+    }
+}
+
+#[test]
+fn all_three_axes_reconstruct_mars_relative_to_earth_using_real_source_series() {
+    let mut reader = De441::new(Cursor::new(fixture())).unwrap();
+    for jd in [1000.25_f64, 1001.75_f64] {
+        let granule = if jd < 1001.0 { 0 } else { 1 };
+        let left = 1000.0 + granule as f64;
+        let mut samples = [[(0.0_f64, 0.0_f64); 3]; 3];
+        for (body_index, series_index) in [2, 3, 9].iter().enumerate() {
+            let data = reader.cartesian_coefficients_for_granule(
+                selection(*series_index, if *series_index == 2 { 0 } else { granule }),
+                JulianDateTdb(left), JulianDateTdb(left + 1.0),
+            ).unwrap();
+            let tau = (jd - data.midpoint_jd_tdb.0) / data.radius_days;
+            for (axis, coefficients) in data.xyz_coefficients_km.iter().enumerate() {
+                let value = evaluate_chebyshev(coefficients, tau).unwrap();
+                samples[body_index][axis] =
+                    (value.value, value.derivative_dx / data.radius_days);
+            }
+        }
+
+        let state = reader.state(
+            Body::MarsBarycenter, Body::Earth, JulianDateTdb(jd),
+        ).unwrap();
+        let earth_moon_mass_ratio = 81.30056_f64;
+        for axis in 0..3 {
+            let predicted_position = samples[1][axis].0 - samples[0][axis].0
+                + samples[2][axis].0 / (1.0 + earth_moon_mass_ratio);
+            let predicted_velocity = samples[1][axis].1 - samples[0][axis].1
+                + samples[2][axis].1 / (1.0 + earth_moon_mass_ratio);
+            near(predicted_position, state.position_km[axis]);
+            near(predicted_velocity, state.velocity_km_per_day[axis]);
+        }
+    }
+}
+
+#[test]
+fn xyz_and_legacy_xy_extraction_use_same_granule_and_cache() {
+    let mut reader = De441::new(Cursor::new(fixture())).unwrap();
+    let xyz = reader.cartesian_coefficients_for_granule(
+        selection(3, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+    ).unwrap();
+    let xy = reader.planar_coefficients_for_granule(
+        selection(3, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+    ).unwrap();
+    assert_eq!(xy.selection, xyz.selection);
+    assert_eq!(xy.start_jd_tdb, xyz.start_jd_tdb);
+    assert_eq!(xy.end_jd_tdb, xyz.end_jd_tdb);
+    assert_eq!(xy.midpoint_jd_tdb, xyz.midpoint_jd_tdb);
+    assert_eq!(xy.radius_days, xyz.radius_days);
+    assert_eq!(xy.x_coefficients_km, xyz.xyz_coefficients_km[0]);
+    assert_eq!(xy.y_coefficients_km, xyz.xyz_coefficients_km[1]);
+}
+
+#[test]
+fn malformed_z_is_rejected_by_both_xyz_and_legacy_planar_extraction() {
+    let mut bytes = fixture();
+    // Mars series 3 starts at 1-based word 400 with two coefficients.
+    // Granule 0 Z starts after the first four X/Y words.
+    let first_z_word = 400 - 1 + 2 * 2;
+    put_f64(&mut bytes, RECORD_OFFSET + first_z_word * 8, f64::NAN);
+    let mut reader = De441::new(Cursor::new(bytes)).unwrap();
+
+    assert!(matches!(reader.cartesian_coefficients_for_granule(
+        selection(3, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+    ), Err(De441Error::InvalidFile(_))));
+    assert!(matches!(reader.planar_coefficients_for_granule(
+        selection(3, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+    ), Err(De441Error::InvalidFile(_))));
+    // A different noncorrupt source series in the same principal record
+    // remains readable and is unaffected by a failed axis extraction.
+    let emb = reader.cartesian_coefficients_for_granule(
+        selection(2, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+    ).unwrap();
+    assert_eq!(emb.xyz_coefficients_km[0], vec![90.0]);
+}
+
+#[test]
+fn xyz_extractor_rejects_uncovered_granules_and_unsupported_series() {
+    let mut reader = De441::new(Cursor::new(fixture())).unwrap();
+    let invalid_windows = [
+        (selection(3, 0), 1000.0, 1001.5),
+        (selection(3, 1), 1000.0, 1001.0),
+        (selection(3, 0), f64::NAN, 1001.0),
+        (selection(3, 0), 1000.0, 1000.0),
+        (selection(3, 0), 1000.0, f64::INFINITY),
+        (selection(3, 10), 1000.0, 1001.0),
+        (selection(11, 0), 1000.0, 1001.0),
+    ];
+    for (selection, start, end) in invalid_windows {
+        assert!(reader.cartesian_coefficients_for_granule(
+            selection, JulianDateTdb(start), JulianDateTdb(end),
+        ).is_err());
+    }
+}
