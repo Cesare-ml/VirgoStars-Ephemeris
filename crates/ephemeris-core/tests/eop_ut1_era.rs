@@ -133,8 +133,15 @@ fn independent_erfa_era00_fixture_survives_eop_to_ut1_chain() {
     let out = observed(&cat, 54_388, 0.0);
     assert_eq!(out.ut1_epoch.day_number(), 2_454_389);
     assert_eq!(out.ut1_epoch.midnight_fraction(), 0.0);
-    near(out.earth_rotation.angle_rad, 0.402_283_724_002_815_8, 1.0e-12);
-    assert_eq!(out.earth_rotation, earth_rotation_angle(out.ut1_epoch).unwrap());
+    near(
+        out.earth_rotation.angle_rad,
+        0.402_283_724_002_815_8,
+        1.0e-12,
+    );
+    assert_eq!(
+        out.earth_rotation,
+        earth_rotation_angle(out.ut1_epoch).unwrap()
+    );
     assert!(out.earth_rotation.angle_rad >= 0.0 && out.earth_rotation.angle_rad < TAU);
 }
 
@@ -142,10 +149,9 @@ fn independent_erfa_era00_fixture_survives_eop_to_ut1_chain() {
 fn ordinary_day_interpolation_composes_parent_tt_and_polar_modules() {
     let cat = catalog(&[ERFA_UTC, ERFA_UTC_NEXT]);
     let half = observed(&cat, 53_750, 43_200.0);
-    let old = approximate_itrs_to_tirs_from_eop_utc(
-        &cat, 53_750, 0.5, EopPredictionPolicy::ObservedOnly,
-    )
-    .unwrap();
+    let old =
+        approximate_itrs_to_tirs_from_eop_utc(&cat, 53_750, 0.5, EopPredictionPolicy::ObservedOnly)
+            .unwrap();
     assert_eq!(half.quality, old.quality);
     near(half.xp_rad, old.xp_rad, 0.0);
     near(half.yp_rad, old.yp_rad, 0.0);
@@ -206,7 +212,12 @@ fn positive_leap_day_end_and_negative_leap_day_bounds_are_explicit() {
     let result = observed(&negative, 57_753, 86_398.5);
     assert_eq!(result.utc_day_length_seconds, 86_399.0);
     assert_eq!(
-        sample(&negative, 57_753, 86_399.0, EopPredictionPolicy::ObservedOnly),
+        sample(
+            &negative,
+            57_753,
+            86_399.0,
+            EopPredictionPolicy::ObservedOnly
+        ),
         Err(EopUt1EraError::InvalidElapsedUtcSecond)
     );
     near(result.ut1_minus_tai_seconds, -36.4, 1.0e-12);
@@ -222,7 +233,10 @@ fn predictions_are_opt_in_and_the_quality_flag_is_not_hidden() {
     );
     let out = sample(&cat, 53_750, 100.0, EopPredictionPolicy::AllowPredicted).unwrap();
     assert_eq!(out.quality, EopPolarQuality::IncludesPrediction);
-    assert_eq!(out.source_label, "externally selected EOP fixture; no online source");
+    assert_eq!(
+        out.source_label,
+        "externally selected EOP fixture; no online source"
+    );
 }
 
 #[test]
@@ -260,10 +274,7 @@ fn rejects_missing_daily_eop_samples_and_unrepresentable_time() {
         sample(&one_row, 53_750, 0.0, EopPredictionPolicy::ObservedOnly),
         Err(EopUt1EraError::Eop(EopCsvError::MissingFollowingDay))
     );
-    let separated = catalog(&[
-        ERFA_UTC,
-        "2006-01-17,53752,0.02,0.03,0.3341,0,0,0,0,0,33,O",
-    ]);
+    let separated = catalog(&[ERFA_UTC, "2006-01-17,53752,0.02,0.03,0.3341,0,0,0,0,0,33,O"]);
     assert_eq!(
         sample(&separated, 53_750, 20.0, EopPredictionPolicy::ObservedOnly),
         Err(EopUt1EraError::Eop(EopCsvError::MissingFollowingDay))
