@@ -443,6 +443,42 @@ function Invoke-PreflightSelfTest {
             }
         }
         Write-Host '[PASS] Numeric Horizons LT and aberrated-rate receipts require four finite body records each.'
+
+        # The original Rust test suites own all scientific tolerances.
+        # The receipt must *also* flag a printed residual exceeding one.
+        # All these lines are invented selftest data, NEVER real DE441.
+        $ltCriteria = Get-ReportedScientificLimits -Suite 'light_time_horizons' -Metrics $ltMetrics
+        $apparentCriteria = Get-ReportedScientificLimits -Suite 'aberrated_real_de441' -Metrics $apparentMetrics
+        if ($ltCriteria.horizons_lt_vectors.declared_strict_upper_limits.position_max_component_km -ne 0.01 -or
+            $ltCriteria.horizons_lt_vectors.declared_strict_upper_limits.lt_derivative_max_component_km_per_s -ne 3e-6 -or
+            $apparentCriteria.recovered_lt_vectors.declared_strict_upper_limits.light_time_error_seconds -ne 1e-6 -or
+            $apparentCriteria.full_pipeline_rate_consistency.declared_strict_upper_limits.angular_rate_error_arcsec_per_tdb_day -ne 0.72 -or
+            $apparentCriteria.full_pipeline_rate_consistency.declared_strict_upper_limits.radial_rate_error_au_per_tdb_day -ne 1e-7) {
+            throw 'Recorded thresholds differ from the referenced Rust test source.'
+        }
+        $aboveLimitFixtures = @(
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000005', '0.020000000') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000001 km/s', '0.000002000000 km/s') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000002 km/s', '0.000004000000 km/s') }) },
+            @{ suite = 'light_time_horizons'; lines = @($ltLines | ForEach-Object { $_.Replace('0.000000000001 s', '0.000002000000 s') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000006 km', '0.020000000 km') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000007 km', '0.020000000 km') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000000003 s', '0.000002000000 s') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('0.000000008 arcseconds', '0.800000000 arcseconds') }) },
+            @{ suite = 'aberrated_real_de441'; lines = @($apparentLines | ForEach-Object { $_.Replace('1.0000000000e-10 AU', '2.0000000000e-7 AU') }) }
+        )
+        foreach ($case in $aboveLimitFixtures) {
+            $rejected = $false
+            try {
+                $parsed = Read-ScientificMetrics -Suite $case.suite -Lines $case.lines
+                $null = Get-ReportedScientificLimits -Suite $case.suite -Metrics $parsed
+            }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                throw "Above-limit fixture was accepted for suite $($case.suite)."
+            }
+        }
+        Write-Host '[PASS] All nine numeric scientific limit overflows fail closed with exact units.'
         Write-Host '[PASS] Offline preflight rejects tiny/missing kernels and nonexecuted/failed test suites.'
     }
     finally {
