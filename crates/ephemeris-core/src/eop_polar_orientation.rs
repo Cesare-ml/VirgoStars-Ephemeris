@@ -96,7 +96,10 @@ impl fmt::Display for EopSp00PolarError {
                 write!(f, "unsupported TAI-minus-UTC daily offset")
             }
             Self::LeapSecondBoundary => {
-                write!(f, "UTC day has a DAT change; leap-second handling is required")
+                write!(
+                    f,
+                    "UTC day has a DAT change; leap-second handling is required"
+                )
             }
             Self::JulianDayOverflow => write!(f, "unrepresentable UTC MJD Julian day"),
             Self::TtEpoch(error) => write!(f, "could not form split TT epoch: {error}"),
@@ -178,8 +181,8 @@ pub fn approximate_itrs_to_tirs_from_eop_utc(
     let jdn_utc_midnight = mjd_utc
         .checked_add(MJD_ZERO_DAY_NUMBER)
         .ok_or(EopSp00PolarError::JulianDayOverflow)?;
-    let tt_day_fraction = fraction_of_utc_day
-        + (f64::from(dat) + TT_MINUS_TAI_SECONDS) / SECONDS_PER_DAY;
+    let tt_day_fraction =
+        fraction_of_utc_day + (f64::from(dat) + TT_MINUS_TAI_SECONDS) / SECONDS_PER_DAY;
     let (day_number, midnight_fraction) = if tt_day_fraction >= 1.0 {
         (
             jdn_utc_midnight
@@ -192,12 +195,9 @@ pub fn approximate_itrs_to_tirs_from_eop_utc(
     };
     let tt_epoch = JulianDate::new(day_number, midnight_fraction, TimeScale::Tt)
         .map_err(EopSp00PolarError::TtEpoch)?;
-    let approximate_polar = itrs_to_tirs_polar_motion_with_approximate_sp00(
-        tt_epoch,
-        interp.xp_rad,
-        interp.yp_rad,
-    )
-    .map_err(EopSp00PolarError::Polar)?;
+    let approximate_polar =
+        itrs_to_tirs_polar_motion_with_approximate_sp00(tt_epoch, interp.xp_rad, interp.yp_rad)
+            .map_err(EopSp00PolarError::Polar)?;
 
     Ok(EopSp00PolarOrientation {
         source_label: catalog.source_label.clone(),
