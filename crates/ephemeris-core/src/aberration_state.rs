@@ -276,12 +276,7 @@ pub fn geocentric_light_time_annual_aberration_analytic<R: Read + Seek>(
         Body::SolarSystemBarycenter,
         observation_epoch,
     )?;
-    geocentric_light_time_annual_aberration_with_earth(
-        ephemeris,
-        target,
-        observation_epoch,
-        &earth,
-    )
+    geocentric_light_time_annual_aberration_with_earth(ephemeris, target, observation_epoch, &earth)
 }
 
 /// Reuse a **reception-epoch Earth state** for several sightlines.
