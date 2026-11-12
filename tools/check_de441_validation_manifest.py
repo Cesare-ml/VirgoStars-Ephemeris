@@ -72,13 +72,22 @@ def reject_nonfinite_json_constant(value):
     raise ValueError(f"non-standard JSON numeric constant: {value}")
 
 
+def reject_nonfinite_json_float(value):
+    """Reject finite-looking JSON literals that overflow Python float parsing."""
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"JSON numeric literal outside finite float range: {value}")
+    return number
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     args = parser.parse_args()
     try:
         count = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys,
-                                             parse_constant=reject_nonfinite_json_constant))
+                                             parse_constant=reject_nonfinite_json_constant,
+                                             parse_float=reject_nonfinite_json_float))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.exit(1, f"Invalid DE441 manifest: {exc}\n")
     print(f"Metadata preflight passed for {count} samples; numerical validation NOT performed.")
