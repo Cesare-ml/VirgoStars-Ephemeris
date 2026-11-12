@@ -55,4 +55,14 @@ No Horizons response has been imported or evaluated as part of these instruction
 
 This tool is a reproducibility aid, **not a scientific validation result**. No external JPL/Horizons vectors or accuracy tolerances are bundled or claimed. See [VALIDATION.md](VALIDATION.md) and [DE441.md](DE441.md).
 
+## Offline residual calculator (Python standard library)
+
+After independently preparing a **single-row** reference CSV with the same column names and units as the Rust exporter, run:
+
+```sh
+python3 tools/compare_de441_vectors.py local-de441-audit/moon-earth-2451545.csv /path/to/independent-reference.csv
+```
+
+The reference CSV must contain `jd_tdb,target,center,frame,corrections,x_km,y_km,z_km,vx_km_day,vy_km_day,vz_km_day`. Convert Horizons velocity values from km/s to km/day **before** creating it. The comparator refuses missing fields, multiple rows, non-finite values, or mismatched epoch/body/center/frame/corrections, and prints position and velocity Euclidean residual norms and maximum component magnitudes. This is a numerical comparison helper, **not** a parser for raw Horizons output or a guarantee that the supplied reference really uses DE441. Verify and archive its provenance separately; no acceptance thresholds are assumed.
+
 Modification record: 2026-11-12 — added a reproducible local evidence-capture command sequence with input SHA-256 and Rust toolchain provenance (documentation only; not executed). 2026-11-12 — added explicit Horizons body-ID and vector-request checklist (documentation only; no scientific run). 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
