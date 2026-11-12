@@ -439,6 +439,20 @@ mod tests {
     }
 
     #[test]
+    fn exact_common_domain_endpoints_are_included_without_extrapolation() {
+        // Different record midpoints/radii, intersection exactly [0,86400].
+        let target=record(499,0.0,86_400.0,&[100.0],&[0.0]);
+        let earth=record(399,43_200.0,43_200.0,&[90.0],&[0.0]);
+        let result=bound_overlapping_relative_chebyshev_longitude_rate(
+            target,earth,0.0,86_400.0,
+        ).unwrap();
+        assert_eq!(result.start_tdb_seconds,0.0);
+        assert_eq!(result.end_tdb_seconds,86_400.0);
+        assert_eq!(result.max_abs_rate_deg_per_tdb_day,0.0);
+        assert_eq!(result.coverage,OverlappingRecordCoverage::RequestedOverlapOfTwoPolynomials);
+    }
+
+    #[test]
     fn result_remains_explicitly_mathematical_not_astronomical() {
         let target=record(499,0.0,86_400.0,&[100.0],&[0.0]);
         let earth=record(399,43_200.0,86_400.0,&[90.0],&[0.0]);
