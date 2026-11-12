@@ -207,3 +207,56 @@ pub fn geocentric_aberrated_fixed_six_fields<R: Read + Seek>(
         geocentric_aberrated_fixed_spherical(ephemeris, target, reception_epoch, fixed_tilt_rad)?;
     aberrated_spherical_to_degrees_au(&spherical)
 }
+
+/// Calculate observer-aberrated, fixed-axis geocentric six fields for
+/// several target bodies at **one already-TDB** reception Julian date.
+///
+/// This is a convenience batch over the *existing* scalar
+/// `geocentric_aberrated_fixed_six_fields`: it preserves the exact input
+/// body order and duplicates, and performs no different astronomical
+/// interpolation, light-time solution, Lorentz boost or unit conversion.
+/// Each target is computed independently through the original pipeline,
+/// including Earth's analytic Chebyshev acceleration. This is **not**
+/// a claim of measured speedup or shared acceleration evaluation.
+///
+/// All-or-error: a failed target (missing series, out-of-coverage
+/// emission epoch, Earth as target, pole singularity, etc.) rejects
+/// the whole batch and exposes the original typed error. An empty
+/// target list returns an empty vector **only after** checking finite
+/// TDB epoch and finite constant tilt, without probing kernel coverage.
+/// No partial output vector is returned on error.
+///
+/// Output angles/rates use degrees, AU and **reception TDB days**;
+/// frame is fixed ICRF or a caller-selected constant X tilt, never
+/// the true ecliptic of date. The correction set includes one-way
+/// light-time and annual aberration **only**: there is no solar
+/// gravitational deflection, date-frame rotation, observer parallax,
+/// or Swiss Ephemeris parity claim.
+pub fn geocentric_aberrated_fixed_six_fields_many<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    targets: &[Body],
+    reception_epoch: JulianDateTdb,
+    fixed_tilt_rad: f64,
+) -> Result<Vec<AberratedFixedSixFieldsDegreesAu>, AberratedSphericalError> {
+    if !reception_epoch.0.is_finite() {
+        return Err(AberratedSphericalError::InvalidIntermediate);
+    }
+    if !fixed_tilt_rad.is_finite() {
+        return Err(AberratedSphericalError::Projection(
+            ProjectionError::NonFinite,
+        ));
+    }
+
+    targets
+        .iter()
+        .copied()
+        .map(|target| {
+            geocentric_aberrated_fixed_six_fields(
+                ephemeris,
+                target,
+                reception_epoch,
+                fixed_tilt_rad,
+            )
+        })
+        .collect()
+}

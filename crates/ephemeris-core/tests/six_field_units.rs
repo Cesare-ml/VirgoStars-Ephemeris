@@ -152,8 +152,16 @@ fn full_signed_retrograde_and_radial_motion_preserve_units() {
     let fields = fixed_spherical_to_degrees_au(&source).unwrap();
     near(fields.longitude_deg, 270.0, 1e-13);
     near(fields.latitude_deg, 90.0, 1e-13);
-    near(fields.longitude_speed_deg_per_tdb_day, -0.2 * 180.0 / PI, 1e-12);
-    near(fields.latitude_speed_deg_per_tdb_day, -0.001 * 180.0 / PI, 1e-12);
+    near(
+        fields.longitude_speed_deg_per_tdb_day,
+        -0.2 * 180.0 / PI,
+        1e-12,
+    );
+    near(
+        fields.latitude_speed_deg_per_tdb_day,
+        -0.001 * 180.0 / PI,
+        1e-12,
+    );
     near(fields.distance_speed_au_per_tdb_day, 3.0, 1e-15);
 }
 
@@ -166,19 +174,18 @@ fn one_conversion_after_aberration_preserves_all_metadata_and_body_id() {
         light_time_seconds: 864.0,
         light_time_rate: 0.01,
         position_km: [IAU_AU_KM, 0.0, 0.0],
-        velocity_km_per_day: [
-            0.0,
-            (PI / 180.0) * IAU_AU_KM,
-            0.01 * IAU_AU_KM,
-        ],
+        velocity_km_per_day: [0.0, (PI / 180.0) * IAU_AU_KM, 0.01 * IAU_AU_KM],
     };
-    let cartesian =
-        aberrate_light_time_state(&source, [0.0; 3], [0.0; 3]).unwrap();
+    let cartesian = aberrate_light_time_state(&source, [0.0; 3], [0.0; 3]).unwrap();
     let angular = spherical_from_aberrated_state(&cartesian, 0.0).unwrap();
     let result = aberrated_spherical_to_degrees_au(&angular).unwrap();
     near(result.fields.longitude_deg, 0.0, 1e-12);
     near(result.fields.longitude_speed_deg_per_tdb_day, 1.0, 1e-12);
-    near(result.fields.latitude_speed_deg_per_tdb_day, 0.01 * 180.0 / PI, 1e-12);
+    near(
+        result.fields.latitude_speed_deg_per_tdb_day,
+        0.01 * 180.0 / PI,
+        1e-12,
+    );
     near(result.fields.distance_speed_au_per_tdb_day, 0.0, 1e-14);
     near(result.fields.distance_au, 1.0, 1e-15);
     assert_eq!(result.fields.target, Body::JupiterBarycenter);
