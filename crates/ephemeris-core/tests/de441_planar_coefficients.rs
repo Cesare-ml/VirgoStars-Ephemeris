@@ -148,6 +148,30 @@ fn extracted_polynomial_matches_existing_geometric_state_evaluator() {
 }
 
 #[test]
+fn extracted_emb_and_moon_granules_reconstruct_existing_mars_earth_state() {
+    let mut reader = De441::new(Cursor::new(fixture())).unwrap();
+    let epoch = 1000.25;
+    let mut planar = Vec::new();
+    for index in [2, 3, 9] {
+        let data = reader.planar_coefficients_for_granule(
+            selection(index, 0), JulianDateTdb(1000.0), JulianDateTdb(1001.0),
+        ).unwrap();
+        let normalized = (epoch - data.midpoint_jd_tdb.0) / data.radius_days;
+        let x = evaluate_chebyshev(&data.x_coefficients_km, normalized).unwrap().value;
+        let y = evaluate_chebyshev(&data.y_coefficients_km, normalized).unwrap().value;
+        planar.push((x, y));
+    }
+    let ratio = 81.30056_f64;
+    let expected_x = planar[1].0 - planar[0].0 + planar[2].0 / (1.0 + ratio);
+    let expected_y = planar[1].1 - planar[0].1 + planar[2].1 / (1.0 + ratio);
+    let result = reader.state(
+        Body::MarsBarycenter, Body::Earth, JulianDateTdb(epoch),
+    ).unwrap();
+    near(result.position_km[0], expected_x);
+    near(result.position_km[1], expected_y);
+}
+
+#[test]
 fn consecutive_granules_read_distinct_coefficient_ranges_with_shared_cache() {
     let mut reader = De441::new(Cursor::new(fixture())).unwrap();
     let one = reader.planar_coefficients_for_granule(
