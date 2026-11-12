@@ -100,7 +100,9 @@ impl From<EphemerisError> for SpkStateError {
 }
 
 fn read_f64(bytes: &[u8], offset: usize, order: SpkByteOrder) -> f64 {
-    let word: [u8; 8] = bytes[offset..offset + 8].try_into().expect("checked word width");
+    let word: [u8; 8] = bytes[offset..offset + 8]
+        .try_into()
+        .expect("checked word width");
     match order {
         SpkByteOrder::LittleEndian => f64::from_le_bytes(word),
         SpkByteOrder::BigEndian => f64::from_be_bytes(word),
@@ -108,7 +110,8 @@ fn read_f64(bytes: &[u8], offset: usize, order: SpkByteOrder) -> f64 {
 }
 
 fn exact_count(value: f64) -> Option<u64> {
-    if value.is_finite() && value >= 1.0 && value.fract() == 0.0 && value < 9_007_199_254_740_992.0 {
+    if value.is_finite() && value >= 1.0 && value.fract() == 0.0 && value < 9_007_199_254_740_992.0
+    {
         Some(value as u64)
     } else {
         None
@@ -153,7 +156,9 @@ fn record_layout<R: Read + Seek>(
         .checked_sub(3)
         .ok_or(SpkStateError::InvalidSegment("missing SPK directory"))?;
     if footer_address <= segment.initial_address {
-        return Err(SpkStateError::InvalidSegment("missing SPK coefficient records"));
+        return Err(SpkStateError::InvalidSegment(
+            "missing SPK coefficient records",
+        ));
     }
     let bytes = read_words(source, footer_address, 4)?;
     let init = read_f64(&bytes, 0, order);
@@ -172,7 +177,9 @@ fn record_layout<R: Read + Seek>(
     let coeffs = record_words
         .checked_sub(2)
         .filter(|n| *n >= component_count && n % component_count == 0)
-        .ok_or(SpkStateError::InvalidSegment("invalid SPK coefficient layout"))?
+        .ok_or(SpkStateError::InvalidSegment(
+            "invalid SPK coefficient layout",
+        ))?
         / component_count;
     let record_count_words = count
         .checked_mul(record_words as u64)
@@ -181,19 +188,22 @@ fn record_layout<R: Read + Seek>(
         .initial_address
         .checked_add(record_count_words)
         .and_then(|n| n.checked_add(3))
-        .ok_or(SpkStateError::InvalidSegment("SPK descriptor address overflow"))?;
+        .ok_or(SpkStateError::InvalidSegment(
+            "SPK descriptor address overflow",
+        ))?;
     if expected_final != segment.final_address {
-        return Err(SpkStateError::InvalidSegment("SPK directory disagrees with address span"));
+        return Err(SpkStateError::InvalidSegment(
+            "SPK directory disagrees with address span",
+        ));
     }
     if !init.is_finite() || !interval.is_finite() || interval <= 0.0 {
         return Err(SpkStateError::InvalidSegment("invalid SPK record interval"));
     }
     let end = init + count as f64 * interval;
-    if !end.is_finite()
-        || segment.start_tdb_seconds < init
-        || segment.end_tdb_seconds > end
-    {
-        return Err(SpkStateError::InvalidSegment("SPK record times disagree with coverage"));
+    if !end.is_finite() || segment.start_tdb_seconds < init || segment.end_tdb_seconds > end {
+        return Err(SpkStateError::InvalidSegment(
+            "SPK record times disagree with coverage",
+        ));
     }
     Ok(RecordLayout {
         first_address: segment.initial_address,
@@ -243,7 +253,9 @@ pub fn direct_spk_state<R: Read + Seek>(
     let layout = record_layout(source, segment, index.byte_order)?;
     let interval_end = layout.init + layout.count as f64 * layout.interval;
     if et < layout.init || et > interval_end {
-        return Err(SpkStateError::InvalidSegment("epoch outside SPK record directory"));
+        return Err(SpkStateError::InvalidSegment(
+            "epoch outside SPK record directory",
+        ));
     }
     // On exact record boundaries choose the following record. The final
     // inclusive endpoint remains in the final record.
@@ -264,11 +276,15 @@ pub fn direct_spk_state<R: Read + Seek>(
     let midpoint = read_f64(&bytes, 0, index.byte_order);
     let radius = read_f64(&bytes, 8, index.byte_order);
     if !midpoint.is_finite() || !radius.is_finite() || radius <= 0.0 {
-        return Err(SpkStateError::InvalidSegment("invalid record midpoint or radius"));
+        return Err(SpkStateError::InvalidSegment(
+            "invalid record midpoint or radius",
+        ));
     }
     let x = (et - midpoint) / radius;
     if !x.is_finite() || !(-1.0..=1.0).contains(&x) {
-        return Err(SpkStateError::InvalidSegment("epoch outside Chebyshev record"));
+        return Err(SpkStateError::InvalidSegment(
+            "epoch outside Chebyshev record",
+        ));
     }
     let components = if segment.spk_type == 2 { 3 } else { 6 };
     let mut values = [0.0; 6];
@@ -433,7 +449,10 @@ mod tests {
     #[test]
     fn record_boundary_uses_second_record_and_final_endpoint_is_inclusive() {
         let bytes = make_kernel(SpkByteOrder::LittleEndian, 2);
-        assert_eq!(evaluate(bytes.clone(), 499, 0.0).unwrap().position_km[0], 90.0);
+        assert_eq!(
+            evaluate(bytes.clone(), 499, 0.0).unwrap().position_km[0],
+            90.0
+        );
         let at_boundary = evaluate(bytes.clone(), 499, 10.0).unwrap();
         assert_eq!(at_boundary.position_km[0], 210.0);
         assert_eq!(at_boundary.velocity_km_per_second[0], -2.0);
@@ -443,10 +462,22 @@ mod tests {
     #[test]
     fn missing_target_invalid_epoch_and_out_of_coverage_fail() {
         let bytes = make_kernel(SpkByteOrder::LittleEndian, 2);
-        assert!(matches!(evaluate(bytes.clone(), 123, 5.0), Err(SpkStateError::MissingSegment { .. })));
-        assert!(matches!(evaluate(bytes.clone(), 499, -0.01), Err(SpkStateError::MissingSegment { .. })));
-        assert!(matches!(evaluate(bytes.clone(), 499, 20.01), Err(SpkStateError::MissingSegment { .. })));
-        assert!(matches!(evaluate(bytes, 499, f64::NAN), Err(SpkStateError::InvalidEpoch)));
+        assert!(matches!(
+            evaluate(bytes.clone(), 123, 5.0),
+            Err(SpkStateError::MissingSegment { .. })
+        ));
+        assert!(matches!(
+            evaluate(bytes.clone(), 499, -0.01),
+            Err(SpkStateError::MissingSegment { .. })
+        ));
+        assert!(matches!(
+            evaluate(bytes.clone(), 499, 20.01),
+            Err(SpkStateError::MissingSegment { .. })
+        ));
+        assert!(matches!(
+            evaluate(bytes, 499, f64::NAN),
+            Err(SpkStateError::InvalidEpoch)
+        ));
     }
 
     #[test]
