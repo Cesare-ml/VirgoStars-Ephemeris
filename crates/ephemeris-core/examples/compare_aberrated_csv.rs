@@ -89,9 +89,9 @@ fn parse_csv(input: &str) -> Result<Vec<Row>, String> {
 
         let mut values = [0.0; 11];
         for (i, value) in values.iter_mut().enumerate() {
-            *value = parts[i + 2].parse::<f64>().map_err(|_| {
-                format!("line {line_number}: invalid number in column {}", i + 3)
-            })?;
+            *value = parts[i + 2]
+                .parse::<f64>()
+                .map_err(|_| format!("line {line_number}: invalid number in column {}", i + 3))?;
             if !value.is_finite() {
                 return Err(format!(
                     "line {line_number}: nonfinite number in column {}",
@@ -108,7 +108,9 @@ fn parse_csv(input: &str) -> Result<Vec<Row>, String> {
             || values[9] <= 0.0
             || values[1] >= values[0]
         {
-            return Err(format!("line {line_number}: physically invalid fixed-frame fields"));
+            return Err(format!(
+                "line {line_number}: physically invalid fixed-frame fields"
+            ));
         }
         if let Some(first) = rows.first() {
             if values[0] != first.values[0] {
@@ -188,7 +190,11 @@ struct Comparison {
     passes: bool,
 }
 
-fn compare(actual: &[Row], reference: &[Row], tolerances: Thresholds) -> Result<Vec<Comparison>, String> {
+fn compare(
+    actual: &[Row],
+    reference: &[Row],
+    tolerances: Thresholds,
+) -> Result<Vec<Comparison>, String> {
     if actual.len() != reference.len() {
         return Err("actual and reference target counts differ; no partial matching".into());
     }
@@ -220,7 +226,10 @@ fn compare(actual: &[Row], reference: &[Row], tolerances: Thresholds) -> Result<
         if residuals.iter().any(|value| !value.is_finite()) {
             return Err(format!("row {}: residual overflow", index + 2));
         }
-        let passes = residuals.iter().zip(limits).all(|(error, limit)| *error <= limit);
+        let passes = residuals
+            .iter()
+            .zip(limits)
+            .all(|(error, limit)| *error <= limit);
         result.push(Comparison {
             body: a.body.clone(),
             residuals,
@@ -310,13 +319,20 @@ mod tests {
         let reference = parse_csv(&csv(ONE)).unwrap();
         let adjusted = ONE
             .replace("359.99000000000000000e0", "1.00000000000000000e-2")
-            .replace("-1.00000000000000000e0,2.00000000000000000e0,-3.00000000000000000e0",
-                     "-2.00000000000000000e0,2.00000000000000000e0,-3.00000000000000000e0");
+            .replace(
+                "-1.00000000000000000e0,2.00000000000000000e0,-3.00000000000000000e0",
+                "-2.00000000000000000e0,2.00000000000000000e0,-3.00000000000000000e0",
+            );
         let actual = parse_csv(&csv(&adjusted)).unwrap();
         let loose = Thresholds::parse(&[
-            "73".to_string(), "0".to_string(), "3600".to_string(),
-            "0".to_string(), "0".to_string(), "0".to_string(),
-        ]).unwrap();
+            "73".to_string(),
+            "0".to_string(),
+            "3600".to_string(),
+            "0".to_string(),
+            "0".to_string(),
+            "0".to_string(),
+        ])
+        .unwrap();
         let result = compare(&actual, &reference, loose).unwrap();
         assert!(result[0].passes);
         assert!((result[0].residuals[0] - 72.0).abs() < 1.0e-8);
@@ -339,9 +355,8 @@ mod tests {
             assert!(parse_csv(&mutated).is_err());
         }
         let reference = parse_csv(&original).unwrap();
-        let shifted_epoch = parse_csv(&original.replace(
-            "2461354.500000000000", "2461354.600000000000",
-        )).unwrap();
+        let shifted_epoch =
+            parse_csv(&original.replace("2461354.500000000000", "2461354.600000000000")).unwrap();
         assert!(compare(&shifted_epoch, &reference, zero()).is_err());
         let venus = parse_csv(&original.replace("Moon,Earth", "Venus,Earth")).unwrap();
         assert!(compare(&venus, &reference, zero()).is_err());
@@ -362,7 +377,8 @@ mod tests {
         assert!(parse_csv(&csv(&format!(
             "{ONE}\n{}",
             ONE.replace("2461354.500000000000", "2461354.700000000000")
-        ))).is_err());
+        )))
+        .is_err());
     }
 
     #[test]
