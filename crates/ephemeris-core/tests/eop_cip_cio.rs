@@ -95,9 +95,17 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
 #[test]
 fn published_celestrak_dx_dy_are_added_in_radians_and_cio_is_recomputed() {
     let cat = catalog(&[PUBLISHED_2000, NEXT_OBSERVED]);
-    let model = modeled(epoch(&cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly), "synthetic model at EOP TT");
+    let model = modeled(
+        epoch(&cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly),
+        "synthetic model at EOP TT",
+    );
     let result = wgs84_gcrs_with_eop_corrected_iau_cip(
-        &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly, site(), model,
+        &cat,
+        51544,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+        site(),
+        model,
     )
     .unwrap();
     let c = result.corrected_cip_cio;
@@ -126,7 +134,11 @@ fn independent_erfa_xys06a_fixture_survives_zero_celestial_eop_offsets() {
     let cat = catalog(&[first, second]);
     let e = epoch(&cat, 53736, 0.0, EopPredictionPolicy::ObservedOnly);
     let result = wgs84_gcrs_with_eop_corrected_iau_cip(
-        &cat, 53736, 0.0, EopPredictionPolicy::ObservedOnly, site(),
+        &cat,
+        53736,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+        site(),
         modeled(e, "ERFA t_xys06a numerical fixture only"),
     )
     .unwrap();
@@ -144,14 +156,23 @@ fn observed_half_day_interpolation_matches_direct_explicit_cip_cio_pipeline() {
     let e = epoch(&cat, 51544, 43200.0, EopPredictionPolicy::ObservedOnly);
     let model = modeled(e, "synthetic-model-for-pole-offset-test");
     let out = wgs84_gcrs_with_eop_corrected_iau_cip(
-        &cat, 51544, 43200.0, EopPredictionPolicy::ObservedOnly, site(), model,
+        &cat,
+        51544,
+        43200.0,
+        EopPredictionPolicy::ObservedOnly,
+        site(),
+        model,
     )
     .unwrap();
     let c = out.corrected_cip_cio;
     near(c.eop_dx_rad, 0.000_045 * ARCSEC_RAD, 1.0e-24);
     near(c.eop_dy_rad, 0.000_050 * ARCSEC_RAD, 1.0e-24);
     let direct = wgs84_gcrs_from_eop_utc_and_cip_cio(
-        &cat, 51544, 43200.0, EopPredictionPolicy::ObservedOnly, site(),
+        &cat,
+        51544,
+        43200.0,
+        EopPredictionPolicy::ObservedOnly,
+        site(),
         ExternalCipCioAtTt {
             tt_epoch: e,
             cip_x: c.corrected_x,
@@ -171,7 +192,12 @@ fn predictions_require_explicit_authorization_and_remain_marked() {
     let model = modeled(e, "forecast-synthetic");
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51545, 43200.0, EopPredictionPolicy::ObservedOnly, site(), model,
+            &cat,
+            51545,
+            43200.0,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            model,
         ),
         Err(EopCipCioError::Eop(
             virgostars_ephemeris_core::eop_ut1_era::EopUt1EraError::Eop(
@@ -180,11 +206,22 @@ fn predictions_require_explicit_authorization_and_remain_marked() {
         ))
     );
     let out = wgs84_gcrs_with_eop_corrected_iau_cip(
-        &cat, 51545, 43200.0, EopPredictionPolicy::AllowPredicted, site(), model,
+        &cat,
+        51545,
+        43200.0,
+        EopPredictionPolicy::AllowPredicted,
+        site(),
+        model,
     )
     .unwrap();
-    assert_eq!(out.corrected_cip_cio.quality, EopPolarQuality::IncludesPrediction);
-    assert_eq!(out.observer.eop.quality, EopPolarQuality::IncludesPrediction);
+    assert_eq!(
+        out.corrected_cip_cio.quality,
+        EopPolarQuality::IncludesPrediction
+    );
+    assert_eq!(
+        out.observer.eop.quality,
+        EopPolarQuality::IncludesPrediction
+    );
 }
 
 #[test]
@@ -192,21 +229,34 @@ fn wrong_scale_or_slightly_wrong_tt_epoch_is_rejected() {
     let cat = catalog(&[PUBLISHED_2000, NEXT_OBSERVED]);
     let e = epoch(&cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly);
     let mut other = modeled(e, "valid-model-label");
-    other.tt_epoch = JulianDate::new(e.day_number(), e.midnight_fraction(), TimeScale::Ut1).unwrap();
+    other.tt_epoch =
+        JulianDate::new(e.day_number(), e.midnight_fraction(), TimeScale::Ut1).unwrap();
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly, site(), other,
+            &cat,
+            51544,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            other,
         ),
         Err(EopCipCioError::ModelEpochRequiresTt(TimeScale::Ut1))
     );
     let mut shifted = modeled(e, "valid-model-label");
     shifted.tt_epoch = JulianDate::new(
-        e.day_number(), e.midnight_fraction() + 1.0e-5 / 86400.0, TimeScale::Tt,
+        e.day_number(),
+        e.midnight_fraction() + 1.0e-5 / 86400.0,
+        TimeScale::Tt,
     )
     .unwrap();
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly, site(), shifted,
+            &cat,
+            51544,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            shifted,
         ),
         Err(EopCipCioError::ModelEpochMismatch)
     );
@@ -219,8 +269,12 @@ fn invalid_model_coordinates_and_blank_provenance_fail_closed() {
     for label in ["", "  ", "\t"] {
         assert_eq!(
             wgs84_gcrs_with_eop_corrected_iau_cip(
-                &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly,
-                site(), modeled(e, label),
+                &cat,
+                51544,
+                0.0,
+                EopPredictionPolicy::ObservedOnly,
+                site(),
+                modeled(e, label),
             ),
             Err(EopCipCioError::MissingModelSource)
         );
@@ -230,8 +284,12 @@ fn invalid_model_coordinates_and_blank_provenance_fail_closed() {
         model.model_x = bad;
         assert_eq!(
             wgs84_gcrs_with_eop_corrected_iau_cip(
-                &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly,
-                site(), model,
+                &cat,
+                51544,
+                0.0,
+                EopPredictionPolicy::ObservedOnly,
+                site(),
+                model,
             ),
             Err(EopCipCioError::InvalidModeledCoordinates)
         );
@@ -240,7 +298,12 @@ fn invalid_model_coordinates_and_blank_provenance_fail_closed() {
     bad_s.cio_s_plus_xy_half_rad = f64::NEG_INFINITY;
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51544, 0.0, EopPredictionPolicy::ObservedOnly, site(), bad_s,
+            &cat,
+            51544,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            bad_s,
         ),
         Err(EopCipCioError::InvalidModeledCoordinates)
     );
@@ -251,7 +314,8 @@ fn invalid_eop_celestial_offset_is_rejected_during_initial_parse() {
     let altered = PUBLISHED_2000.replace("-0.000005,-0.000050", "5.0,-0.000050");
     assert_eq!(
         CelestrakEopPolarCatalog::parse_csv(
-            "invalid celestial offset", &format!("{HEADER}\n{altered}\n"),
+            "invalid celestial offset",
+            &format!("{HEADER}\n{altered}\n"),
         ),
         Err(EopCsvError::InvalidCipOffset { line: 2 })
     );
@@ -264,7 +328,12 @@ fn missing_day_and_bad_utc_elapsed_second_propagate_without_model_fallback() {
     let model = modeled(e, "explicit-model");
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51545, 1.0, EopPredictionPolicy::ObservedOnly, site(), model,
+            &cat,
+            51545,
+            1.0,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            model,
         ),
         Err(EopCipCioError::Eop(
             virgostars_ephemeris_core::eop_ut1_era::EopUt1EraError::Eop(
@@ -274,7 +343,12 @@ fn missing_day_and_bad_utc_elapsed_second_propagate_without_model_fallback() {
     );
     assert_eq!(
         wgs84_gcrs_with_eop_corrected_iau_cip(
-            &cat, 51544, f64::NAN, EopPredictionPolicy::ObservedOnly, site(), model,
+            &cat,
+            51544,
+            f64::NAN,
+            EopPredictionPolicy::ObservedOnly,
+            site(),
+            model,
         ),
         Err(EopCipCioError::Eop(
             virgostars_ephemeris_core::eop_ut1_era::EopUt1EraError::InvalidElapsedUtcSecond
