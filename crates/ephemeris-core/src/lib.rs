@@ -37,9 +37,9 @@ pub mod orientation_chain;
 pub mod polar_motion;
 pub mod state;
 pub mod time;
-pub mod tirs_cirs_era;
 pub mod tio_locator;
 pub mod tio_polar_motion;
+pub mod tirs_cirs_era;
 pub mod topocentric_geometry;
 pub mod wgs84_ecef;
 
