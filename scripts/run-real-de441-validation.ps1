@@ -76,7 +76,7 @@ function Invoke-CargoGate {
         [string[]]$ExpectedTests,
         [string]$Directory
     )
-    [string[]]$args = @(
+    [string[]]$cargoArguments = @(
         'test', '--workspace', '--locked',
         '--test', $Suite, '--', '--ignored', '--nocapture'
     )
@@ -91,7 +91,7 @@ function Invoke-CargoGate {
     $pass = Test-GatePass -Lines $lines -ExitCode $code -ExpectedTests $ExpectedTests
     return [pscustomobject]@{
         suite = $Suite
-        command = ('cargo ' + ($args -join ' '))
+        command = ('cargo ' + ($cargoArguments -join ' '))
         expected_tests = $ExpectedTests
         exit_code = $code
         status = $(if ($pass) { 'PASS' } else { 'FAIL' })
