@@ -50,16 +50,16 @@ fn synthetic_de441() -> Vec<u8> {
 
     let states: [[f64; 3]; 11] = [
         [110_000_000.0, 100_000_000.0, 13_000_000.0], // Mercury
-        [90_000_000.0, -30_000_000.0, 8_000_000.0],  // Venus
-        [150_000_000.0, 1_000_000.0, -500_000.0],   // Earth-Moon barycenter
+        [90_000_000.0, -30_000_000.0, 8_000_000.0],   // Venus
+        [150_000_000.0, 1_000_000.0, -500_000.0],     // Earth-Moon barycenter
         [220_000_000.0, 80_000_000.0, -20_000_000.0], // Mars barycenter
         [530_000_000.0, 200_000_000.0, 20_000_000.0], // Jupiter barycenter
         [1_100_000_000.0, -400_000_000.0, 100_000_000.0], // Saturn barycenter
         [2_500_000_000.0, 800_000_000.0, -100_000_000.0], // Uranus barycenter
         [4_400_000_000.0, -1_200_000_000.0, 300_000_000.0], // Neptune barycenter
         [5_000_000_000.0, 800_000_000.0, -200_000_000.0], // Pluto barycenter
-        [384_400.0, 12_000.0, -8_000.0], // Moon relative to Earth
-        [0.0, 0.0, 0.0],                  // Sun
+        [384_400.0, 12_000.0, -8_000.0],              // Moon relative to Earth
+        [0.0, 0.0, 0.0],                              // Sun
     ];
     for (index, xyz) in states.into_iter().enumerate() {
         let first = 3 + index * 3;
@@ -106,9 +106,7 @@ fn computes_all_ten_geometric_bodies_from_a_tiny_offline_kernel() {
     assert_eq!(sky.tai_minus_utc_seconds, 37);
     assert_eq!(sky.observer, site());
     assert_eq!(sky.approximations, MODEL_APPROXIMATIONS);
-    assert!(sky
-        .approximations
-        .contains(&SkyApproximation::NoAberration));
+    assert!(sky.approximations.contains(&SkyApproximation::NoAberration));
     assert_eq!(sky.positions.len(), 10);
 
     let expected = [
@@ -131,7 +129,9 @@ fn computes_all_ten_geometric_bodies_from_a_tiny_offline_kernel() {
         assert!((0.0..360.0).contains(&position.mean_right_ascension_deg));
         assert!((-90.0..=90.0).contains(&position.mean_declination_deg));
         assert!((-90.0..=90.0).contains(&position.altitude_deg));
-        assert!(position.azimuth_deg.is_none_or(|az| (0.0..360.0).contains(&az)));
+        assert!(position
+            .azimuth_deg
+            .is_none_or(|az| (0.0..360.0).contains(&az)));
     }
     assert!((149_000_000.0..151_000_000.0).contains(&sky.positions[0].distance_km));
     assert!((350_000.0..410_000.0).contains(&sky.positions[1].distance_km));
@@ -208,21 +208,13 @@ fn missing_sun_series_and_outside_epoch_fail_without_partial_results() {
     }
     let mut missing_sun = De441::new(Cursor::new(missing)).unwrap();
     assert!(matches!(
-        calculate(
-            &mut missing_sun,
-            timestamp("2026-11-10T12:30:00Z"),
-            site()
-        ),
+        calculate(&mut missing_sun, timestamp("2026-11-10T12:30:00Z"), site()),
         Err(SkyError::Ephemeris(De441Error::MissingSeries(_)))
     ));
 
     let mut ephemeris = De441::new(Cursor::new(synthetic_de441())).unwrap();
     assert!(matches!(
-        calculate(
-            &mut ephemeris,
-            timestamp("2026-12-20T12:30:00Z"),
-            site()
-        ),
+        calculate(&mut ephemeris, timestamp("2026-12-20T12:30:00Z"), site()),
         Err(SkyError::Ephemeris(De441Error::OutsideCoverage { .. }))
     ));
     assert!(matches!(
