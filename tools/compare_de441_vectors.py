@@ -17,7 +17,7 @@ BODIES = frozenset((
 
 def read_state(path):
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
+        reader = csv.DictReader(handle, strict=True)
         header = reader.fieldnames
         if header is None:
             raise ValueError(f"{path}: missing CSV header")
@@ -76,7 +76,7 @@ def main():
     args = parser.parse_args()
     try:
         metrics = compare(args.ours, args.reference)
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, csv.Error) as exc:
         parser.error(str(exc))
     for name, value in metrics.items():
         print(f"{name}={value:.16e}")
