@@ -242,7 +242,9 @@ pub fn geocentric_aberrated_fixed_six_fields_many<R: Read + Seek>(
         return Err(AberratedSphericalError::InvalidIntermediate);
     }
     if !fixed_tilt_rad.is_finite() {
-        return Err(AberratedSphericalError::Projection(ProjectionError::NonFinite));
+        return Err(AberratedSphericalError::Projection(
+            ProjectionError::NonFinite,
+        ));
     }
 
     targets
