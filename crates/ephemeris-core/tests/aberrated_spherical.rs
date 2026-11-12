@@ -21,9 +21,7 @@ use std::f64::consts::{FRAC_PI_2, PI};
 use virgostars_ephemeris_core::aberrated_spherical::{
     spherical_from_aberrated_state, AberratedSphericalError,
 };
-use virgostars_ephemeris_core::aberration::{
-    annual_aberration_icrf, SPEED_OF_LIGHT_KM_PER_DAY,
-};
+use virgostars_ephemeris_core::aberration::{annual_aberration_icrf, SPEED_OF_LIGHT_KM_PER_DAY};
 use virgostars_ephemeris_core::aberration_state::{
     aberrate_light_time_state, AberratedGeocentricState, ObserverAccelerationSource,
 };
@@ -120,7 +118,11 @@ fn caller_supplied_fixed_tilt_rotates_both_position_and_speed() {
         -1.0 / (125.0_f64).sqrt(),
         1e-15,
     );
-    near(tilted.spherical.distance_km, untitled.spherical.distance_km, 1e-14);
+    near(
+        tilted.spherical.distance_km,
+        untitled.spherical.distance_km,
+        1e-14,
+    );
     near(
         tilted.spherical.distance_rate_km_per_day,
         untitled.spherical.distance_rate_km_per_day,
@@ -172,7 +174,9 @@ fn nonfinite_tilt_or_undefined_poles_fail_instead_of_inventing_longitude() {
     let cart = aberrated([100.0, 0.0, 0.0], [0.0; 3]);
     assert!(matches!(
         spherical_from_aberrated_state(&cart, f64::NAN),
-        Err(AberratedSphericalError::Projection(ProjectionError::NonFinite))
+        Err(AberratedSphericalError::Projection(
+            ProjectionError::NonFinite
+        ))
     ));
     let pole = aberrated([0.0, 0.0, 100.0], [1.0, 0.0, 0.0]);
     assert!(matches!(
@@ -207,8 +211,12 @@ fn independent_finite_difference_checks_aberrated_longitude_rate() {
         r * angular_speed * phase.cos(),
         0.0,
     ];
-    let cart = aberrate_light_time_state(&source(source_pos, source_rate), beta, acceleration)
-        .unwrap();
+    let cart =
+        aberrate_light_time_state(&source(source_pos, source_rate), beta, acceleration).unwrap();
     let result = spherical_from_aberrated_state(&cart, 0.0).unwrap();
-    near(result.spherical.longitude_rate_rad_per_day, numerical, 5e-10);
+    near(
+        result.spherical.longitude_rate_rad_per_day,
+        numerical,
+        5e-10,
+    );
 }
