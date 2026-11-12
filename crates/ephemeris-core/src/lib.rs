@@ -33,6 +33,7 @@ pub mod earth_rotation;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod observer_frame_bridge;
 pub mod observer_gcrs;
 pub mod orientation_chain;
 pub mod polar_motion;
