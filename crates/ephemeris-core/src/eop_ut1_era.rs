@@ -113,13 +113,17 @@ impl fmt::Display for EopUt1EraError {
             Self::BeforeModernUtc => write!(f, "integer leap-second UTC requires 1972 or later"),
             Self::UnsupportedTaiUtcOffset => write!(f, "unsupported daily TAI−UTC value"),
             Self::InvalidLeapStep => write!(f, "adjacent EOP DAT change must be -1, 0 or +1"),
-            Self::InvalidElapsedUtcSecond => write!(f, "elapsed UTC SI second is outside civil day"),
+            Self::InvalidElapsedUtcSecond => {
+                write!(f, "elapsed UTC SI second is outside civil day")
+            }
             Self::InvalidDut1 => write!(f, "daily UT1−UTC must be finite within ±0.9 s"),
             Self::ExcessiveUt1TaiChange => {
                 write!(f, "excessive daily UT1−TAI change in supplied EOP data")
             }
             Self::JulianDayOverflow => write!(f, "unrepresentable UTC MJD"),
-            Self::InvalidJulianDate(error) => write!(f, "invalid split UT1/TT Julian date: {error}"),
+            Self::InvalidJulianDate(error) => {
+                write!(f, "invalid split UT1/TT Julian date: {error}")
+            }
             Self::EarthRotation(error) => write!(f, "IAU ERA from UT1: {error}"),
             Self::Polar(error) => write!(f, "approximate SP00/polar orientation: {error}"),
         }
@@ -167,8 +171,7 @@ fn epoch_from_utc_midnight(
         .checked_add(days as i64)
         .ok_or(EopUt1EraError::JulianDayOverflow)?;
     let fraction = offset_seconds / SI_SECONDS_PER_DAY - days;
-    JulianDate::new(day_number, fraction, scale)
-        .map_err(EopUt1EraError::InvalidJulianDate)
+    JulianDate::new(day_number, fraction, scale).map_err(EopUt1EraError::InvalidJulianDate)
 }
 
 /// Derive UT1 and ERA from a supplied EOP CSV snapshot at an actual
@@ -223,7 +226,11 @@ pub fn eop_ut1_era_from_utc_si_seconds(
     let upper = samples
         .get(index + 1)
         .ok_or(EopUt1EraError::Eop(EopCsvError::MissingFollowingDay))?;
-    if upper.mjd_utc != mjd_utc.checked_add(1).ok_or(EopUt1EraError::JulianDayOverflow)? {
+    if upper.mjd_utc
+        != mjd_utc
+            .checked_add(1)
+            .ok_or(EopUt1EraError::JulianDayOverflow)?
+    {
         return Err(EopUt1EraError::Eop(EopCsvError::MissingFollowingDay));
     }
     let dat0 = lower.tai_minus_utc_seconds_at_0h;
@@ -238,9 +245,7 @@ pub fn eop_ut1_era_from_utc_si_seconds(
         return Err(EopUt1EraError::InvalidLeapStep);
     }
     let day_length = SI_SECONDS_PER_DAY + f64::from(leap_step);
-    if !seconds_into_utc_day.is_finite()
-        || !(0.0..day_length).contains(&seconds_into_utc_day)
-    {
+    if !seconds_into_utc_day.is_finite() || !(0.0..day_length).contains(&seconds_into_utc_day) {
         return Err(EopUt1EraError::InvalidElapsedUtcSecond);
     }
     let dut10 = lower.ut1_minus_utc_seconds_at_0h;
@@ -261,8 +266,7 @@ pub fn eop_ut1_era_from_utc_si_seconds(
     let poles = catalog
         .interpolate(mjd_utc, fraction, prediction_policy)
         .map_err(EopUt1EraError::Eop)?;
-    let ut1_minus_tai_seconds =
-        (ut1_tai1 - ut1_tai0).mul_add(fraction, ut1_tai0);
+    let ut1_minus_tai_seconds = (ut1_tai1 - ut1_tai0).mul_add(fraction, ut1_tai0);
     let ut1_minus_utc_seconds = f64::from(dat0) + ut1_minus_tai_seconds;
     let ut1_epoch = epoch_from_utc_midnight(
         mjd_utc,
@@ -274,14 +278,10 @@ pub fn eop_ut1_era_from_utc_si_seconds(
         seconds_into_utc_day + f64::from(dat0) + TT_MINUS_TAI_SECONDS,
         TimeScale::Tt,
     )?;
-    let earth_rotation =
-        earth_rotation_angle(ut1_epoch).map_err(EopUt1EraError::EarthRotation)?;
-    let approximate_polar = itrs_to_tirs_polar_motion_with_approximate_sp00(
-        tt_epoch,
-        poles.xp_rad,
-        poles.yp_rad,
-    )
-    .map_err(EopUt1EraError::Polar)?;
+    let earth_rotation = earth_rotation_angle(ut1_epoch).map_err(EopUt1EraError::EarthRotation)?;
+    let approximate_polar =
+        itrs_to_tirs_polar_motion_with_approximate_sp00(tt_epoch, poles.xp_rad, poles.yp_rad)
+            .map_err(EopUt1EraError::Polar)?;
     Ok(EopUt1EraOrientation {
         source_label: catalog.source_label.clone(),
         mjd_utc,
