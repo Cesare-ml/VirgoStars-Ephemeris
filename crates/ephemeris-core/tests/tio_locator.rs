@@ -20,9 +20,7 @@
 use std::f64::consts::PI;
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
-use virgostars_ephemeris_core::tio_locator::{
-    approximate_tio_locator_sp00, TioLocatorError,
-};
+use virgostars_ephemeris_core::tio_locator::{approximate_tio_locator_sp00, TioLocatorError};
 
 fn tt(day_number: i64, midnight_fraction: f64) -> JulianDate {
     JulianDate::new(day_number, midnight_fraction, TimeScale::Tt).unwrap()
