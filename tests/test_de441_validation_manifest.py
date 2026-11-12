@@ -49,6 +49,20 @@ class ManifestPreflightTests(unittest.TestCase):
             {"samples": [{"target_id": 301, "center_id": 399}]},
         )
 
+    def test_reject_nonstandard_json_constants_even_in_extra_fields(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                raw = '{"extra": ' + constant + '}'
+                with self.assertRaisesRegex(ValueError, "non-standard JSON"):
+                    json.loads(raw, object_pairs_hook=module.reject_duplicate_keys,
+                               parse_constant=module.reject_nonfinite_json_constant)
+
+    def test_strict_json_accepts_ordinary_finite_numbers(self):
+        self.assertEqual(
+            json.loads('{"extra": 1.25}', parse_constant=module.reject_nonfinite_json_constant),
+            {"extra": 1.25},
+        )
+
     def test_valid_metadata(self):
         self.assertEqual(module.validate_manifest(valid()), 1)
 
