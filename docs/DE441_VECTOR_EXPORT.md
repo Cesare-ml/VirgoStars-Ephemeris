@@ -20,8 +20,26 @@ For a scientifically meaningful comparison, record the external file's supplier,
 4. Repeat for at least Earth, Moon relative to Earth, Sun relative to SSB, and a planetary barycenter; use multiple epochs spanning separate DE441 records. Preserve both successful and failed comparisons. Do not select tolerance thresholds after seeing the results: record the proposed error budget, reference-data precision, and acceptance threshold before evaluation.
 5. If the Horizons solution is not confirmed to be DE441, classify the exercise as a **cross-ephemeris comparison**, not a DE441 implementation parity test. If frame, center, correction or time-scale metadata is missing, mark that case *inconclusive* rather than treating a small residual as validation.
 
+## Horizons identity and request checklist (reviewer aid)
+
+For the first reproducible comparison, use the following **NAIF/Horizons numeric IDs**, not ambiguous English names. The exported target and center must refer to the same physical objects as the reference query:
+
+| CSV name | Horizons/NAIF ID | Meaning |
+| --- | ---: | --- |
+| `ssb` | 0 | Solar-system barycenter |
+| `sun` | 10 | Sun center |
+| `emb` | 3 | Earth–Moon barycenter |
+| `earth` | 399 | Earth center |
+| `moon` | 301 | Moon center |
+| `mars_barycenter` | 4 | Mars-system barycenter, **not** Mars center (499) |
+| `jupiter_barycenter` | 5 | Jupiter-system barycenter, **not** Jupiter center (599) |
+
+In Horizons, choose **VECTORS**, geometric state (`VEC_CORR=NONE`), reference plane **FRAME** (`REF_PLANE=FRAME`, not ecliptic), and output units **KM-S** (`OUT_UNITS=KM-S`). Record the returned reference frame and time-scale header; do not assume that the label alone proves a matching ICRF/TDB solution. For example, the CSV pair `moon earth` means target 301 relative to center 399; `sun ssb` means target 10 relative to center 0. Confirm the Horizons center selection in its returned header, since center identifiers can require an explicit center syntax in the Horizons interface.
+
+Keep the complete raw Horizons response with its `$SOE`/`$EOE` vector block and solution provenance. Compare `X,Y,Z` in km and `VX,VY,VZ` in km/s only **after** converting the latter to km/day. Do not compare a rounded calendar-date epoch with the exact `f64` JD exported by Rust without documenting the rounding. This checklist is a request specification, **not** evidence that a query or a real-kernel comparison has been run.
+
 No Horizons response has been imported or evaluated as part of these instructions. They define an auditable procedure, not a claim of measured accuracy.
 
 This tool is a reproducibility aid, **not a scientific validation result**. No external JPL/Horizons vectors or accuracy tolerances are bundled or claimed. See [VALIDATION.md](VALIDATION.md) and [DE441.md](DE441.md).
 
-Modification record: 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
+Modification record: 2026-11-12 — added explicit Horizons body-ID and vector-request checklist (documentation only; no scientific run). 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
