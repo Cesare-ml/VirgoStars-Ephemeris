@@ -20,9 +20,7 @@ use std::f64::consts::PI;
 
 use virgostars_ephemeris_core::calendar::{JulianDate, TimeScale};
 use virgostars_ephemeris_core::eop_cip_cio::wgs84_gcrs_with_eop_corrected_iau_cip;
-use virgostars_ephemeris_core::eop_polar_csv::{
-    CelestrakEopPolarCatalog, EopPredictionPolicy,
-};
+use virgostars_ephemeris_core::eop_polar_csv::{CelestrakEopPolarCatalog, EopPredictionPolicy};
 use virgostars_ephemeris_core::eop_ut1_era::eop_ut1_era_from_utc_si_seconds;
 use virgostars_ephemeris_core::iau_cip_from_bpn::{
     modeled_cip_cio_from_complete_bpn, CompleteBpnAndCioAtTt, IauCipFromBpnError,
@@ -32,17 +30,41 @@ use virgostars_ephemeris_core::observer_gcrs::Wgs84ObserverSite;
 /// Independent ERFA t_pnm06a, TT=2400000.5 + 50123.9999,
 /// GCRS→true-equator/equinox-of-date 3x3 matrix.
 const ERFA_PNM06A: [[f64; 3]; 3] = [
-    [0.999_999_583_279_420_5, 0.837_238_277_263_096_2e-3, 0.363_968_477_114_062_3e-3],
-    [-0.837_253_374_474_368_4e-3, 0.999_999_648_649_286_2, 0.413_290_594_461_102e-4],
-    [-0.363_933_746_962_946_5e-3, -0.416_337_760_591_066_4e-4, 0.999_999_932_909_426],
+    [
+        0.999_999_583_279_420_5,
+        0.837_238_277_263_096_2e-3,
+        0.363_968_477_114_062_3e-3,
+    ],
+    [
+        -0.837_253_374_474_368_4e-3,
+        0.999_999_648_649_286_2,
+        0.413_290_594_461_102e-4,
+    ],
+    [
+        -0.363_933_746_962_946_5e-3,
+        -0.416_337_760_591_066_4e-4,
+        0.999_999_932_909_426,
+    ],
 ];
 
 /// Separate ERFA t_bpn2xy, X=1.093465510215479e-3,
 /// Y=-4.281337229063151e-5 from the **third row**.
 const ERFA_BPN2XY: [[f64; 3]; 3] = [
-    [9.999_962_358_680_738e-1, -2.516_417_057_665_452e-3, -1.093_569_785_342_370e-3],
-    [2.516_462_370_370_876e-3, 9.999_968_329_010_883e-1, 4.006_159_587_358_310e-5],
-    [1.093_465_510_215_479e-3, -4.281_337_229_063_151e-5, 9.999_994_012_499_173e-1],
+    [
+        9.999_962_358_680_738e-1,
+        -2.516_417_057_665_452e-3,
+        -1.093_569_785_342_370e-3,
+    ],
+    [
+        2.516_462_370_370_876e-3,
+        9.999_968_329_010_883e-1,
+        4.006_159_587_358_310e-5,
+    ],
+    [
+        1.093_465_510_215_479e-3,
+        -4.281_337_229_063_151e-5,
+        9.999_994_012_499_173e-1,
+    ],
 ];
 
 fn tt() -> JulianDate {
@@ -72,9 +94,13 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
 
 #[test]
 fn independent_erfa_pnm06a_extracts_cip_signs_from_third_row() {
-    let out = modeled_cip_cio_from_complete_bpn(
-        supplied(ERFA_PNM06A, tt(), 2.1e-8, "ERFA t_pnm06a matrix fixture"),
-    ).unwrap();
+    let out = modeled_cip_cio_from_complete_bpn(supplied(
+        ERFA_PNM06A,
+        tt(),
+        2.1e-8,
+        "ERFA t_pnm06a matrix fixture",
+    ))
+    .unwrap();
     near(out.model_x, -0.363_933_746_962_946_5e-3, 1e-15);
     near(out.model_y, -0.416_337_760_591_066_4e-4, 1e-15);
     assert_eq!(out.tt_epoch, tt());
@@ -84,9 +110,13 @@ fn independent_erfa_pnm06a_extracts_cip_signs_from_third_row() {
 
 #[test]
 fn separate_erfa_bpn2xy_fixture_proves_row_not_column_convention() {
-    let out = modeled_cip_cio_from_complete_bpn(
-        supplied(ERFA_BPN2XY, tt(), 0.0, "ERFA t_bpn2xy matrix fixture"),
-    ).unwrap();
+    let out = modeled_cip_cio_from_complete_bpn(supplied(
+        ERFA_BPN2XY,
+        tt(),
+        0.0,
+        "ERFA t_bpn2xy matrix fixture",
+    ))
+    .unwrap();
     near(out.model_x, 1.093_465_510_215_479e-3, 1e-15);
     near(out.model_y, -4.281_337_229_063_151e-5, 1e-15);
     assert!((out.model_x - ERFA_BPN2XY[0][2]).abs() > 0.002);
@@ -95,9 +125,8 @@ fn separate_erfa_bpn2xy_fixture_proves_row_not_column_convention() {
 #[test]
 fn identity_and_exact_orthogonal_rotation_preserve_north_pole_geometry() {
     let id = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-    let zero = modeled_cip_cio_from_complete_bpn(
-        supplied(id, tt(), 0.0, "synthetic identity"),
-    ).unwrap();
+    let zero =
+        modeled_cip_cio_from_complete_bpn(supplied(id, tt(), 0.0, "synthetic identity")).unwrap();
     assert_eq!((zero.model_x, zero.model_y), (0.0, 0.0));
     let a: f64 = 0.2;
     let rotated = [
@@ -105,9 +134,9 @@ fn identity_and_exact_orthogonal_rotation_preserve_north_pole_geometry() {
         [0.0, 1.0, 0.0],
         [-a.sin(), 0.0, a.cos()],
     ];
-    let out = modeled_cip_cio_from_complete_bpn(
-        supplied(rotated, tt(), 3.1e-9, "synthetic y-rotation"),
-    ).unwrap();
+    let out =
+        modeled_cip_cio_from_complete_bpn(supplied(rotated, tt(), 3.1e-9, "synthetic y-rotation"))
+            .unwrap();
     near(out.model_x, -a.sin(), 1e-15);
     assert_eq!(out.model_y, 0.0);
     assert_eq!(out.cio_s_plus_xy_half_rad, 3.1e-9);
@@ -181,25 +210,46 @@ fn modeled_cip_x_y_flow_into_existing_eop_corrected_gcrs_site() {
         "2000-01-02,51545,0.1,0.2,0.3553880,0,0,0,-0.000005,-0.000050,32,O\n",
     );
     let eop = CelestrakEopPolarCatalog::parse_csv("synthetic model source", csv).unwrap();
-    let t = eop_ut1_era_from_utc_si_seconds(
-        &eop, 51544, 0.0, EopPredictionPolicy::ObservedOnly,
-    ).unwrap().tt_epoch;
-    let model = modeled_cip_cio_from_complete_bpn(
-        supplied(ERFA_PNM06A, t, 0.0, "ERFA matrix numbers at synthetic TT"),
-    ).unwrap();
+    let t = eop_ut1_era_from_utc_si_seconds(&eop, 51544, 0.0, EopPredictionPolicy::ObservedOnly)
+        .unwrap()
+        .tt_epoch;
+    let model = modeled_cip_cio_from_complete_bpn(supplied(
+        ERFA_PNM06A,
+        t,
+        0.0,
+        "ERFA matrix numbers at synthetic TT",
+    ))
+    .unwrap();
     let site = Wgs84ObserverSite {
         longitude_rad_east: 3.1,
         latitude_rad_north: -0.5,
         ellipsoidal_height_m: 2_500.0,
     };
     let out = wgs84_gcrs_with_eop_corrected_iau_cip(
-        &eop, 51544, 0.0, EopPredictionPolicy::ObservedOnly, site, model,
-    ).unwrap();
-    near(out.corrected_cip_cio.corrected_x,
-        ERFA_PNM06A[2][0] - 0.000_005 * PI / (180.0 * 3600.0), 1e-16);
-    near(out.corrected_cip_cio.corrected_y,
-        ERFA_PNM06A[2][1] - 0.000_050 * PI / (180.0 * 3600.0), 1e-16);
-    assert!(out.observer.observer_gcrs.position_gcrs_km.iter().all(|x| x.is_finite()));
+        &eop,
+        51544,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+        site,
+        model,
+    )
+    .unwrap();
+    near(
+        out.corrected_cip_cio.corrected_x,
+        ERFA_PNM06A[2][0] - 0.000_005 * PI / (180.0 * 3600.0),
+        1e-16,
+    );
+    near(
+        out.corrected_cip_cio.corrected_y,
+        ERFA_PNM06A[2][1] - 0.000_050 * PI / (180.0 * 3600.0),
+        1e-16,
+    );
+    assert!(out
+        .observer
+        .observer_gcrs
+        .position_gcrs_km
+        .iter()
+        .all(|x| x.is_finite()));
 }
 
 #[test]
