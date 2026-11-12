@@ -31,7 +31,6 @@ pub mod error;
 pub mod first_sky;
 pub mod light_time;
 pub mod orientation_chain;
-pub mod orientation_chain;
 pub mod state;
 pub mod time;
 
