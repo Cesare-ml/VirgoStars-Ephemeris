@@ -67,12 +67,18 @@ def reject_duplicate_keys(pairs):
     return result
 
 
+def reject_nonfinite_json_constant(value):
+    """Strict JSON forbids NaN/Infinity, including in otherwise ignored fields."""
+    raise ValueError(f"non-standard JSON numeric constant: {value}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     args = parser.parse_args()
     try:
-        count = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys))
+        count = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys,
+                                             parse_constant=reject_nonfinite_json_constant))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.exit(1, f"Invalid DE441 manifest: {exc}\n")
     print(f"Metadata preflight passed for {count} samples; numerical validation NOT performed.")
