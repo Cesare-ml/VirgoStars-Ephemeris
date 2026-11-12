@@ -12,6 +12,19 @@ CSV metadata: `jd_tdb` is Julian Date in TDB, `frame=ICRF`, `corrections=GEOMETR
 
 For a scientifically meaningful comparison, record the external file's supplier, filename, SHA-256, coverage, the exact Horizons request (epoch/time scale, target, center, frame, correction mode and output units), and the reference response. Convert Horizons velocities from km/s to km/day by multiplying by 86400 if needed. Use an identical ephemeris solution, not merely a similar epoch. Do **not** call agreement with a different kernel proof of DE441 parity.
 
+## Reproducible local evidence capture (not yet executed)
+
+Keep the input binary **outside** the repository. On a POSIX host, the following commands create an audit directory containing the exact input digest, exported CSV, and Rust toolchain version. Replace the path with a legally obtained classic DE441 file; do not commit the binary or a raw Horizons response until its redistribution rights have been reviewed.
+
+```sh
+mkdir -p local-de441-audit
+sha256sum /path/to/de441.eph > local-de441-audit/de441.sha256
+rustc --version > local-de441-audit/rustc-version.txt
+cargo run --quiet --example de441_vector_csv -- /path/to/de441.eph 2451545.0 moon earth > local-de441-audit/moon-earth-2451545.csv
+```
+
+The digest file records the **literal path** used for hashing and may need path normalization before sharing; the digest itself identifies the input bytes. Preserve the unmodified Horizons request/response, the kernel/solution identity reported by Horizons, and a separate comparison report. A CSV produced by this command alone is **not** evidence of agreement with Horizons. If the reference solution is not independently confirmed as DE441, label the result cross-ephemeris rather than implementation parity. Never set acceptance thresholds retroactively based on the measured residuals.
+
 ## Independent comparison protocol (not yet executed)
 
 1. Select an epoch strictly inside the local DE441 header coverage, away from record boundaries for the first comparison; later repeat exactly at and on either side of a boundary. Preserve the full `jd_tdb` value rather than rounding it to a calendar timestamp.
@@ -42,4 +55,4 @@ No Horizons response has been imported or evaluated as part of these instruction
 
 This tool is a reproducibility aid, **not a scientific validation result**. No external JPL/Horizons vectors or accuracy tolerances are bundled or claimed. See [VALIDATION.md](VALIDATION.md) and [DE441.md](DE441.md).
 
-Modification record: 2026-11-12 — added explicit Horizons body-ID and vector-request checklist (documentation only; no scientific run). 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
+Modification record: 2026-11-12 — added a reproducible local evidence-capture command sequence with input SHA-256 and Rust toolchain provenance (documentation only; not executed). 2026-11-12 — added explicit Horizons body-ID and vector-request checklist (documentation only; no scientific run). 2026-11-11 — added offline vector-export example and comparison instructions; preserved round-trip JD and six-vector-component precision and added example unit tests. Added a deterministic 10,000-pattern finite `f64` round-trip stress regression, including explicit subnormal and finite-extreme boundaries. This tests CSV serialization, **not** DE441 numerical accuracy. Run `cargo test --workspace --all-targets` to include example tests. CPAL-1.0, NOTICE and VirgoStars attribution remain applicable.
