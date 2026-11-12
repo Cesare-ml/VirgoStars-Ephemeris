@@ -157,8 +157,7 @@ mod tests {
     impl Read for CountingReader {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             if self.inner.position() >= (RECORD_SIZE * 2) as u64 {
-                self.coefficient_reads
-                    .set(self.coefficient_reads.get() + 1);
+                self.coefficient_reads.set(self.coefficient_reads.get() + 1);
             }
             self.inner.read(buf)
         }
@@ -185,12 +184,7 @@ mod tests {
     }
 
     fn fractional_tdb() -> JulianDate {
-        JulianDate::new(
-            2_451_545,
-            0.5 + 0.25 / 86_400.0,
-            TimeScale::Tdb,
-        )
-        .unwrap()
+        JulianDate::new(2_451_545, 0.5 + 0.25 / 86_400.0, TimeScale::Tdb).unwrap()
     }
 
     #[test]
@@ -224,9 +218,15 @@ mod tests {
                 fractional_tdb(),
                 0.000_001
             ),
-            Err(CheckedStateError::Epoch(EpochBridgeError::PrecisionLoss { .. }))
+            Err(CheckedStateError::Epoch(
+                EpochBridgeError::PrecisionLoss { .. }
+            ))
         ));
-        assert_eq!(reads.get(), 0, "rejected epoch must not read coefficient records");
+        assert_eq!(
+            reads.get(),
+            0,
+            "rejected epoch must not read coefficient records"
+        );
 
         let accepted = checked_state_at_split_tdb(
             &mut ephemeris,
@@ -266,7 +266,9 @@ mod tests {
                 exact_tdb(),
                 f64::NAN
             ),
-            Err(CheckedStateError::Epoch(EpochBridgeError::InvalidErrorBudget))
+            Err(CheckedStateError::Epoch(
+                EpochBridgeError::InvalidErrorBudget
+            ))
         ));
         assert_eq!(reads.get(), 0);
     }
@@ -283,7 +285,9 @@ mod tests {
                 beyond,
                 0.0
             ),
-            Err(CheckedStateError::Ephemeris(De441Error::OutsideCoverage { .. }))
+            Err(CheckedStateError::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            ))
         ));
     }
 
