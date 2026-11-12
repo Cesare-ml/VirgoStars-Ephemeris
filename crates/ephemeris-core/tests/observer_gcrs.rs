@@ -87,13 +87,21 @@ fn independently_published_erfa_earth_orientation_and_wgs84_site_compose() {
     let result = wgs84_observer_to_gcrs(site(), orientation()).unwrap();
     near_xyz(
         result.position_itrs_km,
-        [-5_599.000_557_704_994, 233.011_672_234_792_03, -3_040.909_470_698_336],
+        [
+            -5_599.000_557_704_994,
+            233.011_672_234_792_03,
+            -3_040.909_470_698_336,
+        ],
         2.0e-10,
     );
     near(result.era_rad, 1.752_833_255_303_07, 1.0e-12);
     near_xyz(
         result.position_gcrs_km,
-        [782.687_821_523_805_6, -5_548.791_492_538_574, -3_041.142_028_898_221_3],
+        [
+            782.687_821_523_805_6,
+            -5_548.791_492_538_574,
+            -3_041.142_028_898_221_3,
+        ],
         2.0e-8,
     );
 }
@@ -112,13 +120,8 @@ fn composed_pipeline_agrees_with_all_three_independent_intermediate_steps() {
     let cirs = tirs_to_cirs_earth_spin(tirs, combined.era_rad, TAU * 1.002_737_811_911_354_6)
         .unwrap()
         .position_km;
-    let independently_staged = cirs_to_gcrs_position(
-        cirs,
-        params.cip_x,
-        params.cip_y,
-        params.cio_locator_s_rad,
-    )
-    .unwrap();
+    let independently_staged =
+        cirs_to_gcrs_position(cirs, params.cip_x, params.cip_y, params.cio_locator_s_rad).unwrap();
     near_xyz(combined.position_gcrs_km, independently_staged, 5.0e-12);
 }
 
@@ -182,7 +185,11 @@ fn rejects_invalid_geodetic_inputs_and_cio_pole_data() {
 fn output_is_position_only_and_has_declared_kilometer_units() {
     let result = wgs84_observer_to_gcrs(site(), orientation()).unwrap();
     let norm = |xyz: [f64; 3]| xyz.into_iter().map(|x| x * x).sum::<f64>().sqrt();
-    near(norm(result.position_gcrs_km), norm(result.position_itrs_km), 5.0e-12);
+    near(
+        norm(result.position_gcrs_km),
+        norm(result.position_itrs_km),
+        5.0e-12,
+    );
     assert!(norm(result.position_gcrs_km) > 6_000.0);
     assert!(norm(result.position_gcrs_km) < 7_000.0);
 }
