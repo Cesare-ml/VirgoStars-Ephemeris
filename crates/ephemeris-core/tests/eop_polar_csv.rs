@@ -58,12 +58,17 @@ fn published_celestrak_utc_day_reference_has_correct_units_and_metadata() {
     assert_eq!(row.record_type, EopRecordType::Observed);
     near(row.xp_rad, 0.043_282 * RAD_PER_ARCSEC, 1.0e-21);
     near(row.yp_rad, 0.377_909 * RAD_PER_ARCSEC, 1.0e-21);
+    // Independently published CelesTrak CSV dX=-5 µas and dY=-50 µas.
+    near(row.cip_dx_rad, -0.000_005 * RAD_PER_ARCSEC, 1.0e-25);
+    near(row.cip_dy_rad, -0.000_050 * RAD_PER_ARCSEC, 1.0e-25);
     assert_eq!(row.ut1_minus_utc_seconds_at_0h, 0.355_388);
     assert_eq!(row.tai_minus_utc_seconds_at_0h, 32);
     let exact = catalog.interpolate_observed(51544, 0.0).unwrap();
     assert_eq!(exact.quality, EopPolarQuality::Observed);
     assert_eq!(exact.xp_rad, row.xp_rad);
     assert_eq!(exact.yp_rad, row.yp_rad);
+    assert_eq!(exact.cip_dx_rad, row.cip_dx_rad);
+    assert_eq!(exact.cip_dy_rad, row.cip_dy_rad);
 }
 
 #[test]
@@ -74,6 +79,8 @@ fn linear_half_day_interpolation_converts_arcseconds_before_application() {
     let midpoint = catalog.interpolate_observed(51544, 0.5).unwrap();
     near(midpoint.xp_rad, 0.093_282 * RAD_PER_ARCSEC, 2.0e-21);
     near(midpoint.yp_rad, 0.427_909 * RAD_PER_ARCSEC, 2.0e-21);
+    near(midpoint.cip_dx_rad, -0.000_005 * RAD_PER_ARCSEC, 1.0e-25);
+    near(midpoint.cip_dy_rad, -0.000_050 * RAD_PER_ARCSEC, 1.0e-25);
     assert_eq!(midpoint.quality, EopPolarQuality::Observed);
     assert_eq!(midpoint.mjd_utc, 51544);
     assert_eq!(midpoint.fraction_of_utc_day, 0.5);
@@ -225,4 +232,36 @@ fn leap_second_metadata_are_not_automatically_interpolated_as_ut1() {
     // interpolated UT1-UTC value across the leap discontinuity.
     assert_eq!(a.ut1_minus_utc_seconds_at_0h, -0.20);
     assert_eq!(b.ut1_minus_utc_seconds_at_0h, 0.80);
+}
+
+#[test]
+fn celestial_deltas_are_interpolated_and_forecast_quality_is_visible() {
+    let predicted = NEXT_PREDICTED.replace("-0.000005,-0.000050", "0.000095,0.000150");
+    let catalog = parse(&[PUBLISHED_SAMPLE, NEXT_OBSERVED, &predicted]).unwrap();
+    assert_eq!(
+        catalog.interpolate_observed(51545, 0.5),
+        Err(EopCsvError::PredictionNotAuthorized)
+    );
+    let allowed = catalog
+        .interpolate(51545, 0.5, EopPredictionPolicy::AllowPredicted)
+        .unwrap();
+    assert_eq!(allowed.quality, EopPolarQuality::IncludesPrediction);
+    near(allowed.cip_dx_rad, 0.000_045 * RAD_PER_ARCSEC, 1.0e-24);
+    near(allowed.cip_dy_rad, 0.000_050 * RAD_PER_ARCSEC, 1.0e-24);
+}
+
+#[test]
+fn celestial_delta_units_are_validated_without_confusing_them_with_poles() {
+    let incorrect_dx = PUBLISHED_SAMPLE.replace("-0.000005,-0.000050", "2.0,-0.000050");
+    assert_eq!(
+        parse(&[&incorrect_dx]),
+        Err(EopCsvError::InvalidCipOffset { line: 2 })
+    );
+    let incorrect_dy = PUBLISHED_SAMPLE.replace("-0.000005,-0.000050", "-0.000005,-1.1");
+    assert_eq!(
+        parse(&[&incorrect_dy]),
+        Err(EopCsvError::InvalidCipOffset { line: 2 })
+    );
+    let nan_dx = PUBLISHED_SAMPLE.replace("-0.000005,-0.000050", "NaN,-0.000050");
+    assert_eq!(parse(&[&nan_dx]), Err(EopCsvError::MalformedRow { line: 2 }));
 }
