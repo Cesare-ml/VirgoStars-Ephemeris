@@ -70,10 +70,16 @@ impl ChebyshevPositionRecord {
                 field: "position Chebyshev coefficient",
             });
         }
-        if !(midpoint.value() - radius_seconds).is_finite()
-            || !(midpoint.value() + radius_seconds).is_finite()
-        {
+        let start = midpoint.value() - radius_seconds;
+        let end = midpoint.value() + radius_seconds;
+        if !start.is_finite() || !end.is_finite() {
             return Err(EphemerisError::ArithmeticOverflow);
+        }
+        // Modification (2026-11-12): reject windows whose boundaries round
+        // back to their midpoint in f64. Such windows cannot be sampled
+        // reliably even though midpoint and radius are separately finite.
+        if start >= midpoint.value() || end <= midpoint.value() {
+            return Err(EphemerisError::InvalidRadius);
         }
 
         Ok(Self {
@@ -167,6 +173,53 @@ mod tests {
         assert!(record
             .state_at(TdbSecondsPastJ2000::new(11.0).unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn rejects_windows_with_unrepresentable_epoch_boundaries() {
+        // At 2^53 seconds, an offset of one second can be rounded away
+        // on one side of the midpoint; at 1e20 it is lost on both sides.
+        for midpoint in [
+            9_007_199_254_740_992.0,
+            -9_007_199_254_740_992.0,
+            1.0e20,
+            -1.0e20,
+        ] {
+            let result = ChebyshevPositionRecord::new(
+                TdbSecondsPastJ2000::new(midpoint).unwrap(),
+                1.0,
+                [vec![1.0], vec![2.0], vec![3.0]],
+            );
+            assert!(
+                matches!(result, Err(EphemerisError::InvalidRadius)),
+                "unrepresentable time interval at midpoint={midpoint}"
+            );
+        }
+    }
+
+    #[test]
+    fn sufficiently_wide_high_epoch_window_retains_both_endpoints() {
+        let midpoint = 9_007_199_254_740_992.0;
+        let record = ChebyshevPositionRecord::new(
+            TdbSecondsPastJ2000::new(midpoint).unwrap(),
+            4.0,
+            [vec![5.0, 2.0], vec![7.0, 0.0], vec![-3.0, 0.0]],
+        )
+        .unwrap();
+        for (offset, x) in [(-4.0, -1.0), (0.0, 0.0), (4.0, 1.0)] {
+            let epoch = TdbSecondsPastJ2000::new(midpoint + offset).unwrap();
+            let state = record.state_at(epoch).unwrap();
+            near(state.position_km.x, 5.0 + 2.0 * x);
+            near(state.position_km.y, 7.0);
+            near(state.position_km.z, -3.0);
+            near(state.velocity_km_per_second.x, 0.5);
+            near(state.velocity_km_per_second.y, 0.0);
+            near(state.velocity_km_per_second.z, 0.0);
+        }
+        assert!(matches!(
+            record.state_at(TdbSecondsPastJ2000::new(midpoint + 8.0).unwrap()),
+            Err(EphemerisError::OutsideRecord { .. })
+        ));
     }
 
     #[test]
