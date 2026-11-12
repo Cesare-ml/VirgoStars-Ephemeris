@@ -67,3 +67,8 @@ DE441, that the declared tolerance is scientifically justified, or that any
 numerical vector agrees. Those checks require human review and independent
 real-kernel computation. Keep the manifest and reference evidence with the
 validation report, not with bundled ephemeris binaries.
+
+The preflight CLI parses JSON strictly: duplicate object keys and non-standard
+`NaN`, `Infinity`, or `-Infinity` numeric literals are rejected even in extra
+metadata fields. This prevents malformed provenance from being silently
+accepted; it does not inspect kernel bytes or verify astronomical residuals.
