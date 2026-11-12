@@ -82,11 +82,17 @@ impl fmt::Display for De441IcrfObserverError {
         match self {
             Self::EarthIsNotAValidTarget => write!(f, "target Earth has no supported sightline"),
             Self::InvalidTdbEpoch => write!(f, "DE441 epoch must be a finite TDB Julian date"),
-            Self::InvalidObserver => write!(f, "observer must be finite geocentric ICRF kilometers"),
+            Self::InvalidObserver => {
+                write!(f, "observer must be finite geocentric ICRF kilometers")
+            }
             Self::Ephemeris(error) => write!(f, "DE441 geometric target state: {error}"),
             Self::NonFiniteTargetState => write!(f, "non-finite DE441 target position or velocity"),
-            Self::NonFiniteDisplacement => write!(f, "non-finite ICRF target-observer displacement"),
-            Self::CoincidentTargetAndObserver => write!(f, "target and observer positions coincide"),
+            Self::NonFiniteDisplacement => {
+                write!(f, "non-finite ICRF target-observer displacement")
+            }
+            Self::CoincidentTargetAndObserver => {
+                write!(f, "target and observer positions coincide")
+            }
             Self::InvalidRange => write!(f, "unrepresentable ICRF observer-target range"),
         }
     }
@@ -127,7 +133,10 @@ pub fn de441_geometric_observer_sightline_icrf<R: Read + Seek>(
     if !epoch_tdb.0.is_finite() {
         return Err(De441IcrfObserverError::InvalidTdbEpoch);
     }
-    if observer_geocentric_icrf_km.iter().any(|value| !value.is_finite()) {
+    if observer_geocentric_icrf_km
+        .iter()
+        .any(|value| !value.is_finite())
+    {
         return Err(De441IcrfObserverError::InvalidObserver);
     }
     let state = ephemeris
