@@ -53,10 +53,16 @@ impl fmt::Display for OrientationChainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPolarMotionMatrix => {
-                write!(f, "ITRS-to-TIRS W must be a finite proper orthogonal 3x3 matrix")
+                write!(
+                    f,
+                    "ITRS-to-TIRS W must be a finite proper orthogonal 3x3 matrix"
+                )
             }
             Self::InvalidCioOrientationMatrix => {
-                write!(f, "GCRS-to-CIRS C must be a finite proper orthogonal 3x3 matrix")
+                write!(
+                    f,
+                    "GCRS-to-CIRS C must be a finite proper orthogonal 3x3 matrix"
+                )
             }
             Self::InvalidEarthRotationAngle => {
                 write!(f, "Earth Rotation Angle must be finite in [0, 2pi) radians")
@@ -92,9 +98,7 @@ fn proper_rotation(matrix: &[[f64; 3]; 3]) -> bool {
 }
 
 fn multiply(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
-    std::array::from_fn(|i| {
-        std::array::from_fn(|j| (0..3).map(|k| a[i][k] * b[k][j]).sum())
-    })
+    std::array::from_fn(|i| std::array::from_fn(|j| (0..3).map(|k| a[i][k] * b[k][j]).sum()))
 }
 
 fn finite_vector(vector: &[f64; 3]) -> bool {
@@ -122,12 +126,9 @@ impl ComposedOrientation {
         if !finite_vector(&position_gcrs_km) {
             return Err(OrientationChainError::InvalidPosition);
         }
-        let out: [f64; 3] = self.gcrs_to_itrs.map(|row| {
-            row.iter()
-                .zip(position_gcrs_km)
-                .map(|(a, b)| a * b)
-                .sum()
-        });
+        let out: [f64; 3] = self
+            .gcrs_to_itrs
+            .map(|row| row.iter().zip(position_gcrs_km).map(|(a, b)| a * b).sum());
         if !finite_vector(&out) {
             return Err(OrientationChainError::NonFiniteResult);
         }
@@ -143,7 +144,9 @@ impl ComposedOrientation {
             return Err(OrientationChainError::InvalidPosition);
         }
         let out: [f64; 3] = std::array::from_fn(|j| {
-            (0..3).map(|i| self.gcrs_to_itrs[i][j] * position_itrs_km[i]).sum()
+            (0..3)
+                .map(|i| self.gcrs_to_itrs[i][j] * position_itrs_km[i])
+                .sum()
         });
         if !finite_vector(&out) {
             return Err(OrientationChainError::NonFiniteResult);
@@ -185,12 +188,15 @@ pub fn compose_gcrs_to_itrs(
     let (sin, cos) = era_rad.sin_cos();
     // CIRS -> TIRS, ordinary active column-vector Rz(-ERA).
     let cirs_to_tirs = [[cos, sin, 0.0], [-sin, cos, 0.0], [0.0, 0.0, 1.0]];
-    let tirs_to_itrs: [[f64; 3]; 3] = std::array::from_fn(|i| {
-        std::array::from_fn(|j| itrs_to_tirs_w[j][i])
-    });
+    let tirs_to_itrs: [[f64; 3]; 3] =
+        std::array::from_fn(|i| std::array::from_fn(|j| itrs_to_tirs_w[j][i]));
     let rotated_celestial = multiply(&cirs_to_tirs, &gcrs_to_cirs_c);
     let gcrs_to_itrs = multiply(&tirs_to_itrs, &rotated_celestial);
-    if gcrs_to_itrs.iter().flatten().any(|value| !value.is_finite()) {
+    if gcrs_to_itrs
+        .iter()
+        .flatten()
+        .any(|value| !value.is_finite())
+    {
         return Err(OrientationChainError::NonFiniteResult);
     }
     Ok(ComposedOrientation { gcrs_to_itrs })
