@@ -1,7 +1,7 @@
 # Reproducible local real-DE441 scientific validation receipt
 
 **Date:** 2026-11-12  
-**Status:** experimental opt-in runner; **no authentic DE441 file has been executed in GitHub CI or this PR**.
+**Status:** experimental opt-in runner; **no authentic DE441 file has been executed in GitHub CI or this PR**. The follow-up draft corrects an executable argument-splat regression, adds an actual mock-Cargo invocation check, and strengthens the receipt provenance requirements (2026-11-12).
 
 This branch is stacked directly on [draft #122](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/122), which introduced four optional **`#[ignore]`** real classic-DE441 tests split across two Rust test suites. Those tests compare geocentric one-way-light-time (**LT**) geometry against existing independent NASA/JPL Horizons numerical reference data, and check three signed aberrated-output rates by full-pipeline finite differences. `scripts/run-real-de441-validation.ps1` makes those tests **auditable and easy to execute locally on Windows 11 using PowerShell 7**, without requiring `--ignored` flag knowledge, copying the kernel, or allowing skipped tests to be treated as passing.
 
@@ -14,7 +14,8 @@ At a terminal in the checked-out **feature branch containing this script and dra
 ```powershell
 pwsh -NoProfile -File ./scripts/run-real-de441-validation.ps1 `
   -De441Path "D:\Astronomy\de441.eph" `
-  -OutputRoot "D:\VirgoStars-Scientific-Reports"
+  -OutputRoot "D:\VirgoStars-Scientific-Reports" `
+  -ExpectedSha256 "64-character-sha256-from-an-independent-trusted-source"
 ```
 
 `-OutputRoot` is optional: the default is `$HOME/VirgoStars-Validation`. Every run creates its own unique directory, e.g. `20261112T205500Z-1234abcd`. **Nothing is sent to GitHub, an external site, or an API.** The actual file is only opened/read locally by SHA256 and Rust tests, never copied into the report. Report output contains only the **kernel filename, byte size and SHA-256**, not the file contents or absolute kernel path. Avoid uploading the raw kernel to GitHub or attaching it to an issue. If a review needs the report, share `receipt.json` and the generated text logs, after checking them for your own privacy requirements.
@@ -46,13 +47,13 @@ The script refuses to mark a gate as successful based solely on `cargo` exiting 
 
 Its report directory contains:
 
-- `receipt.json` — schema 1, UTC execution timestamp, source Git commit when available, filename/size/streaming SHA-256, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
+- `receipt.json` — **schema 2**, UTC execution timestamp, **mandatory Git source commit and clean-worktree flag**, filename/size/streaming SHA-256, **optional supplied expected SHA-256 and match flag**, Cargo and rustc versions, pinned provider/query correction settings, expected targets, per-suite **command, status and exit code**, and a declared scientific interpretation limit.
 - `light_time_horizons.log` — full stdout/stderr of the original independent-LT-reference suite.
 - `aberrated_real_de441.log` — full stdout/stderr of the new reconstructed-LT and derivative tests.
 
 Every failure produces **a nonzero exit code and `status=FAIL`** in the receipt; if validation stops before tests, it records `NOT_RUN` only until the first error and never writes a misleading `PASS`. Logs that are not executed are not invented. The runner restores any pre-existing process `DE441_PATH` variable on completion, and does not overwrite existing reports.
 
-**Important verification limitation:** the 1 GB size check and SHA256 fingerprint provide a minimum format guard and **identity** for a supplied binary, not proof the file truly originated from NASA/JPL. Verify the hash against a trusted distributor separately. Do not interpret a simulated/selftest pass as evidence of real-file scientific accuracy.
+**Important verification limitation:** the 1 GB size check and SHA256 fingerprint provide a minimum format guard and **identity** for a supplied binary, not proof the file truly originated from NASA/JPL. The optional `-ExpectedSha256` argument enforces an **exact 64-hex fingerprint match** before any scientific tests; without it `sha256_matched_expected=false` and the receipt makes no trusted-source hash claim. **The expected hash must be independently authenticated** against a trusted distributor: entering the runner's own freshly printed hash as the expectation provides no scientific provenance. Invalid or wrong expected hashes fail with a nonzero exit and a `FAIL` receipt. The runner also requires **Git installed, a resolvable 40-character commit SHA and no tracked or untracked changes**, to avoid recording an unrepeatable source version; choose an output directory **outside the Git checkout**, so the receipt itself does not dirty the worktree. Do not interpret a simulated/selftest pass as evidence of real-file scientific accuracy.
 
 ## CI selftest without an authentic DE441 file
 
@@ -60,13 +61,13 @@ Every failure produces **a nonzero exit code and `status=FAIL`** in the receipt;
 pwsh -NoProfile -File ./scripts/run-real-de441-validation.ps1 -SelfTest
 ```
 
-The selftest checks that the validation preflight rejects a missing file and a fictional **9 KB** kernel. It also uses **invented log lines** to verify that the receipt parser rejects skipped tests, partial test executions, failed assertions and nonzero Cargo exit codes, while accepting precisely two successful cases. It **does not invoke Cargo's real-file tests**, calculate real planets, hash gigabytes of data or claim independent accuracy.
+The selftest checks that the validation preflight rejects a missing file and a fictional **9 KB** kernel. It also uses **invented log lines** to verify that the receipt parser rejects skipped tests, partial test executions, failed assertions and nonzero Cargo exit codes, while accepting precisely two successful cases. A **mock Windows native `cargo.cmd` executable** additionally verifies the wrapper really passes all eight command arguments (including `--ignored`), writes logs, and receives two simulated successful test lines; this guards against the previously observed `@args` vs `@cargoArguments` bug. The selftest also checks absent, matching, malformed and mismatched expected SHA-256 values. It **does not invoke Cargo's real-file tests**, calculate real planets, hash gigabytes of data or claim independent accuracy.
 
 The existing authorized **read-only Windows GitHub CI job** runs only this `-SelfTest`; ordinary Linux and macOS Rust tests remain unchanged. The CI still has `permissions: contents: read`, no secret, no external download, no privileged workflow, no package publishing and no release. Because the real scientific PR is stacked, a temporary validation-only draft PR to `dev/ephemeris` may trigger these already-approved checks; that temporary PR must be **closed without merging**.
 
 ## Modifications, licensing and dependency review
 
-**CPAL-1.0 modification record, 2026-11-12:** original PowerShell script `scripts/run-real-de441-validation.ps1` with the project's Exhibit A source notice, one focused read-only CI Windows preflight step and trigger path, plus this English documentation. The existing `crates/ephemeris-core/tests/*.rs` mathematical algorithms, `LICENSE`, `NOTICE` and any data/binaries remain unchanged. No NASA, NAIF, Swiss or proprietary code is incorporated, and no real `.eph` file is bundled.
+**CPAL-1.0 modification record, 2026-11-12:** original PowerShell script `scripts/run-real-de441-validation.ps1` with the project's Exhibit A source notice, one focused read-only CI Windows preflight step and trigger path, plus this English documentation. Same-day follow-up modifies only the PowerShell runner and this document: actual Cargo argument splatting, mock command invocation test, optional trusted hash matching, and clean Git-worktree enforcement. The existing `crates/ephemeris-core/tests/*.rs` mathematical algorithms, `LICENSE`, `NOTICE` and any data/binaries remain unchanged. No NASA, NAIF, Swiss or proprietary code is incorporated, and no real `.eph` file is bundled.
 
 Required attribution for applicable users: **Powered by VirgoStars** — https://www.virgostars.it/.
 
