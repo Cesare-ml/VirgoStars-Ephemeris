@@ -1,0 +1,75 @@
+"""Offline unit tests for DE441 validation metadata preflight."""
+import copy
+import importlib.util
+from pathlib import Path
+import unittest
+
+script = Path(__file__).resolve().parents[1] / "tools" / "check_de441_validation_manifest.py"
+spec = importlib.util.spec_from_file_location("de441_preflight", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+
+def valid():
+    return {
+        "kernel_url": "https://example.invalid/de441.eph",
+        "kernel_sha256": "a" * 64,
+        "kernel_bytes": 123,
+        "retrieved_utc": "2026-11-12",
+        "engine_commit": "example-commit",
+        "reference_source": "JPL Horizons",
+        "reference_solution": "DE441",
+        "reference_query": "explicit saved Horizons VECTORS query",
+        "tolerance_position_km": 0.001,
+        "tolerance_velocity_km_day": 0.001,
+        "samples": [{
+            "jd_tdb": 2451545.0, "target_id": 301, "center_id": 399,
+            "frame": "ICRF", "correction": "NONE", "reference_plane": "FRAME",
+            "position_unit": "km", "velocity_unit": "km/day",
+        }],
+    }
+
+
+class ManifestPreflightTests(unittest.TestCase):
+    def test_valid_metadata(self):
+        self.assertEqual(module.validate_manifest(valid()), 1)
+
+    def test_reject_missing_provenance(self):
+        value = valid()
+        del value["kernel_sha256"]
+        with self.assertRaisesRegex(ValueError, "missing fields"):
+            module.validate_manifest(value)
+
+    def test_reject_different_ephemeris(self):
+        value = valid()
+        value["reference_solution"] = "DE440"
+        with self.assertRaisesRegex(ValueError, "DE441"):
+            module.validate_manifest(value)
+
+    def test_reject_incompatible_corrections(self):
+        value = valid()
+        value["samples"][0]["correction"] = "LT+S"
+        with self.assertRaisesRegex(ValueError, "correction"):
+            module.validate_manifest(value)
+
+    def test_reject_nonfinite_tolerance(self):
+        value = valid()
+        value["tolerance_position_km"] = float("nan")
+        with self.assertRaisesRegex(ValueError, "finite"):
+            module.validate_manifest(value)
+
+    def test_reject_bool_epoch(self):
+        value = valid()
+        value["samples"][0]["jd_tdb"] = True
+        with self.assertRaisesRegex(ValueError, "Julian date"):
+            module.validate_manifest(value)
+
+    def test_reject_same_target_center(self):
+        value = valid()
+        value["samples"][0]["center_id"] = 301
+        with self.assertRaisesRegex(ValueError, "differ"):
+            module.validate_manifest(value)
+
+
+if __name__ == "__main__":
+    unittest.main()
