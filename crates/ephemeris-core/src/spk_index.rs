@@ -120,10 +120,7 @@ fn double(bytes: &[u8], offset: usize, order: SpkByteOrder) -> f64 {
 /// A DAF summary-list pointer/count stored as an exact integer in f64.
 /// The caller decides whether zero is allowed and checks record bounds.
 fn exact_nonnegative_integer(value: f64) -> Option<u64> {
-    if !value.is_finite()
-        || value < 0.0
-        || value.fract() != 0.0
-        || value >= 9_007_199_254_740_992.0
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value >= 9_007_199_254_740_992.0
     {
         None
     } else {
@@ -144,7 +141,9 @@ fn exact_nonnegative_integer(value: f64) -> Option<u64> {
 pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexError> {
     let size = source.seek(SeekFrom::End(0))?;
     if size < RECORD_BYTES as u64 * 3 || size % RECORD_BYTES as u64 != 0 {
-        return Err(SpkIndexError::InvalidFile("invalid DAF record alignment or size"));
+        return Err(SpkIndexError::InvalidFile(
+            "invalid DAF record alignment or size",
+        ));
     }
     let file_records = size / RECORD_BYTES as u64;
     let file_words = size / WORD_BYTES as u64;
@@ -152,7 +151,9 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
     let mut file_record = [0u8; RECORD_BYTES];
     source.read_exact(&mut file_record)?;
     if &file_record[..8] != b"DAF/SPK " {
-        return Err(SpkIndexError::InvalidFile("expected DAF/SPK identification word"));
+        return Err(SpkIndexError::InvalidFile(
+            "expected DAF/SPK identification word",
+        ));
     }
     let order = match &file_record[88..96] {
         b"LTL-IEEE" => SpkByteOrder::LittleEndian,
@@ -172,7 +173,9 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         || last as u64 >= file_records
         || free as u64 > file_words + 1
     {
-        return Err(SpkIndexError::InvalidFile("invalid DAF summary or free pointers"));
+        return Err(SpkIndexError::InvalidFile(
+            "invalid DAF summary or free pointers",
+        ));
     }
     let mut visited = HashSet::new();
     let mut segments = Vec::new();
@@ -180,7 +183,9 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
     let mut previous = 0u64;
     loop {
         if current < 2 || current >= file_records || !visited.insert(current) {
-            return Err(SpkIndexError::InvalidFile("cyclic or invalid DAF summary link"));
+            return Err(SpkIndexError::InvalidFile(
+                "cyclic or invalid DAF summary link",
+            ));
         }
         // DAF summary records are immediately followed by name records.
         let offset = (current - 1) * RECORD_BYTES as u64;
@@ -189,15 +194,20 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         source.read_exact(&mut record)?;
         let next = exact_nonnegative_integer(double(&record, 0, order))
             .ok_or(SpkIndexError::InvalidFile("invalid next summary pointer"))?;
-        let prev = exact_nonnegative_integer(double(&record, 8, order))
-            .ok_or(SpkIndexError::InvalidFile("invalid previous summary pointer"))?;
+        let prev = exact_nonnegative_integer(double(&record, 8, order)).ok_or(
+            SpkIndexError::InvalidFile("invalid previous summary pointer"),
+        )?;
         let count = exact_nonnegative_integer(double(&record, 16, order))
             .ok_or(SpkIndexError::InvalidFile("invalid DAF summary count"))?;
         if prev != previous || count > MAX_SUMMARIES as u64 {
-            return Err(SpkIndexError::InvalidFile("inconsistent DAF summary chain or count"));
+            return Err(SpkIndexError::InvalidFile(
+                "inconsistent DAF summary chain or count",
+            ));
         }
         if count == 0 && (next != 0 || segments.is_empty()) {
-            return Err(SpkIndexError::InvalidFile("unexpected empty DAF summary record"));
+            return Err(SpkIndexError::InvalidFile(
+                "unexpected empty DAF summary record",
+            ));
         }
         for index in 0..count as usize {
             let offset = (3 + SUMMARY_WORDS * index) * WORD_BYTES;
@@ -240,7 +250,10 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         previous = current;
         current = next;
     }
-    Ok(SpkIndex { byte_order: order, segments })
+    Ok(SpkIndex {
+        byte_order: order,
+        segments,
+    })
 }
 
 #[cfg(test)]
@@ -264,7 +277,16 @@ mod tests {
         buf[offset..offset + 8].copy_from_slice(&bytes);
     }
 
-    fn write_segment(buf: &mut [u8], record: usize, index: usize, order: SpkByteOrder, target: i32, start: f64, end: f64, data: i32) {
+    fn write_segment(
+        buf: &mut [u8],
+        record: usize,
+        index: usize,
+        order: SpkByteOrder,
+        target: i32,
+        start: f64,
+        end: f64,
+        data: i32,
+    ) {
         let offset = (record - 1) * RECORD_BYTES + (3 + index * SUMMARY_WORDS) * WORD_BYTES;
         put_f64(buf, offset, start, order);
         put_f64(buf, offset + 8, end, order);
@@ -277,7 +299,14 @@ mod tests {
         // Record 1: file header; record 2: reserved; record 3: summary;
         // record 4: names; record 5: synthetic coefficient area.
         // With chained summaries: record 6 summary, 7 names, 8 data.
-        let mut b = vec![0; if chained { 8 * RECORD_BYTES } else { 5 * RECORD_BYTES }];
+        let mut b = vec![
+            0;
+            if chained {
+                8 * RECORD_BYTES
+            } else {
+                5 * RECORD_BYTES
+            }
+        ];
         b[0..8].copy_from_slice(b"DAF/SPK ");
         b[88..96].copy_from_slice(match order {
             SpkByteOrder::LittleEndian => b"LTL-IEEE",
@@ -288,7 +317,12 @@ mod tests {
         put_i32(&mut b, 76, 3, order);
         put_i32(&mut b, 80, if chained { 6 } else { 3 }, order);
         put_i32(&mut b, 84, if chained { 901 } else { 517 }, order);
-        put_f64(&mut b, 2 * RECORD_BYTES, if chained { 6.0 } else { 0.0 }, order);
+        put_f64(
+            &mut b,
+            2 * RECORD_BYTES,
+            if chained { 6.0 } else { 0.0 },
+            order,
+        );
         put_f64(&mut b, 2 * RECORD_BYTES + 8, 0.0, order);
         put_f64(&mut b, 2 * RECORD_BYTES + 16, 1.0, order);
         write_segment(&mut b, 3, 0, order, 399, -10.0, 100.0, 513);
@@ -316,7 +350,10 @@ mod tests {
             assert_eq!(earth.center_id, 0);
             assert_eq!(earth.frame_id, 1);
             assert_eq!(earth.spk_type, 2);
-            assert_eq!((earth.start_tdb_seconds, earth.end_tdb_seconds), (-10.0, 100.0));
+            assert_eq!(
+                (earth.start_tdb_seconds, earth.end_tdb_seconds),
+                (-10.0, 100.0)
+            );
             assert_eq!((earth.initial_address, earth.final_address), (513, 516));
             let moon = result.segments[1];
             assert_eq!(moon.target_id, 301);
