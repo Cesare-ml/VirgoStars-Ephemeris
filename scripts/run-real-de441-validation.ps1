@@ -143,7 +143,7 @@ function Read-ScientificMetrics {
             'position[ \t]+(?<position_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
             'Horizons velocity[ \t]+(?<horizons_velocity_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
             'finite-difference derivative[ \t]+(?<lt_derivative_max_component_km_per_s>' + $n + ')[ \t]+km/s,[ \t]+' +
-            'delay[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*$'
+            'delay[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*\r?$'
         return [ordered]@{
             horizons_lt_vectors = Read-ResidualGroup -Text $text -Pattern $pattern -Fields @(
                 'position_max_component_km',
@@ -157,10 +157,10 @@ function Read-ScientificMetrics {
         $vectorPattern = $prefix +
             'recovered Horizons LT vector error[ \t]+(?<recovered_lt_vector_max_component_km>' + $n + ')[ \t]+km,[ \t]+' +
             'LT range error[ \t]+(?<lt_range_error_km>' + $n + ')[ \t]+km,[ \t]+' +
-            'delay error[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*$'
+            'delay error[ \t]+(?<light_time_error_seconds>' + $n + ')[ \t]+s[ \t]*\r?$'
         $ratePattern = $prefix +
             'max angular rate residual = [ \t]*(?<angular_rate_error_arcsec_per_tdb_day>' + $n + ')[ \t]+arcseconds/TDB-day;[ \t]+' +
-            'radial rate residual = [ \t]*(?<radial_rate_error_au_per_tdb_day>' + $n + ')[ \t]+AU/TDB-day[ \t]*$'
+            'radial rate residual = [ \t]*(?<radial_rate_error_au_per_tdb_day>' + $n + ')[ \t]+AU/TDB-day[ \t]*\r?$'
         return [ordered]@{
             recovered_lt_vectors = Read-ResidualGroup -Text $text -Pattern $vectorPattern -Fields @(
                 'recovered_lt_vector_max_component_km', 'lt_range_error_km', 'light_time_error_seconds'
