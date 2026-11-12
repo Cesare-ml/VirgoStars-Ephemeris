@@ -1,6 +1,7 @@
 """Offline unit tests for DE441 validation metadata preflight."""
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -31,6 +32,23 @@ def valid():
 
 
 class ManifestPreflightTests(unittest.TestCase):
+    def test_reject_duplicate_top_level_json_key(self):
+        raw = '{"reference_solution":"DE440","reference_solution":"DE441"}'
+        with self.assertRaisesRegex(ValueError, "duplicate JSON key: reference_solution"):
+            json.loads(raw, object_pairs_hook=module.reject_duplicate_keys)
+
+    def test_reject_duplicate_nested_sample_key(self):
+        raw = '{"samples":[{"target_id":499,"target_id":4}]}'
+        with self.assertRaisesRegex(ValueError, "duplicate JSON key: target_id"):
+            json.loads(raw, object_pairs_hook=module.reject_duplicate_keys)
+
+    def test_valid_json_object_pairs(self):
+        raw = '{"samples":[{"target_id":301,"center_id":399}]}'
+        self.assertEqual(
+            json.loads(raw, object_pairs_hook=module.reject_duplicate_keys),
+            {"samples": [{"target_id": 301, "center_id": 399}]},
+        )
+
     def test_valid_metadata(self):
         self.assertEqual(module.validate_manifest(valid()), 1)
 
