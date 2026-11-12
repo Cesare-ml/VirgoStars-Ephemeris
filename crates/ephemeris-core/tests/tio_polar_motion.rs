@@ -72,9 +72,9 @@ fn published_erfa_sp00_and_pom00_fixtures_match_in_one_real_composition() {
             0.999_999_999_998_237,
         ],
     ];
-    for i in 0..3 {
-        for j in 0..3 {
-            near(output.itrs_to_tirs[i][j], rpom[j][i], 1.0e-15);
+    for (i, row) in output.itrs_to_tirs.iter().enumerate() {
+        for (j, value) in row.iter().enumerate() {
+            near(*value, rpom[j][i], 1.0e-15);
         }
     }
 }
