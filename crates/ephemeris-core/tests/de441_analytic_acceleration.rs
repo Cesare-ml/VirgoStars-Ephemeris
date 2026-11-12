@@ -587,7 +587,6 @@ fn empty_aberrated_batch_validates_epoch_and_tilt_without_reading_series() {
     ));
 }
 
-
 #[test]
 fn cached_earth_batch_is_exactly_equivalent_to_scalar_across_records_and_tilts() {
     // Quadratic Earth acceleration is different in the two records.
@@ -613,13 +612,9 @@ fn cached_earth_batch_is_exactly_equivalent_to_scalar_across_records_and_tilts()
             assert_eq!(batch[0], batch[2]);
             for (actual, body) in batch.iter().zip(targets) {
                 let mut single_reader = eph();
-                let single = geocentric_aberrated_fixed_six_fields(
-                    &mut single_reader,
-                    body,
-                    epoch,
-                    tilt,
-                )
-                .unwrap();
+                let single =
+                    geocentric_aberrated_fixed_six_fields(&mut single_reader, body, epoch, tilt)
+                        .unwrap();
                 assert_eq!(*actual, single);
                 assert_eq!(
                     actual.observer_acceleration_source,
