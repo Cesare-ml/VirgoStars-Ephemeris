@@ -49,9 +49,7 @@ fn magnitude(v: [f64; 3]) -> f64 {
 }
 
 fn max_component_error(a: [f64; 3], b: [f64; 3]) -> f64 {
-    (0..3)
-        .map(|i| (a[i] - b[i]).abs())
-        .fold(0.0, f64::max)
+    (0..3).map(|i| (a[i] - b[i]).abs()).fold(0.0, f64::max)
 }
 
 /// The four numerical vectors were independently obtained from NASA/JPL
@@ -81,43 +79,54 @@ fn real_de441_aberrated_pipeline_recovers_horizons_light_time_geometry() {
     let cases = [
         (
             Body::Moon,
-            [-2.271092990545779e5, -2.863237983404845e5, -1.620441867628545e5],
+            [
+                -2.271092990545779e5,
+                -2.863237983404845e5,
+                -1.620441867628545e5,
+            ],
             1.333498431623768,
         ),
         (
             Body::Venus,
-            [-4.238188819403984e7, -1.552509477906777e7, -9.024076156753547e6],
+            [
+                -4.238188819403984e7,
+                -1.552509477906777e7,
+                -9.024076156753547e6,
+            ],
             153.5368740945382,
         ),
         (
             Body::MarsBarycenter,
-            [-1.614080644210615e8, 1.105419500423874e8, 5.485717291371012e7],
+            [
+                -1.614080644210615e8,
+                1.105419500423874e8,
+                5.485717291371012e7,
+            ],
             677.7296430371571,
         ),
         (
             Body::JupiterBarycenter,
-            [-6.56483483498132e8, 4.186401692284813e8, 1.924872858802854e8],
+            [
+                -6.56483483498132e8,
+                4.186401692284813e8,
+                1.924872858802854e8,
+            ],
             2675.345227915447,
         ),
     ];
     for (body, expected_lt_xyz, expected_delay_s) in cases {
-        let corrected = geocentric_aberrated_fixed_spherical(&mut eph, body, t, 0.0)
-            .unwrap();
+        let corrected = geocentric_aberrated_fixed_spherical(&mut eph, body, t, 0.0).unwrap();
         assert_eq!(corrected.spherical.center, Body::Earth);
         assert_eq!(corrected.spherical.target, body);
         assert_eq!(corrected.spherical.epoch, t);
         assert!(corrected.emission_epoch.0 < t.0);
 
         let apparent_xyz = xyz(&corrected.spherical);
-        let recovered_lt_direction = annual_aberration_icrf(
-            apparent_xyz,
-            reverse_earth_velocity,
-        )
-        .unwrap();
+        let recovered_lt_direction =
+            annual_aberration_icrf(apparent_xyz, reverse_earth_velocity).unwrap();
         let recovered_lt_xyz = recovered_lt_direction.map(|d| d * corrected.spherical.distance_km);
         let vector_error_km = max_component_error(recovered_lt_xyz, expected_lt_xyz);
-        let range_error_km =
-            (corrected.spherical.distance_km - magnitude(expected_lt_xyz)).abs();
+        let range_error_km = (corrected.spherical.distance_km - magnitude(expected_lt_xyz)).abs();
         let delay_error_s = (corrected.light_time_seconds - expected_delay_s).abs();
 
         println!(
