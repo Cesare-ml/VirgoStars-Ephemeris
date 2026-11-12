@@ -46,7 +46,7 @@ const ARCSEC_RAD: f64 = PI / (180.0 * 3600.0);
 // is computed in this feature; these values are model INPUTS.
 const ERFA_X: f64 = 0.579_130_848_283_529_3e-3;
 const ERFA_Y: f64 = 0.402_058_009_945_402e-4;
-const ERFA_S: f64 = -0.122_003_229_416_457_99e-7;
+const ERFA_S: f64 = -1.220_032_294_164_58e-8;
 
 fn catalog(rows: &[&str]) -> CelestrakEopPolarCatalog {
     CelestrakEopPolarCatalog::parse_csv(
