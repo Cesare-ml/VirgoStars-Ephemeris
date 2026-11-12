@@ -142,8 +142,8 @@ pub fn wgs84_observer_to_gcrs(
     .map_err(ObserverGcrsError::Geodesy)?
     .kilometers();
 
-    let era = earth_rotation_angle(orientation.ut1_epoch)
-        .map_err(ObserverGcrsError::EarthRotation)?;
+    let era =
+        earth_rotation_angle(orientation.ut1_epoch).map_err(ObserverGcrsError::EarthRotation)?;
     let w = itrs_to_tirs_polar_motion_matrix(
         orientation.polar_xp_rad,
         orientation.polar_yp_rad,
@@ -156,8 +156,8 @@ pub fn wgs84_observer_to_gcrs(
         orientation.cio_locator_s_rad,
     )
     .map_err(ObserverGcrsError::CioOrientation)?;
-    let composed = compose_gcrs_to_itrs(w, era.angle_rad, c)
-        .map_err(ObserverGcrsError::Composition)?;
+    let composed =
+        compose_gcrs_to_itrs(w, era.angle_rad, c).map_err(ObserverGcrsError::Composition)?;
     let position_gcrs_km = composed
         .itrs_to_gcrs_position(position_itrs_km)
         .map_err(ObserverGcrsError::Composition)?;
