@@ -91,26 +91,33 @@ fn synthetic_de441_lunar_vector_matches_independent_erfa_p2s_spherical_oracle() 
     // range=114.5643923738960002 input units.
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     let jd = JulianDateTdb(1016.0);
-    let sight = de441_geometric_observer_sightline_icrf(
-        &mut eph,
-        Body::Moon,
-        jd,
-        [0.0; 3],
-    )
-    .unwrap();
+    let sight =
+        de441_geometric_observer_sightline_icrf(&mut eph, Body::Moon, jd, [0.0; 3]).unwrap();
     assert_eq!(sight.target, Body::Moon);
     assert_eq!(sight.epoch_tdb, jd);
     near_vec(sight.target_geocentric_icrf_km, [100.0, -50.0, 25.0], 0.0);
-    near_vec(sight.target_geocentric_velocity_icrf_km_per_tdb_day, [0.0; 3], 0.0);
+    near_vec(
+        sight.target_geocentric_velocity_icrf_km_per_tdb_day,
+        [0.0; 3],
+        0.0,
+    );
     near_vec(sight.displacement_icrf_km, [100.0, -50.0, 25.0], 0.0);
     near(sight.range_km, 114.564_392_373_896, 1.0e-12);
-    near(sight.declination_icrf_rad, 0.219_987_977_395_459_45, 1.0e-14);
+    near(
+        sight.declination_icrf_rad,
+        0.219_987_977_395_459_45,
+        1.0e-14,
+    );
     near(
         sight.right_ascension_icrf_rad.unwrap(),
         TAU - 0.463_647_609_000_806_1,
         1.0e-14,
     );
-    let squared = sight.unit_direction_icrf.into_iter().map(|x| x * x).sum::<f64>();
+    let squared = sight
+        .unit_direction_icrf
+        .into_iter()
+        .map(|x| x * x)
+        .sum::<f64>();
     near(squared, 1.0, 5.0e-16);
 }
 
@@ -147,8 +154,12 @@ fn earth_center_relative_moon_works_without_emb_barycenter_series() {
     }
     let mut eph = De441::new(Cursor::new(data)).unwrap();
     let sight = de441_geometric_observer_sightline_icrf(
-        &mut eph, Body::Moon, JulianDateTdb(1016.0), [0.0; 3],
-    ).unwrap();
+        &mut eph,
+        Body::Moon,
+        JulianDateTdb(1016.0),
+        [0.0; 3],
+    )
+    .unwrap();
     near_vec(sight.displacement_icrf_km, [100.0, -50.0, 25.0], 0.0);
 }
 
@@ -156,11 +167,14 @@ fn earth_center_relative_moon_works_without_emb_barycenter_series() {
 fn mercury_earth_center_keeps_target_and_center_semantics() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     let epoch = JulianDateTdb(1016.0);
-    let sight = de441_geometric_observer_sightline_icrf(
-        &mut eph, Body::Mercury, epoch, [0.0; 3],
-    ).unwrap();
+    let sight =
+        de441_geometric_observer_sightline_icrf(&mut eph, Body::Mercury, epoch, [0.0; 3]).unwrap();
     let expected = eph.state(Body::Mercury, Body::Earth, epoch).unwrap();
-    near_vec(sight.target_geocentric_icrf_km, expected.position_km, 1.0e-12);
+    near_vec(
+        sight.target_geocentric_icrf_km,
+        expected.position_km,
+        1.0e-12,
+    );
     near_vec(
         sight.target_geocentric_velocity_icrf_km_per_tdb_day,
         expected.velocity_km_per_day,
@@ -173,11 +187,16 @@ fn mercury_earth_center_keeps_target_and_center_semantics() {
 fn does_not_infer_an_ephemeris_for_unsupported_target_series() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     let result = de441_geometric_observer_sightline_icrf(
-        &mut eph, Body::MarsBarycenter, JulianDateTdb(1016.0), [0.0; 3],
+        &mut eph,
+        Body::MarsBarycenter,
+        JulianDateTdb(1016.0),
+        [0.0; 3],
     );
     assert!(matches!(
         result,
-        Err(De441IcrfObserverError::Ephemeris(De441Error::MissingSeries(_)))
+        Err(De441IcrfObserverError::Ephemeris(
+            De441Error::MissingSeries(_)
+        ))
     ));
 }
 
@@ -187,14 +206,20 @@ fn invalid_epoch_and_outside_coverage_fail_closed() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         assert!(matches!(
             de441_geometric_observer_sightline_icrf(
-                &mut eph, Body::Moon, JulianDateTdb(bad), [0.0; 3]
+                &mut eph,
+                Body::Moon,
+                JulianDateTdb(bad),
+                [0.0; 3]
             ),
             Err(De441IcrfObserverError::InvalidTdbEpoch)
         ));
     }
     assert!(matches!(
         de441_geometric_observer_sightline_icrf(
-            &mut eph, Body::Moon, JulianDateTdb(1033.0), [0.0; 3]
+            &mut eph,
+            Body::Moon,
+            JulianDateTdb(1033.0),
+            [0.0; 3]
         ),
         Err(De441IcrfObserverError::Ephemeris(
             De441Error::OutsideCoverage { .. }
@@ -207,14 +232,20 @@ fn target_earth_and_bad_observer_are_explicitly_rejected() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     assert!(matches!(
         de441_geometric_observer_sightline_icrf(
-            &mut eph, Body::Earth, JulianDateTdb(1016.0), [0.0; 3]
+            &mut eph,
+            Body::Earth,
+            JulianDateTdb(1016.0),
+            [0.0; 3]
         ),
         Err(De441IcrfObserverError::EarthIsNotAValidTarget)
     ));
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         assert!(matches!(
             de441_geometric_observer_sightline_icrf(
-                &mut eph, Body::Moon, JulianDateTdb(1016.0), [0.0, bad, 0.0]
+                &mut eph,
+                Body::Moon,
+                JulianDateTdb(1016.0),
+                [0.0, bad, 0.0]
             ),
             Err(De441IcrfObserverError::InvalidObserver)
         ));
@@ -229,8 +260,12 @@ fn exact_polar_direction_is_defined_but_right_ascension_is_not() {
     }
     let mut eph = De441::new(Cursor::new(data)).unwrap();
     let sight = de441_geometric_observer_sightline_icrf(
-        &mut eph, Body::Moon, JulianDateTdb(1016.0), [0.0; 3],
-    ).unwrap();
+        &mut eph,
+        Body::Moon,
+        JulianDateTdb(1016.0),
+        [0.0; 3],
+    )
+    .unwrap();
     assert_eq!(sight.right_ascension_icrf_rad, None);
     near(sight.declination_icrf_rad, FRAC_PI_2, 0.0);
     near_vec(sight.unit_direction_icrf, [0.0, 0.0, 1.0], 0.0);
@@ -241,13 +276,19 @@ fn coincident_observer_and_overlarge_finite_observer_are_rejected() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     assert!(matches!(
         de441_geometric_observer_sightline_icrf(
-            &mut eph, Body::Moon, JulianDateTdb(1016.0), [100.0, -50.0, 25.0]
+            &mut eph,
+            Body::Moon,
+            JulianDateTdb(1016.0),
+            [100.0, -50.0, 25.0]
         ),
         Err(De441IcrfObserverError::CoincidentTargetAndObserver)
     ));
     assert!(matches!(
         de441_geometric_observer_sightline_icrf(
-            &mut eph, Body::Moon, JulianDateTdb(1016.0), [f64::MAX; 3]
+            &mut eph,
+            Body::Moon,
+            JulianDateTdb(1016.0),
+            [f64::MAX; 3]
         ),
         Err(De441IcrfObserverError::InvalidRange)
     ));
