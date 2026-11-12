@@ -39,10 +39,15 @@ fn rejects_nonfinite_header_numbers() {
     ] {
         let mut bytes = synthetic_header();
         f64_field(&mut bytes, offset, value);
-        assert!(matches!(
-            De441::new(Cursor::new(bytes)),
-            Err(De441Error::InvalidFile("invalid coverage or Earth/Moon mass ratio"))
-        ), "offset {offset}");
+        assert!(
+            matches!(
+                De441::new(Cursor::new(bytes)),
+                Err(De441Error::InvalidFile(
+                    "invalid coverage or Earth/Moon mass ratio"
+                ))
+            ),
+            "offset {offset}"
+        );
     }
 }
 
@@ -57,10 +62,15 @@ fn rejects_invalid_coverage_step_and_mass_ratio() {
     ] {
         let mut bytes = synthetic_header();
         f64_field(&mut bytes, offset, value);
-        assert!(matches!(
-            De441::new(Cursor::new(bytes)),
-            Err(De441Error::InvalidFile("invalid coverage or Earth/Moon mass ratio"))
-        ), "offset {offset}, value {value}");
+        assert!(
+            matches!(
+                De441::new(Cursor::new(bytes)),
+                Err(De441Error::InvalidFile(
+                    "invalid coverage or Earth/Moon mass ratio"
+                ))
+            ),
+            "offset {offset}, value {value}"
+        );
     }
 }
 
