@@ -40,12 +40,15 @@ def compare(ours_path, reference_path):
     residual = [x - y for x, y in zip(a, b)]
     if not all(math.isfinite(x) for x in residual):
         raise ValueError("non-finite residual (overflow)")
-    return {
+    metrics = {
         "position_norm_km": math.hypot(*residual[:3]),
         "velocity_norm_km_per_day": math.hypot(*residual[3:]),
         "max_position_component_km": max(map(abs, residual[:3])),
         "max_velocity_component_km_per_day": max(map(abs, residual[3:])),
     }
+    if not all(math.isfinite(value) for value in metrics.values()):
+        raise ValueError("non-finite residual metric (overflow)")
+    return metrics
 
 
 def main():
