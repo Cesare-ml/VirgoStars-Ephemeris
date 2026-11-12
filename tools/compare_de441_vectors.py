@@ -22,6 +22,8 @@ def read_state(path):
     if len(rows) != 1:
         raise ValueError(f"{path}: expected exactly one data row")
     row = rows[0]
+    if None in row:
+        raise ValueError(f"{path}: unexpected extra data columns")
     if any(name not in row for name in FIELDS + META):
         raise ValueError(f"{path}: missing required columns")
     if any(not row[name] for name in FIELDS + META):
