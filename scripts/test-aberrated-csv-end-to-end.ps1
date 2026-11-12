@@ -184,3 +184,7 @@ finally {
     Pop-Location
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Deliberate negative test subprocesses leave LASTEXITCODE=1. Every
+# expected failure has already been asserted; report script success.
+exit 0
