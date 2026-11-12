@@ -265,10 +265,12 @@ function Invoke-CargoGate {
     )
     $pass = Test-GatePass -Lines $lines -ExitCode $code -ExpectedTests $ExpectedTests
     $metrics = $null
+    $criteria = $null
     $metricError = $null
     if ($pass -and $Suite -in @('light_time_horizons', 'aberrated_real_de441')) {
         try {
             $metrics = Read-ScientificMetrics -Suite $Suite -Lines $lines
+            $criteria = Get-ReportedScientificLimits -Suite $Suite -Metrics $metrics
         }
         catch {
             $metricError = $_.Exception.Message
@@ -283,6 +285,7 @@ function Invoke-CargoGate {
         status = $(if ($pass) { 'PASS' } else { 'FAIL' })
         log = $logName
         metrics = $metrics
+        scientific_criteria = $criteria
         metric_parse_error = $metricError
     }
 }
@@ -461,7 +464,7 @@ $reportDirectory = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $identifier
 New-Item -ItemType Directory -Path $reportDirectory -ErrorAction Stop | Out-Null
 
 $receipt = [ordered]@{
-    schema_version = 3
+    schema_version = 4
     status = 'NOT_RUN'
     run_timestamp_utc = $timestamp
     tool = 'VirgoStars-Ephemeris real classic-DE441 receipt v1'
