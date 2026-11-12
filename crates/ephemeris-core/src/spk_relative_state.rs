@@ -381,7 +381,7 @@ mod tests {
             let moon_mars = compute(order, &specs, 301, 4, 5.0).unwrap();
             assert_eq!(moon_mars.position_km, [312.0, -26.0, 0.0]);
             assert_eq!(moon_mars.velocity_km_per_second[0], 5.8);
-            assert_eq!(moon_mars.velocity_km_per_second[1], 0.6);
+            assert!((moon_mars.velocity_km_per_second[1] - 0.6).abs() < 1e-12);
             let mars_moon = compute(order, &specs, 4, 301, 5.0).unwrap();
             assert_eq!(mars_moon.position_km, [-312.0, 26.0, 0.0]);
             assert!((mars_moon.velocity_km_per_second[0] + 5.8).abs() < 1e-12);
