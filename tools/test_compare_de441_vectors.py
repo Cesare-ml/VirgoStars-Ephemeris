@@ -150,6 +150,26 @@ class VectorComparisonTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "non-finite state component"):
                     comparator.read_state(self.ours)
 
+    def test_unsupported_body_names_rejected_even_when_metadata_matches(self):
+        # Matching strings alone cannot establish that a body exists in the Rust API.
+        for field, value in (
+            ("target", "mars"),  # Exporter exposes the Mars-system barycenter.
+            ("center", "solar_system_barycenter"),
+            ("target", "Moon"),
+            ("center", "earth "),
+        ):
+            with self.subTest(field=field, value=value):
+                changed = dict(BASE, **{field: value})
+                with self.assertRaisesRegex(ValueError, "unsupported .* body name"):
+                    self.pair(changed, changed)
+
+    def test_all_exporter_body_identifiers_accepted(self):
+        for body in sorted(comparator.BODIES):
+            with self.subTest(body=body):
+                changed = dict(BASE, target=body)
+                metrics = self.pair(changed, changed)
+                self.assertEqual(metrics["position_norm_km"], 0.0)
+
     def test_multiple_or_zero_rows_rejected(self):
         for rows in ([], [BASE, BASE]):
             self.write(self.ours, rows)
