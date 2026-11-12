@@ -57,26 +57,39 @@ fn independent_celestrak_example_yields_correct_tt_dat_and_eop_radians() {
     // oracle, not evidence about a current Earth orientation model.
     let catalog = catalog(&[HISTORICAL, NEXT_OBSERVED]);
     let result = approximate_itrs_to_tirs_from_eop_utc(
-        &catalog, 51_544, 0.0, EopPredictionPolicy::ObservedOnly,
-    ).unwrap();
+        &catalog,
+        51_544,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .unwrap();
     assert_eq!(result.source_label, "audited-external-EOP-example");
     assert_eq!(result.quality, EopPolarQuality::Observed);
     assert_eq!(result.tai_minus_utc_seconds, 32);
     assert_eq!(result.tt_epoch.scale(), TimeScale::Tt);
     assert_eq!(result.tt_epoch.day_number(), 2_451_545);
-    near(result.tt_epoch.midnight_fraction(), 64.184 / 86_400.0, 1.0e-15);
+    near(
+        result.tt_epoch.midnight_fraction(),
+        64.184 / 86_400.0,
+        1.0e-15,
+    );
     near(result.xp_rad, 0.043_282 * RAD_PER_ARCSEC, 1.0e-21);
     near(result.yp_rad, 0.377_909 * RAD_PER_ARCSEC, 1.0e-21);
     // This SP00 reference comes from the *published IERS linear
     // formula*, with TT obtained from 0h UTC + known DAT.
     let centuries_since_j2000 = (-0.5 + 64.184 / 86_400.0) / 36_525.0;
     let expected_sp = -47.0e-6 * RAD_PER_ARCSEC * centuries_since_j2000;
-    near(result.approximate_polar.locator.sp_rad, expected_sp, 1.0e-24);
+    near(
+        result.approximate_polar.locator.sp_rad,
+        expected_sp,
+        1.0e-24,
+    );
     let direct = itrs_to_tirs_polar_motion_matrix(
         0.043_282 * RAD_PER_ARCSEC,
         0.377_909 * RAD_PER_ARCSEC,
         expected_sp,
-    ).unwrap();
+    )
+    .unwrap();
     for (row, expected_row) in result.approximate_polar.itrs_to_tirs.iter().zip(direct) {
         for (value, expected) in row.iter().zip(expected_row) {
             near(*value, expected, 1.0e-16);
@@ -88,9 +101,17 @@ fn independent_celestrak_example_yields_correct_tt_dat_and_eop_radians() {
 fn half_day_sample_matches_split_tt_and_composes_existing_modules() {
     let input = catalog(&[HISTORICAL, NEXT_OBSERVED]);
     let output = approximate_itrs_to_tirs_from_eop_utc(
-        &input, 51_544, 0.5, EopPredictionPolicy::ObservedOnly,
-    ).unwrap();
-    near(output.tt_epoch.midnight_fraction(), 0.5 + 64.184 / 86_400.0, 1.0e-15);
+        &input,
+        51_544,
+        0.5,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .unwrap();
+    near(
+        output.tt_epoch.midnight_fraction(),
+        0.5 + 64.184 / 86_400.0,
+        1.0e-15,
+    );
     near(output.xp_rad, 0.093_282 * RAD_PER_ARCSEC, 1.0e-21);
     near(output.yp_rad, 0.427_909 * RAD_PER_ARCSEC, 1.0e-21);
     assert_eq!(output.quality, EopPolarQuality::Observed);
@@ -107,8 +128,12 @@ fn normal_utc_day_tt_midnight_carry_is_explicit_and_split_precise() {
     let input = catalog(&[HISTORICAL, NEXT_OBSERVED]);
     let fraction = 0.999_9;
     let output = approximate_itrs_to_tirs_from_eop_utc(
-        &input, 51_544, fraction, EopPredictionPolicy::ObservedOnly,
-    ).unwrap();
+        &input,
+        51_544,
+        fraction,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .unwrap();
     assert_eq!(output.tt_epoch.day_number(), 2_451_546);
     near(
         output.tt_epoch.midnight_fraction(),
@@ -124,13 +149,20 @@ fn prediction_requires_opt_in_and_provenance_is_preserved() {
     let input = catalog(&[HISTORICAL, NEXT_OBSERVED, NEXT_PREDICTED]);
     assert_eq!(
         approximate_itrs_to_tirs_from_eop_utc(
-            &input, 51_545, 0.5, EopPredictionPolicy::ObservedOnly,
+            &input,
+            51_545,
+            0.5,
+            EopPredictionPolicy::ObservedOnly,
         ),
         Err(EopSp00PolarError::Eop(EopCsvError::PredictionNotAuthorized))
     );
     let result = approximate_itrs_to_tirs_from_eop_utc(
-        &input, 51_545, 0.5, EopPredictionPolicy::AllowPredicted,
-    ).unwrap();
+        &input,
+        51_545,
+        0.5,
+        EopPredictionPolicy::AllowPredicted,
+    )
+    .unwrap();
     assert_eq!(result.quality, EopPolarQuality::IncludesPrediction);
     near(result.xp_rad, 0.193_282 * RAD_PER_ARCSEC, 1.0e-21);
     assert_eq!(result.tai_minus_utc_seconds, 32);
@@ -146,21 +178,36 @@ fn detected_leap_second_day_refuses_silent_normal_day_assumption() {
     ]);
     assert_eq!(
         approximate_itrs_to_tirs_from_eop_utc(
-            &input, 57_753, 0.5, EopPredictionPolicy::ObservedOnly,
+            &input,
+            57_753,
+            0.5,
+            EopPredictionPolicy::ObservedOnly,
         ),
         Err(EopSp00PolarError::LeapSecondBoundary)
     );
     // At each exact 0h UTC, the DAT metadata applies unambiguously;
     // the rest of leap-second day remains deliberately unsupported.
     let start = approximate_itrs_to_tirs_from_eop_utc(
-        &input, 57_753, 0.0, EopPredictionPolicy::ObservedOnly,
-    ).unwrap();
+        &input,
+        57_753,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .unwrap();
     let end = approximate_itrs_to_tirs_from_eop_utc(
-        &input, 57_754, 0.0, EopPredictionPolicy::ObservedOnly,
-    ).unwrap();
+        &input,
+        57_754,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .unwrap();
     assert_eq!(start.tai_minus_utc_seconds, 36);
     assert_eq!(end.tai_minus_utc_seconds, 37);
-    near(start.tt_epoch.midnight_fraction(), 68.184 / 86_400.0, 1.0e-15);
+    near(
+        start.tt_epoch.midnight_fraction(),
+        68.184 / 86_400.0,
+        1.0e-15,
+    );
     near(end.tt_epoch.midnight_fraction(), 69.184 / 86_400.0, 1.0e-15);
 }
 
@@ -172,23 +219,31 @@ fn rejects_pre_1972_utc_even_when_integer_dat_is_supplied() {
     ]);
     assert_eq!(
         approximate_itrs_to_tirs_from_eop_utc(
-            &input, 41_316, 0.0, EopPredictionPolicy::ObservedOnly,
+            &input,
+            41_316,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
         ),
         Err(EopSp00PolarError::BeforeModernUtc)
     );
     assert!(approximate_itrs_to_tirs_from_eop_utc(
-        &input, 41_317, 0.0, EopPredictionPolicy::ObservedOnly,
-    ).is_ok());
+        &input,
+        41_317,
+        0.0,
+        EopPredictionPolicy::ObservedOnly,
+    )
+    .is_ok());
 }
 
 #[test]
 fn rejects_unsupported_tai_utc_offsets_in_unauthenticated_eop_files() {
-    let input = catalog(&[
-        "2000-01-01,51544,0.1,0.2,0,0,0,0,0,0,0,O",
-    ]);
+    let input = catalog(&["2000-01-01,51544,0.1,0.2,0,0,0,0,0,0,0,O"]);
     assert_eq!(
         approximate_itrs_to_tirs_from_eop_utc(
-            &input, 51_544, 0.0, EopPredictionPolicy::ObservedOnly,
+            &input,
+            51_544,
+            0.0,
+            EopPredictionPolicy::ObservedOnly,
         ),
         Err(EopSp00PolarError::UnsupportedTaiUtcOffset)
     );
@@ -199,14 +254,20 @@ fn propagates_catalog_range_gaps_and_invalid_utc_fractions() {
     let input = catalog(&[HISTORICAL, NEXT_PREDICTED]);
     assert_eq!(
         approximate_itrs_to_tirs_from_eop_utc(
-            &input, 51_544, 0.5, EopPredictionPolicy::AllowPredicted,
+            &input,
+            51_544,
+            0.5,
+            EopPredictionPolicy::AllowPredicted,
         ),
         Err(EopSp00PolarError::Eop(EopCsvError::MissingFollowingDay))
     );
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.1, 1.0] {
         assert_eq!(
             approximate_itrs_to_tirs_from_eop_utc(
-                &input, 51_544, bad, EopPredictionPolicy::ObservedOnly,
+                &input,
+                51_544,
+                bad,
+                EopPredictionPolicy::ObservedOnly,
             ),
             Err(EopSp00PolarError::Eop(EopCsvError::InvalidUtcFraction))
         );
