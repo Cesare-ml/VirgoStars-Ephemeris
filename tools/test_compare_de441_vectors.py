@@ -128,6 +128,25 @@ class VectorComparisonTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     comparator.read_state(self.ours)
 
+    def test_malformed_quoted_csv_rejected(self):
+        # A truncated quoted field must not be silently interpreted as valid data.
+        self.ours.write_text(
+            ",".join(HEADER) + "\n" +
+            ",".join(BASE[name] for name in HEADER[:-1]) + ',"unterminated\n',
+            encoding="utf-8",
+        )
+        with self.assertRaises(csv.Error):
+            comparator.read_state(self.ours)
+
+        self.write(self.reference, [BASE])
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), str(self.ours), str(self.reference)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("error:", result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_headerless_csv_rejected(self):
         self.ours.write_text("", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "missing CSV header"):
