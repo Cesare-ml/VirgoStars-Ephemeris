@@ -274,6 +274,23 @@ impl<R: Read + Seek> De441<R> {
         (JulianDateTdb(self.start), JulianDateTdb(self.end))
     }
 
+    /// Validated classic-header series/granule grid for read-only planning.
+    ///
+    /// Exposes the actual granule counts accepted during De441::new(), not
+    /// polynomial coefficients, kernel contents, or proof of boundary
+    /// continuity. Plan results must never be labeled JPL-validated.
+    pub fn granule_layout(&self) -> crate::de441_granule_plan::ClassicDe441GranuleLayout {
+        crate::de441_granule_plan::ClassicDe441GranuleLayout {
+            start_jd_tdb: self.start,
+            end_jd_tdb: self.end,
+            record_step_days: self.step,
+            record_count: self.record_count,
+            series_granules_per_record: self.pointers.map(|p| {
+                if p.first == 0 { None } else { Some(p.granules) }
+            }),
+        }
+    }
+
     /// Returns a geometric target-relative-to-center state at a TDB epoch.
     pub fn state(
         &mut self,
