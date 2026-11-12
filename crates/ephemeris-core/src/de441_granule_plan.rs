@@ -24,6 +24,7 @@
 //! Original VirgoStars contribution 2026-11-12, CPAL-1.0.
 
 use core::fmt;
+use std::collections::HashMap;
 use crate::de441::Body;
 
 /// Classic DE441 header layout: 13 optional series in official pointer order.
@@ -181,14 +182,34 @@ pub fn plan_de441_relative_granules(
         return Err(De441GranulePlanError::ExcessiveCoverage);
     }
     let mut boundaries=vec![start_jd_tdb,end_jd_tdb];
+    // Same rounded f64 date can accidentally represent two DIFFERENT
+    // rational granule boundaries at large Julian dates. Never deduplicate
+    // those as though the polynomial selection were proven unambiguous.
+    let mut seen = HashMap::<(usize,u64),(usize,usize)>::new();
     for principal in first..=last {
         let principal_start=layout.start_jd_tdb+(principal as f64)*layout.record_step_days;
         for &index in &series {
             let count=layout.series_granules_per_record[index].expect("series checked");
             let width=layout.record_step_days/(count as f64);
+            let mut previous=f64::NEG_INFINITY;
             for k in 0..=count {
                 let boundary=principal_start+(k as f64)*width;
+                if !boundary.is_finite() || boundary<=previous {
+                    return Err(De441GranulePlanError::InsufficientTimePrecision);
+                }
+                previous=boundary;
                 if boundary>start_jd_tdb && boundary<end_jd_tdb {
+                    let key=(principal,boundary.to_bits());
+                    if let Some(&(other_k,other_count))=seen.get(&key) {
+                        // k/count and other_k/other_count are exact rational
+                        // subrecord fractions; cross products fit usize
+                        // because classic DE441 permits at most 100 granules.
+                        if k*other_count!=other_k*count {
+                            return Err(De441GranulePlanError::InsufficientTimePrecision);
+                        }
+                    } else {
+                        seen.insert(key,(k,count));
+                    }
                     boundaries.push(boundary);
                 }
             }
@@ -315,6 +336,36 @@ mod tests {
         assert_eq!(p.slices[0].start_jd_tdb,100.25);
         assert_eq!(p.slices[1].end_jd_tdb,100.75);
     }
+    #[test]
+    fn unresolvable_granule_subdivisions_fail_closed() {
+        // 1e16 has 2-second-sized ulps: 100 subdivisions across a 4-day
+        // synthetic JD step collapse in f64, even though the header step fits.
+        let mut bad=layout();
+        bad.start_jd_tdb=1.0e16;
+        bad.end_jd_tdb=1.0e16+4.0;
+        bad.record_step_days=4.0;
+        bad.record_count=1;
+        assert_eq!(plan_de441_relative_granules(
+            &bad,Body::MarsBarycenter,Body::Earth,1.0e16,1.0e16+4.0,
+        ),Err(De441GranulePlanError::InsufficientTimePrecision));
+    }
+
+    #[test]
+    fn distinct_rational_boundaries_rounded_to_one_float_are_rejected() {
+        // At JD 1e13, 1/99 and 1/100 subrecord grids contain distinct
+        // rational cut points that can collapse to an identical f64.
+        let mut bad=layout();
+        bad.start_jd_tdb=1.0e13;
+        bad.end_jd_tdb=1.0e13+1.0;
+        bad.record_step_days=1.0;
+        bad.record_count=1;
+        bad.series_granules_per_record[2]=Some(99);
+        bad.series_granules_per_record[9]=Some(100);
+        assert_eq!(plan_de441_relative_granules(
+            &bad,Body::MarsBarycenter,Body::Earth,1.0e13,1.0e13+1.0,
+        ),Err(De441GranulePlanError::InsufficientTimePrecision));
+    }
+
     #[test]
     fn no_required_series_direction_still_uses_nonempty_plan() {
         let p=plan_de441_relative_granules(
