@@ -131,6 +131,23 @@ class VectorComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing CSV header"):
             comparator.read_state(self.ours)
 
+    def test_reordered_columns_and_utf8_bom_accepted(self):
+        # Independent reference converters may emit columns in a different order,
+        # while spreadsheet exports commonly include a UTF-8 BOM.
+        reordered = tuple(reversed(HEADER))
+        self.write(self.ours, [BASE], reordered)
+        self.write(self.reference, [BASE])
+        self.ours.write_bytes(b"\xef\xbb\xbf" + self.ours.read_bytes())
+        metrics = comparator.compare(self.ours, self.reference)
+        self.assertTrue(all(value == 0.0 for value in metrics.values()))
+
+    def test_nonfinite_velocity_components_rejected(self):
+        for value in ("nan", "inf", "-inf"):
+            with self.subTest(value=value):
+                self.write(self.ours, [dict(BASE, vz_km_day=value)])
+                with self.assertRaisesRegex(ValueError, "non-finite state component"):
+                    comparator.read_state(self.ours)
+
     def test_multiple_or_zero_rows_rejected(self):
         for rows in ([], [BASE, BASE]):
             self.write(self.ours, rows)
