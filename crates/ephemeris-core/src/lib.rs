@@ -38,6 +38,7 @@ pub mod polar_motion;
 pub mod state;
 pub mod time;
 pub mod tirs_cirs_era;
+pub mod topocentric_geometry;
 pub mod wgs84_ecef;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
