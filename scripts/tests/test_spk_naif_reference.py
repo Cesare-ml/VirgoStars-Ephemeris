@@ -19,6 +19,8 @@
 
 import importlib.util
 import hashlib
+import json
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -180,6 +182,114 @@ class SpkReferenceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "changed during NAIF generation"):
             self.reference(MutatingSpice())
+
+
+    def test_one_command_audit_emits_replayable_receipt_only_after_rust_pass(self):
+        reference = Path(self.folder.name) / "reference.csv"
+        receipt = Path(self.folder.name) / "receipt.json"
+        calls = []
+
+        def passing_rust(command, *, cwd, check, capture_output, text):
+            calls.append((command, cwd, check, capture_output, text))
+            self.assertEqual(command[:6], [
+                "cargo", "run", "--offline", "--locked", "--example", "validate_spk_reference"
+            ])
+            self.assertEqual(command[-2:], list(map(lambda path: str(path.resolve()), self.paths)))
+            return subprocess.CompletedProcess(command, 0, "2 cases: failures=0", "")
+
+        result = REFERENCE.run_validation(
+            self.paths,
+            ["301:399:0", "399:0:123.25"],
+            reference,
+            receipt,
+            0.001,
+            1e-7,
+            FakeSpice(),
+            runner=passing_rust,
+            repo_root=Path(self.folder.name),
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["status"], "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING")
+        self.assertFalse(result["scientific_accuracy_certified"])
+        self.assertTrue(result["provenance_review_required"])
+        self.assertEqual(result["case_count"], 2)
+        self.assertEqual(result["rust_stdout"], "2 cases: failures=0")
+        self.assertEqual(json.loads(receipt.read_text(encoding="utf-8")), result)
+        self.assertEqual(
+            result["reference_sha256"], hashlib.sha256(reference.read_bytes()).hexdigest()
+        )
+        self.assertEqual(result["ordered_kernels"][0]["name"], "first.bsp")
+        REFERENCE.verify_reference_hashes(reference.read_text(encoding="utf-8"), self.paths)
+        with self.assertRaisesRegex(ValueError, "refuse to overwrite"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=passing_rust,
+            )
+
+    def test_failed_rust_comparison_keeps_reference_but_never_success_receipt(self):
+        reference = Path(self.folder.name) / "reference.csv"
+        receipt = Path(self.folder.name) / "receipt.json"
+
+        def failing_rust(command, **options):
+            return subprocess.CompletedProcess(command, 1, "1 cases: failures=1", "exceeds limit")
+
+        with self.assertRaisesRegex(ValueError, "Rust SPK comparator exited 1"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=failing_rust,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
+    def test_changed_kernel_while_rust_runs_invalidates_result(self):
+        reference = Path(self.folder.name) / "reference.csv"
+        receipt = Path(self.folder.name) / "receipt.json"
+
+        def corrupt_kernel(command, **options):
+            contents = bytearray(self.first.read_bytes())
+            contents[0] ^= 1
+            self.first.write_bytes(contents)
+            return subprocess.CompletedProcess(command, 0, "1 cases: failures=0", "")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_kernel,
+            )
+        self.assertFalse(receipt.exists())
+
+    def test_modified_reference_while_rust_runs_invalidates_result(self):
+        reference = Path(self.folder.name) / "reference.csv"
+        receipt = Path(self.folder.name) / "receipt.json"
+
+        def corrupt_reference(command, **options):
+            reference.write_text(reference.read_text(encoding="utf-8") + "# extra\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "1 cases: failures=0", "")
+
+        with self.assertRaisesRegex(ValueError, "CSV bytes changed"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_reference,
+            )
+        self.assertFalse(receipt.exists())
+
+    def test_one_command_requires_explicit_finite_positive_limits_and_new_outputs(self):
+        for bad in ("0", "-1", "inf", "nan", "abc"):
+            with self.assertRaises(ValueError):
+                REFERENCE.approved_limit(bad, "position")
+        self.assertEqual(REFERENCE.approved_limit("0.001", "position"), 0.001)
+        reference = Path(self.folder.name) / "reference.csv"
+        receipt = Path(self.folder.name) / "receipt.json"
+        with self.assertRaisesRegex(ValueError, "max position"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, float("nan"), 1e-7,
+                FakeSpice(),
+            )
+        with self.assertRaisesRegex(ValueError, "different paths"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, reference, 0.01, 1e-7,
+                FakeSpice(),
+            )
 
     def test_verify_command_works_without_spiceypy_and_fail_closed(self):
         document = self.reference()
