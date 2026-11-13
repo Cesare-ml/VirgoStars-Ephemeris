@@ -19,39 +19,50 @@ SPDX-License-Identifier: CPAL-1.0
 //!
 //! No ephemeris vectors are evaluated and no kernel is downloaded.
 //! The reported coverage is header metadata, not NASA/JPL numerical validation.
-//! Modification record: 2026-11-13 — initial standalone inspector and tests.
+//! Modification record: 2026-11-13 — initial inspector; added strict coverage gate.
 
 use std::env;
 use std::error::Error;
 use std::io::{self, Read, Seek};
 use virgostars_ephemeris_core::de441::De441;
 
-const USAGE: &str = "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB>]";
+const USAGE: &str = "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB> [--require-coverage]]";
 
 struct Options {
     file: String,
     probe_jd_tdb: Option<f64>,
+    require_coverage: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Options, String> {
-    let file = match args {
-        [file] | [file, _, _] if !file.is_empty() && !file.starts_with("--") => file.clone(),
+    let file = match args.first() {
+        Some(file) if !file.is_empty() && !file.starts_with("--") => file.clone(),
         _ => return Err(USAGE.to_owned()),
     };
-    let probe_jd_tdb = match args {
-        [_] => None,
-        [_, flag, value] if flag == "--at-jd" => {
+    let (probe_text, require_coverage) = match &args[1..] {
+        [] => (None, false),
+        [flag, value] if flag == "--at-jd" => (Some(value.as_str()), false),
+        [flag, value, strict] if flag == "--at-jd" && strict == "--require-coverage" => {
+            (Some(value.as_str()), true)
+        }
+        _ => return Err(USAGE.to_owned()),
+    };
+    let probe_jd_tdb = probe_text
+        .map(|value| {
             let jd = value
                 .parse::<f64>()
                 .map_err(|_| "JD_TDB must be a finite number".to_owned())?;
             if !jd.is_finite() {
                 return Err("JD_TDB must be a finite number".to_owned());
             }
-            Some(jd)
-        }
-        _ => return Err(USAGE.to_owned()),
-    };
-    Ok(Options { file, probe_jd_tdb })
+            Ok(jd)
+        })
+        .transpose()?;
+    Ok(Options {
+        file,
+        probe_jd_tdb,
+        require_coverage,
+    })
 }
 
 fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -> String {
@@ -68,6 +79,25 @@ fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -
     )
 }
 
+/// In strict mode, reject a non-covered epoch before emitting any CSV.
+fn checked_csv_report<R: Read + Seek>(
+    ephemeris: &De441<R>,
+    probe_jd_tdb: Option<f64>,
+    require_coverage: bool,
+) -> Result<String, String> {
+    if require_coverage {
+        let jd = probe_jd_tdb.ok_or("strict coverage requires --at-jd")?;
+        let (start, end) = ephemeris.coverage();
+        if jd < start.0 || jd > end.0 {
+            return Err(format!(
+                "JD TDB {jd} is outside declared DE441 coverage [{}, {}] JD TDB",
+                start.0, end.0
+            ));
+        }
+    }
+    Ok(csv_report(ephemeris, probe_jd_tdb))
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let options = parse_args(&args)
@@ -75,7 +105,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     // De441::open validates the classic header and declared file length.
     // This intentionally does not read or certify any coefficient values.
     let ephemeris = De441::open(&options.file)?;
-    println!("{}", csv_report(&ephemeris, options.probe_jd_tdb));
+    let report = checked_csv_report(
+        &ephemeris,
+        options.probe_jd_tdb,
+        options.require_coverage,
+    )
+    .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    println!("{report}");
     Ok(())
 }
 
@@ -172,5 +208,65 @@ mod tests {
         let parsed = parse_args(&args).unwrap();
         assert_eq!(parsed.file, "file.eph");
         assert_eq!(parsed.probe_jd_tdb, Some(-3_027_215.5));
+        assert!(!parsed.require_coverage);
+    }
+
+    #[test]
+    fn strict_flag_requires_one_explicit_tdb_probe() {
+        let valid = vec![
+            "file.eph".into(),
+            "--at-jd".into(),
+            "2451545.0".into(),
+            "--require-coverage".into(),
+        ];
+        let options = parse_args(&valid).unwrap();
+        assert_eq!(options.probe_jd_tdb, Some(2_451_545.0));
+        assert!(options.require_coverage);
+
+        for args in [
+            vec!["file.eph".into(), "--require-coverage".into()],
+            vec![
+                "file.eph".into(),
+                "--require-coverage".into(),
+                "--at-jd".into(),
+                "2451545".into(),
+            ],
+            vec![
+                "file.eph".into(),
+                "--at-jd".into(),
+                "2451545".into(),
+                "--require-coverage".into(),
+                "--require-coverage".into(),
+            ],
+        ] {
+            assert!(parse_args(&args).is_err());
+        }
+    }
+
+    #[test]
+    fn strict_mode_accepts_inclusive_endpoints_and_retains_csv_contract() {
+        let ephemeris = synthetic_de441();
+        for jd in [1000.0, 1016.0, 1032.0] {
+            assert_eq!(
+                checked_csv_report(&ephemeris, Some(jd), true).unwrap(),
+                csv_report(&ephemeris, Some(jd))
+            );
+        }
+    }
+
+    #[test]
+    fn strict_mode_rejects_both_sides_before_csv_but_diagnostic_mode_remains_compatible() {
+        let ephemeris = synthetic_de441();
+        for jd in [999.999_999, 1032.000_001] {
+            let error = checked_csv_report(&ephemeris, Some(jd), true).unwrap_err();
+            assert!(error.contains("outside declared DE441 coverage"));
+            assert!(checked_csv_report(&ephemeris, Some(jd), false)
+                .unwrap()
+                .ends_with(",out_of_coverage"));
+        }
+        assert!(checked_csv_report(&ephemeris, None, true).is_err());
+        assert!(checked_csv_report(&ephemeris, None, false)
+            .unwrap()
+            .ends_with(",not_checked"));
     }
 }
