@@ -352,3 +352,40 @@ fn granule_transition_uses_each_side_without_assuming_continuity() {
         );
     }
 }
+
+#[test]
+fn second_granule_reverse_geometry_preserves_xyz_derivatives_at_interior_epochs() {
+    let mut bytes = cubic_fixture();
+    let second = RECORD_BYTES * 2 + (2 + 12) * 8;
+    for (index, value) in [1.0, 2.0, 3.0, 4.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (4 + index) * 8, value);
+    }
+    for (index, value) in [4.0, -2.0, 0.0, 1.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (8 + index) * 8, value);
+    }
+
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    for jd in [1018.0, 1024.0, 1030.0] {
+        let forward = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        let reverse = ephemeris
+            .state(
+                Body::SolarSystemBarycenter,
+                Body::Mercury,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            assert_eq!(forward.position_km[axis], -reverse.position_km[axis]);
+            assert_eq!(
+                forward.velocity_km_per_day[axis],
+                -reverse.velocity_km_per_day[axis]
+            );
+        }
+    }
+}
