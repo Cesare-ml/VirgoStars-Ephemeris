@@ -39,7 +39,9 @@ fn usage() -> &'static str {
      ET is TDB seconds past J2000; kernel paths are in NAIF load order"
 }
 
-fn arguments(values: &[String]) -> Result<(Option<i32>, Option<f64>, Vec<&str>), String> {
+type ParsedArguments<'a> = (Option<i32>, Option<f64>, Vec<&'a str>);
+
+fn arguments(values: &[String]) -> Result<ParsedArguments<'_>, String> {
     let mut target = None;
     let mut selected_et = None;
     let mut files = Vec::new();
@@ -108,9 +110,9 @@ fn is_candidate(segment: &SpkSegmentDescriptor) -> bool {
 }
 
 /// Report the final covering descriptor for one target at an explicit ET.
-////
-//// This is *descriptor precedence*, not evidence that a complete relative
-//// path or the selected segment's coefficient records are usable.
+///
+/// This is *descriptor precedence*, not evidence that a complete relative
+/// path or the selected segment's coefficient records are usable.
 fn selected_descriptor(
     indexes: &[SpkIndex],
     target: i32,
