@@ -95,16 +95,18 @@ python scripts/spk_naif_reference.py verify `
   --reference "C:\\my-validation\\spk-reference.csv" `
   --kernel "C:\\kernels\\de440s.bsp"
 
-# Supply separately reviewed, positive scientific tolerances; there
-# are NO defaults and NO independent accuracy claim from this example.
-cargo run --example validate_spk_reference -- `
-  "C:\\my-validation\\spk-reference.csv" `
-  <approved_position_component_km> `
-  <approved_velocity_component_km_per_second> `
-  "C:\\kernels\\de440s.bsp"
+# One-command, offline verify + Rust comparison + verify again.
+# Choose scientifically justified positive limits; no accuracy defaults.
+python scripts/spk_naif_reference.py compare `
+  --reference "C:\\my-validation\\spk-reference.csv" `
+  --kernel "C:\\kernels\\de440s.bsp" `
+  --position-limit-km <approved_position_component_km> `
+  --velocity-limit-km-s <approved_velocity_component_km_per_second>
 ```
 
-For bash, replace PowerShell continuation characters with backslashes. Add `--kernel` arguments in the same order to all three commands for a multi-kernel comparison. `--case` can be repeated for multiple finite epochs and distinct target/center pairs; duplicate triples and same-body tautologies are rejected. The example's target and observer IDs are merely candidate cases; they succeed **only if the chosen kernels actually cover those bodies/epochs using supported frame-1 SPK types 2 or 3**.
+For bash, replace PowerShell continuation characters with backslashes. Add `--kernel` arguments in the same order to all commands for a multi-kernel comparison. The independent `verify` subcommand remains available when only hash checking is desired. `--case` can be repeated for multiple finite epochs and distinct target/center pairs; duplicate triples and same-body tautologies are rejected. The example's target and observer IDs are merely candidate cases; they succeed **only if the chosen kernels actually cover those bodies/epochs using supported frame-1 SPK types 2 or 3**.
+
+The new `compare` subcommand requires **explicit, finite, strictly positive** position/velocity component tolerances; verifies the ordered kernel names, sizes, hashes and generator script fingerprint **before** running `cargo run --offline --locked --example validate_spk_reference`; then rechecks both original CSV bytes and ordered kernel digests even if Rust fails. It passes values as individual subprocess arguments, never through a shell, and propagates Rust's nonzero exit. Cargo's `--offline` prevents dependency downloads during this check. With the added source-code fingerprint, users of an older generator revision must regenerate their reference CSV under the new version before the `compare` command can accept it. The separate standalone Rust comparator remains usable but **does not itself perform these pre/post SHA-256 checks**. This reduces accidental use of stale/corrupted inputs but **does not provide an atomic filesystem snapshot**: externally modified files after the final check, or an attacker controlling both references and hashes, remain outside this tool's guarantee.
 
 The generator uses `spkezr(target, et, "J2000", "NONE", observer)`, records its NAIF toolkit version, the UTC creation timestamp, full-precision floating-point output, and an ordered manifest of kernel **names, byte sizes and SHA-256 digests**. It also records the **SHA-256 of the exact generator script source**. Its `verify` command rehashes every file and the current generator script and rejects missing, substituted, reordered, truncated or same-length-corrupted kernel bytes. On `generate`, it checks source hashes before and after independent SPICE evaluation and clears the global SPICE kernel pool even on errors. The output CSV is written only once all requested vectors and hash checks succeed; an existing output is not overwritten without explicit `--overwrite`.
 
@@ -116,8 +118,10 @@ Offline mocked Python regressions run in Rust development CI on Ubuntu, Windows 
 python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
 ```
 
-These tests exercise manifest integrity, load order, duplicate/invalid time/IDs, nonfinite SPICE output, cleanup on failures and corrupt bytes; they **do not** call NAIF Toolkit or validate JPL numerical parity.
+These tests exercise manifest integrity, load order, duplicate/invalid time/IDs, nonfinite SPICE output, cleanup on failures and corrupt bytes; seven additional mocked cases cover the single-command offline Rust invocation, invalid thresholds, pre/post file tampering and nonzero process exits. They **do not** call NAIF Toolkit or validate JPL numerical parity.
 
 ### Modification record
+
+2026-11-13 (follow-up): added an offline `compare` orchestration command to the original `spk_naif_reference.py`, seven mocked safety tests, documentation for fail-closed verification before/after Rust and source-fingerprint compatibility. No data, deployment or release added.
 
 2026-11-13: added original validation-only `scripts/spk_naif_reference.py`, `scripts/tests/test_spk_naif_reference.py`, and read-only CI checks on three platforms. The source preserves the project CPAL-1.0/Exhibit A and VirgoStars attribution. No third-party source, kernel binary, network call, production component or runtime dependency was added to the Rust engine.
