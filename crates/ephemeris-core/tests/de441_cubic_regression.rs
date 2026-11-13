@@ -268,6 +268,41 @@ fn second_granule_xyz_quarter_epochs_match_analytic_values() {
     }
 }
 
+// Modification (2026-11-13): cross-check all XYZ analytic TDB-day velocities
+// against independent centered differences in the second granule.
+#[test]
+fn second_granule_xyz_velocities_match_centered_differences() {
+    let mut bytes = cubic_fixture();
+    let second = RECORD_BYTES * 2 + (2 + 12) * 8;
+    for (index, value) in [1.0, 2.0, 3.0, 4.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (4 + index) * 8, value);
+    }
+    for (index, value) in [4.0, -2.0, 0.0, 1.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (8 + index) * 8, value);
+    }
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    let step_days = 1.0 / 1024.0;
+    for jd in [1019.25, 1024.0, 1028.75] {
+        let before = ephemeris
+            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd - step_days))
+            .unwrap();
+        let at = ephemeris
+            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd))
+            .unwrap();
+        let after = ephemeris
+            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd + step_days))
+            .unwrap();
+        for axis in 0..3 {
+            let numerical_velocity =
+                (after.position_km[axis] - before.position_km[axis]) / (2.0 * step_days);
+            assert!(
+                (at.velocity_km_per_day[axis] - numerical_velocity).abs() < 1.0e-6,
+                "XYZ derivative mismatch at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
+
 #[test]
 fn granule_transition_uses_each_side_without_assuming_continuity() {
     // The synthetic neighboring polynomials are deliberately discontinuous.
