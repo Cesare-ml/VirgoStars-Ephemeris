@@ -20,6 +20,8 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from itertools import combinations
+import hashlib
+import json
 import math
 from pathlib import Path
 import re
@@ -177,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", type=Path,
                         help="Audit an existing NAIF/SPICE reference CSV")
+    parser.add_argument("--json", action="store_true",
+                        help="Print structured audit result with exact CSV byte SHA-256")
     parser.add_argument("--plan", action="store_true",
                         help="Print --case triples for the independent NAIF generator")
     parser.add_argument("--planet", type=int, action="append",
@@ -186,8 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.plan:
-            if args.reference is not None:
-                raise ValueError("--plan cannot be combined with --reference")
+            if args.reference is not None or args.json:
+                raise ValueError("--plan cannot be combined with --reference or --json")
             cases = plan_e1_cases(args.planet or [], args.epoch or [])
             for target, center, et in cases:
                 print(f"--case {target}:{center}:{format(et, '.17g')}")
@@ -196,11 +200,35 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.reference is None or args.planet or args.epoch:
             raise ValueError("supply --reference alone, or use --plan with --planet/--epoch")
-        rows = parse_reference(args.reference.read_text(encoding="utf-8"))
+        # Hash the exact byte stream, not re-encoded text or normalized newlines.
+        reference_bytes = args.reference.read_bytes()
+        rows = parse_reference(reference_bytes.decode("utf-8"))
         issues, planets, shared = audit_e1_matrix(rows)
     except (OSError, UnicodeError, ValueError) as exc:
-        print(f"E1 matrix audit ERROR: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({
+                "schema": "virgostars-e1-matrix-audit/v1",
+                "status": "invalid",
+                "issues": [str(exc)],
+                "scientific_accuracy_certified": False,
+                "provenance_review_required": True,
+            }, sort_keys=True))
+        else:
+            print(f"E1 matrix audit ERROR: {exc}", file=sys.stderr)
         return 2
+    if args.json:
+        print(json.dumps({
+            "schema": "virgostars-e1-matrix-audit/v1",
+            "status": "incomplete" if issues else "pass",
+            "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
+            "case_count": len(rows),
+            "planet_pairs": [list(pair) for pair in planets],
+            "shared_et_tdb_seconds": [format(epoch, ".17g") for epoch in shared],
+            "issues": issues,
+            "scientific_accuracy_certified": False,
+            "provenance_review_required": True,
+        }, sort_keys=True))
+        return 1 if issues else 0
     if issues:
         for issue in issues:
             print(f"INCOMPLETE E1 case matrix: {issue}", file=sys.stderr)
