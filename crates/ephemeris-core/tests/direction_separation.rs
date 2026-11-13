@@ -32,11 +32,7 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
 #[test]
 fn aligned_orthogonal_and_opposed_directions() {
     near(angle([1.0, 0.0, 0.0], [3.0, 0.0, 0.0]), 0.0, 0.0);
-    near(
-        angle([1.0, 0.0, 0.0], [0.0, -1.0, 0.0]),
-        FRAC_PI_2,
-        1e-15,
-    );
+    near(angle([1.0, 0.0, 0.0], [0.0, -1.0, 0.0]), FRAC_PI_2, 1e-15);
     near(angle([1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]), PI, 1e-15);
 }
 
@@ -44,11 +40,7 @@ fn aligned_orthogonal_and_opposed_directions() {
 fn resolves_small_angles_near_conjunction_and_opposition() {
     let tiny = 1e-12;
     near(angle([1.0, 0.0, 0.0], [1.0, tiny, 0.0]), tiny, 1e-20);
-    near(
-        PI - angle([1.0, 0.0, 0.0], [-1.0, tiny, 0.0]),
-        tiny,
-        1e-15,
-    );
+    near(PI - angle([1.0, 0.0, 0.0], [-1.0, tiny, 0.0]), tiny, 1e-15);
 }
 
 #[test]
