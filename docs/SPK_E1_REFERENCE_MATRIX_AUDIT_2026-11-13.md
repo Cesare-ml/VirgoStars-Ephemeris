@@ -21,6 +21,20 @@ Each of those five selected target/center pairs needs **at least three distinct 
 
 **No implicit defaults:** the auditor does not invent observation times, convert UTC to ET, assert that any NAIF ID exists in a given kernel, enforce numerical tolerances or infer support for planetary center versus barycenter. A `PASS` is **only** a case-matrix breadth check. Check SPK actual segment coverage before selecting epochs; verify record/segment boundaries, different byte orders, light-time/frame corrections and Horizons solution identity separately. The minimal breadth gate is **necessary but not sufficient** for E1 and is deliberately stricter about shared epochs than issue #3's simple three-epoch wording.
 
+## Plan explicit NAIF/SPICE test cases
+
+The same standalone utility can **plan** the minimum body/epoch matrix before generating NAIF vectors. The operator must supply *two physically distinct planetary systems* using their exact numeric NAIF target IDs, and **three or more explicit finite TDB/ET epochs** (seconds past J2000). No default planets, timestamps, UTC conversion, dataset loading, downloads, or scientific accuracy claims are involved.
+
+```bash
+python3 scripts/audit_spk_e1_matrix.py --plan \
+  --planet 4 --planet 5 \
+  --epoch 0 --epoch 86400 --epoch 172800
+```
+
+The 15 output lines use the exact `--case TARGET:CENTER:ET` syntax accepted by the experimental `scripts/spk_naif_reference.py generate/run` commands in unmerged drafts #162/#164. For example, the first and last printed lines are `--case 10:399:0` and `--case 5:399:172800`. Review them and pass them as repeated `--case` arguments; the planning command **does not execute** SPICE or Cargo. On Windows, use `python` and PowerShell backticks instead of bash line continuations, or issue a single-line command.
+
+For planetary test pairs the planner uses **Earth center (399)** as observer, without silently substituting barycenters or changing a caller-supplied target ID. It rejects `--planet 4 --planet 499` as **one** Mars system, nonfinite/duplicate epochs including `-0` versus `0`, and an incomplete set of planets or epochs. Actual kernel support for chosen targets, frames, centers and ET values must be established from the relevant SPK descriptors before running NAIF. This planner sets up the minimum general-purpose E1 case matrix, **not** separate near-record/segment boundary tests required by issue #3.
+
 ## Offline usage
 
 ```bash
@@ -47,6 +61,8 @@ The included Python standard-library `unittest` suite uses **fabricated numeric 
 5. Keep `E1=IMPLEMENTED_UNVERIFIED` until the complete real-data evidence has been reviewed. A passing synthetic CI run or this script's PASS is never scientific parity evidence.
 
 ## CPAL-1.0 modification record
+
+2026-11-13 (planning follow-up): added an opt-in `--plan` mode for explicit two-planet, three-or-more-ET case planning, shared E1 audit rules and seven additional synthetic CLI/validation tests. No astronomical calculation or external data access added.
 
 2026-11-13 (follow-up): corrected planetary-system identity when selecting independent test targets: planet center and system barycenter IDs now map to the same physical planet for coverage counting. Added regression tests without changing astronomical calculations.
 
