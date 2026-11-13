@@ -8,6 +8,7 @@
 // Modification (2026-11-13): same-body zero states and epoch coverage boundaries.
 // Modification (2026-11-13): missing lunar series on date-valid synthetic records.
 // Modification (2026-11-13): missing EMB and invalid record-date precedence regressions.
+// Modification (2026-11-13): second-record date integrity at interior epochs.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -334,6 +335,30 @@ fn rejects_inconsistent_record_dates_before_missing_series() {
         Body::Earth,
         Body::SolarSystemBarycenter,
         JulianDateTdb(1016.0),
+    );
+    assert!(matches!(
+        result,
+        Err(De441Error::InvalidFile(
+            "coefficient record has unexpected dates"
+        ))
+    ));
+}
+
+#[test]
+fn rejects_inconsistent_second_record_dates_at_interior_epoch() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    let mut bytes = synthetic_header();
+    // The first record is valid. The second must cover [1032, 1064].
+    f64_field(&mut bytes, 2 * 3000, 1000.0);
+    f64_field(&mut bytes, 2 * 3000 + 8, 1032.0);
+    f64_field(&mut bytes, 3 * 3000, 1033.0);
+    f64_field(&mut bytes, 3 * 3000 + 8, 1065.0);
+    let mut reader = De441::new(Cursor::new(bytes)).unwrap();
+    let result = reader.state(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        JulianDateTdb(1048.0),
     );
     assert!(matches!(
         result,
