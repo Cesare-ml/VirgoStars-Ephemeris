@@ -32,6 +32,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental single-kernel SPK center-chain states (not JPL-validated)](docs/RUST_SPK_CENTER_CHAINS_2026-11-12.md)
 - [Experimental loaded-kernel precedence and cross-file states (not JPL-validated)](docs/RUST_SPK_KERNEL_SET_PRIORITY_2026-11-13.md)
 - [Offline NAIF/SPICE SPK validation comparator and evidence requirements (no real results yet)](docs/RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md)
+- [Inspect local SPK descriptor coverage and select E1 candidate epochs (no JPL accuracy claims)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
 - [Independent SPICE reference generator and ordered kernel SHA256 verification](scripts/spk_naif_reference.py)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
