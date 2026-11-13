@@ -19,8 +19,8 @@ use std::rc::Rc;
 use virgostars_ephemeris_core::de441::{De441, De441Error, JulianDateTdb};
 use virgostars_ephemeris_core::geometry::AngularSeparationError;
 use virgostars_ephemeris_core::lunar_phase::{
-    geometric_lunar_illumination_from_de441, geometric_lunar_orientation_from_de441, LunarDe441Error,
-    LunarEclipticHalf, LunarIlluminationError,
+    geometric_lunar_illumination_from_de441, geometric_lunar_orientation_from_de441,
+    LunarDe441Error, LunarEclipticHalf, LunarIlluminationError,
 };
 
 const RECORD_BYTES: usize = 3000;
@@ -217,13 +217,12 @@ fn bridge_reuses_record_cache_and_recovers_after_injected_io_failure() {
     assert_eq!(reads.get(), cached_reads, "same record should reuse cache");
 }
 
-
 #[test]
 fn oriented_de441_bridge_provides_separate_earth_elongation_and_lunar_fraction() {
     let mut eph = De441::new(Cursor::new(fixture())).unwrap();
     let pole = [0.0, 0.0, 1.0]; // Synthetic ICRF fixture plane, not real ecliptic-of-date.
-    let quarter = geometric_lunar_orientation_from_de441(&mut eph, JulianDateTdb(1016.0), pole)
-        .unwrap();
+    let quarter =
+        geometric_lunar_orientation_from_de441(&mut eph, JulianDateTdb(1016.0), pole).unwrap();
     near(quarter.illumination.illuminated_fraction, 0.5, 1e-14);
     near(
         quarter.geocentric_elongation_rad,
@@ -235,13 +234,19 @@ fn oriented_de441_bridge_provides_separate_earth_elongation_and_lunar_fraction()
         -std::f64::consts::FRAC_PI_4,
         1e-14,
     );
-    assert_eq!(quarter.longitude_half, LunarEclipticHalf::WaningLongitudeHalf);
+    assert_eq!(
+        quarter.longitude_half,
+        LunarEclipticHalf::WaningLongitudeHalf
+    );
 
-    let dark = geometric_lunar_orientation_from_de441(&mut eph, JulianDateTdb(1032.0), pole)
-        .unwrap();
+    let dark =
+        geometric_lunar_orientation_from_de441(&mut eph, JulianDateTdb(1032.0), pole).unwrap();
     near(dark.illumination.illuminated_fraction, 0.0, 1e-14);
     near(dark.geocentric_elongation_rad, 0.0, 1e-14);
-    assert_eq!(dark.longitude_half, LunarEclipticHalf::ConjunctionOrOpposition);
+    assert_eq!(
+        dark.longitude_half,
+        LunarEclipticHalf::ConjunctionOrOpposition
+    );
 
     assert!(matches!(
         geometric_lunar_orientation_from_de441(&mut eph, JulianDateTdb(1016.0), [0.0; 3]),
