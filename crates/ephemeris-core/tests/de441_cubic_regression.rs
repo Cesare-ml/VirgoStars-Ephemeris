@@ -194,7 +194,6 @@ fn second_granule_xyz_coefficients_and_velocities_are_independent() {
     assert_eq!(state.velocity_km_per_day, [-0.875, -1.25, -0.625]);
 }
 
-
 // Modification (2026-11-13): verify the inclusive final epoch and the
 // exact granule transition for all three axes, including reverse geometry.
 #[test]
