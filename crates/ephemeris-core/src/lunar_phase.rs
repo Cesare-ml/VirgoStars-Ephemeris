@@ -23,7 +23,7 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
-use crate::geometry::{geometric_angular_separation_rad, AngularSeparationError};
+use crate::geometry::{geometric_angular_separation_rad, scaled_direction, AngularSeparationError};
 
 /// A geometric, geocentric, ideal-sphere Moon illumination estimate.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -49,6 +49,10 @@ pub enum LunarIlluminationError {
     UnrepresentableDifference,
     /// The Moon's observer/Sun directions are undefined.
     Geometry(AngularSeparationError),
+    /// The caller-supplied ICRF ecliptic north is a zero-length vector.
+    UndefinedReferencePole,
+    /// A Sun/Moon direction lies exactly along the supplied ecliptic pole.
+    UndefinedEclipticProjection,
 }
 
 impl fmt::Display for LunarIlluminationError {
@@ -63,6 +67,10 @@ impl fmt::Display for LunarIlluminationError {
                 write!(f, "Moon-to-Sun difference exceeds floating-point range")
             }
             Self::Geometry(error) => write!(f, "undefined lunar illumination geometry: {error}"),
+            Self::UndefinedReferencePole => write!(f, "ecliptic reference pole has zero direction"),
+            Self::UndefinedEclipticProjection => {
+                write!(f, "Sun or Moon longitude is undefined at the ecliptic pole")
+            }
         }
     }
 }
@@ -188,6 +196,16 @@ pub fn geometric_lunar_illumination_from_de441<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     epoch: JulianDateTdb,
 ) -> Result<GeometricLunarIllumination, LunarDe441Error> {
+    let (sun, moon) = read_sun_moon_de441(ephemeris, epoch)?;
+    geometric_lunar_illumination(&sun, &moon).map_err(LunarDe441Error::Illumination)
+}
+
+// One source of Sun/Moon lookup rules for all geometrical DE441 adapters.
+// The lunar path in `De441::state` preserves small Earth–Moon offsets.
+fn read_sun_moon_de441<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    epoch: JulianDateTdb,
+) -> Result<(StateVector, StateVector), LunarDe441Error> {
     if !epoch.0.is_finite() {
         return Err(LunarDe441Error::NonFiniteEpoch);
     }
@@ -197,5 +215,154 @@ pub fn geometric_lunar_illumination_from_de441<R: Read + Seek>(
     let moon = ephemeris
         .state(Body::Moon, Body::Earth, epoch)
         .map_err(LunarDe441Error::Ephemeris)?;
-    geometric_lunar_illumination(&sun, &moon).map_err(LunarDe441Error::Illumination)
+    Ok((sun, moon))
+}
+
+
+/// Ecliptic longitude half-plane relative to the Sun, **not** a time derivative.
+///
+/// This is the **geometric** ordering of ecliptic longitudes after projection
+/// onto the caller-defined ecliptic plane. A genuinely valid ecliptic north
+/// pole in ICRF axes at the requested epoch is required for astronomical
+/// waxing/waning interpretation. At exact conjunction or opposition the
+/// unsigned half-plane classification is indeterminate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LunarEclipticHalf {
+    /// Moon longitude is 0°–180° ahead (east) of the Sun: waxing half-plane.
+    WaxingLongitudeHalf,
+    /// Moon longitude is 0°–180° behind (west) the Sun: waning half-plane.
+    WaningLongitudeHalf,
+    /// Projected longitudes coincide or oppose exactly (0° or 180°).
+    ConjunctionOrOpposition,
+}
+
+/// Three distinct geometric Moon quantities, with no apparent corrections.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GeometricLunarOrientation {
+    /// Sun–Moon–Earth phase angle **at the Moon** and illuminated fraction.
+    pub illumination: GeometricLunarIllumination,
+    /// Sun–Earth–Moon unsigned angle **at the Earth**, radians in [0, PI].
+    pub geocentric_elongation_rad: f64,
+    /// Moon minus Sun ecliptic longitude projected about the supplied pole:
+    /// signed radians in [-PI, PI], with positive towards ecliptic east.
+    pub signed_ecliptic_longitude_difference_rad: f64,
+    /// Waxing/waning **longitude half**, not measured illumination trend.
+    pub longitude_half: LunarEclipticHalf,
+}
+
+/// Calculate geometric Moon illumination, geocentric elongation and ecliptic
+/// longitude half-plane from two matched Earth-centered ICRF states.
+///
+/// `ecliptic_north_icrf` is a **caller-supplied** nonzero finite vector in
+/// exactly the same ICRF axes and appropriate ecliptic-of-date convention as
+/// the state epoch. It is *not* automatically obtained from Earth's spin
+/// axis or a calendar date. The API cannot verify that the supplied vector
+/// is a physical ecliptic pole or matches the epoch: the caller must
+/// document and validate its provenance and convention.
+///
+/// Moon and Sun vectors are projected orthogonally into the plane whose
+/// positive normal is `ecliptic_north_icrf`. The oriented projected
+/// longitude difference is `atan2(n · (Sun × Moon), Sun · Moon)`, using
+/// overflow-safe per-vector scaling before all products. A projection that
+/// vanishes at the reference pole is rejected rather than assigned an
+/// arbitrary longitude. In contrast, `geocentric_elongation_rad` is the
+/// **3-D** unsigned angle between the unprojected observer-centered vectors.
+///
+/// Positive signed longitude corresponds to the traditional "waxing"
+/// ecliptic half-plane; negative to "waning". This **does not guarantee
+/// increasing or decreasing illuminated fraction at an instant**, nor
+/// identify a unique lunar phase event. Near 0°/180°, the half-plane can be
+/// numerically sensitive. At exactly 0°/180°, returns the boundary category.
+///
+/// There is no UTC/TT conversion, light-time, aberration, parallax,
+/// refraction, frame conversion, nutation or search for phase events.
+pub fn geometric_lunar_orientation(
+    sun: &StateVector,
+    moon: &StateVector,
+    ecliptic_north_icrf: [f64; 3],
+) -> Result<GeometricLunarOrientation, LunarIlluminationError> {
+    // Existing typed validation rules are the single contract for the states.
+    let illumination = geometric_lunar_illumination(sun, moon)?;
+    let geocentric_elongation_rad =
+        geometric_angular_separation_rad(sun.position_km, moon.position_km)?;
+
+    let normal = match scaled_direction(ecliptic_north_icrf) {
+        Ok(direction) => direction,
+        Err(AngularSeparationError::UndefinedDirection) => {
+            return Err(LunarIlluminationError::UndefinedReferencePole);
+        }
+        Err(AngularSeparationError::NonFiniteInput) => {
+            return Err(LunarIlluminationError::NonFiniteInput);
+        }
+    };
+    let normal_length = normal[0].hypot(normal[1]).hypot(normal[2]);
+    let normal = normal.map(|value| value / normal_length);
+
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let project = |position_km: [f64; 3]| -> Result<[f64; 3], LunarIlluminationError> {
+        let direction = scaled_direction(position_km)?;
+        let parallel = dot(direction, normal);
+        let projection = std::array::from_fn(|axis| direction[axis] - parallel * normal[axis]);
+        match scaled_direction(projection) {
+            Ok(direction) => Ok(direction),
+            Err(AngularSeparationError::UndefinedDirection) => {
+                Err(LunarIlluminationError::UndefinedEclipticProjection)
+            }
+            Err(error) => Err(LunarIlluminationError::Geometry(error)),
+        }
+    };
+    let sun_longitude_direction = project(sun.position_km)?;
+    let moon_longitude_direction = project(moon.position_km)?;
+    let cross = [
+        sun_longitude_direction[1] * moon_longitude_direction[2]
+            - sun_longitude_direction[2] * moon_longitude_direction[1],
+        sun_longitude_direction[2] * moon_longitude_direction[0]
+            - sun_longitude_direction[0] * moon_longitude_direction[2],
+        sun_longitude_direction[0] * moon_longitude_direction[1]
+            - sun_longitude_direction[1] * moon_longitude_direction[0],
+    ];
+    let oriented_sine = dot(normal, cross);
+    let oriented_cosine = dot(sun_longitude_direction, moon_longitude_direction);
+    let (signed_ecliptic_longitude_difference_rad, longitude_half) = if oriented_sine > 0.0 {
+        (
+            oriented_sine.atan2(oriented_cosine),
+            LunarEclipticHalf::WaxingLongitudeHalf,
+        )
+    } else if oriented_sine < 0.0 {
+        (
+            oriented_sine.atan2(oriented_cosine),
+            LunarEclipticHalf::WaningLongitudeHalf,
+        )
+    } else {
+        // Explicit boundary without relying on the sign of floating-point -0.
+        (
+            if oriented_cosine < 0.0 { PI } else { 0.0 },
+            LunarEclipticHalf::ConjunctionOrOpposition,
+        )
+    };
+
+    Ok(GeometricLunarOrientation {
+        illumination,
+        geocentric_elongation_rad,
+        signed_ecliptic_longitude_difference_rad,
+        longitude_half,
+    })
+}
+
+/// Read Sun/Earth and Moon/Earth classic-DE441 geometric states once each
+/// and derive all three lunar orientation quantities in the canonical Rust
+/// core, using a caller-provided ICRF ecliptic-of-date north vector.
+///
+/// Exact same TDB epoch and ICRF coordinate conventions are required.
+/// See `geometric_lunar_orientation` for the geometry and limitations.
+/// No implicit frame/time conversion, third-party kernel download or
+/// precision certification is performed.
+pub fn geometric_lunar_orientation_from_de441<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    epoch: JulianDateTdb,
+    ecliptic_north_icrf: [f64; 3],
+) -> Result<GeometricLunarOrientation, LunarDe441Error> {
+    let (sun, moon) = read_sun_moon_de441(ephemeris, epoch)?;
+    geometric_lunar_orientation(&sun, &moon, ecliptic_north_icrf)
+        .map_err(LunarDe441Error::Illumination)
 }
