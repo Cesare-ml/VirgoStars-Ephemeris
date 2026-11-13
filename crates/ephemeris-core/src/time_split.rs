@@ -61,7 +61,6 @@ pub fn split_julian_day_tdb_from_et(
     Ok(split)
 }
 
-
 /// Results of auditing a TDB ET-to-split-JD representation change.
 ///
 /// The reported residual compares two binary64 representations of the *given*
@@ -88,7 +87,10 @@ impl std::fmt::Display for SplitEpochAuditError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidErrorBudget => {
-                write!(f, "ET-to-split-JD precision budget must be finite and nonnegative")
+                write!(
+                    f,
+                    "ET-to-split-JD precision budget must be finite and nonnegative"
+                )
             }
             Self::InvalidJulianDate(error) => write!(f, "invalid split JD: {error}"),
             Self::PrecisionLoss {
