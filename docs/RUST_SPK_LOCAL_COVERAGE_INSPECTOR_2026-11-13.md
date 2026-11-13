@@ -23,6 +23,15 @@ cargo run --offline --locked --example inspect_spk_coverage -- \
   --target 399 /local/path/de440s.bsp > earth-coverage.csv
 ```
 
+To ask **which single descriptor wins for a target at one explicit TDB epoch**, add `--at-et` (the example ET `0` is illustrative; its coverage has not been verified against any external kernel here):
+
+```bash
+cargo run --offline --locked --example inspect_spk_coverage -- \
+  --target 399 --at-et 0 /local/path/kernel1.bsp /local/path/kernel2.bsp
+```
+
+This emits the **same CSV header plus exactly one selected row**. It selects the **last covering segment for that target in the last-loaded kernel with coverage**, using inclusive descriptor start/end ET values; no observer/center, frame or SPK-type prefiltering is performed. A later unsupported frame or type is shown with `candidate_j2000_type2_or3=false` rather than falling back silently to an earlier supported segment. Missing required `--target`, duplicate `--at-et`, nonfinite ET values, invalid kernels or lack of declared target coverage cause nonzero exits **without emitting a CSV row or partial header**. The query examines **descriptor-level precedence only**; it does not assert that the selected record coefficients can be evaluated, that the full target-to-observer chain is resolvable, or that all kernel priority rules in the independent NAIF Toolkit have been numerically verified.
+
 Multiple file arguments are accepted in **exact load order** (later files and later covering segments may override earlier ones under NAIF priority). Do not reorder them when subsequently generating an independent reference. Output is to stdout as CSV, and a non-claiming summary goes to stderr. A missing/corrupt SPK file causes a nonzero exit before *any* CSV is emitted; a target filter matching zero descriptors also returns a nonzero exit.
 
 ## CSV contract
@@ -46,5 +55,7 @@ This file is intentionally **not** a final validation receipt: it includes no po
 **Scientific status:** synthetic Rust index tests validate parsing and CSV formatting on little- and big-endian DAF fixtures. They are *not* proof of NASA/JPL accuracy, real kernel coverage, general type support, or production readiness. E1 issue #3 remains **open** until genuine independent reference comparison and review.
 
 ## Modifications and attribution
+
+2026-11-13 (ET selection follow-up): Added explicit `--at-et` and `--target` combination to report the final covering descriptor in the ordered kernels. Added five deterministic regressions for overlapping file/segment precedence, unsupported winning frames/types, inclusive boundaries, coverage gaps, CLI input and preserved DAF ordinals. No real kernel states or numerical accuracy results are claimed.
 
 2026-11-13: Added original Rust metadata-only CLI `inspect_spk_coverage.rs`, deterministic parser-backed and CLI unit tests, and three-platform read-only Rust CI checks. No third-party kernel files or SPICE toolkit code are included. Original modifications are CPAL-1.0 covered with VirgoStars notices; see [LICENSE](../LICENSE) and [NOTICE](../NOTICE).
