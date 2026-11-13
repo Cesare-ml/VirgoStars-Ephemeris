@@ -394,7 +394,9 @@ fn audit_rejects_corrupt_later_record_even_when_header_and_length_are_valid() {
             .is_ok());
         assert!(matches!(
             eph.audit_record_dates(),
-            Err(De441Error::InvalidFile("coefficient record has unexpected dates"))
+            Err(De441Error::InvalidFile(
+                "coefficient record has unexpected dates"
+            ))
         ));
     }
 }
@@ -406,6 +408,8 @@ fn audit_rejects_corrupt_first_record_without_interpolating_coefficients() {
     let mut eph = De441::new(Cursor::new(bytes)).unwrap();
     assert!(matches!(
         eph.audit_record_dates(),
-        Err(De441Error::InvalidFile("coefficient record has unexpected dates"))
+        Err(De441Error::InvalidFile(
+                "coefficient record has unexpected dates"
+            ))
     ));
 }
