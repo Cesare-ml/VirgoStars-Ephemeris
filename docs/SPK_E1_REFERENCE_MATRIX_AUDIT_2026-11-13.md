@@ -35,6 +35,51 @@ The 15 output lines use the exact `--case TARGET:CENTER:ET` syntax accepted by t
 
 For planetary test pairs the planner uses **Earth center (399)** as observer, without silently substituting barycenters or changing a caller-supplied target ID. It rejects `--planet 4 --planet 499` as **one** Mars system, nonfinite/duplicate epochs including `-0` versus `0`, and an incomplete set of planets or epochs. Actual kernel support for chosen targets, frames, centers and ET values must be established from the relevant SPK descriptors before running NAIF. This planner sets up the minimum general-purpose E1 case matrix, **not** separate near-record/segment boundary tests required by issue #3.
 
+## Machine-readable audit report (not a scientific receipt)
+
+Use `--json` with `--reference` to emit one JSON document on stdout that
+other local validation tools can consume. Unlike the independent NAIF/Rust
+**numerical** receipt from draft #164, this JSON object reports only **E1
+test-matrix breadth** and must never be interpreted as verified scientific
+accuracy.
+
+```bash
+python3 scripts/audit_spk_e1_matrix.py --reference /path/to/spk-reference.csv --json > matrix-audit.json
+```
+
+A structurally valid and complete synthetic example produces fields such as:
+
+```json
+{
+  "schema": "virgostars-e1-matrix-audit/v1",
+  "status": "pass",
+  "reference_sha256": "<actual SHA-256 of exact input CSV bytes>",
+  "case_count": 15,
+  "planet_pairs": [[4, 399], [5, 399]],
+  "shared_et_tdb_seconds": ["0", "86400", "172800"],
+  "issues": [],
+  "scientific_accuracy_certified": false,
+  "provenance_review_required": true
+}
+```
+
+This is an **illustration**, not a real file fingerprint or NAIF result.
+`reference_sha256` binds the report to the exact **raw CSV bytes**,
+including line endings, rather than the normalized numeric representation.
+The three TDB epoch strings preserve Python's 17-digit round-trip rendering.
+Compare the byte hash with the source reference used by any separate Rust
+comparison receipt. Neither a matching hash nor a `status=pass` authenticates
+the claimed NAIF provider or vector values.
+
+The command uses the **same exit status as text mode**: `0` on sufficient
+matrix breadth, `1` on incomplete but valid input, `2` on malformed/missing
+input. The JSON status is respectively `pass`, `incomplete`, or `invalid`.
+Invalid input yields an `issues` list and the explicit
+`scientific_accuracy_certified=false` flag, but does **not** invent a
+`reference_sha256`. Consumers must require both exit code zero and
+`status=pass`; the full astronomy/provenance gates must be checked separately.
+`--json` and `--plan` cannot be combined.
+
 ## Offline usage
 
 ```bash
@@ -61,6 +106,8 @@ The included Python standard-library `unittest` suite uses **fabricated numeric 
 5. Keep `E1=IMPLEMENTED_UNVERIFIED` until the complete real-data evidence has been reviewed. A passing synthetic CI run or this script's PASS is never scientific parity evidence.
 
 ## CPAL-1.0 modification record
+
+2026-11-13 (reporting follow-up): added a machine-readable JSON breadth result with explicit non-certification markers and SHA-256 of the exact local reference CSV bytes. Added six synthetic tests for pass/incomplete/invalid output and input-byte identity. This does not authenticate JPL/NAIF provenance or perform astronomical comparisons.
 
 2026-11-13 (planning follow-up): added an opt-in `--plan` mode for explicit two-planet, three-or-more-ET case planning, shared E1 audit rules and seven additional synthetic CLI/validation tests. No astronomical calculation or external data access added.
 
