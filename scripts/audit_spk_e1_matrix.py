@@ -369,6 +369,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("--plan cannot be combined with --reference, --json or --receipt")
             epochs = args.epoch or []
             if args.boundary_et:
+                # Check raw user epochs first: boundary additions must never
+                # hide duplicate or insufficient original --epoch values.
+                plan_e1_cases(args.planet or [], epochs)
                 if args.boundary_offset_seconds is None:
                     raise ValueError(
                         "--boundary-offset-seconds required with --boundary-et"
