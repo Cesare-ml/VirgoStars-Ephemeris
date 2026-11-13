@@ -40,6 +40,17 @@ HEX64 = re.compile(r"[0-9a-fA-F]{64}\Z")
 Rows = list[tuple[int, int, float]]
 
 
+def planet_system(target: int) -> int | None:
+    """Canonical NAIF planet family, unifying center and system barycenter IDs.
+
+    4 (Mars system barycenter) and 499 (Mars body center) are *one*
+    planetary system for test-breadth accounting, not two planets.
+    """
+    if target not in PLANET_IDS:
+        return None
+    return target if target < 10 else target // 100
+
+
 def parse_reference(content: str) -> Rows:
     """Validate numeric rows and metadata compatible with the Rust comparator."""
     metadata: dict[str, str] = {}
@@ -102,7 +113,7 @@ def parse_reference(content: str) -> Rows:
 
 
 def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[float]]:
-    """Require five target/center pairs over >=3 *shared* explicit TDB epochs."""
+    """Require five pairs from five physical systems across >=3 shared TDB epochs."""
     epochs: dict[tuple[int, int], set[float]] = defaultdict(set)
     for target, center, et in rows:
         epochs[(target, center)].add(et)
@@ -116,18 +127,20 @@ def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[
                   and len(times) >= 3]
     best: tuple[list[tuple[int, int]], list[float]] | None = None
     for left, right in combinations(sorted(candidates), 2):
-        if left[0] == right[0]:
-            continue  # Two observers of one planet are not two planets.
+        if planet_system(left[0]) == planet_system(right[0]):
+            # NAIF 4 and 499, for example, are the same Mars system even
+            # though their SPK trajectories and physical centers differ.
+            continue
         required = [*CORE_PAIRS, left, right]
         shared = sorted(set.intersection(*(epochs.get(pair, set()) for pair in required)))
         if len(shared) >= 3:
             best = ([left, right], shared)
             break
-    planet_count = len({pair[0] for pair in candidates})
+    planet_count = len({planet_system(pair[0]) for pair in candidates})
     if planet_count < 2:
-        issues.append(f"two distinct planetary targets required; found {planet_count}")
+        issues.append(f"two distinct planetary systems required; found {planet_count}")
     elif best is None:
-        issues.append("no two distinct planetary targets share three ET epochs with all core pairs")
+        issues.append("no two distinct planetary systems share three ET epochs with all core pairs")
     if best is None:
         return issues, [], []
     return issues, best[0], best[1]
