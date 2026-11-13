@@ -17,6 +17,9 @@ Contributors retain applicable rights in their own contributions under the terms
 SPDX-License-Identifier: CPAL-1.0
 */
 
+// Modification record: 2026-11-14 — add optional fail-closed constructors
+// that validate all classic DE441 record date pairs before exposing a reader.
+
 //! Reader for the classic little-endian JPL DE441 binary format, not SPK or SE1.
 //!
 //! Binary header layout: <https://www.imcce.fr/content/medias/recherche/equipes/asd/inpop/inpop_file_format_2_0.pdf>.
@@ -143,6 +146,13 @@ impl De441<File> {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, De441Error> {
         Self::new(File::open(path)?)
     }
+
+    /// Open an external classic DE441 binary and verify every record's TDB
+    /// date pair before giving the caller access to its geometric states.
+    /// This is a structural check, not independent astronomical validation.
+    pub fn open_with_record_date_audit(path: impl AsRef<Path>) -> Result<Self, De441Error> {
+        Self::new_with_record_date_audit(File::open(path)?)
+    }
 }
 
 fn f64_at(bytes: &[u8], offset: usize) -> f64 {
@@ -161,6 +171,19 @@ fn i32_at(bytes: &[u8], offset: usize) -> i32 {
 }
 
 impl<R: Read + Seek> De441<R> {
+    /// Validate the classic header, file length, and every coefficient record
+    /// TDB start/end pair before returning an ephemeris reader.
+    ///
+    /// Unlike `new()`, this opt-in constructor fails if a corrupt intermediate
+    /// record has incorrect date tags, even if that record has not been queried.
+    /// Reads only 16 bytes per record after header validation, with no
+    /// coefficient evaluation; independent JPL/NAIF parity is still required.
+    pub fn new_with_record_date_audit(source: R) -> Result<Self, De441Error> {
+        let mut reader = Self::new(source)?;
+        reader.audit_record_dates()?;
+        Ok(reader)
+    }
+
     /// Opens a seekable classic JPL DE441 binary. Checks its header and declared file length.
     pub fn new(mut source: R) -> Result<Self, De441Error> {
         source.seek(SeekFrom::Start(0))?;
