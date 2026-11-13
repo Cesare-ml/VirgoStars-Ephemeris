@@ -94,6 +94,83 @@ read failures and cache reuse after recovery. A passing test proves only
 correct reader-to-geometry wiring with synthetic coefficients; it is not
 an independently sourced NASA/JPL reference or precision certification.
 
+## Geocentric elongation and conditional waxing/waning longitude halves (2026-11-14)
+
+New `lunar_phase::geometric_lunar_orientation(&sun, &moon, ecliptic_north_icrf)`
+builds on the previous, checked Sun/Earth and Moon/Earth `StateVector`
+contract. It returns a `GeometricLunarOrientation` with **three distinct
+outputs**:
+
+- `illumination.phase_angle_rad` (Moon-vertex angle; radians) and
+  `illumination.illuminated_fraction` (ideal spherical fraction, 0–1).
+- `geocentric_elongation_rad` (unsigned **Sun–Earth–Moon** 3-D angle,
+  radians 0–π). The value generally differs from both the phase angle at
+  the Moon and the difference in projected ecliptic longitudes.
+- `signed_ecliptic_longitude_difference_rad` (Moon ecliptic longitude
+  minus Sun ecliptic longitude, projected onto the plane normal to the
+  **caller-supplied** pole, radians in [−π, +π]) and
+  `longitude_half: LunarEclipticHalf`.
+
+For conventional astronomical **waxing or waning longitude-half**
+interpretation, the caller **must** pass a correctly determined *north
+ecliptic pole expressed in ICRF Cartesian axes*, with its explicitly
+chosen epoch and ecliptic convention matching the states. **The API does
+not compute the physical ecliptic pole or rotate ICRF states into the
+ecliptic of date.** A vector such as `[0, 0, 1]` is the ICRF equatorial
+north axis, **not** automatically ecliptic north in real astronomy.
+The synthetic tests deliberately use an artificial plane with that normal;
+they do not constitute a real physical ecliptic solution.
+
+The signed difference is measured using the normal's right-hand
+orientation on **projected** Sun/Moon directions:
+
+- Moon longitude ahead of Sun (positive 0–π): `WaxingLongitudeHalf`.
+- Moon longitude behind Sun (negative −π–0): `WaningLongitudeHalf`.
+- Exactly projected aligned/opposed (0 or π): `ConjunctionOrOpposition`.
+- A zero/nonfinite reference pole, zero Sun/Moon projected longitude or
+  invalid state metadata fails explicitly. Both 3-D directions retain
+  overflow-safe numeric scaling before projections and products.
+
+These half-plane labels are **not measurements of whether the illuminated
+fraction is currently increasing/decreasing with time**. They are
+geometrical longitude-sector labels subject to the supplied pole and
+its provenance. Near conjunction/opposition the sign can be sensitive;
+no event-time solver or empirical rate is involved.
+
+The matching direct reader convenience API is
+`geometric_lunar_orientation_from_de441(&mut eph, epoch_tdb, ecliptic_north_icrf)`.
+Both Sun/Earth and Moon/Earth states come from the **same** classic DE441
+reader, using the same already-TDB Julian date and the original canonical
+Rust interpolation, not a separate algorithm. Both reader adapters share
+a single internal `read_sun_moon_de441` helper and existing cache.
+
+```rust
+use virgostars_ephemeris_core::de441::{De441, JulianDateTdb};
+use virgostars_ephemeris_core::lunar_phase::geometric_lunar_orientation_from_de441;
+
+let mut eph = De441::open("/path/to/de441.eph")?;
+// Example only: caller must supply its independently validated ICRF
+// ecliptic-north vector for this date and ecliptic convention.
+let validated_ecliptic_north_icrf = [0.0, 0.0, 1.0]; // Placeholder, NOT physical ecliptic north.
+let snapshot = geometric_lunar_orientation_from_de441(
+    &mut eph,
+    JulianDateTdb(2_451_545.0),
+    validated_ecliptic_north_icrf,
+)?;
+println!("3-D elongation: {} rad", snapshot.geocentric_elongation_rad);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Seven additional synthetic direct-state regressions cover physically distinct
+triangle angles, both longitude half-planes, exact conjunction/opposition,
+nonzero latitude, independent pole scaling/sign reversal, near-opposition
+signed continuity, invalid poles, undefined projections and matching
+target/center/epoch errors. A further synthetic binary bridge test checks
+the second 32-day record, geocentric elongation versus fraction, invalid
+pole and outside-coverage propagation. No external data was downloaded.
+All results remain **geometric and experimental** pending independently
+traceable JPL/NAIF vectors, accuracy budgets and physical frame conventions.
+
 ## Test evidence and limitations
 
 ```bash
