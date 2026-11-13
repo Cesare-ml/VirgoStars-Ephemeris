@@ -31,6 +31,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental SPK type-2/type-3 direct-segment states (not JPL-validated)](docs/RUST_SPK_TYPE2_TYPE3_DIRECT_STATE_2026-11-12.md)
 - [Experimental single-kernel SPK center-chain states (not JPL-validated)](docs/RUST_SPK_CENTER_CHAINS_2026-11-12.md)
 - [Experimental loaded-kernel precedence and cross-file states (not JPL-validated)](docs/RUST_SPK_KERNEL_SET_PRIORITY_2026-11-13.md)
+- [Offline NAIF/SPICE SPK validation comparator and evidence requirements (no real results yet)](docs/RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
@@ -52,6 +53,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - Experimental Rust workspace: `Cargo.toml`, `crates/ephemeris-core/`, and the classic binary DE441 reader documented in [docs/DE441.md](docs/DE441.md).
 - Experimental time-and-place CLI computes topocentric geometric positions using an externally supplied DE441 binary; see its documented time range and approximations.
 - The experimental Rust `spk_index::inspect_spk` indexes NAIF DAF/SPK headers and segments in both IEEE byte orders. The `spk_direct_state::direct_spk_state` module evaluates primitive J2000/ICRF type-2/3 states. `spk_relative_state::relative_spk_state` combines states within **one kernel**, while the experimental `spk_kernel_set::SpkKernelSet` applies **later-loaded SPK precedence** and composes cross-file center chains. Frame conversion, other SPK types and real-kernel validation remain unimplemented.
+- An experimental **offline** Rust SPK comparison example accepts externally obtained, independently reviewed NAIF/SPICE geometric state vectors, ordered SPK files and explicit error tolerances; no actual real-kernel parity result has been verified.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
 - Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
