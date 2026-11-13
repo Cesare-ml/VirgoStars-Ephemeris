@@ -21,6 +21,7 @@ import argparse
 from collections import defaultdict
 from itertools import combinations
 import hashlib
+import hmac
 import json
 import math
 from pathlib import Path
@@ -141,6 +142,113 @@ def parse_reference(content: str) -> Rows:
     return rows
 
 
+def verify_run_receipt(
+    reference_content: str,
+    reference_sha256: str,
+    case_count: int,
+    receipt: object,
+) -> None:
+    """Check #164 NAIF/Rust receipt consistency, NOT provenance/authenticity.
+
+    This verifies that a claimed comparator receipt describes the exact
+    supplied CSV and its declared ordered kernels. It cannot prove that
+    Rust/NAIF were really executed or that any numerical value is correct.
+    """
+    if not isinstance(receipt, dict):
+        raise ValueError("receipt JSON must be an object")
+    if receipt.get("status") != "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING":
+        raise ValueError("receipt does not declare successful comparator execution")
+    if receipt.get("scientific_accuracy_certified") is not False:
+        raise ValueError("receipt must explicitly decline scientific certification")
+    if receipt.get("provenance_review_required") is not True:
+        raise ValueError("receipt must explicitly require provenance review")
+    claimed_hash = receipt.get("reference_sha256")
+    if not isinstance(claimed_hash, str) or not HEX64.fullmatch(claimed_hash):
+        raise ValueError("receipt reference SHA-256 is missing or malformed")
+    if not hmac.compare_digest(claimed_hash.lower(), reference_sha256):
+        raise ValueError("receipt reference SHA-256 differs from actual CSV bytes")
+    if type(receipt.get("case_count")) is not int or receipt["case_count"] != case_count:
+        raise ValueError("receipt case count differs from reference CSV rows")
+
+    contract = {
+        "provider": "NAIF_SPICE",
+        "method": "spkezr",
+        "frame": "J2000",
+        "corrections": "NONE",
+        "time_scale": "TDB_SECONDS_PAST_J2000",
+        "position_units": "km",
+        "velocity_units": "km/s",
+    }
+    for key, expected in contract.items():
+        if receipt.get(key) != expected:
+            raise ValueError(f"receipt {key} does not match geometric SPK contract")
+    for key in ("max_position_component_km", "max_velocity_component_km_s"):
+        value = receipt.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"receipt {key} must be finite and positive")
+    cmd = receipt.get("rust_command")
+    if not isinstance(cmd, list) or cmd[:7] != [
+        "cargo", "run", "--offline", "--locked", "--example",
+        "validate_spk_reference", "--",
+    ]:
+        raise ValueError("receipt lacks expected canonical offline Rust command")
+
+    # parse_reference() already validated these metadata lines and duplicates.
+    metadata: dict[str, str] = {}
+    for line in reference_content.splitlines():
+        if line.strip() == COLUMNS:
+            break
+        if line.startswith("#"):
+            key, value = line[1:].strip().split("=", 1)
+            metadata[key.strip()] = value.strip()
+    for key in (
+        "toolkit_version", "generator_sha256",
+        "ordered_kernel_sha256", "ordered_kernel_sizes_bytes", "ordered_kernel_names",
+    ):
+        if not metadata.get(key):
+            raise ValueError(f"reference CSV missing receipt metadata {key}")
+    if receipt.get("toolkit_version") != metadata["toolkit_version"]:
+        raise ValueError("receipt toolkit version differs from reference CSV")
+    generator_digest = metadata["generator_sha256"]
+    claimed_generator = receipt.get("generator_sha256")
+    if (
+        not isinstance(claimed_generator, str)
+        or not HEX64.fullmatch(generator_digest)
+        or not HEX64.fullmatch(claimed_generator)
+        or not hmac.compare_digest(claimed_generator.lower(), generator_digest.lower())
+    ):
+        raise ValueError("receipt generator SHA-256 differs from reference CSV")
+
+    expected_names = metadata["ordered_kernel_names"].split(";")
+    expected_sizes = metadata["ordered_kernel_sizes_bytes"].split(";")
+    expected_hashes = metadata["ordered_kernel_sha256"].split(";")
+    ordered = receipt.get("ordered_kernels")
+    if (
+        not isinstance(ordered, list) or not expected_names
+        or len(ordered) != len(expected_names)
+        or len(ordered) != len(expected_sizes)
+        or len(ordered) != len(expected_hashes)
+    ):
+        raise ValueError("receipt kernel manifest count/order differs from reference CSV")
+    for i, (item, name, size, digest) in enumerate(
+        zip(ordered, expected_names, expected_sizes, expected_hashes), 1
+    ):
+        if not isinstance(item, dict) or item.get("name") != name:
+            raise ValueError(f"receipt kernel {i} name/order mismatch")
+        if (
+            not size.isdecimal() or type(item.get("size_bytes")) is not int
+            or item["size_bytes"] < 0 or str(item["size_bytes"]) != size
+        ):
+            raise ValueError(f"receipt kernel {i} byte size mismatch")
+        claimed = item.get("sha256")
+        if (
+            not isinstance(claimed, str)
+            or not HEX64.fullmatch(claimed) or not HEX64.fullmatch(digest)
+            or not hmac.compare_digest(claimed.lower(), digest.lower())
+        ):
+            raise ValueError(f"receipt kernel {i} SHA-256 mismatch")
+
+
 def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[float]]:
     """Require five pairs from five physical systems across >=3 shared TDB epochs."""
     epochs: dict[tuple[int, int], set[float]] = defaultdict(set)
@@ -181,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Audit an existing NAIF/SPICE reference CSV")
     parser.add_argument("--json", action="store_true",
                         help="Print structured audit result with exact CSV byte SHA-256")
+    parser.add_argument("--receipt", type=Path,
+                        help="Cross-check a #164 numeric comparator JSON receipt against this CSV")
     parser.add_argument("--plan", action="store_true",
                         help="Print --case triples for the independent NAIF generator")
     parser.add_argument("--planet", type=int, action="append",
@@ -190,8 +300,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.plan:
-            if args.reference is not None or args.json:
-                raise ValueError("--plan cannot be combined with --reference or --json")
+            if args.reference is not None or args.json or args.receipt is not None:
+                raise ValueError("--plan cannot be combined with --reference, --json or --receipt")
             cases = plan_e1_cases(args.planet or [], args.epoch or [])
             for target, center, et in cases:
                 print(f"--case {target}:{center}:{format(et, '.17g')}")
@@ -202,7 +312,16 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("supply --reference alone, or use --plan with --planet/--epoch")
         # Hash the exact byte stream, not re-encoded text or normalized newlines.
         reference_bytes = args.reference.read_bytes()
-        rows = parse_reference(reference_bytes.decode("utf-8"))
+        reference_content = reference_bytes.decode("utf-8")
+        rows = parse_reference(reference_content)
+        reference_sha256 = hashlib.sha256(reference_bytes).hexdigest()
+        receipt_checked = False
+        if args.receipt is not None:
+            receipt_data = json.loads(args.receipt.read_text(encoding="utf-8"))
+            verify_run_receipt(
+                reference_content, reference_sha256, len(rows), receipt_data
+            )
+            receipt_checked = True
         issues, planets, shared = audit_e1_matrix(rows)
     except (OSError, UnicodeError, ValueError) as exc:
         if args.json:
@@ -220,7 +339,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({
             "schema": "virgostars-e1-matrix-audit/v1",
             "status": "incomplete" if issues else "pass",
-            "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
+            "reference_sha256": reference_sha256,
+            "receipt_consistency_checked": receipt_checked,
             "case_count": len(rows),
             "planet_pairs": [list(pair) for pair in planets],
             "shared_et_tdb_seconds": [format(epoch, ".17g") for epoch in shared],
@@ -229,6 +349,8 @@ def main(argv: list[str] | None = None) -> int:
             "provenance_review_required": True,
         }, sort_keys=True))
         return 1 if issues else 0
+    if receipt_checked:
+        print("Receipt/CSV metadata and SHA-256 agree (no provenance proof).")
     if issues:
         for issue in issues:
             print(f"INCOMPLETE E1 case matrix: {issue}", file=sys.stderr)
