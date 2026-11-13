@@ -56,8 +56,7 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'sta
     }
     let audit_record_dates = first == "--audit-record-dates";
     let path = if audit_record_dates {
-        args
-            .next()
+        args.next()
             .ok_or("a local classic DE441 file path is required")?
     } else {
         first
