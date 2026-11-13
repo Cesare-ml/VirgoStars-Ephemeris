@@ -111,7 +111,7 @@ fn explicit_preflight_error_for_nonfinite_epoch_and_reader_coverage_error() {
             Err(LunarDe441Error::NonFiniteEpoch)
         ));
     }
-    for jd in [999.0, 1064.000_001] {
+    for jd in [999.0, 1_064.000_001] {
         assert!(matches!(
             geometric_lunar_illumination_from_de441(&mut eph, JulianDateTdb(jd)),
             Err(LunarDe441Error::Ephemeris(
