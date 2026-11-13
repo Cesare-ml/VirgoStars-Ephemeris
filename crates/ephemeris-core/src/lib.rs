@@ -15,10 +15,10 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! Experimental SPK indexing, primitive type-2/3 J2000 evaluation, and
-//! single-kernel center-chain composition are available. Multi-kernel priority,
-//! non-J2000 frames, independent JPL validation and stable production-grade
-//! astronomy are not provided at this stage.
+//! Experimental SPK indexing, type-2/3 J2000 evaluation, and ordered
+//! multi-kernel center-chain composition are available. Non-J2000 frames,
+//! independent JPL validation and stable production-grade astronomy are
+//! not provided at this stage.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
@@ -33,6 +33,7 @@ pub mod error;
 pub mod first_sky;
 pub mod light_time;
 pub mod spk_direct_state;
+pub mod spk_kernel_set;
 pub mod spk_index;
 pub mod spk_relative_state;
 pub mod state;
