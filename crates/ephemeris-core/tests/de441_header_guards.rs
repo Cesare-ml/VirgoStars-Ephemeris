@@ -3,6 +3,7 @@
 // Modification (2026-11-13): adjacent-series and incomplete-pointer boundary cases.
 // Modification (2026-11-13): reject mismatched DE identity and truncated headers.
 // Modification (2026-11-13): degenerate coverage and fractional record counts.
+// Modification (2026-11-13): guard extreme coefficient-pointer integers.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -211,6 +212,29 @@ fn rejects_degenerate_coverage_and_fractional_record_count() {
         assert!(
             matches!(result, Err(De441Error::InvalidFile(message)) if message == expected),
             "coverage {start}..{end}"
+        );
+    }
+}
+
+#[test]
+fn rejects_extreme_coefficient_pointer_values_without_panicking() {
+    // Integer extremes must fail validation before pointer arithmetic can
+    // address coefficient storage outside the declared classic record.
+    for (offset, value) in [
+        (2844, i32::MAX),
+        (2848, i32::MAX),
+        (2852, i32::MAX),
+        (2848, i32::MIN),
+        (2852, i32::MIN),
+    ] {
+        let mut bytes = synthetic_header();
+        i32_field(&mut bytes, offset, value);
+        assert!(
+            matches!(
+                De441::new(Cursor::new(bytes)),
+                Err(De441Error::InvalidFile("invalid coefficient pointer"))
+            ),
+            "offset {offset}, value {value}"
         );
     }
 }
