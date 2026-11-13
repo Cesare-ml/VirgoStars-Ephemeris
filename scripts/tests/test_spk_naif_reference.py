@@ -18,6 +18,7 @@
 """Offline, synthetic tests for the SPK reference producer, never JPL parity."""
 
 import importlib.util
+import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -75,7 +76,7 @@ class SpkReferenceTests(unittest.TestCase):
             [(301, 399, 0.0), (399, 0, 123.25)],
             spice if spice is not None else FakeSpice(),
             generated_utc="2026-11-13T12:00:00Z",
-            generator_digest="a" * 64,
+            generator_digest=hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest(),
         )
 
     def test_parses_explicit_et_without_converting_time_or_body_ids(self):
@@ -106,7 +107,7 @@ class SpkReferenceTests(unittest.TestCase):
         self.assertIn("# provider=NAIF_SPICE\n", document)
         self.assertIn("# toolkit_version=CSPICE_N0067\n", document)
         self.assertIn("# reference_source=scripts/spk_naif_reference.py\n", document)
-        self.assertIn("# generator_sha256=" + "a" * 64, document)
+        self.assertIn("# generator_sha256=" + hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest(), document)
         self.assertIn(REFERENCE.COLUMNS + "\n", document)
         self.assertIn("0,301,399,1.25,-2.5,3.75,0.10000000000000001", document)
         self.assertEqual(spice.clear_count, 2)
@@ -144,6 +145,16 @@ class SpkReferenceTests(unittest.TestCase):
                 REFERENCE.verify_reference_hashes(changed, self.paths)
         with self.assertRaisesRegex(ValueError, "count mismatch"):
             REFERENCE.verify_reference_hashes(document, self.paths[:1])
+
+    def test_generator_source_digest_is_verified_not_only_declared(self):
+        document = self.reference()
+        digest = hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest()
+        bad = document.replace(
+            "# generator_sha256=" + digest,
+            "# generator_sha256=" + "b" * 64,
+        )
+        with self.assertRaisesRegex(ValueError, "generator SHA256 mismatch"):
+            REFERENCE.verify_reference_hashes(bad, self.paths)
 
     def test_naif_error_clears_pool_and_outputs_no_csv(self):
         spice = FakeSpice(fail=True)
