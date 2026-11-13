@@ -7,6 +7,7 @@
 // Modification (2026-11-13): align extreme first-word expectation with length validation.
 // Modification (2026-11-13): same-body zero states and epoch coverage boundaries.
 // Modification (2026-11-13): missing lunar series on date-valid synthetic records.
+// Modification (2026-11-13): missing EMB and invalid record-date precedence regressions.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -294,5 +295,50 @@ fn missing_lunar_series_is_reported_on_a_valid_synthetic_record() {
     assert!(matches!(
         result,
         Err(De441Error::MissingSeries("geocentric Moon"))
+    ));
+}
+
+#[test]
+fn missing_emb_series_is_reported_after_record_date_validation() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    // Only series 12 is declared; a barycentric Earth request needs EMB (2).
+    let mut bytes = synthetic_header();
+    for (index, start) in [(0usize, 1000.0), (1, 1032.0)] {
+        let offset = (index + 2) * 3000;
+        f64_field(&mut bytes, offset, start);
+        f64_field(&mut bytes, offset + 8, start + 32.0);
+    }
+    let mut reader = De441::new(Cursor::new(bytes)).unwrap();
+    let result = reader.state(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        JulianDateTdb(1016.0),
+    );
+    assert!(matches!(
+        result,
+        Err(De441Error::MissingSeries("Earth-Moon barycenter"))
+    ));
+}
+
+#[test]
+fn rejects_inconsistent_record_dates_before_missing_series() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    let mut bytes = synthetic_header();
+    // First coefficient record must cover [1000, 1032], not [1001, 1033].
+    f64_field(&mut bytes, 2 * 3000, 1001.0);
+    f64_field(&mut bytes, 2 * 3000 + 8, 1033.0);
+    let mut reader = De441::new(Cursor::new(bytes)).unwrap();
+    let result = reader.state(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        JulianDateTdb(1016.0),
+    );
+    assert!(matches!(
+        result,
+        Err(De441Error::InvalidFile(
+            "coefficient record has unexpected dates"
+        ))
     ));
 }
