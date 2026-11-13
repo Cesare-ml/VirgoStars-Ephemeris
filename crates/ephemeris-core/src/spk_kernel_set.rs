@@ -131,8 +131,7 @@ impl<R: Read + Seek> SpkKernelSet<R> {
 impl<R: Read + Seek> SpkStateResolver for SpkKernelSet<R> {
     fn selected_center(&self, body: i32, et: f64) -> Option<i32> {
         self.loaded.iter().rev().find_map(|entry| {
-            select_covering_segment(&entry.index, body, et)
-                .map(|segment| segment.center_id)
+            select_covering_segment(&entry.index, body, et).map(|segment| segment.center_id)
         })
     }
 
@@ -273,9 +272,7 @@ mod tests {
         bytes
     }
 
-    fn with_kernels(
-        specs: &[(SpkByteOrder, Vec<Segment>)],
-    ) -> SpkKernelSet<Cursor<Vec<u8>>> {
+    fn with_kernels(specs: &[(SpkByteOrder, Vec<Segment>)]) -> SpkKernelSet<Cursor<Vec<u8>>> {
         let mut set = SpkKernelSet::new();
         for (endian, segments) in specs {
             set.load(Cursor::new(kernel(*endian, segments))).unwrap();
@@ -329,7 +326,10 @@ mod tests {
         let selected = set.direct_state(399, 5.0).unwrap();
         assert_eq!(selected.center_id, 4);
         assert_eq!(selected.position_km[0], 7.0);
-        assert_eq!(set.relative_state(399, 0, 5.0).unwrap().position_km[0], -193.0);
+        assert_eq!(
+            set.relative_state(399, 0, 5.0).unwrap().position_km[0],
+            -193.0
+        );
         assert_eq!(set.relative_state(399, 4, 5.0).unwrap().position_km[0], 7.0);
         set.unload_last().unwrap();
         assert_eq!(set.kernel_count(), 1);
@@ -349,7 +349,10 @@ mod tests {
         ]);
         let at_five = set.direct_state(301, 5.0).unwrap();
         assert_eq!((at_five.center_id, at_five.position_km[0]), (399, 2.0));
-        assert_eq!(set.relative_state(301, 399, 5.0).unwrap().position_km[0], 2.0);
+        assert_eq!(
+            set.relative_state(301, 399, 5.0).unwrap().position_km[0],
+            2.0
+        );
         let at_six = set.direct_state(301, 6.0).unwrap();
         assert_eq!(at_six.center_id, 4);
         assert_eq!(at_six.position_km[0], 50.0);
@@ -454,7 +457,10 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(set.kernel_count(), 1);
-        assert_eq!(set.relative_state(399, 399, 5.0).unwrap().position_km, [0.0; 3]);
+        assert_eq!(
+            set.relative_state(399, 399, 5.0).unwrap().position_km,
+            [0.0; 3]
+        );
         assert!(matches!(
             set.relative_state(301, 399, f64::INFINITY),
             Err(SpkRelativeError::InvalidEpoch)
