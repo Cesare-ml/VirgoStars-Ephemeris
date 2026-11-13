@@ -626,6 +626,93 @@ class E1MatrixAuditTests(unittest.TestCase):
                 "--epoch", "86400", "--epoch", "172800",
             ]), 2)
 
+    def test_boundary_samples_include_before_at_after_without_duplicate_epochs(self):
+        original = [0.0, 86400.0, 172800.0]
+        extended = AUDIT.extend_with_boundary_epochs(original, [86400.0], 0.25)
+        self.assertEqual(extended, [
+            0.0, 86400.0, 172800.0, 86399.75, 86400.25
+        ])
+        cases = AUDIT.plan_e1_cases([4, 5], extended)
+        self.assertEqual(len(cases), 25)
+        self.assertEqual(AUDIT.audit_e1_matrix(cases)[0], [])
+
+    def test_two_boundary_epochs_yield_additional_explicit_cases(self):
+        epochs = AUDIT.extend_with_boundary_epochs(
+            [0, 86400, 172800], [86400, 172800], 1
+        )
+        self.assertEqual(
+            epochs, [0, 86400, 172800, 86399, 86401, 172799, 172801]
+        )
+        self.assertEqual(len(AUDIT.plan_e1_cases([4, 5], epochs)), 35)
+
+    def test_rejects_invalid_boundary_delta_and_epoch(self):
+        for offset in (0, -1, float("nan"), float("inf"), 1e309):
+            with self.subTest(offset=offset), self.assertRaises(ValueError):
+                AUDIT.extend_with_boundary_epochs([0, 1, 2], [1], offset)
+        for boundary in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(boundary=boundary), self.assertRaises(ValueError):
+                AUDIT.extend_with_boundary_epochs([0, 1, 2], [boundary], 1)
+
+    def test_rejects_nonrepresentable_or_overflowing_boundary_neighbors(self):
+        # The offset must be large enough to produce distinct binary64 ETs.
+        with self.assertRaisesRegex(ValueError, "too small"):
+            AUDIT.extend_with_boundary_epochs([0, 1, 2], [1e16], 0.01)
+        with self.assertRaisesRegex(ValueError, "overflows"):
+            AUDIT.extend_with_boundary_epochs([0, 1, 2], [1e308], 1e308)
+
+    def test_boundary_plan_cli_emits_all_25_cases_without_implied_coverage(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+
+        out, err = StringIO(), StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            status = AUDIT.main([
+                "--plan", "--planet", "4", "--planet", "5",
+                "--epoch", "0", "--epoch", "86400", "--epoch", "172800",
+                "--boundary-et", "86400", "--boundary-offset-seconds", "1",
+            ])
+        self.assertEqual(status, 0)
+        flags = out.getvalue().splitlines()
+        self.assertEqual(len(flags), 25)
+        self.assertIn("--case 10:399:86399", flags)
+        self.assertIn("--case 5:399:86400", flags)
+        self.assertIn("--case 5:399:86401", flags)
+        self.assertIn("BOUNDARY CANDIDATES ONLY", err.getvalue())
+        self.assertIn("NOT CERTIFIED", err.getvalue())
+
+    def test_boundary_requires_both_explicit_epoch_and_delta(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        common = [
+            "--plan", "--planet", "4", "--planet", "5",
+            "--epoch", "0", "--epoch", "86400", "--epoch", "172800",
+        ]
+        invalid = [
+            common + ["--boundary-et", "86400"],
+            common + ["--boundary-offset-seconds", "1"],
+            common + ["--boundary-et", "86400",
+                      "--boundary-offset-seconds", "0"],
+            common + ["--boundary-et", "86400",
+                      "--boundary-offset-seconds", "nan"],
+            ["--reference", "/not-needed.csv", "--boundary-et", "86400",
+             "--boundary-offset-seconds", "1"],
+        ]
+        for argv in invalid:
+            with self.subTest(argv=argv), redirect_stderr(StringIO()):
+                self.assertEqual(AUDIT.main(argv), 2)
+
+    def test_boundary_expansion_cannot_hide_duplicate_original_epochs(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        with redirect_stderr(StringIO()):
+            self.assertEqual(AUDIT.main([
+                "--plan", "--planet", "4", "--planet", "5",
+                "--epoch", "0", "--epoch", "-0", "--epoch", "86400",
+                "--boundary-et", "86400", "--boundary-offset-seconds", "1",
+            ]), 2)
+
     def test_cli_exit_status_distinguishes_pass_incomplete_and_invalid(self):
         with TemporaryDirectory() as folder:
             csv = Path(folder) / "reference.csv"
