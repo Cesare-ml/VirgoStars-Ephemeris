@@ -105,3 +105,48 @@ existing Rust CI checks in the PR; no external downloads are required.
 
 Change record: 2026-11-13, added one CPAL-1.0-noticed integration test
 without modifying the original code's licensing or attribution.
+
+
+## Opt-in ET-to-split precision audit (2026-11-14)
+
+The same Rust `time_split` module now provides
+`audited_split_julian_day_tdb_from_et(et, max_roundtrip_error_seconds)`.
+This does **not** perform any additional time-scale conversion or
+kernel calculation. It evaluates the split date and reconstructs the
+provided **binary64 ET seconds** using the integer-day offset from
+J2000 and the separately retained midnight fraction. The result
+includes the split date and its observed binary64 roundtrip residual.
+
+```rust
+use virgostars_ephemeris_core::time_split::audited_split_julian_day_tdb_from_et;
+use virgostars_ephemeris_core::TdbSecondsPastJ2000;
+
+let et = TdbSecondsPastJ2000::new(1.0e-12)?;
+assert!(audited_split_julian_day_tdb_from_et(et, 1.0e-13).is_err());
+let allowed = audited_split_julian_day_tdb_from_et(et, 1.0e-11)?;
+assert_eq!(allowed.roundtrip_error_seconds, 1.0e-12);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+A one-picosecond offset near J2000 is representable in the ET input but
+**not** in the `f64` Julian midnight fraction, which rounds back to noon.
+A strict 0.1-ps residual budget rejects that offset; a relaxed 10-ps
+budget accepts it with its loss reported. The audit also rejects NaN,
+infinite and negative budgets; any invalid or out-of-range split epoch
+remains an explicit error. Tests cover exactly represented whole/half-day
+offsets, one-microsecond offsets, negative near-boundary inputs and
+unsupported magnitudes.
+
+**Scope of the number:** the residual is an observed comparison between
+binary64 values, **not** a mathematically certified absolute error bound
+for arbitrarily large timestamps. It cannot measure detail already lost
+before the `TdbSecondsPastJ2000` input was constructed, or precision
+lost later when collapsing the split date to the classic DE441 reader's
+single-`f64` JD. Callers who require a *subsequent* split→DE441 budget
+must apply the separate checked-epoch bridge of PR #136 after that PR
+has been integrated with the appropriate dependency chain.
+
+No SPK handling, external datasets, astrophysical correction or
+independent NASA/JPL scientific comparison is added. CPAL-1.0 source
+notice and visible **Powered by VirgoStars** attribution remain applicable.
+The change was added to the draft #171 branch on 2026-11-14.
