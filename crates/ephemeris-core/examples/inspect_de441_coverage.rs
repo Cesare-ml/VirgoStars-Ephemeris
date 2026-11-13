@@ -19,7 +19,8 @@ SPDX-License-Identifier: CPAL-1.0
 //!
 //! No ephemeris vectors are evaluated and no kernel is downloaded.
 //! The reported coverage is header metadata, not NASA/JPL numerical validation.
-//! Modification record: 2026-11-13 — initial inspector; added strict coverage gate.
+//! Modification record: 2026-11-13 — initial inspector and strict coverage gate.
+//! 2026-11-14 — optional versioned machine-readable JSON output.
 
 use std::env;
 use std::error::Error;
@@ -27,12 +28,13 @@ use std::io::{self, Read, Seek};
 use virgostars_ephemeris_core::de441::De441;
 
 const USAGE: &str =
-    "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB> [--require-coverage]]";
+    "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB> [--require-coverage]] [--json]";
 
 struct Options {
     file: String,
     probe_jd_tdb: Option<f64>,
     require_coverage: bool,
+    json_output: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Options, String> {
@@ -40,11 +42,20 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         Some(file) if !file.is_empty() && !file.starts_with("--") => file.clone(),
         _ => return Err(USAGE.to_owned()),
     };
-    let (probe_text, require_coverage) = match &args[1..] {
-        [] => (None, false),
-        [flag, value] if flag == "--at-jd" => (Some(value.as_str()), false),
+    let (probe_text, require_coverage, json_output) = match &args[1..] {
+        [] => (None, false, false),
+        [flag] if flag == "--json" => (None, false, true),
+        [flag, value] if flag == "--at-jd" => (Some(value.as_str()), false, false),
         [flag, value, strict] if flag == "--at-jd" && strict == "--require-coverage" => {
-            (Some(value.as_str()), true)
+            (Some(value.as_str()), true, false)
+        }
+        [flag, value, format] if flag == "--at-jd" && format == "--json" => {
+            (Some(value.as_str()), false, true)
+        }
+        [flag, value, strict, format]
+            if flag == "--at-jd" && strict == "--require-coverage" && format == "--json" =>
+        {
+            (Some(value.as_str()), true, true)
         }
         _ => return Err(USAGE.to_owned()),
     };
@@ -63,16 +74,22 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         file,
         probe_jd_tdb,
         require_coverage,
+        json_output,
     })
+}
+
+fn probe_status(start: f64, end: f64, probe_jd_tdb: Option<f64>) -> &'static str {
+    match probe_jd_tdb {
+        Some(jd) if jd >= start && jd <= end => "covered",
+        Some(_) => "out_of_coverage",
+        None => "not_checked",
+    }
 }
 
 fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -> String {
     let (start, end) = ephemeris.coverage();
-    let (probe, status) = match probe_jd_tdb {
-        Some(jd) if jd >= start.0 && jd <= end.0 => (format!("{jd:.12}"), "covered"),
-        Some(jd) => (format!("{jd:.12}"), "out_of_coverage"),
-        None => (String::new(), "not_checked"),
-    };
+    let probe = probe_jd_tdb.map(|jd| format!("{jd:.12}")).unwrap_or_default();
+    let status = probe_status(start.0, end.0, probe_jd_tdb);
     format!(
         "format,epoch_scale,declared_start_jd,declared_end_jd,probe_jd,probe_status\n\
          classic-de441,TDB,{:.12},{:.12},{probe},{status}",
@@ -80,23 +97,51 @@ fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -
     )
 }
 
-/// In strict mode, reject a non-covered epoch before emitting any CSV.
-fn checked_csv_report<R: Read + Seek>(
+fn json_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -> String {
+    let (start, end) = ephemeris.coverage();
+    let probe = probe_jd_tdb
+        .map(|jd| format!("{jd:.12}"))
+        .unwrap_or_else(|| "null".to_owned());
+    let status = probe_status(start.0, end.0, probe_jd_tdb);
+    format!(
+        concat!(
+            "{{\"schema\":\"virgostars-de441-coverage/v1\",",
+            "\"format\":\"classic-de441\",",
+            "\"epoch_scale\":\"TDB\",",
+            "\"declared_start_jd\":{:.12},",
+            "\"declared_end_jd\":{:.12},",
+            "\"probe_jd\":{probe},",
+            "\"probe_status\":\"{status}\",",
+            "\"declared_header_only\":true,",
+            "\"scientific_accuracy_certified\":false}}"
+        ),
+        start.0,
+        end.0
+    )
+}
+
+/// In strict mode, reject a non-covered epoch before emitting any output.
+fn checked_report<R: Read + Seek>(
     ephemeris: &De441<R>,
     probe_jd_tdb: Option<f64>,
     require_coverage: bool,
+    json_output: bool,
 ) -> Result<String, String> {
     if require_coverage {
         let jd = probe_jd_tdb.ok_or("strict coverage requires --at-jd")?;
         let (start, end) = ephemeris.coverage();
-        if jd < start.0 || jd > end.0 {
+        if probe_status(start.0, end.0, Some(jd)) != "covered" {
             return Err(format!(
                 "JD TDB {jd} is outside declared DE441 coverage [{}, {}] JD TDB",
                 start.0, end.0
             ));
         }
     }
-    Ok(csv_report(ephemeris, probe_jd_tdb))
+    if json_output {
+        Ok(json_report(ephemeris, probe_jd_tdb))
+    } else {
+        Ok(csv_report(ephemeris, probe_jd_tdb))
+    }
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
@@ -106,8 +151,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     // De441::open validates the classic header and declared file length.
     // This intentionally does not read or certify any coefficient values.
     let ephemeris = De441::open(&options.file)?;
-    let report = checked_csv_report(&ephemeris, options.probe_jd_tdb, options.require_coverage)
-        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let report = checked_report(
+        &ephemeris,
+        options.probe_jd_tdb,
+        options.require_coverage,
+        options.json_output,
+    )
+    .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     println!("{report}");
     Ok(())
 }
@@ -206,6 +256,7 @@ mod tests {
         assert_eq!(parsed.file, "file.eph");
         assert_eq!(parsed.probe_jd_tdb, Some(-3_027_215.5));
         assert!(!parsed.require_coverage);
+        assert!(!parsed.json_output);
     }
 
     #[test]
@@ -219,6 +270,7 @@ mod tests {
         let options = parse_args(&valid).unwrap();
         assert_eq!(options.probe_jd_tdb, Some(2_451_545.0));
         assert!(options.require_coverage);
+        assert!(!options.json_output);
 
         for args in [
             vec!["file.eph".into(), "--require-coverage".into()],
@@ -241,11 +293,94 @@ mod tests {
     }
 
     #[test]
+    fn json_without_probe_is_versioned_and_not_scientifically_certified() {
+        let options = parse_args(&["file.eph".into(), "--json".into()]).unwrap();
+        assert!(options.json_output);
+        assert_eq!(options.probe_jd_tdb, None);
+        let report = checked_report(&synthetic_de441(), None, false, true).unwrap();
+        assert_eq!(
+            report,
+            concat!(
+                "{\"schema\":\"virgostars-de441-coverage/v1\",",
+                "\"format\":\"classic-de441\",",
+                "\"epoch_scale\":\"TDB\",",
+                "\"declared_start_jd\":1000.000000000000,",
+                "\"declared_end_jd\":1032.000000000000,",
+                "\"probe_jd\":null,",
+                "\"probe_status\":\"not_checked\",",
+                "\"declared_header_only\":true,",
+                "\"scientific_accuracy_certified\":false}"
+            )
+        );
+    }
+
+    #[test]
+    fn json_probe_reports_coverage_without_changing_csv() {
+        let ephemeris = synthetic_de441();
+        let report = checked_report(&ephemeris, Some(1032.0), false, true).unwrap();
+        assert!(report.contains("\"probe_jd\":1032.000000000000"));
+        assert!(report.contains("\"probe_status\":\"covered\""));
+        assert!(report.contains("\"scientific_accuracy_certified\":false"));
+        assert!(checked_report(&ephemeris, Some(1032.0), false, false)
+            .unwrap()
+            .ends_with(",covered"));
+
+        let outside = checked_report(&ephemeris, Some(1032.000_001), false, true).unwrap();
+        assert!(outside.contains("\"probe_status\":\"out_of_coverage\""));
+    }
+
+    #[test]
+    fn json_strict_gate_prevents_output_on_outside_epoch() {
+        let ephemeris = synthetic_de441();
+        assert!(checked_report(&ephemeris, Some(999.0), true, true)
+            .unwrap_err()
+            .contains("outside declared DE441 coverage"));
+        let args = vec![
+            "file.eph".into(),
+            "--at-jd".into(),
+            "1016".into(),
+            "--require-coverage".into(),
+            "--json".into(),
+        ];
+        let options = parse_args(&args).unwrap();
+        assert!(options.require_coverage && options.json_output);
+        let report = checked_report(
+            &ephemeris,
+            options.probe_jd_tdb,
+            options.require_coverage,
+            options.json_output,
+        )
+        .unwrap();
+        assert!(report.contains("\"probe_status\":\"covered\""));
+    }
+
+    #[test]
+    fn json_option_rejects_unknown_or_duplicate_flags() {
+        for args in [
+            vec!["file.eph".into(), "--json".into(), "--json".into()],
+            vec!["file.eph".into(), "--json".into(), "--at-jd".into(), "1016".into()],
+            vec!["file.eph".into(), "--at-jd".into(), "1016".into(), "--json".into(), "--json".into()],
+            vec!["file.eph".into(), "--json".into(), "--require-coverage".into()],
+        ] {
+            assert!(parse_args(&args).is_err());
+        }
+        let allowed = parse_args(&[
+            "file.eph".into(),
+            "--at-jd".into(),
+            "1016".into(),
+            "--json".into(),
+        ])
+        .unwrap();
+        assert!(allowed.json_output);
+        assert!(!allowed.require_coverage);
+    }
+
+    #[test]
     fn strict_mode_accepts_inclusive_endpoints_and_retains_csv_contract() {
         let ephemeris = synthetic_de441();
         for jd in [1000.0, 1016.0, 1032.0] {
             assert_eq!(
-                checked_csv_report(&ephemeris, Some(jd), true).unwrap(),
+                checked_report(&ephemeris, Some(jd), true, false).unwrap(),
                 csv_report(&ephemeris, Some(jd))
             );
         }
@@ -255,14 +390,14 @@ mod tests {
     fn strict_mode_rejects_both_sides_before_csv_but_diagnostic_mode_remains_compatible() {
         let ephemeris = synthetic_de441();
         for jd in [999.999_999, 1032.000_001] {
-            let error = checked_csv_report(&ephemeris, Some(jd), true).unwrap_err();
+            let error = checked_report(&ephemeris, Some(jd), true, false).unwrap_err();
             assert!(error.contains("outside declared DE441 coverage"));
-            assert!(checked_csv_report(&ephemeris, Some(jd), false)
+            assert!(checked_report(&ephemeris, Some(jd), false, false)
                 .unwrap()
                 .ends_with(",out_of_coverage"));
         }
-        assert!(checked_csv_report(&ephemeris, None, true).is_err());
-        assert!(checked_csv_report(&ephemeris, None, false)
+        assert!(checked_report(&ephemeris, None, true, false).is_err());
+        assert!(checked_report(&ephemeris, None, false, false)
             .unwrap()
             .ends_with(",not_checked"));
     }
