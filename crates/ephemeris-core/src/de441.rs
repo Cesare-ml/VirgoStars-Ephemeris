@@ -284,7 +284,9 @@ impl<R: Read + Seek> De441<R> {
             let offset = (index as u64)
                 .checked_add(2)
                 .and_then(|n| n.checked_mul(self.record_size as u64))
-                .ok_or(De441Error::InvalidFile("coefficient record offset overflow"))?;
+                .ok_or(De441Error::InvalidFile(
+                    "coefficient record offset overflow",
+                ))?;
             self.source.seek(SeekFrom::Start(offset))?;
             self.source.read_exact(&mut dates)?;
             let expected_start = self.start + index as f64 * self.step;
