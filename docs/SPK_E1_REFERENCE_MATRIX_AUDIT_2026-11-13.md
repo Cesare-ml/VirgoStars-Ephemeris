@@ -33,7 +33,22 @@ python3 scripts/audit_spk_e1_matrix.py --plan \
 
 The 15 output lines use the exact `--case TARGET:CENTER:ET` syntax accepted by the experimental `scripts/spk_naif_reference.py generate/run` commands in unmerged drafts #162/#164. For example, the first and last printed lines are `--case 10:399:0` and `--case 5:399:172800`. Review them and pass them as repeated `--case` arguments; the planning command **does not execute** SPICE or Cargo. On Windows, use `python` and PowerShell backticks instead of bash line continuations, or issue a single-line command.
 
-For planetary test pairs the planner uses **Earth center (399)** as observer, without silently substituting barycenters or changing a caller-supplied target ID. It rejects `--planet 4 --planet 499` as **one** Mars system, nonfinite/duplicate epochs including `-0` versus `0`, and an incomplete set of planets or epochs. Actual kernel support for chosen targets, frames, centers and ET values must be established from the relevant SPK descriptors before running NAIF. This planner sets up the minimum general-purpose E1 case matrix, **not** separate near-record/segment boundary tests required by issue #3.
+For planetary test pairs the planner uses **Earth center (399)** as observer, without silently substituting barycenters or changing a caller-supplied target ID. It rejects `--planet 4 --planet 499` as **one** Mars system, nonfinite/duplicate epochs including `-0` versus `0`, and an incomplete set of planets or epochs. Actual kernel support for chosen targets, frames, centers and ET values must be established from the relevant SPK descriptors before running NAIF. This planner sets up the minimum general-purpose E1 case matrix. It can also add **candidate** near-record/segment-boundary epochs, but cannot independently establish actual SPK descriptor coverage.
+
+## Explicit internal SPK boundary candidates
+
+Issue [#3](https://github.com/Cesare-ml/VirgoStars-Ephemeris/issues/3) also requires numerical tests around record and segment boundaries. To prepare these extra cases without inventing kernel coverage, pass the **TDB seconds past J2000** for an operator-confirmed *internal* SPK boundary and a positive, explicitly chosen offset:
+
+```bash
+python3 scripts/audit_spk_e1_matrix.py --plan \
+  --planet 4 --planet 5 \
+  --epoch 0 --epoch 86400 --epoch 172800 \
+  --boundary-et 86400 --boundary-offset-seconds 1
+```
+
+The original fifteen cases remain, and ten additional cases are emitted at ET `86399` and `86401` (before/after the already-listed `86400`): **25 case flags** covering the same five body/observer pairs. For several independently identified boundaries, repeat `--boundary-et`; duplicated boundary samples are emitted once. The planner preserves all operator-supplied epoch values and validates them *before* inserting boundary candidates; it rejects nonfinite or nonpositive offsets, overflowing ET values and offsets too small to be representable in binary64 relative to the selected boundary.
+
+**Crucial safety limits:** the supplied `--boundary-et` must come from the **actual** local kernel descriptor or record metadata and be checked independently. The script does **not** parse SPK files, know whether a segment uses a supported type/frame, or prove that both sides of a boundary are in the selected kernels' valid coverage. Do **not** treat a kernel coverage **start or end** as an internal boundary: one of its before/after samples may intentionally lie outside coverage and must be handled by a separate expected-error test, not counted as a valid numerical comparison. All output is merely a plan for independent NAIF/SPICE generation and Rust comparison; no accuracy certification is implied.
 
 ## Machine-readable audit report (not a scientific receipt)
 
@@ -121,6 +136,8 @@ The included Python standard-library `unittest` suite uses **fabricated numeric 
 5. Keep `E1=IMPLEMENTED_UNVERIFIED` until the complete real-data evidence has been reviewed. A passing synthetic CI run or this script's PASS is never scientific parity evidence.
 
 ## CPAL-1.0 modification record
+
+2026-11-13 (boundary case planning): added explicit `--boundary-et` and `--boundary-offset-seconds` parameters to generate before/exactly-at/after **candidate** internal SPK record/segment epochs, without loading kernels or claiming coverage. Seven synthetic tests cover time selection, multiple boundaries, nonfinite/overflowing/too-small offsets and CLI validation. Independent real-kernel coverage/provenance review remains mandatory.
 
 2026-11-13 (full command trace follow-up): strengthened the offline receipt auditor to require exact Rust argv consistency (CSV path, serialized numeric tolerances and ordered kernel paths) and reject stale CSV evidence paths even when bytes match. Added four synthetic regression tests. This is evidence self-consistency only, not proof of a real NAIF/Rust invocation.
 
