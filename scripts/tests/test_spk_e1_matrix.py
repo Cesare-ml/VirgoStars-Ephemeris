@@ -222,6 +222,116 @@ class E1MatrixAuditTests(unittest.TestCase):
             with self.subTest(args=args), redirect_stderr(StringIO()):
                 self.assertEqual(AUDIT.main(args), 2)
 
+    def test_json_pass_binds_exact_input_bytes_and_declines_accuracy_claims(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+        import hashlib
+        import json
+
+        with TemporaryDirectory() as folder:
+            csv = Path(folder) / "reference.csv"
+            csv.write_text(synthetic_document(ALL_PAIRS), encoding="utf-8")
+            output, errors = StringIO(), StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                code = AUDIT.main(["--reference", str(csv), "--json"])
+            report = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(errors.getvalue(), "")
+            self.assertEqual(report["schema"], "virgostars-e1-matrix-audit/v1")
+            self.assertEqual(report["status"], "pass")
+            self.assertEqual(report["reference_sha256"],
+                             hashlib.sha256(csv.read_bytes()).hexdigest())
+            self.assertEqual(report["case_count"], 15)
+            self.assertEqual(report["planet_pairs"], [[4, 399], [5, 399]])
+            self.assertEqual(report["shared_et_tdb_seconds"], ["0", "86400", "172800"])
+            self.assertEqual(report["issues"], [])
+            self.assertFalse(report["scientific_accuracy_certified"])
+            self.assertTrue(report["provenance_review_required"])
+
+    def test_json_incomplete_returns_nonzero_and_no_false_pass(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        with TemporaryDirectory() as folder:
+            csv = Path(folder) / "reference.csv"
+            csv.write_text(synthetic_document(CORE), encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output):
+                code = AUDIT.main(["--json", "--reference", str(csv)])
+            report = json.loads(output.getvalue())
+            self.assertEqual(code, 1)
+            self.assertEqual(report["status"], "incomplete")
+            self.assertEqual(report["case_count"], 9)
+            self.assertTrue(any("two distinct" in x for x in report["issues"]))
+            self.assertEqual(report["planet_pairs"], [])
+            self.assertFalse(report["scientific_accuracy_certified"])
+
+    def test_json_invalid_input_returns_only_machine_readable_error(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+        import json
+
+        with TemporaryDirectory() as folder:
+            csv = Path(folder) / "reference.csv"
+            csv.write_bytes(b"not,valid,columns\n")
+            output, errors = StringIO(), StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                code = AUDIT.main(["--json", "--reference", str(csv)])
+            report = json.loads(output.getvalue())
+            self.assertEqual(code, 2)
+            self.assertEqual(errors.getvalue(), "")
+            self.assertEqual(report["status"], "invalid")
+            self.assertTrue(report["issues"])
+            self.assertNotIn("reference_sha256", report)
+            self.assertFalse(report["scientific_accuracy_certified"])
+
+    def test_json_reports_reject_invalid_utf8_without_crashing(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        with TemporaryDirectory() as folder:
+            csv = Path(folder) / "reference.csv"
+            csv.write_bytes(b"\xff\xfe")
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(AUDIT.main(["--reference", str(csv), "--json"]), 2)
+            self.assertEqual(json.loads(output.getvalue())["status"], "invalid")
+
+    def test_json_fingerprint_changes_on_only_line_endings(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        with TemporaryDirectory() as folder:
+            csv = Path(folder) / "reference.csv"
+            content = synthetic_document(ALL_PAIRS)
+            digests = []
+            for raw in (content.encode("utf-8"),
+                        content.replace("\n", "\r\n").encode("utf-8")):
+                csv.write_bytes(raw)
+                output = StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(
+                        AUDIT.main(["--reference", str(csv), "--json"]), 0
+                    )
+                digests.append(json.loads(output.getvalue())["reference_sha256"])
+            self.assertNotEqual(digests[0], digests[1])
+
+    def test_json_and_plan_cannot_be_combined(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        output = StringIO()
+        with redirect_stdout(output):
+            code = AUDIT.main(["--plan", "--json", "--planet", "4",
+                               "--planet", "5", "--epoch", "0",
+                               "--epoch", "86400", "--epoch", "172800"])
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(output.getvalue())["status"], "invalid")
+
     def test_cli_exit_status_distinguishes_pass_incomplete_and_invalid(self):
         with TemporaryDirectory() as folder:
             csv = Path(folder) / "reference.csv"
