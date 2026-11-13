@@ -81,6 +81,34 @@ def plan_e1_cases(planet_ids: list[int], epochs: list[float]) -> Rows:
     return cases
 
 
+def extend_with_boundary_epochs(
+    epochs: list[float], boundary_ets: list[float], offset_seconds: float
+) -> list[float]:
+    """Add explicit candidate ETs around caller-identified internal SPK boundaries.
+
+    No kernel is opened and the returned instants are NOT claimed in coverage.
+    Caller must confirm that all three ETs fall within actual segment coverage.
+    """
+    if not math.isfinite(offset_seconds) or offset_seconds <= 0:
+        raise ValueError("boundary offset must be finite and strictly positive")
+    if not boundary_ets:
+        raise ValueError("at least one explicit --boundary-et is required")
+    additional: list[float] = []
+    for boundary in boundary_ets:
+        if not math.isfinite(boundary):
+            raise ValueError("boundary ET must be finite TDB seconds past J2000")
+        before, after = boundary - offset_seconds, boundary + offset_seconds
+        if not (math.isfinite(before) and math.isfinite(after)
+                and before < boundary < after):
+            raise ValueError(
+                "boundary offset overflows or is too small to separate ET samples"
+            )
+        additional.extend((before, boundary, after))
+    # Preserve caller-specified time order, deduplicating only the boundary
+    # additions (not the original explicit epochs, which are validated).
+    return list(dict.fromkeys([*epochs, *additional]))
+
+
 def parse_reference(content: str) -> Rows:
     """Validate numeric rows and metadata compatible with the Rust comparator."""
     metadata: dict[str, str] = {}
@@ -330,19 +358,42 @@ def main(argv: list[str] | None = None) -> int:
                         help="Two explicit, physically distinct planet NAIF IDs")
     parser.add_argument("--epoch", type=float, action="append",
                         help="Three or more explicit TDB/ET seconds past J2000")
+    parser.add_argument("--boundary-et", type=float, action="append",
+                        help="Operator-confirmed internal SPK record/segment boundary ET")
+    parser.add_argument("--boundary-offset-seconds", type=float,
+                        help="Explicit positive seconds before/after each boundary ET")
     args = parser.parse_args(argv)
     try:
         if args.plan:
             if args.reference is not None or args.json or args.receipt is not None:
                 raise ValueError("--plan cannot be combined with --reference, --json or --receipt")
-            cases = plan_e1_cases(args.planet or [], args.epoch or [])
+            epochs = args.epoch or []
+            if args.boundary_et:
+                if args.boundary_offset_seconds is None:
+                    raise ValueError(
+                        "--boundary-offset-seconds required with --boundary-et"
+                    )
+                epochs = extend_with_boundary_epochs(
+                    epochs, args.boundary_et, args.boundary_offset_seconds
+                )
+                print(
+                    "BOUNDARY CANDIDATES ONLY: confirm each before/at/after ET "
+                    "lies in actual J2000 Type-2/3 SPK coverage.",
+                    file=sys.stderr,
+                )
+            elif args.boundary_offset_seconds is not None:
+                raise ValueError("--boundary-offset-seconds requires --boundary-et")
+            cases = plan_e1_cases(args.planet or [], epochs)
             for target, center, et in cases:
                 print(f"--case {target}:{center}:{format(et, '.17g')}")
             print("NOT CERTIFIED: review actual kernel coverage, time scale, "
                   "source and numeric tolerances before use.", file=sys.stderr)
             return 0
-        if args.reference is None or args.planet or args.epoch:
-            raise ValueError("supply --reference alone, or use --plan with --planet/--epoch")
+        if (args.reference is None or args.planet or args.epoch
+                or args.boundary_et or args.boundary_offset_seconds is not None):
+            raise ValueError(
+                "supply --reference alone, or use --plan with --planet/--epoch"
+            )
         # Hash the exact byte stream, not re-encoded text or normalized newlines.
         reference_bytes = args.reference.read_bytes()
         reference_content = reference_bytes.decode("utf-8")
