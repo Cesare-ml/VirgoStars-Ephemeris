@@ -30,6 +30,7 @@ pub mod de441;
 pub mod error;
 pub mod state;
 pub mod time;
+pub mod time_split;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
