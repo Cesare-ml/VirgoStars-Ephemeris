@@ -117,7 +117,10 @@ fn json_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) 
             "\"declared_header_only\":true,",
             "\"scientific_accuracy_certified\":false}}"
         ),
-        start.0, end.0
+        start.0,
+        end.0,
+        probe = probe,
+        status = status
     )
 }
 
