@@ -73,3 +73,35 @@ kernel, proprietary source, new dependency, license text or production
 application was changed. All original code remains under **CPAL-1.0** with
 required attribution **Powered by VirgoStars**:
 https://www.virgostars.it/.
+
+## Synthetic legacy DE441 hand-off regression (2026-11-13)
+
+The additional `split_tdb_de441_bridge.rs` integration test creates a
+**synthetic classic DE441 binary in memory** and performs the complete
+`TdbSecondsPastJ2000` → `JulianDate` split → legacy
+`JulianDateTdb(f64)` → `De441::state` sequence. Its Mercury/SSB example
+uses an exact two-day Chebyshev record with positions in **km**, velocities
+in **km/day**, and an epoch already on the **TDB** scale. It verifies known
+polynomial values and derivatives at both coverage endpoints, midnight,
+J2000 noon and a one-second offset. UTC/TT conversion is never implied.
+
+Importantly, the test also demonstrates a precision boundary: an ET offset
+of ±1 microsecond survives in the two-part `JulianDate`, but collapsing
+it into the reader's single-`f64` JD rounds back to JD 2451545.0, so the
+reader returns the *same* state as at the exact J2000 instant. This is
+expected with the existing reader; the test makes it difficult to
+accidentally claim microsecond resolution at the **astronomical output**.
+
+A non-TDB split date is explicitly rejected by the legacy epoch converter,
+and an ET offset outside the fixture coverage remains an explicit
+`OutsideCoverage` error. No new legacy reader API or duplicated
+precision-budget guard is introduced: work on the opt-in checked bridge
+is already underway in PR #136 / #139.
+
+This test proves **interface compatibility and observed binary64
+quantization**, not precision of a real JPL kernel, matching Horizons,
+or production-ready planetary results. Verification is provided by the
+existing Rust CI checks in the PR; no external downloads are required.
+
+Change record: 2026-11-13, added one CPAL-1.0-noticed integration test
+without modifying the original code's licensing or attribution.
