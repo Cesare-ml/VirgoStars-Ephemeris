@@ -57,7 +57,10 @@ fn quarter_triangle_distinguishes_phase_angle_elongation_and_waxing_half() {
         -FRAC_PI_4,
         1e-15,
     );
-    assert_eq!(result.longitude_half, LunarEclipticHalf::WaningLongitudeHalf);
+    assert_eq!(
+        result.longitude_half,
+        LunarEclipticHalf::WaningLongitudeHalf
+    );
 
     let (sun, moon) = pair([1.0, -1.0, 0.0], [1.0, 0.0, 0.0]);
     let mirror = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, 1.0]).unwrap();
@@ -66,7 +69,10 @@ fn quarter_triangle_distinguishes_phase_angle_elongation_and_waxing_half() {
         FRAC_PI_4,
         1e-15,
     );
-    assert_eq!(mirror.longitude_half, LunarEclipticHalf::WaxingLongitudeHalf);
+    assert_eq!(
+        mirror.longitude_half,
+        LunarEclipticHalf::WaxingLongitudeHalf
+    );
     close(mirror.illumination.illuminated_fraction, 0.5, 1e-15);
 }
 
@@ -74,14 +80,20 @@ fn quarter_triangle_distinguishes_phase_angle_elongation_and_waxing_half() {
 fn exact_alignment_and_opposition_have_no_waxing_or_waning_half() {
     let (sun, moon) = pair([2.0, 0.0, 0.0], [1.0, 0.0, 0.0]);
     let new = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, 1.0]).unwrap();
-    assert_eq!(new.longitude_half, LunarEclipticHalf::ConjunctionOrOpposition);
+    assert_eq!(
+        new.longitude_half,
+        LunarEclipticHalf::ConjunctionOrOpposition
+    );
     close(new.signed_ecliptic_longitude_difference_rad, 0.0, 0.0);
     close(new.geocentric_elongation_rad, 0.0, 0.0);
     close(new.illumination.illuminated_fraction, 0.0, 0.0);
 
     let (sun, moon) = pair([2.0, 0.0, 0.0], [-1.0, 0.0, 0.0]);
     let full = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, 1.0]).unwrap();
-    assert_eq!(full.longitude_half, LunarEclipticHalf::ConjunctionOrOpposition);
+    assert_eq!(
+        full.longitude_half,
+        LunarEclipticHalf::ConjunctionOrOpposition
+    );
     close(full.signed_ecliptic_longitude_difference_rad, PI, 0.0);
     close(full.geocentric_elongation_rad, PI, 0.0);
     close(full.illumination.illuminated_fraction, 1.0, 0.0);
@@ -100,7 +112,10 @@ fn three_dimensional_elongation_differs_from_projected_longitude_difference() {
         (result.geocentric_elongation_rad - FRAC_PI_4).abs() > 0.1,
         "3-D elongation must preserve latitude rather than use projected longitude"
     );
-    assert_eq!(result.longitude_half, LunarEclipticHalf::WaxingLongitudeHalf);
+    assert_eq!(
+        result.longitude_half,
+        LunarEclipticHalf::WaxingLongitudeHalf
+    );
 }
 
 #[test]
@@ -111,22 +126,35 @@ fn reference_pole_positive_scale_and_orientation_have_explicit_semantics() {
         let scaled = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, length]).unwrap();
         assert_eq!(scaled, reference);
     }
-    assert_eq!(reference.longitude_half, LunarEclipticHalf::WaxingLongitudeHalf);
+    assert_eq!(
+        reference.longitude_half,
+        LunarEclipticHalf::WaxingLongitudeHalf
+    );
     let reversed = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, -1.0]).unwrap();
-    assert_eq!(reversed.longitude_half, LunarEclipticHalf::WaningLongitudeHalf);
+    assert_eq!(
+        reversed.longitude_half,
+        LunarEclipticHalf::WaningLongitudeHalf
+    );
     close(
         reversed.signed_ecliptic_longitude_difference_rad,
         -reference.signed_ecliptic_longitude_difference_rad,
         1e-15,
     );
-    close(reversed.geocentric_elongation_rad, reference.geocentric_elongation_rad, 0.0);
+    close(
+        reversed.geocentric_elongation_rad,
+        reference.geocentric_elongation_rad,
+        0.0,
+    );
 }
 
 #[test]
 fn signed_angle_retains_side_near_opposition_without_naming_phase_event() {
     let (sun, moon) = pair([2.0, 0.0, 0.0], [-1.0, 1e-9, 0.0]);
     let before = geometric_lunar_orientation(&sun, &moon, [0.0, 0.0, 1.0]).unwrap();
-    assert_eq!(before.longitude_half, LunarEclipticHalf::WaxingLongitudeHalf);
+    assert_eq!(
+        before.longitude_half,
+        LunarEclipticHalf::WaxingLongitudeHalf
+    );
     assert!(before.signed_ecliptic_longitude_difference_rad > PI - 1e-8);
 
     let (sun, moon) = pair([2.0, 0.0, 0.0], [-1.0, -1e-9, 0.0]);
