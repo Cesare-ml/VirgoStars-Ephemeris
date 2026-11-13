@@ -345,15 +345,15 @@ mod tests {
 
     #[test]
     fn selected_epoch_requires_one_target_and_finite_nonduplicated_time() {
-        let ok = arguments(&[
+        let input = [
             "--target".into(),
             "399".into(),
             "--at-et".into(),
             "-86400".into(),
             "first.bsp".into(),
             "second.bsp".into(),
-        ])
-        .unwrap();
+        ];
+        let ok = arguments(&input).unwrap();
         assert_eq!(
             ok,
             (Some(399), Some(-86_400.0), vec!["first.bsp", "second.bsp"])
