@@ -60,3 +60,96 @@ pub fn split_julian_day_tdb_from_et(
     split.parts()?;
     Ok(split)
 }
+
+
+/// Results of auditing a TDB ET-to-split-JD representation change.
+///
+/// The reported residual compares two binary64 representations of the *given*
+/// ET input. It is not a bound on TDB modeling, clock accuracy, or ephemeris
+/// position error.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AuditedSplitJulianDayTdb {
+    pub julian_date: JulianDate,
+    pub roundtrip_error_seconds: f64,
+}
+
+/// Invalid precision budget, date representation, or detected quantization.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SplitEpochAuditError {
+    InvalidErrorBudget,
+    InvalidJulianDate(CalendarError),
+    PrecisionLoss {
+        error_seconds: f64,
+        max_error_seconds: f64,
+    },
+}
+
+impl std::fmt::Display for SplitEpochAuditError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidErrorBudget => {
+                write!(f, "ET-to-split-JD precision budget must be finite and nonnegative")
+            }
+            Self::InvalidJulianDate(error) => write!(f, "invalid split JD: {error}"),
+            Self::PrecisionLoss {
+                error_seconds,
+                max_error_seconds,
+            } => write!(
+                f,
+                "ET-to-split-JD roundtrip loses {error_seconds} s, exceeding {max_error_seconds} s"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SplitEpochAuditError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidJulianDate(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+/// Convert an already-TDB ET epoch into a split JD and audit the roundtrip.
+///
+/// The budget is in TDB seconds. The check rejects a detected binary64
+/// ET-to-split-to-ET residual larger than the caller's finite, nonnegative
+/// tolerance. It cannot recover resolution already lost in the ET input,
+/// and is NOT a rigorous forward-error bound for arbitrary huge epochs.
+///
+/// For a strict split-JD -> legacy-DE441 single-f64-JD budget, use the
+/// independently developed `de441_epoch_bridge` API (PR #136); this helper
+/// checks the *preceding* ET -> split step only.
+///
+/// Modified 2026-11-14: opt-in ET-to-split roundtrip precision audit.
+pub fn audited_split_julian_day_tdb_from_et(
+    epoch: TdbSecondsPastJ2000,
+    max_roundtrip_error_seconds: f64,
+) -> Result<AuditedSplitJulianDayTdb, SplitEpochAuditError> {
+    if !max_roundtrip_error_seconds.is_finite() || max_roundtrip_error_seconds < 0.0 {
+        return Err(SplitEpochAuditError::InvalidErrorBudget);
+    }
+    let julian_date =
+        split_julian_day_tdb_from_et(epoch).map_err(SplitEpochAuditError::InvalidJulianDate)?;
+
+    let days_from_j2000 = julian_date.day_number() - J2000_JD_TDB as i64;
+    let subday_seconds = (julian_date.midnight_fraction() - 0.5) * SECONDS_PER_DAY;
+    let reconstructed_et = (days_from_j2000 as f64).mul_add(SECONDS_PER_DAY, subday_seconds);
+    let error_seconds = (reconstructed_et - epoch.value()).abs();
+    if !error_seconds.is_finite() {
+        return Err(SplitEpochAuditError::InvalidJulianDate(
+            CalendarError::UnrepresentableTime,
+        ));
+    }
+    if error_seconds > max_roundtrip_error_seconds {
+        return Err(SplitEpochAuditError::PrecisionLoss {
+            error_seconds,
+            max_error_seconds: max_roundtrip_error_seconds,
+        });
+    }
+    Ok(AuditedSplitJulianDayTdb {
+        julian_date,
+        roundtrip_error_seconds: error_seconds,
+    })
+}
