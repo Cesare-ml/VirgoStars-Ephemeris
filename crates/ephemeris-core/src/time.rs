@@ -41,6 +41,20 @@ impl TdbSecondsPastJ2000 {
     pub fn value(self) -> f64 {
         self.0
     }
+
+    /// Convert TDB seconds since J2000 to a single-f64 TDB Julian day.
+    ///
+    /// This is an epoch representation change, not a time-scale conversion.
+    /// Around modern dates the single-f64 Julian day cannot preserve every
+    /// sub-millisecond ET offset; retain ET seconds or use a split JD when
+    /// finer resolution is required.
+    pub fn to_julian_day_tdb(self) -> Result<JulianDayTdb> {
+        let julian_day = J2000_JD_TDB + self.0 / SECONDS_PER_DAY;
+        if !julian_day.is_finite() {
+            return Err(EphemerisError::ArithmeticOverflow);
+        }
+        JulianDayTdb::new(julian_day)
+    }
 }
 
 /// Julian day explicitly on the TDB time scale.
