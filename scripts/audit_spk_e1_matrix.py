@@ -147,6 +147,7 @@ def verify_run_receipt(
     reference_sha256: str,
     case_count: int,
     receipt: object,
+    reference_path: Path | None = None,
 ) -> None:
     """Check #164 NAIF/Rust receipt consistency, NOT provenance/authenticity.
 
@@ -247,6 +248,38 @@ def verify_run_receipt(
             or not hmac.compare_digest(claimed.lower(), digest.lower())
         ):
             raise ValueError(f"receipt kernel {i} SHA-256 mismatch")
+        kernel_path = item.get("path")
+        if (
+            not isinstance(kernel_path, str) or not kernel_path
+            or not Path(kernel_path).is_absolute()
+            or Path(kernel_path).name != name
+        ):
+            raise ValueError(f"receipt kernel {i} path does not match its name")
+
+    claimed_reference = receipt.get("reference_csv")
+    if (
+        not isinstance(claimed_reference, str) or not claimed_reference
+        or not Path(claimed_reference).is_absolute()
+    ):
+        raise ValueError("receipt reference CSV path must be absolute")
+    if reference_path is not None and (
+        Path(claimed_reference) != reference_path.resolve()
+    ):
+        raise ValueError("receipt reference CSV path differs from supplied file")
+
+    # PR #164 serializes the argv actually passed to subprocess.run.
+    # Checking just the prefix was insufficient: paths and tolerances could
+    # describe completely different comparisons with the same CSV hash.
+    expected_command = [
+        "cargo", "run", "--offline", "--locked", "--example",
+        "validate_spk_reference", "--",
+        claimed_reference,
+        format(receipt["max_position_component_km"], ".17g"),
+        format(receipt["max_velocity_component_km_s"], ".17g"),
+        *(item["path"] for item in ordered),
+    ]
+    if cmd != expected_command:
+        raise ValueError("receipt Rust command arguments differ from declared evidence")
 
 
 def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[float]]:
@@ -319,7 +352,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.receipt is not None:
             receipt_data = json.loads(args.receipt.read_text(encoding="utf-8"))
             verify_run_receipt(
-                reference_content, reference_sha256, len(rows), receipt_data
+                reference_content, reference_sha256, len(rows), receipt_data,
+                reference_path=args.reference,
             )
             receipt_checked = True
         issues, planets, shared = audit_e1_matrix(rows)
