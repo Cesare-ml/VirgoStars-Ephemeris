@@ -26,7 +26,8 @@ use std::error::Error;
 use std::io::{self, Read, Seek};
 use virgostars_ephemeris_core::de441::De441;
 
-const USAGE: &str = "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB> [--require-coverage]]";
+const USAGE: &str =
+    "usage: inspect_de441_coverage <classic-de441.eph> [--at-jd <JD_TDB> [--require-coverage]]";
 
 struct Options {
     file: String,
@@ -105,12 +106,8 @@ fn run() -> Result<(), Box<dyn Error>> {
     // De441::open validates the classic header and declared file length.
     // This intentionally does not read or certify any coefficient values.
     let ephemeris = De441::open(&options.file)?;
-    let report = checked_csv_report(
-        &ephemeris,
-        options.probe_jd_tdb,
-        options.require_coverage,
-    )
-    .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let report = checked_csv_report(&ephemeris, options.probe_jd_tdb, options.require_coverage)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     println!("{report}");
     Ok(())
 }
