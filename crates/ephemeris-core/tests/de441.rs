@@ -409,7 +409,7 @@ fn audit_rejects_corrupt_first_record_without_interpolating_coefficients() {
     assert!(matches!(
         eph.audit_record_dates(),
         Err(De441Error::InvalidFile(
-                "coefficient record has unexpected dates"
-            ))
+            "coefficient record has unexpected dates"
+        ))
     ));
 }
