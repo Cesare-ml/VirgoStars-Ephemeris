@@ -218,7 +218,6 @@ fn read_sun_moon_de441<R: Read + Seek>(
     Ok((sun, moon))
 }
 
-
 /// Ecliptic longitude half-plane relative to the Sun, **not** a time derivative.
 ///
 /// This is the **geometric** ordering of ecliptic longitudes after projection
