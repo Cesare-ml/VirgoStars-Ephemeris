@@ -74,7 +74,12 @@ fn microseconds_on_both_sides_of_midnight_choose_correct_days() {
 
 #[test]
 fn positive_and_negative_multi_year_offsets_retain_second_precision() {
-    for seconds in [345_678_912.125, -345_678_912.125, 100_000_000_000.0, -100_000_000_000.0] {
+    for seconds in [
+        345_678_912.125,
+        -345_678_912.125,
+        100_000_000_000.0,
+        -100_000_000_000.0,
+    ] {
         let jd = convert(seconds).unwrap();
         assert!((recovered_seconds(jd) - seconds).abs() < 1.0e-5);
     }
