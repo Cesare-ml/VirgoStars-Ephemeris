@@ -6,6 +6,7 @@
 // Modification (2026-11-13): guard extreme coefficient-pointer integers.
 // Modification (2026-11-13): align extreme first-word expectation with length validation.
 // Modification (2026-11-13): same-body zero states and epoch coverage boundaries.
+// Modification (2026-11-13): missing lunar series on date-valid synthetic records.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -274,4 +275,24 @@ fn identical_body_state_still_rejects_out_of_coverage_epochs() {
             "epoch {jd}"
         );
     }
+}
+
+#[test]
+fn missing_lunar_series_is_reported_on_a_valid_synthetic_record() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    // This header declares only series 12, not the geocentric Moon (series 9).
+    // Populate both record date pairs so lookup reaches the missing-series guard.
+    let mut bytes = synthetic_header();
+    for (index, start) in [(0usize, 1000.0), (1, 1032.0)] {
+        let offset = (index + 2) * 3000;
+        f64_field(&mut bytes, offset, start);
+        f64_field(&mut bytes, offset + 8, start + 32.0);
+    }
+    let mut reader = De441::new(Cursor::new(bytes)).unwrap();
+    let result = reader.state(Body::Moon, Body::Earth, JulianDateTdb(1016.0));
+    assert!(matches!(
+        result,
+        Err(De441Error::MissingSeries("geocentric Moon"))
+    ));
 }
