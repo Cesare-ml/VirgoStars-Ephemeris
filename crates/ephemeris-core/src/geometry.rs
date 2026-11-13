@@ -40,7 +40,8 @@ impl fmt::Display for AngularSeparationError {
 
 impl Error for AngularSeparationError {}
 
-fn scaled_direction(vector: [f64; 3]) -> Result<[f64; 3], AngularSeparationError> {
+// Shared numeric scaling for orientation calculations in the same Rust core.
+pub(crate) fn scaled_direction(vector: [f64; 3]) -> Result<[f64; 3], AngularSeparationError> {
     if vector.iter().any(|component| !component.is_finite()) {
         return Err(AngularSeparationError::NonFiniteInput);
     }
