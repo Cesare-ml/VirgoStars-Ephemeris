@@ -116,19 +116,23 @@ fn selected_descriptor(
     target: i32,
     et: f64,
 ) -> Option<(usize, usize, SpkSegmentDescriptor)> {
-    indexes.iter().enumerate().rev().find_map(|(file_index, index)| {
-        index
-            .segments
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(segment_index, segment)| {
-                (segment.target_id == target
-                    && segment.start_tdb_seconds <= et
-                    && et <= segment.end_tdb_seconds)
-                    .then_some((file_index, segment_index, *segment))
-            })
-    })
+    indexes
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(file_index, index)| {
+            index
+                .segments
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(segment_index, segment)| {
+                    (segment.target_id == target
+                        && segment.start_tdb_seconds <= et
+                        && et <= segment.end_tdb_seconds)
+                        .then_some((file_index, segment_index, *segment))
+                })
+        })
 }
 
 fn render<W: Write>(
@@ -179,8 +183,8 @@ fn run<W: Write>(values: &[String], output: &mut W) -> Result<usize, Box<dyn Err
     }
     let selected = if let Some(et) = selected_et {
         let target_id = target.expect("validated by arguments()");
-        let (file_index, segment_index, _) =
-            selected_descriptor(&indexes, target_id, et).ok_or_else(|| {
+        let (file_index, segment_index, _) = selected_descriptor(&indexes, target_id, et)
+            .ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "no SPK segment covers the requested target at this ET",
@@ -296,9 +300,16 @@ mod tests {
         assert_eq!(chosen.spk_type, 9);
         assert!(!is_candidate(&chosen));
         let mut csv = Vec::new();
-        assert_eq!(render(&mut csv, &indexes, Some(399), Some((file, segment))).unwrap(), 1);
+        assert_eq!(
+            render(&mut csv, &indexes, Some(399), Some((file, segment))).unwrap(),
+            1
+        );
         let rendered = String::from_utf8(csv).unwrap();
-        assert!(rendered.lines().nth(1).unwrap().starts_with("2,1,399,0,17,9,"));
+        assert!(rendered
+            .lines()
+            .nth(1)
+            .unwrap()
+            .starts_with("2,1,399,0,17,9,"));
         assert!(rendered.ends_with(",false\n"));
     }
 
@@ -335,18 +346,33 @@ mod tests {
     #[test]
     fn selected_epoch_requires_one_target_and_finite_nonduplicated_time() {
         let ok = arguments(&[
-            "--target".into(), "399".into(), "--at-et".into(),
-            "-86400".into(), "first.bsp".into(), "second.bsp".into(),
+            "--target".into(),
+            "399".into(),
+            "--at-et".into(),
+            "-86400".into(),
+            "first.bsp".into(),
+            "second.bsp".into(),
         ])
         .unwrap();
-        assert_eq!(ok, (Some(399), Some(-86_400.0), vec!["first.bsp", "second.bsp"]));
+        assert_eq!(
+            ok,
+            (Some(399), Some(-86_400.0), vec!["first.bsp", "second.bsp"])
+        );
         for args in [
             vec!["--at-et", "0", "first.bsp"],
             vec!["--target", "399", "--at-et", "nan", "first.bsp"],
             vec!["--target", "399", "--at-et", "inf", "first.bsp"],
             vec!["--target", "399", "--at-et", "abc", "first.bsp"],
             vec!["--target", "399", "--at-et", "first.bsp"],
-            vec!["--target", "399", "--at-et", "1", "--at-et", "2", "first.bsp"],
+            vec![
+                "--target",
+                "399",
+                "--at-et",
+                "1",
+                "--at-et",
+                "2",
+                "first.bsp",
+            ],
             vec!["--target", "399", "--at-et", "0"],
         ] {
             let args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
