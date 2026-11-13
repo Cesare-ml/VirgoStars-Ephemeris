@@ -54,6 +54,46 @@ The example requires a separately obtained classic DE441 binary file. No
 ephemeris file is committed and no test downloads any kernel. DE441 positions
 themselves still await documented, independent NASA/JPL validation.
 
+## Direct classic DE441 bridge (experimental)
+
+The additive Rust API
+`lunar_phase::geometric_lunar_illumination_from_de441(&mut eph, epoch)`
+retrieves **Sun relative to Earth** and **Moon relative to Earth** at the
+**same Julian Date TDB** from one caller-supplied, seekable classic
+`De441<R: Read + Seek>` reader. The existing reader provides geometric ICRF
+positions in km, and preserves the Moon's directly encoded geocentric series
+rather than subtracting large absolute barycentric Earth/Moon positions.
+The bridge delegates to `geometric_lunar_illumination` instead of
+reimplementing the geometry.
+
+```rust
+use virgostars_ephemeris_core::de441::{De441, JulianDateTdb};
+use virgostars_ephemeris_core::lunar_phase::geometric_lunar_illumination_from_de441;
+
+let mut eph = De441::open("/path/to/de441.eph")?;
+let result = geometric_lunar_illumination_from_de441(
+    &mut eph,
+    JulianDateTdb(2_451_545.0),
+)?;
+println!("fraction: {:.9}", result.illuminated_fraction);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`LunarDe441Error` distinguishes a nonfinite input epoch from the original
+`De441Error` (coverage, missing series, file corruption or I/O) and from
+the geometric `LunarIlluminationError`. It does not download data,
+silently substitute an analytic ephemeris, or convert UTC/TT into TDB.
+
+A new **offline synthetic classic-binary integration fixture** includes
+two 32-day records with deliberately chosen geocentric Sun/Moon triangles:
+quarter geometry in record one and dark/new-side geometry in record two.
+Five deterministic tests cover inclusive coverage and the exact record
+boundary; nonfinite epochs; missing Sun, Moon, or Earth–Moon barycenter
+series; malformed Chebyshev coefficient and zero lunar vector; injected
+read failures and cache reuse after recovery. A passing test proves only
+correct reader-to-geometry wiring with synthetic coefficients; it is not
+an independently sourced NASA/JPL reference or precision certification.
+
 ## Test evidence and limitations
 
 ```bash
@@ -62,7 +102,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Six synthetic Rust regression tests exercise:
+Six direct-vector synthetic Rust regression tests exercise:
 - Exactly new/full/quarter geometric triangles (including the difference
   between **45° geocentric elongation** and **90° lunar phase angle**).
 - Tiny positive near-new illuminated fraction.
@@ -71,7 +111,7 @@ Six synthetic Rust regression tests exercise:
 - Explicit rejection of floating-point subtraction overflow.
 - Invariance to velocity values, which the primitive does not consume.
 
-Passing these tests establishes a basic mathematical contract, **not**
+Passing these tests and the bridge tests establishes a mathematical/API contract, **not**
 scientific ephemeris parity. Before downstream use, compare full real-kernel
 Sun/Moon states and illuminated fractions against independently documented
 reference cases and tolerances. Do not ship user-facing Moon predictions
