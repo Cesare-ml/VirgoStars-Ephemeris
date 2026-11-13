@@ -51,6 +51,33 @@ def planet_system(target: int) -> int | None:
     return target if target < 10 else target // 100
 
 
+def plan_e1_cases(planet_ids: list[int], epochs: list[float]) -> Rows:
+    """Plan explicit E1 target/center/ET triples without touching SPK kernels.
+
+    IDs and epochs must be supplied by the operator. There is no inferred
+    coverage, default epoch, civil-to-TDB conversion or network access.
+    """
+    if len(planet_ids) != 2:
+        raise ValueError("exactly two --planet NAIF IDs are required")
+    if any(target not in PLANET_IDS for target in planet_ids):
+        raise ValueError("unsupported planetary ID: use a listed center or barycenter")
+    if planet_system(planet_ids[0]) == planet_system(planet_ids[1]):
+        raise ValueError("two physically distinct planetary systems are required")
+    if len(epochs) < 3:
+        raise ValueError("at least three explicit --epoch ET values are required")
+    if not all(math.isfinite(et) for et in epochs):
+        raise ValueError("all ET epochs must be finite TDB seconds past J2000")
+    if len(set(epochs)) != len(epochs):
+        raise ValueError("duplicate ET epochs are not allowed")
+    pairs = [*CORE_PAIRS, (planet_ids[0], 399), (planet_ids[1], 399)]
+    cases = [(target, center, et) for target, center in pairs for et in epochs]
+    # The planned inputs must satisfy the same coverage rules as existing CSVs.
+    issues, _, _ = audit_e1_matrix(cases)
+    if issues:
+        raise ValueError("planned cases fail E1 audit: " + "; ".join(issues))
+    return cases
+
+
 def parse_reference(content: str) -> Rows:
     """Validate numeric rows and metadata compatible with the Rust comparator."""
     metadata: dict[str, str] = {}
@@ -148,9 +175,27 @@ def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference", required=True, type=Path)
+    parser.add_argument("--reference", type=Path,
+                        help="Audit an existing NAIF/SPICE reference CSV")
+    parser.add_argument("--plan", action="store_true",
+                        help="Print --case triples for the independent NAIF generator")
+    parser.add_argument("--planet", type=int, action="append",
+                        help="Two explicit, physically distinct planet NAIF IDs")
+    parser.add_argument("--epoch", type=float, action="append",
+                        help="Three or more explicit TDB/ET seconds past J2000")
     args = parser.parse_args(argv)
     try:
+        if args.plan:
+            if args.reference is not None:
+                raise ValueError("--plan cannot be combined with --reference")
+            cases = plan_e1_cases(args.planet or [], args.epoch or [])
+            for target, center, et in cases:
+                print(f"--case {target}:{center}:{format(et, '.17g')}")
+            print("NOT CERTIFIED: review actual kernel coverage, time scale, "
+                  "source and numeric tolerances before use.", file=sys.stderr)
+            return 0
+        if args.reference is None or args.planet or args.epoch:
+            raise ValueError("supply --reference alone, or use --plan with --planet/--epoch")
         rows = parse_reference(args.reference.read_text(encoding="utf-8"))
         issues, planets, shared = audit_e1_matrix(rows)
     except (OSError, UnicodeError, ValueError) as exc:
