@@ -45,7 +45,7 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'sta
     if args.next().is_some() {
         return Err("exactly one file path is required");
     }
-    if path == OsString::from("--help") || path == OsString::from("-h") {
+    if path == "--help" || path == "-h" {
         return Ok(Request::Help);
     }
     if path.is_empty() {
