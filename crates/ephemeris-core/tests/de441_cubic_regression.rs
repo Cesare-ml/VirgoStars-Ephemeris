@@ -165,3 +165,31 @@ fn cubic_velocity_agrees_with_centered_position_difference_inside_each_granule()
         }
     }
 }
+
+// Modification (2026-11-13): check XYZ coefficient offsets and analytic
+// TDB-day derivatives independently in the second Chebyshev granule.
+#[test]
+fn second_granule_xyz_coefficients_and_velocities_are_independent() {
+    let mut bytes = cubic_fixture();
+    // Granule 2 begins at word 15; Y and Z follow the four X coefficients.
+    let second = RECORD_BYTES * 2 + (2 + 12) * 8;
+    for (index, value) in [1.0, 2.0, 3.0, 4.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (4 + index) * 8, value);
+    }
+    for (index, value) in [4.0, -2.0, 0.0, 1.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (8 + index) * 8, value);
+    }
+
+    // At JD 1024, normalized x=0: T2=-1, T3=0,
+    // dT1/dJD=1/8 and dT3/dJD=-3/8.
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    let state = ephemeris
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1024.0),
+        )
+        .unwrap();
+    assert_eq!(state.position_km, [20.0, -2.0, 4.0]);
+    assert_eq!(state.velocity_km_per_day, [-0.875, -1.25, -0.625]);
+}
