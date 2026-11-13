@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 // Modification (2026-11-12): deterministic malformed-header regression cases.
 // Modification (2026-11-13): adjacent-series and incomplete-pointer boundary cases.
+// Modification (2026-11-13): reject mismatched DE identity and truncated headers.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -158,5 +159,39 @@ fn rejects_incomplete_zero_first_pointer() {
             De441::new(Cursor::new(bytes)),
             Err(De441Error::InvalidFile("invalid coefficient pointer"))
         ));
+    }
+}
+
+#[test]
+fn rejects_mismatched_classic_de441_identity() {
+    let mut wrong_title = synthetic_header();
+    wrong_title[0] = b'X';
+    assert!(matches!(
+        De441::new(Cursor::new(wrong_title)),
+        Err(De441Error::InvalidFile(
+            "expected classic little-endian JPL DE441"
+        ))
+    ));
+
+    let mut wrong_version = synthetic_header();
+    i32_field(&mut wrong_version, 2840, 440);
+    assert!(matches!(
+        De441::new(Cursor::new(wrong_version)),
+        Err(De441Error::InvalidFile(
+            "expected classic little-endian JPL DE441"
+        ))
+    ));
+}
+
+#[test]
+fn rejects_truncated_header_without_panicking() {
+    // Every size below the fixed 2856-byte header must fail with I/O,
+    // before any indexed field access or record-size calculation.
+    for length in [0, 1, 2652, 2840, 2855] {
+        let bytes = synthetic_header()[..length].to_vec();
+        assert!(
+            matches!(De441::new(Cursor::new(bytes)), Err(De441Error::Io(_))),
+            "truncated length {length}"
+        );
     }
 }
