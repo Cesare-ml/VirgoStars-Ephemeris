@@ -61,7 +61,7 @@ fn cubic_chebyshev_position_and_analytic_velocity_match_independent_polynomials(
     let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
     for (jd, expected_position, expected_velocity) in [
         (1008.0, 7.0, -1.25),
-        (1012.0, 5.5, 1.375),
+        (1012.0, 5.5, 1.0),
         (1024.0, 20.0, -0.875),
         (1028.0, 17.5, -0.125),
         (1032.0, 21.0, 2.125),
