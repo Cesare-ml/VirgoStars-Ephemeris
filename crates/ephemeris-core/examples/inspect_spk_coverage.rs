@@ -285,6 +285,91 @@ mod tests {
     }
 
     #[test]
+    fn selects_last_loaded_file_even_when_its_frame_is_unsupported() {
+        let indexes = vec![
+            index(vec![descriptor(399, 1, 2)]),
+            index(vec![descriptor(399, 17, 9)]),
+        ];
+        let (file, segment, chosen) = selected_descriptor(&indexes, 399, 0.0).unwrap();
+        assert_eq!((file, segment), (1, 0));
+        assert_eq!(chosen.frame_id, 17);
+        assert_eq!(chosen.spk_type, 9);
+        assert!(!is_candidate(&chosen));
+        let mut csv = Vec::new();
+        assert_eq!(render(&mut csv, &indexes, Some(399), Some((file, segment))).unwrap(), 1);
+        let rendered = String::from_utf8(csv).unwrap();
+        assert!(rendered.lines().nth(1).unwrap().starts_with("2,1,399,0,17,9,"));
+        assert!(rendered.ends_with(",false\n"));
+    }
+
+    #[test]
+    fn selects_last_overlapping_segment_inside_one_file() {
+        let earlier = descriptor(399, 1, 2);
+        let mut later = descriptor(399, 1, 3);
+        later.center_id = 301;
+        let indexes = vec![index(vec![earlier, later])];
+        let (file, segment, selected) = selected_descriptor(&indexes, 399, 12.5).unwrap();
+        assert_eq!((file, segment), (0, 1));
+        assert_eq!(selected.center_id, 301);
+        assert_eq!(selected.spk_type, 3);
+    }
+
+    #[test]
+    fn coverage_endpoints_are_inclusive_but_outside_and_gaps_fail() {
+        let indexes = vec![index(vec![descriptor(399, 1, 2)])];
+        for et in [-86_400.0, 0.0, 86_400.0] {
+            assert!(selected_descriptor(&indexes, 399, et).is_some());
+        }
+        for et in [-86_400.5, 86_400.5, f64::NAN] {
+            assert!(selected_descriptor(&indexes, 399, et).is_none());
+        }
+        assert!(selected_descriptor(&indexes, 301, 0.0).is_none());
+        let mut split = descriptor(399, 1, 2);
+        split.start_tdb_seconds = 100_000.0;
+        split.end_tdb_seconds = 200_000.0;
+        let indexes = vec![index(vec![descriptor(399, 1, 2), split])];
+        assert!(selected_descriptor(&indexes, 399, 90_000.0).is_none());
+        assert_eq!(selected_descriptor(&indexes, 399, 150_000.0).unwrap().1, 1);
+    }
+
+    #[test]
+    fn selected_epoch_requires_one_target_and_finite_nonduplicated_time() {
+        let ok = arguments(&[
+            "--target".into(), "399".into(), "--at-et".into(),
+            "-86400".into(), "first.bsp".into(), "second.bsp".into(),
+        ])
+        .unwrap();
+        assert_eq!(ok, (Some(399), Some(-86_400.0), vec!["first.bsp", "second.bsp"]));
+        for args in [
+            vec!["--at-et", "0", "first.bsp"],
+            vec!["--target", "399", "--at-et", "nan", "first.bsp"],
+            vec!["--target", "399", "--at-et", "inf", "first.bsp"],
+            vec!["--target", "399", "--at-et", "abc", "first.bsp"],
+            vec!["--target", "399", "--at-et", "first.bsp"],
+            vec!["--target", "399", "--at-et", "1", "--at-et", "2", "first.bsp"],
+            vec!["--target", "399", "--at-et", "0"],
+        ] {
+            let args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+            assert!(arguments(&args).is_err(), "{args:?}");
+        }
+    }
+
+    #[test]
+    fn filtered_selection_does_not_reorder_descriptor_ordinals() {
+        let indexes = vec![
+            index(vec![descriptor(301, 1, 3), descriptor(399, 1, 2)]),
+            index(vec![descriptor(301, 1, 2)]),
+        ];
+        let (file, segment, _) = selected_descriptor(&indexes, 399, 0.0).unwrap();
+        let mut output = Vec::new();
+        let count = render(&mut output, &indexes, Some(399), Some((file, segment))).unwrap();
+        assert_eq!(count, 1);
+        let text = String::from_utf8(output).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.lines().nth(1).unwrap().starts_with("1,2,399,"));
+    }
+
+    #[test]
     fn does_not_mislabel_unknown_frames_or_types_as_supported() {
         for segment in [
             descriptor(399, 17, 2),
