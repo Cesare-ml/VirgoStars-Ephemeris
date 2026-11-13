@@ -14,12 +14,14 @@
 
 // Modification record: 2026-11-13 — added a read-only classic DE441
 // coverage diagnostic with synthetic parser and CLI argument regressions.
+// Modification record: 2026-11-13 — added optional full-record date-pair audit.
 
 //! Inspect the declared epoch coverage of an externally supplied classic DE441
 //! binary. This is header validation, NOT a scientific accuracy check.
 //!
 //! Run:
 //! cargo run --offline --locked --example inspect_classic_de441 -- /path/to/de441.eph
+//! cargo run --offline --locked --example inspect_classic_de441 -- --audit-record-dates /path/to/de441.eph
 
 use std::env;
 use std::ffi::OsString;
@@ -29,29 +31,42 @@ use std::process::ExitCode;
 
 use virgostars_ephemeris_core::de441::{De441, De441Error, JulianDateTdb};
 
-const USAGE: &str = "Usage: inspect_classic_de441 <path-to-classic-de441-file>";
+const USAGE: &str =
+    "Usage: inspect_classic_de441 [--audit-record-dates] <path-to-classic-de441-file>";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Request {
     Help,
-    File(PathBuf),
+    File { path: PathBuf, audit_record_dates: bool },
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'static str> {
     let mut args = args.into_iter();
-    let path = args
+    let first = args
         .next()
         .ok_or("a local classic DE441 file path is required")?;
+    if first == "--help" || first == "-h" {
+        if args.next().is_some() {
+            return Err("help does not accept a file path");
+        }
+        return Ok(Request::Help);
+    }
+    let audit_record_dates = first == "--audit-record-dates";
+    let path = if audit_record_dates {
+        args.next().ok_or("a local classic DE441 file path is required")?
+    } else {
+        first
+    };
     if args.next().is_some() {
         return Err("exactly one file path is required");
     }
-    if path == "--help" || path == "-h" {
-        return Ok(Request::Help);
+    if path.is_empty() || path == "--audit-record-dates" || path == "--help" || path == "-h" {
+        return Err("file path is missing or invalid");
     }
-    if path.is_empty() {
-        return Err("file path cannot be empty");
-    }
-    Ok(Request::File(PathBuf::from(path)))
+    Ok(Request::File {
+        path: PathBuf::from(path),
+        audit_record_dates,
+    })
 }
 
 fn coverage_csv((start, end): (JulianDateTdb, JulianDateTdb)) -> String {
@@ -63,9 +78,17 @@ fn coverage_csv((start, end): (JulianDateTdb, JulianDateTdb)) -> String {
     )
 }
 
-fn inspect<R: Read + Seek>(source: R) -> Result<String, De441Error> {
-    let ephemeris = De441::new(source)?;
-    Ok(coverage_csv(ephemeris.coverage()))
+fn inspect<R: Read + Seek>(
+    source: R,
+    audit_record_dates: bool,
+) -> Result<(String, Option<usize>), De441Error> {
+    let mut ephemeris = De441::new(source)?;
+    let checked_records = if audit_record_dates {
+        Some(ephemeris.audit_record_dates()?)
+    } else {
+        None
+    };
+    Ok((coverage_csv(ephemeris.coverage()), checked_records))
 }
 
 fn main() -> ExitCode {
@@ -74,9 +97,15 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Ok(Request::File(path)) => match std::fs::File::open(&path) {
-            Ok(file) => match inspect(file) {
-                Ok(csv) => {
+        Ok(Request::File {
+            path,
+            audit_record_dates,
+        }) => match std::fs::File::open(&path) {
+            Ok(file) => match inspect(file, audit_record_dates) {
+                Ok((csv, checked_records)) => {
+                    if let Some(count) = checked_records {
+                        eprintln!("Audited {count} classic DE441 record date pairs");
+                    }
                     print!("{csv}");
                     ExitCode::SUCCESS
                 }
@@ -133,17 +162,30 @@ mod tests {
     fn accepts_one_path_or_help_only() {
         assert_eq!(
             parse_args([OsString::from("test.eph")]),
-            Ok(Request::File(PathBuf::from("test.eph")))
+            Ok(Request::File {
+                path: PathBuf::from("test.eph"),
+                audit_record_dates: false,
+            })
         );
         assert_eq!(parse_args([OsString::from("--help")]), Ok(Request::Help));
+        assert_eq!(
+            parse_args([OsString::from("--audit-record-dates"), OsString::from("test.eph")]),
+            Ok(Request::File {
+                path: PathBuf::from("test.eph"),
+                audit_record_dates: true,
+            })
+        );
         assert!(parse_args(Vec::<OsString>::new()).is_err());
         assert!(parse_args([OsString::from("a.eph"), OsString::from("b.eph")]).is_err());
         assert!(parse_args([OsString::new()]).is_err());
+        assert!(parse_args([OsString::from("--audit-record-dates")]).is_err());
+        assert!(parse_args([OsString::from("--help"), OsString::from("file.eph")]).is_err());
     }
 
     #[test]
     fn reports_validated_classic_header_coverage_without_state_interpolation() {
-        let csv = inspect(Cursor::new(synthetic_header_and_record())).unwrap();
+        let (csv, audit_count) = inspect(Cursor::new(synthetic_header_and_record()), false).unwrap();
+        assert_eq!(audit_count, None);
         assert_eq!(
             csv,
             "format,coverage_start_jd_tdb,coverage_end_jd_tdb\nclassic-de441,1000,1032\n"
@@ -154,9 +196,24 @@ mod tests {
     fn corrupt_and_short_files_fail_without_a_partial_csv_result() {
         let mut corrupt = synthetic_header_and_record();
         corrupt[0] = b'X';
-        assert!(inspect(Cursor::new(corrupt)).is_err());
+        assert!(inspect(Cursor::new(corrupt), false).is_err());
         let mut short = synthetic_header_and_record();
         short.truncate(8500);
-        assert!(inspect(Cursor::new(short)).is_err());
+        assert!(inspect(Cursor::new(short), false).is_err());
+    }
+    
+    #[test]
+    fn optional_audit_rejects_corrupt_record_dates_before_producing_csv() {
+        let (csv, checked) = inspect(Cursor::new(synthetic_header_and_record()), true).unwrap();
+        assert_eq!(checked, Some(1));
+        assert!(csv.contains("classic-de441,1000,1032"));
+        let mut corrupted = synthetic_header_and_record();
+        put_f64(&mut corrupted, 6008, 1033.0);
+        // Valid header and length are insufficient for checking record dates.
+        assert!(inspect(Cursor::new(corrupted.clone()), false).is_ok());
+        assert!(matches!(
+            inspect(Cursor::new(corrupted), true),
+            Err(De441Error::InvalidFile("coefficient record has unexpected dates"))
+        ));
     }
 }
