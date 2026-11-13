@@ -267,3 +267,42 @@ fn second_granule_xyz_quarter_epochs_match_analytic_values() {
         assert_eq!(state.velocity_km_per_day, velocity, "velocity at JD {jd}");
     }
 }
+
+#[test]
+fn granule_transition_uses_each_side_without_assuming_continuity() {
+    // The synthetic neighboring polynomials are deliberately discontinuous.
+    // The exact boundary belongs to the second granule.
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let h = 1.0 / 1024.0;
+    for (jd, second_granule) in [(1016.0 - h, false), (1016.0, true), (1016.0 + h, true)] {
+        let x = if second_granule {
+            (jd - 1024.0) / 8.0
+        } else {
+            (jd - 1008.0) / 8.0
+        };
+        let (c0, c1, c2, c3) = if second_granule {
+            (20.0, -1.0, 0.0, 2.0)
+        } else {
+            (10.0, 2.0, 3.0, 4.0)
+        };
+        let expected_position = c0 + c1 * x + c2 * (2.0 * x * x - 1.0)
+            + c3 * (4.0 * x * x * x - 3.0 * x);
+        let expected_velocity =
+            (c1 + 4.0 * c2 * x + c3 * (12.0 * x * x - 3.0)) / 8.0;
+        let state = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        assert!(
+            (state.position_km[0] - expected_position).abs() < 1.0e-10,
+            "position at JD {jd}"
+        );
+        assert!(
+            (state.velocity_km_per_day[0] - expected_velocity).abs() < 1.0e-10,
+            "velocity at JD {jd}"
+        );
+    }
+}
