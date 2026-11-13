@@ -193,3 +193,47 @@ fn second_granule_xyz_coefficients_and_velocities_are_independent() {
     assert_eq!(state.position_km, [20.0, -2.0, 4.0]);
     assert_eq!(state.velocity_km_per_day, [-0.875, -1.25, -0.625]);
 }
+
+
+// Modification (2026-11-13): verify the inclusive final epoch and the
+// exact granule transition for all three axes, including reverse geometry.
+#[test]
+fn second_granule_xyz_boundaries_preserve_velocity_and_reverse_signs() {
+    let mut bytes = cubic_fixture();
+    let second = RECORD_BYTES * 2 + (2 + 12) * 8;
+    for (index, value) in [1.0, 2.0, 3.0, 4.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (4 + index) * 8, value);
+    }
+    for (index, value) in [4.0, -2.0, 0.0, 1.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (8 + index) * 8, value);
+    }
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    // At x=-1 (JD 1016), T=[1,-1,1,-1], dT/dx=[0,1,-4,9].
+    // At x=+1 (JD 1032), T=[1,1,1,1], dT/dx=[0,1,4,9].
+    // Both derivative vectors are scaled by dx/dJD=1/8.
+    for (jd, position, velocity) in [
+        (1016.0, [19.0, -2.0, 5.0], [2.125, 3.25, 0.875]),
+        (1032.0, [21.0, 10.0, 3.0], [2.125, 6.25, 0.875]),
+    ] {
+        let forward = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        assert_eq!(forward.position_km, position, "position at JD {jd}");
+        assert_eq!(forward.velocity_km_per_day, velocity, "velocity at JD {jd}");
+        let reverse = ephemeris
+            .state(
+                Body::SolarSystemBarycenter,
+                Body::Mercury,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            assert_eq!(reverse.position_km[axis], -position[axis]);
+            assert_eq!(reverse.velocity_km_per_day[axis], -velocity[axis]);
+        }
+    }
+}
