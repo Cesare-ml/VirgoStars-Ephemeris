@@ -80,7 +80,9 @@ fn read_reference(content: &str) -> Result<Reference, String> {
         }
         if !seen_header {
             if line != CSV_COLUMNS {
-                return Err(format!("line {line_no}: unexpected reference column layout"));
+                return Err(format!(
+                    "line {line_no}: unexpected reference column layout"
+                ));
             }
             seen_header = true;
             continue;
@@ -166,7 +168,9 @@ fn read_reference(content: &str) -> Result<Reference, String> {
             digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
         })
     {
-        return Err("ordered_kernel_sha256 must contain semicolon-separated 64-hex SHA256 digests".into());
+        return Err(
+            "ordered_kernel_sha256 must contain semicolon-separated 64-hex SHA256 digests".into(),
+        );
     }
     // These are user-declared hashes, NOT cryptographically verified by this
     // dependency-free example. Verify them independently at execution time.
@@ -186,7 +190,11 @@ struct Residual {
     velocity_norm_km_per_second: f64,
 }
 
-fn residual(actual_position: [f64; 3], actual_velocity: [f64; 3], expected: [f64; 6]) -> Result<Residual, String> {
+fn residual(
+    actual_position: [f64; 3],
+    actual_velocity: [f64; 3],
+    expected: [f64; 6],
+) -> Result<Residual, String> {
     let mut result = Residual {
         signed_position_km: [0.0; 3],
         signed_velocity_km_per_second: [0.0; 3],
@@ -226,7 +234,9 @@ fn tolerance(value: &str, name: &str) -> Result<f64, Box<dyn Error>> {
         .parse::<f64>()
         .map_err(|_| input_error(format!("{name} must be numeric")))?;
     if !result.is_finite() || result <= 0.0 {
-        return Err(input_error(format!("{name} must be finite and strictly positive")));
+        return Err(input_error(format!(
+            "{name} must be finite and strictly positive"
+        )));
     }
     Ok(result)
 }
@@ -266,8 +276,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         let actual = kernels
             .relative_state(case.target, case.center, case.et)
             .map_err(|error| input_error(format!("case {}: {error}", index + 1)))?;
-        let diff = residual(actual.position_km, actual.velocity_km_per_second, case.expected)
-            .map_err(input_error)?;
+        let diff = residual(
+            actual.position_km,
+            actual.velocity_km_per_second,
+            case.expected,
+        )
+        .map_err(input_error)?;
         let exceeded = diff.max_position_component_km > position_limit
             || diff.max_velocity_component_km_per_second > velocity_limit;
         if exceeded {
@@ -305,7 +319,9 @@ fn run() -> Result<(), Box<dyn Error>> {
          verify original NAIF output, ordered file SHA-256 values and matching kernel versions independently."
     );
     if failures != 0 {
-        return Err(input_error("SPK/NAIF reference residual exceeds explicit limits"));
+        return Err(input_error(
+            "SPK/NAIF reference residual exceeds explicit limits",
+        ));
     }
     Ok(())
 }
@@ -367,11 +383,7 @@ mod tests {
 
     #[test]
     fn requires_provenance_and_valid_ordered_hashes() {
-        assert!(read_reference(&change(
-            "# generated_utc=",
-            "# missing_utc=",
-        ))
-        .is_err());
+        assert!(read_reference(&change("# generated_utc=", "# missing_utc=",)).is_err());
         assert!(read_reference(&change(
             "ordered_kernel_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "ordered_kernel_sha256=unknown",
@@ -401,10 +413,7 @@ mod tests {
 
     #[test]
     fn duplicate_metadata_or_late_metadata_never_override_contract() {
-        assert!(read_reference(&format!(
-            "# frame=J2000\n{BASELINE}"
-        ))
-        .is_err());
+        assert!(read_reference(&format!("# frame=J2000\n{BASELINE}")).is_err());
         assert!(read_reference(&format!("{BASELINE}# frame=J2000\n")).is_err());
     }
 
@@ -424,7 +433,12 @@ mod tests {
 
     #[test]
     fn nonfinite_or_overflowed_residuals_fail_closed() {
-        assert!(residual([f64::MAX, 0.0, 0.0], [0.0; 3], [-f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0]).is_err());
+        assert!(residual(
+            [f64::MAX, 0.0, 0.0],
+            [0.0; 3],
+            [-f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
+        .is_err());
         assert!(residual([f64::MAX, f64::MAX, 0.0], [0.0; 3], [0.0; 6]).is_err());
         assert!(residual([0.0; 3], [f64::INFINITY, 0.0, 0.0], [0.0; 6]).is_err());
     }
