@@ -24,10 +24,7 @@ fn audited(seconds: f64, max_error: f64) -> Result<f64, SplitEpochAuditError> {
     let et = TdbSecondsPastJ2000::new(seconds).unwrap();
     audited_split_julian_day_tdb_from_et(et, max_error).map(|value| {
         assert_eq!(value.julian_date.scale(), TimeScale::Tdb);
-        assert_eq!(
-            value.julian_date,
-            split_julian_day_tdb_from_et(et).unwrap()
-        );
+        assert_eq!(value.julian_date, split_julian_day_tdb_from_et(et).unwrap());
         value.roundtrip_error_seconds
     })
 }
