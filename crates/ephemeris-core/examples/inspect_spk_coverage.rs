@@ -28,9 +28,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, Write};
 
-use virgostars_ephemeris_core::spk_index::{
-    inspect_spk, SpkIndex, SpkSegmentDescriptor,
-};
+use virgostars_ephemeris_core::spk_index::{inspect_spk, SpkIndex, SpkSegmentDescriptor};
 
 const HEADER: &str = "load_index,segment_index,target_id,center_id,frame_id,spk_type,\
 coverage_start_et_tdb_seconds,coverage_end_et_tdb_seconds,candidate_j2000_type2_or3";
@@ -65,7 +63,10 @@ fn arguments(values: &[String]) -> Result<(Option<i32>, Vec<&str>), String> {
                 break;
             }
             option if option.starts_with('-') => {
-                return Err(format!("unexpected argument {option}; {usage}", usage = usage()));
+                return Err(format!(
+                    "unexpected argument {option}; {usage}",
+                    usage = usage()
+                ));
             }
             _ => {
                 files.push(values[i].as_str());
@@ -74,7 +75,10 @@ fn arguments(values: &[String]) -> Result<(Option<i32>, Vec<&str>), String> {
         }
     }
     if files.is_empty() || files.iter().any(|path| path.is_empty()) {
-        return Err(format!("at least one explicit local SPK file required; {}", usage()));
+        return Err(format!(
+            "at least one explicit local SPK file required; {}",
+            usage()
+        ));
     }
     Ok((target, files))
 }
@@ -235,15 +239,27 @@ mod tests {
         for arguments in [
             vec![],
             vec!["--target".to_string()],
-            vec!["--target".to_string(), "nan".to_string(), "x.bsp".to_string()],
-            vec!["--target".to_string(), "1".to_string(), "--target".to_string()],
+            vec![
+                "--target".to_string(),
+                "nan".to_string(),
+                "x.bsp".to_string(),
+            ],
+            vec![
+                "--target".to_string(),
+                "1".to_string(),
+                "--target".to_string(),
+            ],
             vec!["--unknown".to_string(), "x.bsp".to_string()],
         ] {
             assert!(super::arguments(&arguments).is_err());
         }
         assert_eq!(
-            super::arguments(&["--target".to_string(), "399".to_string(), "x.bsp".to_string()])
-                .unwrap(),
+            super::arguments(&[
+                "--target".to_string(),
+                "399".to_string(),
+                "x.bsp".to_string()
+            ])
+            .unwrap(),
             (Some(399), vec!["x.bsp"])
         );
     }
@@ -256,12 +272,20 @@ mod tests {
     }
 
     fn put_i32(bytes: &mut [u8], offset: usize, value: i32, big: bool) {
-        let encoded = if big { value.to_be_bytes() } else { value.to_le_bytes() };
+        let encoded = if big {
+            value.to_be_bytes()
+        } else {
+            value.to_le_bytes()
+        };
         bytes[offset..offset + 4].copy_from_slice(&encoded);
     }
 
     fn put_f64(bytes: &mut [u8], offset: usize, value: f64, big: bool) {
-        let encoded = if big { value.to_be_bytes() } else { value.to_le_bytes() };
+        let encoded = if big {
+            value.to_be_bytes()
+        } else {
+            value.to_le_bytes()
+        };
         bytes[offset..offset + 8].copy_from_slice(&encoded);
     }
 
