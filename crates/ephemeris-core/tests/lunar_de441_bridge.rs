@@ -17,10 +17,10 @@ use std::io::{self, Cursor, Read, Seek, SeekFrom};
 use std::rc::Rc;
 
 use virgostars_ephemeris_core::de441::{De441, De441Error, JulianDateTdb};
+use virgostars_ephemeris_core::geometry::AngularSeparationError;
 use virgostars_ephemeris_core::lunar_phase::{
     geometric_lunar_illumination_from_de441, LunarDe441Error, LunarIlluminationError,
 };
-use virgostars_ephemeris_core::geometry::AngularSeparationError;
 
 const RECORD_BYTES: usize = 3000;
 const FIRST_RECORD: usize = RECORD_BYTES * 2;
@@ -114,7 +114,9 @@ fn explicit_preflight_error_for_nonfinite_epoch_and_reader_coverage_error() {
     for jd in [999.0, 1064.000_001] {
         assert!(matches!(
             geometric_lunar_illumination_from_de441(&mut eph, JulianDateTdb(jd)),
-            Err(LunarDe441Error::Ephemeris(De441Error::OutsideCoverage { .. }))
+            Err(LunarDe441Error::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            ))
         ));
     }
 }
@@ -191,7 +193,8 @@ fn bridge_reuses_record_cache_and_recovers_after_injected_io_failure() {
         inner: Cursor::new(fixture()),
         reads: reads.clone(),
         fail: fail.clone(),
-    }).unwrap();
+    })
+    .unwrap();
 
     fail.set(true);
     let err = geometric_lunar_illumination_from_de441(&mut eph, JulianDateTdb(1016.0))
@@ -202,7 +205,10 @@ fn bridge_reuses_record_cache_and_recovers_after_injected_io_failure() {
 
     let before = reads.get();
     let first = geometric_lunar_illumination_from_de441(&mut eph, JulianDateTdb(1016.0)).unwrap();
-    assert!(reads.get() > before, "reader must load first coefficient record");
+    assert!(
+        reads.get() > before,
+        "reader must load first coefficient record"
+    );
     near(first.illuminated_fraction, 0.5, 1e-14);
     let cached_reads = reads.get();
     let second = geometric_lunar_illumination_from_de441(&mut eph, JulianDateTdb(1020.0)).unwrap();
