@@ -2,6 +2,7 @@
 // Modification (2026-11-12): deterministic malformed-header regression cases.
 // Modification (2026-11-13): adjacent-series and incomplete-pointer boundary cases.
 // Modification (2026-11-13): reject mismatched DE identity and truncated headers.
+// Modification (2026-11-13): degenerate coverage and fractional record counts.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -192,6 +193,24 @@ fn rejects_truncated_header_without_panicking() {
         assert!(
             matches!(De441::new(Cursor::new(bytes)), Err(De441Error::Io(_))),
             "truncated length {length}"
+        );
+    }
+}
+
+#[test]
+fn rejects_degenerate_coverage_and_fractional_record_count() {
+    for (start, end, expected) in [
+        (1000.0, 1000.0, "invalid coverage or Earth/Moon mass ratio"),
+        (1064.0, 1000.0, "invalid coverage or Earth/Moon mass ratio"),
+        (1000.0, 1016.0, "invalid record count or size"),
+    ] {
+        let mut bytes = synthetic_header();
+        f64_field(&mut bytes, 2652, start);
+        f64_field(&mut bytes, 2660, end);
+        let result = De441::new(Cursor::new(bytes));
+        assert!(
+            matches!(result, Err(De441Error::InvalidFile(message)) if message == expected),
+            "coverage {start}..{end}"
         );
     }
 }
