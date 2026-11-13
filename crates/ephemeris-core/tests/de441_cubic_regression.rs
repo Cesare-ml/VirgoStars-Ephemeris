@@ -60,8 +60,14 @@ fn cubic_chebyshev_position_and_analytic_velocity_match_independent_polynomials(
     // Each granule spans 16 TDB days, so dx/dJD=2/16.
     let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
     for (jd, expected_position, expected_velocity) in [
+        // Negative normalized time, plus the exact first-granule start.
+        (1000.0, 7.0, 3.25),
+        (1004.0, 11.5, -0.5),
         (1008.0, 7.0, -1.25),
         (1012.0, 5.5, 1.0),
+        // Granule boundary must select the second polynomial, not the first.
+        (1016.0, 19.0, 2.125),
+        (1020.0, 22.5, -0.125),
         (1024.0, 20.0, -0.875),
         (1028.0, 17.5, -0.125),
         (1032.0, 21.0, 2.125),
