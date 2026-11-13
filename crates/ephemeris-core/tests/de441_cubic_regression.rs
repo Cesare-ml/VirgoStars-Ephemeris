@@ -125,3 +125,43 @@ fn cubic_interpolation_keeps_axes_separate_and_reverses_relative_states() {
     assert_eq!(reverse.position_km, [-7.0, -4.0, 3.0]);
     assert_eq!(reverse.velocity_km_per_day, [1.25, 0.25, 0.375]);
 }
+
+#[test]
+fn cubic_velocity_agrees_with_centered_position_difference_inside_each_granule() {
+    // Independent numerical cross-check of the analytic derivative at non-boundary
+    // epochs in both granules. The step is exactly representable in binary days.
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let step_days = 1.0 / 1024.0;
+    for jd in [1005.25, 1011.75, 1019.25, 1026.75] {
+        let before = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd - step_days),
+            )
+            .unwrap();
+        let at = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        let after = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd + step_days),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            let numerical_velocity =
+                (after.position_km[axis] - before.position_km[axis]) / (2.0 * step_days);
+            // Centered differences of a cubic have O(h^2) truncation error.
+            assert!(
+                (at.velocity_km_per_day[axis] - numerical_velocity).abs() < 1.0e-6,
+                "velocity/position derivative mismatch at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
