@@ -70,7 +70,8 @@ fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -
 
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let options = parse_args(&args).map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let options = parse_args(&args)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     // De441::open validates the classic header and declared file length.
     // This intentionally does not read or certify any coefficient values.
     let ephemeris = De441::open(&options.file)?;
@@ -151,7 +152,12 @@ mod tests {
             vec!["--at-jd".to_owned()],
             vec!["file.eph".to_owned(), "2451545".to_owned()],
             vec!["file.eph".to_owned(), "--at-jd".to_owned()],
-            vec!["file.eph".to_owned(), "--at-jd".to_owned(), "1".to_owned(), "extra".to_owned()],
+            vec![
+                "file.eph".to_owned(),
+                "--at-jd".to_owned(),
+                "1".to_owned(),
+                "extra".to_owned(),
+            ],
         ] {
             assert!(parse_args(&args).is_err());
         }
