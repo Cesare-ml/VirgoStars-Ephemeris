@@ -389,7 +389,7 @@ mod tests {
             &[seg(301, 399, 2, [10.0, 0.0], [0.0, 0.0])],
         );
         // Footer RSIZE occupies directory word 3 after the 8-word Type-2 record.
-        let footer_rsize = (INITIAL_WORD + 8 - 1) * 8;
+        let footer_rsize = (INITIAL_WORD + 8 + 1) * 8;
         double(&mut corrupt, footer_rsize, 7.0, SpkByteOrder::BigEndian);
         let mut set = SpkKernelSet::new();
         set.load(Cursor::new(old)).unwrap();
