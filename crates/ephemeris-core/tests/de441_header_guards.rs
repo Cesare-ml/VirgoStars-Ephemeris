@@ -5,6 +5,7 @@
 // Modification (2026-11-13): degenerate coverage and fractional record counts.
 // Modification (2026-11-13): guard extreme coefficient-pointer integers.
 // Modification (2026-11-13): align extreme first-word expectation with length validation.
+// Modification (2026-11-13): same-body zero states and epoch coverage boundaries.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -242,6 +243,35 @@ fn rejects_extreme_coefficient_pointer_values_without_panicking() {
         assert!(
             matches!(result, Err(De441Error::InvalidFile(message)) if message == expected),
             "offset {offset}, value {value}"
+        );
+    }
+}
+
+#[test]
+fn identical_body_state_is_zero_at_inclusive_coverage_endpoints() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    let mut reader = De441::new(Cursor::new(synthetic_header())).unwrap();
+    for jd in [1000.0, 1032.0, 1064.0] {
+        let state = reader
+            .state(Body::Moon, Body::Moon, JulianDateTdb(jd))
+            .unwrap();
+        assert_eq!(state.position_km, [0.0; 3]);
+        assert_eq!(state.velocity_km_per_day, [0.0; 3]);
+        assert_eq!(state.epoch, JulianDateTdb(jd));
+    }
+}
+
+#[test]
+fn identical_body_state_still_rejects_out_of_coverage_epochs() {
+    use virgostars_ephemeris_core::de441::{Body, JulianDateTdb};
+
+    let mut reader = De441::new(Cursor::new(synthetic_header())).unwrap();
+    for jd in [999.0, 1065.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let result = reader.state(Body::Earth, Body::Earth, JulianDateTdb(jd));
+        assert!(
+            matches!(result, Err(De441Error::OutsideCoverage { .. })),
+            "epoch {jd}"
         );
     }
 }
