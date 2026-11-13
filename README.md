@@ -22,6 +22,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
+- [E1 SPK reference-matrix breadth audit (not a numerical accuracy test)](docs/SPK_E1_REFERENCE_MATRIX_AUDIT_2026-11-13.md)
 - [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
 - [Proposed public contracts](docs/API_CONTRACTS.md)
 - [Contributor and AI-agent rules](AGENTS.md)
