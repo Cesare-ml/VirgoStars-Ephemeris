@@ -33,7 +33,9 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::spk_direct_state::{direct_spk_state, select_covering_segment, SpkDirectState, SpkStateError};
+use crate::spk_direct_state::{
+    direct_spk_state, select_covering_segment, SpkDirectState, SpkStateError,
+};
 use crate::spk_index::SpkIndex;
 
 /// Geometric target-minus-center state in fixed NAIF frame 1 (J2000/ICRF).
@@ -120,7 +122,11 @@ impl<R: Read + Seek> SpkStateResolver for SingleKernel<'_, R> {
 /// Selects the last covering descriptor for each link *without* evaluating
 /// coefficients. A missing path above a shared ancestor is harmless; missing
 /// connections between the requested bodies are not. A cycle is never followed.
-fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> Result<Vec<i32>, SpkRelativeError> {
+fn ancestors<S: SpkStateResolver>(
+    resolver: &S,
+    body: i32,
+    et: f64,
+) -> Result<Vec<i32>, SpkRelativeError> {
     let mut path = Vec::new();
     let mut visited = HashSet::new();
     let mut node = body;
