@@ -64,6 +64,33 @@ class E1MatrixAuditTests(unittest.TestCase):
         issues, _, _ = AUDIT.audit_e1_matrix(rows)
         self.assertTrue(any("two distinct planetary" in item for item in issues))
 
+    def test_planet_center_and_barycenter_are_one_physical_system(self):
+        # 4 = Mars system barycenter; 499 = Mars body center.
+        # Different NAIF IDs must not masquerade as two planets.
+        rows = AUDIT.parse_reference(synthetic_document(CORE + [(4, 399), (499, 399)]))
+        issues, planets, shared = AUDIT.audit_e1_matrix(rows)
+        self.assertTrue(any("two distinct planetary systems" in issue for issue in issues))
+        self.assertEqual(planets, [])
+        self.assertEqual(shared, [])
+
+    def test_mixed_planet_center_and_barycenter_plus_another_planet_passes(self):
+        rows = AUDIT.parse_reference(
+            synthetic_document(CORE + [(4, 399), (499, 399), (5, 399)])
+        )
+        issues, planets, shared = AUDIT.audit_e1_matrix(rows)
+        self.assertEqual(issues, [])
+        self.assertEqual(planets, [(4, 399), (5, 399)])
+        self.assertEqual(len(shared), 3)
+
+    def test_all_supported_naif_centers_map_to_correct_barycenter_system(self):
+        for system in (1, 2, 4, 5, 6, 7, 8, 9):
+            with self.subTest(system=system):
+                self.assertEqual(AUDIT.planet_system(system), system)
+                self.assertEqual(AUDIT.planet_system(system * 100 + 99), system)
+        for unrelated in (0, 3, 10, 301, 399, 500, 100000):
+            with self.subTest(unrelated=unrelated):
+                self.assertIsNone(AUDIT.planet_system(unrelated))
+
     def test_disjoint_epoch_sets_do_not_satisfy_shared_epoch_requirement(self):
         base = AUDIT.parse_reference(synthetic_document(CORE))
         planets = AUDIT.parse_reference(synthetic_document([(4, 399), (5, 399)], (100, 200, 300)))
