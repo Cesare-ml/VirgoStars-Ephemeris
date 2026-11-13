@@ -60,6 +60,8 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Check offline SPK NAIF reference parser and residuals
         run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Check local SPK coverage metadata inspector on Ubuntu
+        run: cargo test --workspace --example inspect_spk_coverage --locked
       - name: Check offline SPK NAIF reference generator and SHA256 verification
         run: python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
       - name: Run optimized workspace regression tests
@@ -90,6 +92,8 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Run SPK reference comparator regressions on Windows
         run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Test SPK coverage metadata inspector on Windows
+        run: cargo test --workspace --example inspect_spk_coverage --locked
       - name: Run offline SPK NAIF generator regressions on Windows
         run: python -m unittest discover -s scripts/tests -p test_spk_naif_reference.py
       - name: Run Clippy natively on Windows
@@ -110,6 +114,8 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Run SPK reference comparator regressions on macOS
         run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Test SPK coverage metadata inspector on macOS
+        run: cargo test --workspace --example inspect_spk_coverage --locked
       - name: Run offline SPK NAIF generator regressions on macOS
         run: python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
       - name: Run Clippy natively on macOS
