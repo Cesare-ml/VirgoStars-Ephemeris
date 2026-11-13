@@ -68,6 +68,10 @@ jobs:
       - name: Run Rust workspace tests
         if: steps.workspace.outputs.available == 'true'
         run: cargo test --workspace --locked
+      # Validate the example's own #[test] cases, not only its compilation.
+      - name: Test classic DE441 header inspector (synthetic fixture)
+        if: steps.workspace.outputs.available == 'true'
+        run: cargo test --locked --example inspect_classic_de441
       - name: Check Rust lint
         if: steps.workspace.outputs.available == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
