@@ -145,6 +145,83 @@ class E1MatrixAuditTests(unittest.TestCase):
             with self.subTest(altered=altered[:60]), self.assertRaises(ValueError):
                 AUDIT.parse_reference(altered)
 
+    def test_plan_explicit_e1_matrix_passes_same_audit_as_csv(self):
+        cases = AUDIT.plan_e1_cases([4, 5], [0.0, 86400.0, 172800.0])
+        self.assertEqual(len(cases), 15)
+        self.assertEqual(cases[:3], [(10, 399, 0.0), (10, 399, 86400.0),
+                                     (10, 399, 172800.0)])
+        self.assertEqual(cases[-3:], [(5, 399, 0.0), (5, 399, 86400.0),
+                                       (5, 399, 172800.0)])
+        self.assertEqual(AUDIT.audit_e1_matrix(cases)[0], [])
+
+    def test_plan_no_default_planets_or_epochs(self):
+        for planets, times in (
+            ([], [0.0, 86400.0, 172800.0]),
+            ([4], [0.0, 86400.0, 172800.0]),
+            ([4, 5], []),
+            ([4, 5], [0.0, 86400.0]),
+        ):
+            with self.subTest(planets=planets, times=times), self.assertRaises(ValueError):
+                AUDIT.plan_e1_cases(planets, times)
+
+    def test_plan_rejects_same_physical_planet_and_unsupported_ids(self):
+        for planets in ([4, 499], [5, 599], [4, 4], [3, 4],
+                        [301, 4], [399, 5]):
+            with self.subTest(planets=planets), self.assertRaises(ValueError):
+                AUDIT.plan_e1_cases(planets, [0.0, 86400.0, 172800.0])
+        self.assertEqual(
+            len(AUDIT.plan_e1_cases([499, 5], [0.0, 86400.0, 172800.0])),
+            15,
+        )
+
+    def test_plan_rejects_duplicate_and_nonfinite_epochs(self):
+        for epochs in ([0.0, -0.0, 86400.0], [0.0, float("nan"), 1.0],
+                       [0.0, float("inf"), 1.0], [0.0, 1.0, float("-inf")]):
+            with self.subTest(epochs=epochs), self.assertRaises(ValueError):
+                AUDIT.plan_e1_cases([4, 5], epochs)
+
+    def test_plan_allows_four_user_supplied_epochs_without_implicit_values(self):
+        epochs = [-86400.0, 0.0, 123.5, 86400.0]
+        cases = AUDIT.plan_e1_cases([5, 499], epochs)
+        self.assertEqual(len(cases), 20)
+        self.assertEqual({et for _, _, et in cases}, set(epochs))
+        self.assertEqual(AUDIT.audit_e1_matrix(cases)[0], [])
+
+    def test_plan_cli_prints_only_generator_compatible_case_flags(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+
+        out, err = StringIO(), StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = AUDIT.main(["--plan", "--planet", "4", "--planet", "5",
+                               "--epoch", "0", "--epoch", "86400",
+                               "--epoch", "172800"])
+        self.assertEqual(code, 0)
+        flags = out.getvalue().splitlines()
+        self.assertEqual(len(flags), 15)
+        self.assertEqual(flags[0], "--case 10:399:0")
+        self.assertEqual(flags[-1], "--case 5:399:172800")
+        self.assertTrue(all(flag.startswith("--case ") for flag in flags))
+        self.assertIn("NOT CERTIFIED", err.getvalue())
+
+    def test_plan_cli_fails_closed_on_incorrect_usage(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        for args in (
+            ["--plan", "--planet", "4", "--planet", "499",
+             "--epoch", "0", "--epoch", "86400", "--epoch", "172800"],
+            ["--plan", "--planet", "4", "--planet", "5",
+             "--epoch", "0", "--epoch", "0", "--epoch", "172800"],
+            ["--reference", "/unused.csv", "--plan",
+             "--planet", "4", "--planet", "5",
+             "--epoch", "0", "--epoch", "86400", "--epoch", "172800"],
+            ["--epoch", "0", "--reference", "/unused.csv"],
+            [],
+        ):
+            with self.subTest(args=args), redirect_stderr(StringIO()):
+                self.assertEqual(AUDIT.main(args), 2)
+
     def test_cli_exit_status_distinguishes_pass_incomplete_and_invalid(self):
         with TemporaryDirectory() as folder:
             csv = Path(folder) / "reference.csv"
