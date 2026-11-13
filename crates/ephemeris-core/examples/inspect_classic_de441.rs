@@ -39,7 +39,9 @@ enum Request {
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'static str> {
     let mut args = args.into_iter();
-    let path = args.next().ok_or("a local classic DE441 file path is required")?;
+    let path = args
+        .next()
+        .ok_or("a local classic DE441 file path is required")?;
     if args.next().is_some() {
         return Err("exactly one file path is required");
     }
