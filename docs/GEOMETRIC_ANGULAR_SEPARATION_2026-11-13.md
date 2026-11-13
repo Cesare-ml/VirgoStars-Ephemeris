@@ -63,8 +63,11 @@ Sun/Moon displacement vectors with independently validated DE441/SPK or an
 equivalent accepted source and matched epochs/frames. Apply separately
 specified corrections before naming any result **apparent**. Lunar
 illuminated fraction additionally requires Sun–Moon–observer geometry,
-not just observer-centered elongation. Do not generate user-facing lunar
-calendar predictions from this primitive alone.
+not just observer-centered elongation. The separate experimental
+[typed Moon illumination adapter](GEOMETRIC_LUNAR_ILLUMINATION_2026-11-13.md)
+uses this primitive with checked Sun/Earth and Moon/Earth DE441 state metadata.
+Do not generate user-facing lunar calendar predictions from these primitives
+without independent ephemeris and correction-mode validation.
 
 Original code is CPAL-1.0 (see repository `LICENSE` and `NOTICE`).
 No external data or dependencies are added. Required public attribution:
