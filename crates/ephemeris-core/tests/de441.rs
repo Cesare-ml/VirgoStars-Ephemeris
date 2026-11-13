@@ -1,4 +1,26 @@
-use std::io::Cursor;
+/*
+EXHIBIT A. Common Public Attribution License Version 1.0.
+
+The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+
+Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+
+The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+
+The Original Developer is the Initial Developer.
+
+The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+
+Contributors retain applicable rights in their own contributions under the terms of this License.
+
+[NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+SPDX-License-Identifier: CPAL-1.0
+*/
+
+// Modification record: 2026-11-14 — add audited constructor regressions,
+// including structural rejection and fail-closed read-error handling.
+
+use std::io::{self, Cursor, Read, Seek, SeekFrom};
 use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
 
 fn put_f64(bytes: &mut [u8], offset: usize, value: f64) {
@@ -411,5 +433,81 @@ fn audit_rejects_corrupt_first_record_without_interpolating_coefficients() {
         Err(De441Error::InvalidFile(
             "coefficient record has unexpected dates"
         ))
+    ));
+}
+
+#[test]
+fn audited_constructor_returns_usable_reader_after_whole_file_date_scan() {
+    let mut eph = De441::new_with_record_date_audit(Cursor::new(fixture())).unwrap();
+    assert_eq!(
+        eph.coverage(),
+        (JulianDateTdb(1000.0), JulianDateTdb(1064.0))
+    );
+    // The audit has already traversed every date pair; the caller can
+    // safely seek backwards to read the first record afterward.
+    let mercury = eph
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1000.0),
+        )
+        .unwrap();
+    assert_eq!(mercury.position_km, [1.0, 11.0, 21.0]);
+}
+
+#[test]
+fn audited_constructor_rejects_late_damage_before_exposing_reader() {
+    for (offset, invalid) in [
+        (6000usize, f64::NAN),
+        (9000, 1033.0),
+        (9008, 1063.0),
+        (9008, f64::INFINITY),
+    ] {
+        let mut bytes = fixture();
+        put_f64(&mut bytes, offset, invalid);
+        // The legacy constructor remains deliberately header-only.
+        assert!(De441::new(Cursor::new(bytes.clone())).is_ok());
+        assert!(matches!(
+            De441::new_with_record_date_audit(Cursor::new(bytes)),
+            Err(De441Error::InvalidFile(
+                "coefficient record has unexpected dates"
+            ))
+        ));
+    }
+}
+
+struct FailingReadAt {
+    source: Cursor<Vec<u8>>,
+    failure_offset: u64,
+}
+
+impl Read for FailingReadAt {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.source.position() == self.failure_offset {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "synthetic record read failure",
+            ));
+        }
+        self.source.read(buffer)
+    }
+}
+
+impl Seek for FailingReadAt {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.source.seek(position)
+    }
+}
+
+#[test]
+fn audited_constructor_propagates_mid_scan_io_error() {
+    let source = FailingReadAt {
+        source: Cursor::new(fixture()),
+        failure_offset: 9000,
+    };
+    assert!(matches!(
+        De441::new_with_record_date_audit(source),
+        Err(De441Error::Io(error))
+            if error.kind() == io::ErrorKind::PermissionDenied
     ));
 }
