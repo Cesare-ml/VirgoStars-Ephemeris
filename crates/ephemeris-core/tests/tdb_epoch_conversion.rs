@@ -15,9 +15,7 @@
 //! Public API checks for TDB epoch representation conversion.
 //! These are binary64 arithmetic tests, not NASA/JPL astronomical validation.
 
-use virgostars_ephemeris_core::{
-    JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY,
-};
+use virgostars_ephemeris_core::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
 
 #[test]
 fn exact_day_and_half_day_offsets_round_trip() {
