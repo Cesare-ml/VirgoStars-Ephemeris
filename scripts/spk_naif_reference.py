@@ -26,11 +26,13 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import json
 import hmac
 import math
 from pathlib import Path
 import re
 import sys
+import subprocess
 from typing import Any, Sequence
 
 COLUMNS = "et_tdb_seconds,target_id,center_id,x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s"
@@ -214,6 +216,126 @@ def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
     # The CSV's declared digest is not an authenticity signature.
 
 
+
+def approved_limit(raw: str, label: str) -> float:
+    """Require finite, strictly positive, caller-approved per-component limits."""
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError(f"{label} must be numeric") from error
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{label} must be finite and strictly positive")
+    return value
+
+
+def run_validation(
+    paths: Sequence[Path],
+    raw_cases: Sequence[str],
+    reference_path: Path,
+    receipt_path: Path,
+    position_limit: float,
+    velocity_limit: float,
+    spice: Any,
+    *,
+    runner: Any = subprocess.run,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Generate independent references, run the Rust comparator and audit bytes.
+
+    A successful receipt is created only after the comparator returns zero
+    *and* every source and generated CSV has been rehashed. No network access
+    or background jobs are initiated. Tests inject a fake runner and SPICE.
+    """
+    if not (math.isfinite(position_limit) and position_limit > 0):
+        raise ValueError("max position component km must be finite and positive")
+    if not (math.isfinite(velocity_limit) and velocity_limit > 0):
+        raise ValueError("max velocity component km/s must be finite and positive")
+    cases = parse_cases(raw_cases)
+    if reference_path == receipt_path or reference_path.resolve() == receipt_path.resolve():
+        raise ValueError("reference CSV and receipt JSON must be different paths")
+    if reference_path.exists() or receipt_path.exists():
+        raise ValueError("reference or receipt already exists: refuse to overwrite evidence")
+    if not reference_path.parent.is_dir() or not receipt_path.parent.is_dir():
+        raise ValueError("reference and receipt output directories must exist")
+    script_path = Path(__file__)
+    before_source_digest = hashlib.sha256(script_path.read_bytes()).hexdigest()
+    generated_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    document = generate_reference(
+        paths,
+        cases,
+        spice,
+        generated_utc=generated_utc,
+        generator_digest=before_source_digest,
+    )
+    verify_reference_hashes(document, paths)
+    with reference_path.open("x", encoding="utf-8", newline="\n") as output:
+        output.write(document)
+    original_csv_digest = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parents[1]
+    command = [
+        "cargo",
+        "run",
+        "--offline",
+        "--locked",
+        "--example",
+        "validate_spk_reference",
+        "--",
+        str(reference_path.resolve()),
+        format(position_limit, ".17g"),
+        format(velocity_limit, ".17g"),
+        *(str(path.resolve()) for path in paths),
+    ]
+    completed = runner(
+        command,
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        # Keep the reference for debugging, but never write a success receipt.
+        raise ValueError(
+            f"Rust SPK comparator exited {completed.returncode}; "
+            f"stderr={completed.stderr[-1600:]} stdout={completed.stdout[-1600:]}"
+        )
+    if not reference_path.is_file() or hashlib.sha256(reference_path.read_bytes()).hexdigest() != original_csv_digest:
+        raise ValueError("reference CSV bytes changed during Rust comparison")
+    verify_reference_hashes(reference_path.read_text(encoding="utf-8"), paths)
+    manifest = kernel_manifest(paths)
+    receipt = {
+        "status": "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING",
+        "generated_utc": generated_utc,
+        "completed_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "reference_csv": str(reference_path.resolve()),
+        "reference_sha256": original_csv_digest,
+        "generator_sha256": before_source_digest,
+        "toolkit_version": metadata_from_csv(document)["toolkit_version"],
+        "provider": "NAIF_SPICE",
+        "method": "spkezr",
+        "frame": "J2000",
+        "corrections": "NONE",
+        "time_scale": "TDB_SECONDS_PAST_J2000",
+        "position_units": "km",
+        "velocity_units": "km/s",
+        "max_position_component_km": position_limit,
+        "max_velocity_component_km_s": velocity_limit,
+        "case_count": len(cases),
+        "ordered_kernels": [
+            {"path": str(path.resolve()), "name": name, "size_bytes": size, "sha256": digest}
+            for path, (name, size, digest) in zip(paths, manifest)
+        ],
+        "rust_command": command,
+        "rust_stdout": completed.stdout,
+        "rust_stderr": completed.stderr,
+        "scientific_accuracy_certified": False,
+        "provenance_review_required": True,
+    }
+    with receipt_path.open("x", encoding="utf-8", newline="\n") as output:
+        json.dump(receipt, output, indent=2, sort_keys=True)
+        output.write("\n")
+    return receipt
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate NAIF geometric SPK references or verify kernel SHA256."
@@ -227,11 +349,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     verify = subparsers.add_parser("verify")
     verify.add_argument("--reference", type=Path, required=True)
     verify.add_argument("--kernel", action="append", required=True, type=Path)
+    audit = subparsers.add_parser("run", help="Generate, verify and compare locally in one command")
+    audit.add_argument("--kernel", action="append", required=True, type=Path)
+    audit.add_argument("--case", action="append", required=True)
+    audit.add_argument("--reference", type=Path, required=True)
+    audit.add_argument("--receipt", type=Path, required=True)
+    audit.add_argument("--max-position-km", required=True)
+    audit.add_argument("--max-velocity-km-s", required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == "verify":
             verify_reference_hashes(args.reference.read_text(encoding="utf-8"), args.kernel)
             print(f"Verified {len(args.kernel)} ordered kernel SHA256 hashes, names and sizes.")
+            return 0
+        if args.action == "run":
+            # Real independent SPICE bindings are required for this command;
+            # mocked CI tests invoke run_validation with an injected fake.
+            try:
+                import spiceypy as spice
+            except ImportError as error:
+                raise ValueError(
+                    "run mode requires independently installed spiceypy/NAIF Toolkit"
+                ) from error
+            receipt = run_validation(
+                args.kernel,
+                args.case,
+                args.reference,
+                args.receipt,
+                approved_limit(args.max_position_km, "position tolerance"),
+                approved_limit(args.max_velocity_km_s, "velocity tolerance"),
+                spice,
+            )
+            print(
+                f"Rust comparator passed {receipt['case_count']} cases; "
+                "human reference-provenance review is still required. "
+                f"Receipt: {args.receipt}"
+            )
             return 0
         cases = parse_cases(args.case)
         if args.output.exists() and not args.overwrite:
