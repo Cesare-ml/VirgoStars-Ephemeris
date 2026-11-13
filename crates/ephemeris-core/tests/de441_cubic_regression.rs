@@ -88,7 +88,6 @@ fn cubic_chebyshev_position_and_analytic_velocity_match_independent_polynomials(
     }
 }
 
- 
 // Modification (2026-11-13): exercise independent Y/Z coefficient offsets and
 // reversed target/center signs with cubic velocity in TDB days.
 #[test]
@@ -107,13 +106,21 @@ fn cubic_interpolation_keeps_axes_separate_and_reverses_relative_states() {
     let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
     // At JD 1008, x=0, so T2=-1, T3=0, and dx/dJD=1/8.
     let forward = ephemeris
-        .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1008.0))
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1008.0),
+        )
         .unwrap();
     assert_eq!(forward.position_km, [7.0, 4.0, -3.0]);
     assert_eq!(forward.velocity_km_per_day, [-1.25, -0.25, -0.375]);
 
     let reverse = ephemeris
-        .state(Body::SolarSystemBarycenter, Body::Mercury, JulianDateTdb(1008.0))
+        .state(
+            Body::SolarSystemBarycenter,
+            Body::Mercury,
+            JulianDateTdb(1008.0),
+        )
         .unwrap();
     assert_eq!(reverse.position_km, [-7.0, -4.0, 3.0]);
     assert_eq!(reverse.velocity_km_per_day, [1.25, 0.25, 0.375]);
