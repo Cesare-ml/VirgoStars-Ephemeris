@@ -27,7 +27,7 @@ use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use virgostars_ephemeris_core::de441::{De441, JulianDateTdb};
+use virgostars_ephemeris_core::de441::{De441, De441Error, JulianDateTdb};
 
 const USAGE: &str = "Usage: inspect_classic_de441 <path-to-classic-de441-file>";
 
@@ -61,7 +61,7 @@ fn coverage_csv((start, end): (JulianDateTdb, JulianDateTdb)) -> String {
     )
 }
 
-fn inspect<R: Read + Seek>(source: R) -> Result<String, virgostars_ephemeris_core::de441::De441Error> {
+fn inspect<R: Read + Seek>(source: R) -> Result<String, De441Error> {
     let ephemeris = De441::new(source)?;
     Ok(coverage_csv(ephemeris.coverage()))
 }
@@ -72,7 +72,7 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Ok(Request::File(path)) => match std::fs::File::open(&path).and_then(|file| Ok(file)) {
+        Ok(Request::File(path)) => match std::fs::File::open(&path) {
             Ok(file) => match inspect(file) {
                 Ok(csv) => {
                     print!("{csv}");
