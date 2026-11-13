@@ -37,7 +37,10 @@ const USAGE: &str =
 #[derive(Debug, PartialEq, Eq)]
 enum Request {
     Help,
-    File { path: PathBuf, audit_record_dates: bool },
+    File {
+        path: PathBuf,
+        audit_record_dates: bool,
+    },
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'static str> {
@@ -53,7 +56,9 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Request, &'sta
     }
     let audit_record_dates = first == "--audit-record-dates";
     let path = if audit_record_dates {
-        args.next().ok_or("a local classic DE441 file path is required")?
+        args
+            .next()
+            .ok_or("a local classic DE441 file path is required")?
     } else {
         first
     };
@@ -169,7 +174,10 @@ mod tests {
         );
         assert_eq!(parse_args([OsString::from("--help")]), Ok(Request::Help));
         assert_eq!(
-            parse_args([OsString::from("--audit-record-dates"), OsString::from("test.eph")]),
+            parse_args([
+                OsString::from("--audit-record-dates"),
+                OsString::from("test.eph"),
+            ]),
             Ok(Request::File {
                 path: PathBuf::from("test.eph"),
                 audit_record_dates: true,
@@ -184,7 +192,8 @@ mod tests {
 
     #[test]
     fn reports_validated_classic_header_coverage_without_state_interpolation() {
-        let (csv, audit_count) = inspect(Cursor::new(synthetic_header_and_record()), false).unwrap();
+        let (csv, audit_count) =
+            inspect(Cursor::new(synthetic_header_and_record()), false).unwrap();
         assert_eq!(audit_count, None);
         assert_eq!(
             csv,
@@ -201,7 +210,7 @@ mod tests {
         short.truncate(8500);
         assert!(inspect(Cursor::new(short), false).is_err());
     }
-    
+
     #[test]
     fn optional_audit_rejects_corrupt_record_dates_before_producing_csv() {
         let (csv, checked) = inspect(Cursor::new(synthetic_header_and_record()), true).unwrap();
@@ -213,7 +222,9 @@ mod tests {
         assert!(inspect(Cursor::new(corrupted.clone()), false).is_ok());
         assert!(matches!(
             inspect(Cursor::new(corrupted), true),
-            Err(De441Error::InvalidFile("coefficient record has unexpected dates"))
+            Err(De441Error::InvalidFile(
+                "coefficient record has unexpected dates"
+            ))
         ));
     }
 }
