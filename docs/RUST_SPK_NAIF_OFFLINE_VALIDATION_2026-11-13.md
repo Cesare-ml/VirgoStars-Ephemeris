@@ -73,3 +73,51 @@ The next true validation milestone is a **manually executed and recorded actual 
 ## CPAL-1.0 modification record
 
 2026-11-13: Added original `crates/ephemeris-core/examples/validate_spk_reference.rs` reference harness, extended `.github/workflows/rust-dev.yml` with read-only three-platform parser/regression checks, and documented the scientific gates. Original VirgoStars work remains under [CPAL-1.0](../LICENSE), with the required [NOTICE](../NOTICE) and [attribution and credits](LICENSING_AND_CREDITS.md). No third-party kernel data, external source code, deployments, releases or production changes.
+
+## Reproducible independent reference generation and digest verification (2026-11-13)
+
+The add-on script [`scripts/spk_naif_reference.py`](../scripts/spk_naif_reference.py) closes the previous **manual-only** manifest step. It is a scientific **test utility**, not a second astronomical implementation. It calls an independently installed **NAIF Toolkit through SpiceyPy** *only when generating reference vectors*. Rust remains the sole source for all VirgoStars production astronomy.
+
+Generate a reference from already obtained external kernels, using explicit **TDB seconds past J2000**. File order matters. The utility never downloads kernels, converts UTC, invents epochs, or bundles external data.
+
+```powershell
+# Run in the repository root. Install spiceypy in your own isolated
+# Python environment before using generate; CI mocks the SPICE calls.
+python scripts/spk_naif_reference.py generate `
+  --kernel "C:\\kernels\\de440s.bsp" `
+  --case "301:399:0" `
+  --case "301:399:86400" `
+  --case "399:0:0" `
+  --output "C:\\my-validation\\spk-reference.csv"
+
+# Independent provenance preflight using Python stdlib only.
+python scripts/spk_naif_reference.py verify `
+  --reference "C:\\my-validation\\spk-reference.csv" `
+  --kernel "C:\\kernels\\de440s.bsp"
+
+# Supply separately reviewed, positive scientific tolerances; there
+# are NO defaults and NO independent accuracy claim from this example.
+cargo run --example validate_spk_reference -- `
+  "C:\\my-validation\\spk-reference.csv" `
+  <approved_position_component_km> `
+  <approved_velocity_component_km_per_second> `
+  "C:\\kernels\\de440s.bsp"
+```
+
+For bash, replace PowerShell continuation characters with backslashes. Add `--kernel` arguments in the same order to all three commands for a multi-kernel comparison. `--case` can be repeated for multiple finite epochs and distinct target/center pairs; duplicate triples and same-body tautologies are rejected. The example's target and observer IDs are merely candidate cases; they succeed **only if the chosen kernels actually cover those bodies/epochs using supported frame-1 SPK types 2 or 3**.
+
+The generator uses `spkezr(target, et, "J2000", "NONE", observer)`, records its NAIF toolkit version, the UTC creation timestamp, full-precision floating-point output, and an ordered manifest of kernel **names, byte sizes and SHA-256 digests**. It also records the **SHA-256 of the exact generator script source**. Its `verify` command rehashes every file and the current generator script and rejects missing, substituted, reordered, truncated or same-length-corrupted kernel bytes. On `generate`, it checks source hashes before and after independent SPICE evaluation and clears the global SPICE kernel pool even on errors. The output CSV is written only once all requested vectors and hash checks succeed; an existing output is not overwritten without explicit `--overwrite`.
+
+This is a stronger reproducibility gate, but **hash matching is not scientific validation by itself**: an attacker can regenerate all hashes and vector values. Scientific acceptance still requires an authentic and reviewed NAIF/SPICE source and matching loaded kernels, an independently approved test-case matrix and numerical error thresholds, and a recorded Rust comparator run. A real-kernel comparison has **not** yet been executed in CI.
+
+Offline mocked Python regressions run in Rust development CI on Ubuntu, Windows and macOS:
+
+```bash
+python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
+```
+
+These tests exercise manifest integrity, load order, duplicate/invalid time/IDs, nonfinite SPICE output, cleanup on failures and corrupt bytes; they **do not** call NAIF Toolkit or validate JPL numerical parity.
+
+### Modification record
+
+2026-11-13: added original validation-only `scripts/spk_naif_reference.py`, `scripts/tests/test_spk_naif_reference.py`, and read-only CI checks on three platforms. The source preserves the project CPAL-1.0/Exhibit A and VirgoStars attribution. No third-party source, kernel binary, network call, production component or runtime dependency was added to the Rust engine.
