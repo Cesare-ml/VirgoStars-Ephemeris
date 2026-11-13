@@ -285,10 +285,9 @@ fn granule_transition_uses_each_side_without_assuming_continuity() {
         } else {
             (10.0, 2.0, 3.0, 4.0)
         };
-        let expected_position = c0 + c1 * x + c2 * (2.0 * x * x - 1.0)
-            + c3 * (4.0 * x * x * x - 3.0 * x);
-        let expected_velocity =
-            (c1 + 4.0 * c2 * x + c3 * (12.0 * x * x - 3.0)) / 8.0;
+        let expected_position =
+            c0 + c1 * x + c2 * (2.0 * x * x - 1.0) + c3 * (4.0 * x * x * x - 3.0 * x);
+        let expected_velocity = (c1 + 4.0 * c2 * x + c3 * (12.0 * x * x - 3.0)) / 8.0;
         let state = ephemeris
             .state(
                 Body::Mercury,
