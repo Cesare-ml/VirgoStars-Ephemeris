@@ -284,13 +284,25 @@ fn second_granule_xyz_velocities_match_centered_differences() {
     let step_days = 1.0 / 1024.0;
     for jd in [1019.25, 1024.0, 1028.75] {
         let before = ephemeris
-            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd - step_days))
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd - step_days),
+            )
             .unwrap();
         let at = ephemeris
-            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd))
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
             .unwrap();
         let after = ephemeris
-            .state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(jd + step_days))
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd + step_days),
+            )
             .unwrap();
         for axis in 0..3 {
             let numerical_velocity =
