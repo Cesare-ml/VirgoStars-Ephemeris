@@ -35,12 +35,13 @@ coverage_start_et_tdb_seconds,coverage_end_et_tdb_seconds,candidate_j2000_type2_
 
 fn usage() -> &'static str {
     "usage: cargo run --offline --locked --example inspect_spk_coverage -- \
-     [--target NAIF_ID] <kernel1.bsp> [kernel2.bsp ...]\n\
+     [--target NAIF_ID] [--at-et ET_TDB_SECONDS] <kernel1.bsp> [kernel2.bsp ...]\n\
      ET is TDB seconds past J2000; kernel paths are in NAIF load order"
 }
 
-fn arguments(values: &[String]) -> Result<(Option<i32>, Vec<&str>), String> {
+fn arguments(values: &[String]) -> Result<(Option<i32>, Option<f64>, Vec<&str>), String> {
     let mut target = None;
+    let mut selected_et = None;
     let mut files = Vec::new();
     let mut i = 0;
     while i < values.len() {
@@ -56,6 +57,22 @@ fn arguments(values: &[String]) -> Result<(Option<i32>, Vec<&str>), String> {
                     raw.parse::<i32>()
                         .map_err(|_| "invalid --target NAIF i32 ID".to_string())?,
                 );
+                i += 2;
+            }
+            "--at-et" => {
+                if selected_et.is_some() {
+                    return Err("duplicate --at-et epoch".into());
+                }
+                let raw = values
+                    .get(i + 1)
+                    .ok_or_else(|| "--at-et requires TDB seconds past J2000".to_string())?;
+                let value = raw
+                    .parse::<f64>()
+                    .map_err(|_| "invalid --at-et epoch".to_string())?;
+                if !value.is_finite() {
+                    return Err("--at-et must be finite TDB seconds past J2000".into());
+                }
+                selected_et = Some(value);
                 i += 2;
             }
             "--" => {
@@ -80,23 +97,54 @@ fn arguments(values: &[String]) -> Result<(Option<i32>, Vec<&str>), String> {
             usage()
         ));
     }
-    Ok((target, files))
+    if selected_et.is_some() && target.is_none() {
+        return Err("--at-et requires an explicit --target NAIF ID".into());
+    }
+    Ok((target, selected_et, files))
 }
 
 fn is_candidate(segment: &SpkSegmentDescriptor) -> bool {
     segment.frame_id == 1 && matches!(segment.spk_type, 2 | 3)
 }
 
+/// Report the final covering descriptor for one target at an explicit ET.
+////
+//// This is *descriptor precedence*, not evidence that a complete relative
+//// path or the selected segment's coefficient records are usable.
+fn selected_descriptor(
+    indexes: &[SpkIndex],
+    target: i32,
+    et: f64,
+) -> Option<(usize, usize, SpkSegmentDescriptor)> {
+    indexes.iter().enumerate().rev().find_map(|(file_index, index)| {
+        index
+            .segments
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(segment_index, segment)| {
+                (segment.target_id == target
+                    && segment.start_tdb_seconds <= et
+                    && et <= segment.end_tdb_seconds)
+                    .then_some((file_index, segment_index, *segment))
+            })
+    })
+}
+
 fn render<W: Write>(
     output: &mut W,
     indexes: &[SpkIndex],
     target: Option<i32>,
+    selected: Option<(usize, usize)>,
 ) -> io::Result<usize> {
     writeln!(output, "{HEADER}")?;
     let mut count = 0;
     for (file_index, index) in indexes.iter().enumerate() {
         for (segment_index, segment) in index.segments.iter().enumerate() {
             if target.is_some_and(|id| segment.target_id != id) {
+                continue;
+            }
+            if selected.is_some_and(|location| location != (file_index, segment_index)) {
                 continue;
             }
             writeln!(
@@ -119,7 +167,7 @@ fn render<W: Write>(
 }
 
 fn run<W: Write>(values: &[String], output: &mut W) -> Result<usize, Box<dyn Error>> {
-    let (target, files) = arguments(values)
+    let (target, selected_et, files) = arguments(values)
         .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
 
     // Validate every supplied file before writing any CSV. A corrupt later
@@ -129,11 +177,28 @@ fn run<W: Write>(values: &[String], output: &mut W) -> Result<usize, Box<dyn Err
         let mut source = File::open(path)?;
         indexes.push(inspect_spk(&mut source)?);
     }
-    let matching = indexes
-        .iter()
-        .flat_map(|index| &index.segments)
-        .filter(|segment| target.is_none_or(|id| segment.target_id == id))
-        .count();
+    let selected = if let Some(et) = selected_et {
+        let target_id = target.expect("validated by arguments()");
+        let (file_index, segment_index, _) =
+            selected_descriptor(&indexes, target_id, et).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "no SPK segment covers the requested target at this ET",
+                )
+            })?;
+        Some((file_index, segment_index))
+    } else {
+        None
+    };
+    let matching = if selected.is_some() {
+        1
+    } else {
+        indexes
+            .iter()
+            .flat_map(|index| &index.segments)
+            .filter(|segment| target.is_none_or(|id| segment.target_id == id))
+            .count()
+    };
     if matching == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -141,7 +206,7 @@ fn run<W: Write>(values: &[String], output: &mut W) -> Result<usize, Box<dyn Err
         )
         .into());
     }
-    let count = render(output, &indexes, target)?;
+    let count = render(output, &indexes, target, selected)?;
     debug_assert_eq!(count, matching);
     Ok(count)
 }
@@ -189,7 +254,7 @@ mod tests {
 
     fn output_text(indexes: &[SpkIndex], target: Option<i32>) -> (String, usize) {
         let mut out = Vec::new();
-        let count = render(&mut out, indexes, target).unwrap();
+        let count = render(&mut out, indexes, target, None).unwrap();
         (String::from_utf8(out).unwrap(), count)
     }
 
@@ -260,7 +325,7 @@ mod tests {
                 "x.bsp".to_string()
             ])
             .unwrap(),
-            (Some(399), vec!["x.bsp"])
+            (Some(399), None, vec!["x.bsp"])
         );
     }
 
