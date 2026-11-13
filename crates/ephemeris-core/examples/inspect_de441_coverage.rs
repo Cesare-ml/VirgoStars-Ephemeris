@@ -88,7 +88,9 @@ fn probe_status(start: f64, end: f64, probe_jd_tdb: Option<f64>) -> &'static str
 
 fn csv_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) -> String {
     let (start, end) = ephemeris.coverage();
-    let probe = probe_jd_tdb.map(|jd| format!("{jd:.12}")).unwrap_or_default();
+    let probe = probe_jd_tdb
+        .map(|jd| format!("{jd:.12}"))
+        .unwrap_or_default();
     let status = probe_status(start.0, end.0, probe_jd_tdb);
     format!(
         "format,epoch_scale,declared_start_jd,declared_end_jd,probe_jd,probe_status\n\
@@ -115,8 +117,7 @@ fn json_report<R: Read + Seek>(ephemeris: &De441<R>, probe_jd_tdb: Option<f64>) 
             "\"declared_header_only\":true,",
             "\"scientific_accuracy_certified\":false}}"
         ),
-        start.0,
-        end.0
+        start.0, end.0
     )
 }
 
@@ -358,9 +359,24 @@ mod tests {
     fn json_option_rejects_unknown_or_duplicate_flags() {
         for args in [
             vec!["file.eph".into(), "--json".into(), "--json".into()],
-            vec!["file.eph".into(), "--json".into(), "--at-jd".into(), "1016".into()],
-            vec!["file.eph".into(), "--at-jd".into(), "1016".into(), "--json".into(), "--json".into()],
-            vec!["file.eph".into(), "--json".into(), "--require-coverage".into()],
+            vec![
+                "file.eph".into(),
+                "--json".into(),
+                "--at-jd".into(),
+                "1016".into(),
+            ],
+            vec![
+                "file.eph".into(),
+                "--at-jd".into(),
+                "1016".into(),
+                "--json".into(),
+                "--json".into(),
+            ],
+            vec![
+                "file.eph".into(),
+                "--json".into(),
+                "--require-coverage".into(),
+            ],
         ] {
             assert!(parse_args(&args).is_err());
         }
