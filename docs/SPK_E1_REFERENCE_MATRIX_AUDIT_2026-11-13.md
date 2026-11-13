@@ -80,6 +80,21 @@ Invalid input yields an `issues` list and the explicit
 `status=pass`; the full astronomy/provenance gates must be checked separately.
 `--json` and `--plan` cannot be combined.
 
+## Optional cross-check with the NAIF/Rust numeric receipt (draft #164)
+
+The receipt from draft [#164](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/164) is an **unmerged, experimental** JSON record of a separate Rust comparator run. When both reference CSV and receipt are available, the E1 auditor accepts an optional `--receipt` argument:
+
+```bash
+python3 scripts/audit_spk_e1_matrix.py \
+  --reference /path/to/spk-reference.csv \
+  --receipt /path/to/spk-comparison-receipt.json \
+  --json
+```
+
+Before reporting matrix breadth, it checks the receipt's `reference_sha256` against the **actual CSV bytes**, `case_count` against the parsed number of rows, the declared `J2000/NONE/TDB seconds/km/km-s` contract, real-toolkit-version string equality between files, generator script SHA-256, and the **ordered** kernel names, sizes and SHA-256 declarations against the CSV. The receipt must explicitly declare `COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING`, `scientific_accuracy_certified=false`, `provenance_review_required=true`, positive finite numeric comparator thresholds and the expected canonical offline Rust example command shape. The command does **not** open or rehash kernel binaries; that remains the responsibility of the independent preflight in drafts #162/#164. Missing or mismatched evidence exits **2** (`invalid`), even if the CSV contains a complete matrix. A matched receipt adds `"receipt_consistency_checked": true` to the JSON report; ordinary CSV-only reports include `false`.
+
+This is an **evidence consistency cross-check, not authentication**. Both JSON and CSV can be fabricated together, the declared Rust command is not re-executed by this helper, and a passing CSV/receipt fingerprint does not establish independent NAIF provenance or JPL numerical parity. Do not treat the output as a scientific certificate. Genuine E1 acceptance still requires real local JPL kernels, independent reference vectors, approved tolerances, and a reviewed Rust numerical residual receipt. The optional check deliberately avoids importing #164 code or changing its unmerged generator and receipt writer.
+
 ## Offline usage
 
 ```bash
@@ -106,6 +121,8 @@ The included Python standard-library `unittest` suite uses **fabricated numeric 
 5. Keep `E1=IMPLEMENTED_UNVERIFIED` until the complete real-data evidence has been reviewed. A passing synthetic CI run or this script's PASS is never scientific parity evidence.
 
 ## CPAL-1.0 modification record
+
+2026-11-13 (receipt cross-check follow-up): added optional `--receipt` correlation against the experimental NAIF/Rust comparator receipt in draft #164, with strict exact-byte CSV fingerprint, case count, scientific-contract, ordered-kernel metadata and non-certification flags. Nine synthetic regressions verify rejection of missing or incompatible evidence. No numerical comparator, toolkit dependency or third-party dataset was added.
 
 2026-11-13 (reporting follow-up): added a machine-readable JSON breadth result with explicit non-certification markers and SHA-256 of the exact local reference CSV bytes. Added six synthetic tests for pass/incomplete/invalid output and input-byte identity. This does not authenticate JPL/NAIF provenance or perform astronomical comparisons.
 
