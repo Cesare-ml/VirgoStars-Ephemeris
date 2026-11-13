@@ -20,8 +20,9 @@
 use std::error::Error;
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::fmt;
+use std::io::{Read, Seek};
 
-use crate::de441::{Body, JulianDateTdb, StateVector};
+use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
 use crate::geometry::{geometric_angular_separation_rad, AngularSeparationError};
 
 /// A geometric, geocentric, ideal-sphere Moon illumination estimate.
@@ -135,4 +136,66 @@ pub fn geometric_lunar_illumination(
         phase_angle_rad: alpha,
         illuminated_fraction,
     })
+}
+
+/// Errors when requesting geometric lunar illumination from a classic DE441 reader.
+#[derive(Debug)]
+pub enum LunarDe441Error {
+    /// The supplied Julian Date TDB epoch was NaN or infinite.
+    NonFiniteEpoch,
+    /// The external file could not supply one of the required geometric states.
+    Ephemeris(De441Error),
+    /// Both states were retrieved, but their geometric configuration was invalid.
+    Illumination(LunarIlluminationError),
+}
+
+impl fmt::Display for LunarDe441Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonFiniteEpoch => write!(f, "non-finite Julian Date TDB epoch"),
+            Self::Ephemeris(error) => write!(f, "DE441 lunar illumination state: {error}"),
+            Self::Illumination(error) => write!(f, "DE441 lunar illumination geometry: {error}"),
+        }
+    }
+}
+
+impl Error for LunarDe441Error {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::NonFiniteEpoch => None,
+            Self::Ephemeris(error) => Some(error),
+            Self::Illumination(error) => Some(error),
+        }
+    }
+}
+
+/// Derive geometric lunar illumination directly from a caller-supplied DE441 file.
+///
+/// Calls the existing classic binary reader twice at the **same** already-TDB
+/// Julian date, fetching Sun/Earth and Moon/Earth geometric ICRF state vectors
+/// in kilometers. Then delegates the Sun–Moon–Earth phase angle and ideal
+/// illuminated-fraction calculation to `geometric_lunar_illumination`.
+///
+/// This uses the exact `Moon` relative to `Earth` path of the DE441 reader,
+/// which avoids cancellation between large barycentric Earth/Moon coordinates.
+/// Neither the DE441 source nor the returned values are independently verified
+/// by this adapter. The caller owns the file and must validate provenance.
+///
+/// Fails explicitly for nonfinite epochs, missing/corrupt files, coverage or
+/// I/O errors, and degenerate geometry. No UTC conversion, light-time,
+/// aberration, parallax, refraction, or event-time search is performed.
+pub fn geometric_lunar_illumination_from_de441<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    epoch: JulianDateTdb,
+) -> Result<GeometricLunarIllumination, LunarDe441Error> {
+    if !epoch.0.is_finite() {
+        return Err(LunarDe441Error::NonFiniteEpoch);
+    }
+    let sun = ephemeris
+        .state(Body::Sun, Body::Earth, epoch)
+        .map_err(LunarDe441Error::Ephemeris)?;
+    let moon = ephemeris
+        .state(Body::Moon, Body::Earth, epoch)
+        .map_err(LunarDe441Error::Ephemeris)?;
+    geometric_lunar_illumination(&sun, &moon).map_err(LunarDe441Error::Illumination)
 }
