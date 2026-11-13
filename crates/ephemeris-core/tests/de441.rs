@@ -355,3 +355,61 @@ fn chebyshev_velocity_agrees_with_central_position_difference_inside_granules() 
         }
     }
 }
+
+#[test]
+fn audit_record_dates_visits_both_records_and_preserves_later_state_access() {
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    assert_eq!(eph.audit_record_dates().unwrap(), 2);
+    // The full audit leaves the cursor positioned at the end of the last
+    // date pair; subsequent state lookups must still seek correctly.
+    let state = eph
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1000.0),
+        )
+        .unwrap();
+    assert_eq!(state.position_km, [1.0, 11.0, 21.0]);
+}
+
+#[test]
+fn audit_rejects_corrupt_later_record_even_when_header_and_length_are_valid() {
+    // Opening the file validates its header and total length, not every
+    // internal record. The first record remains readable in each case.
+    for (offset, invalid) in [
+        (9000usize, 1033.0),
+        (9008, 1063.0),
+        (9000, f64::NAN),
+        (9008, f64::INFINITY),
+    ] {
+        let mut bytes = fixture();
+        put_f64(&mut bytes, offset, invalid);
+        let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+        assert!(eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(1000.0)
+            )
+            .is_ok());
+        assert!(matches!(
+            eph.audit_record_dates(),
+            Err(De441Error::InvalidFile(
+                "coefficient record has unexpected dates"
+            ))
+        ));
+    }
+}
+
+#[test]
+fn audit_rejects_corrupt_first_record_without_interpolating_coefficients() {
+    let mut bytes = fixture();
+    put_f64(&mut bytes, 6008, 1033.0);
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    assert!(matches!(
+        eph.audit_record_dates(),
+        Err(De441Error::InvalidFile(
+            "coefficient record has unexpected dates"
+        ))
+    ));
+}

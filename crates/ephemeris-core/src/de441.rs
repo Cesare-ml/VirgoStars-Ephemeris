@@ -268,6 +268,39 @@ impl<R: Read + Seek> De441<R> {
         (JulianDateTdb(self.start), JulianDateTdb(self.end))
     }
 
+    /// Audit every classic DE441 coefficient record's 16-byte TDB date pair.
+    ///
+    /// Checks exact continuity against the header-declared start and step,
+    /// including intermediate records that a header-only inspection does not
+    /// visit. Reads only the date pair per record (not polynomial payloads);
+    /// it does NOT authenticate a kernel, validate its coefficients or prove
+    /// astronomical accuracy. On success returns the number of checked records.
+    ///
+    /// Performs O(record_count) seeks/reads and is opt-in for large files.
+    /// Like `state()`, this method changes the underlying stream position.
+    pub fn audit_record_dates(&mut self) -> Result<usize, De441Error> {
+        let mut dates = [0u8; 16];
+        for index in 0..self.record_count {
+            let offset = (index as u64)
+                .checked_add(2)
+                .and_then(|n| n.checked_mul(self.record_size as u64))
+                .ok_or(De441Error::InvalidFile(
+                    "coefficient record offset overflow",
+                ))?;
+            self.source.seek(SeekFrom::Start(offset))?;
+            self.source.read_exact(&mut dates)?;
+            let expected_start = self.start + index as f64 * self.step;
+            let actual_start = f64_at(&dates, 0);
+            let actual_end = f64_at(&dates, 8);
+            if actual_start != expected_start || actual_end != expected_start + self.step {
+                return Err(De441Error::InvalidFile(
+                    "coefficient record has unexpected dates",
+                ));
+            }
+        }
+        Ok(self.record_count)
+    }
+
     /// Returns a geometric target-relative-to-center state at a TDB epoch.
     pub fn state(
         &mut self,
