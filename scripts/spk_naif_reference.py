@@ -196,6 +196,9 @@ def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
         raise ValueError("kernel path/order/count mismatch")
     if not HEX_SHA256_PATTERN.fullmatch(metadata["generator_sha256"]):
         raise ValueError("invalid generator digest declaration")
+    actual_generator = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    if not hmac.compare_digest(actual_generator, metadata["generator_sha256"].lower()):
+        raise ValueError("reference generator SHA256 mismatch")
     actual = kernel_manifest(paths)
     for i, ((name, size, digest), expected_name, expected_size, expected_digest) in enumerate(
         zip(actual, names, sizes, digests), 1
