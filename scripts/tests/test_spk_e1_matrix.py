@@ -55,7 +55,10 @@ def matched_synthetic_receipt():
         "# ordered_kernel_sizes_bytes=42\n"
         + AUDIT.COLUMNS,
     )
+    reference_path = str((Path.cwd() / "synthetic-reference-e1.csv").resolve())
+    kernel_path = str((Path.cwd() / "synthetic.bsp").resolve())
     receipt = {
+        "reference_csv": reference_path,
         "status": "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING",
         "scientific_accuracy_certified": False,
         "provenance_review_required": True,
@@ -73,11 +76,16 @@ def matched_synthetic_receipt():
         "toolkit_version": "synthetic-not-real-toolkit",
         "generator_sha256": "b" * 64,
         "ordered_kernels": [
-            {"name": "synthetic.bsp", "size_bytes": 42, "sha256": "a" * 64}
+            {"name": "synthetic.bsp", "size_bytes": 42, "sha256": "a" * 64,
+             "path": kernel_path}
         ],
         "rust_command": [
             "cargo", "run", "--offline", "--locked", "--example",
             "validate_spk_reference", "--",
+            reference_path,
+            format(0.001, ".17g"),
+            format(0.000001, ".17g"),
+            kernel_path,
         ],
     }
     return document, receipt
@@ -494,6 +502,8 @@ class E1MatrixAuditTests(unittest.TestCase):
             csv = Path(directory) / "sample.csv"
             evidence = Path(directory) / "receipt.json"
             csv.write_bytes(document.encode())
+            receipt["reference_csv"] = str(csv.resolve())
+            receipt["rust_command"][7] = str(csv.resolve())
             evidence.write_text(json.dumps(receipt), encoding="utf-8")
             out, err = StringIO(), StringIO()
             with redirect_stdout(out), redirect_stderr(err):
@@ -517,6 +527,8 @@ class E1MatrixAuditTests(unittest.TestCase):
             csv = Path(directory) / "sample.csv"
             evidence = Path(directory) / "receipt.json"
             csv.write_bytes(document.encode())
+            receipt["reference_csv"] = str(csv.resolve())
+            receipt["rust_command"][7] = str(csv.resolve())
             for content in (json.dumps({**receipt, "case_count": 99}),
                             "{not-json", "null"):
                 evidence.write_text(content, encoding="utf-8")
@@ -529,6 +541,79 @@ class E1MatrixAuditTests(unittest.TestCase):
                 self.assertEqual(result, 2)
                 self.assertEqual(report["status"], "invalid")
                 self.assertNotIn("reference_sha256", report)
+
+    def test_receipt_rejects_substituted_comparator_argv_values(self):
+        import copy
+        import hashlib
+
+        document, receipt = matched_synthetic_receipt()
+        digest = hashlib.sha256(document.encode()).hexdigest()
+        modifications = (
+            (7, "/different/reference.csv"),
+            (8, "0.5"),
+            (9, "1e-10"),
+            (10, "/different/kernel.bsp"),
+        )
+        for index, value in modifications:
+            altered = copy.deepcopy(receipt)
+            altered["rust_command"][index] = value
+            with self.subTest(index=index), self.assertRaisesRegex(
+                ValueError, "Rust command arguments"
+            ):
+                AUDIT.verify_run_receipt(document, digest, 15, altered)
+        for suffix in (["--extra"], ["other-kernel.bsp"]):
+            altered = copy.deepcopy(receipt)
+            altered["rust_command"].extend(suffix)
+            with self.assertRaisesRegex(ValueError, "Rust command arguments"):
+                AUDIT.verify_run_receipt(document, digest, 15, altered)
+
+    def test_receipt_rejects_manifest_path_not_matching_kernel_name(self):
+        import copy
+        import hashlib
+
+        document, receipt = matched_synthetic_receipt()
+        for name in ("other.bsp", ""):
+            altered = copy.deepcopy(receipt)
+            altered["ordered_kernels"][0]["path"] = str(
+                (Path.cwd() / name).resolve()
+            ) if name else ""
+            with self.subTest(name=name), self.assertRaisesRegex(
+                ValueError, "kernel 1 path"
+            ):
+                AUDIT.verify_run_receipt(
+                    document, hashlib.sha256(document.encode()).hexdigest(),
+                    15, altered,
+                )
+
+    def test_receipt_rejects_reference_path_from_another_run(self):
+        import hashlib
+
+        document, receipt = matched_synthetic_receipt()
+        wrong = (Path.cwd() / "another-reference-e1.csv").resolve()
+        with self.assertRaisesRegex(ValueError, "reference CSV path differs"):
+            AUDIT.verify_run_receipt(
+                document, hashlib.sha256(document.encode()).hexdigest(), 15,
+                receipt, reference_path=wrong,
+            )
+
+    def test_receipt_cli_rejects_stale_reference_path_even_if_hash_matches(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        document, receipt = matched_synthetic_receipt()
+        with TemporaryDirectory() as directory:
+            csv = Path(directory) / "reference.csv"
+            evidence = Path(directory) / "receipt.json"
+            csv.write_bytes(document.encode())
+            evidence.write_text(json.dumps(receipt), encoding="utf-8")
+            out = StringIO()
+            with redirect_stdout(out):
+                code = AUDIT.main([
+                    "--reference", str(csv), "--receipt", str(evidence), "--json"
+                ])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(out.getvalue())["status"], "invalid")
 
     def test_receipt_cannot_be_used_with_plan(self):
         from contextlib import redirect_stderr
