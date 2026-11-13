@@ -33,7 +33,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::spk_direct_state::{direct_spk_state, select_covering_segment, SpkStateError};
+use crate::spk_direct_state::{direct_spk_state, select_covering_segment, SpkDirectState, SpkStateError};
 use crate::spk_index::SpkIndex;
 
 /// Geometric target-minus-center state in fixed NAIF frame 1 (J2000/ICRF).
@@ -91,12 +91,36 @@ impl From<SpkStateError> for SpkRelativeError {
     }
 }
 
+/// Selected-link interface shared by one-kernel and ordered multi-kernel sets.
+///
+/// Centers are inspected from index metadata; only links required for a
+/// requested result are evaluated through the existing Rust SPK solver.
+pub(crate) trait SpkStateResolver {
+    fn selected_center(&self, body: i32, et: f64) -> Option<i32>;
+    fn direct_state(&mut self, body: i32, et: f64) -> Result<SpkDirectState, SpkStateError>;
+}
+
+struct SingleKernel<'a, R: Read + Seek> {
+    source: &'a mut R,
+    index: &'a SpkIndex,
+}
+
+impl<R: Read + Seek> SpkStateResolver for SingleKernel<'_, R> {
+    fn selected_center(&self, body: i32, et: f64) -> Option<i32> {
+        select_covering_segment(self.index, body, et).map(|segment| segment.center_id)
+    }
+
+    fn direct_state(&mut self, body: i32, et: f64) -> Result<SpkDirectState, SpkStateError> {
+        direct_spk_state(self.source, self.index, body, et)
+    }
+}
+
 /// Discover declared center ancestry, stopping at SSB (ID 0) or missing data.
 ///
 /// Selects the last covering descriptor for each link *without* evaluating
 /// coefficients. A missing path above a shared ancestor is harmless; missing
 /// connections between the requested bodies are not. A cycle is never followed.
-fn ancestors(index: &SpkIndex, body: i32, et: f64) -> Result<Vec<i32>, SpkRelativeError> {
+fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> Result<Vec<i32>, SpkRelativeError> {
     let mut path = Vec::new();
     let mut visited = HashSet::new();
     let mut node = body;
@@ -108,8 +132,8 @@ fn ancestors(index: &SpkIndex, body: i32, et: f64) -> Result<Vec<i32>, SpkRelati
         if node == 0 {
             break;
         }
-        match select_covering_segment(index, node, et) {
-            Some(segment) => node = segment.center_id,
+        match resolver.selected_center(node, et) {
+            Some(parent) => node = parent,
             None => break,
         }
     }
@@ -120,9 +144,8 @@ fn ancestors(index: &SpkIndex, body: i32, et: f64) -> Result<Vec<i32>, SpkRelati
 ///
 /// Each link is retrieved through the canonical evaluator; any unsupported
 /// selected frame/type or invalid coefficients therefore fail explicitly.
-fn to_ancestor<R: Read + Seek>(
-    source: &mut R,
-    index: &SpkIndex,
+fn to_ancestor<S: SpkStateResolver>(
+    resolver: &mut S,
     path: &[i32],
     common: i32,
     et: f64,
@@ -133,7 +156,7 @@ fn to_ancestor<R: Read + Seek>(
         if body == common {
             break;
         }
-        let state = direct_spk_state(source, index, body, et)?;
+        let state = resolver.direct_state(body, et)?;
         for axis in 0..3 {
             position[axis] += state.position_km[axis];
             velocity[axis] += state.velocity_km_per_second[axis];
@@ -170,6 +193,21 @@ pub fn relative_spk_state<R: Read + Seek>(
     center_id: i32,
     et: f64,
 ) -> Result<SpkRelativeState, SpkRelativeError> {
+    resolve_relative(
+        &mut SingleKernel { source, index },
+        target_id,
+        center_id,
+        et,
+    )
+}
+
+/// Share one center-chain algorithm between single and ordered multi-kernel sets.
+pub(crate) fn resolve_relative<S: SpkStateResolver>(
+    resolver: &mut S,
+    target_id: i32,
+    center_id: i32,
+    et: f64,
+) -> Result<SpkRelativeState, SpkRelativeError> {
     if !et.is_finite() {
         return Err(SpkRelativeError::InvalidEpoch);
     }
@@ -184,8 +222,8 @@ pub fn relative_spk_state<R: Read + Seek>(
         });
     }
 
-    let target_path = ancestors(index, target_id, et)?;
-    let center_path = ancestors(index, center_id, et)?;
+    let target_path = ancestors(resolver, target_id, et)?;
+    let center_path = ancestors(resolver, center_id, et)?;
     let common = target_path
         .iter()
         .copied()
@@ -195,8 +233,8 @@ pub fn relative_spk_state<R: Read + Seek>(
             center_id,
         })?;
 
-    let (target_position, target_velocity) = to_ancestor(source, index, &target_path, common, et)?;
-    let (center_position, center_velocity) = to_ancestor(source, index, &center_path, common, et)?;
+    let (target_position, target_velocity) = to_ancestor(resolver, &target_path, common, et)?;
+    let (center_position, center_velocity) = to_ancestor(resolver, &center_path, common, et)?;
     let mut position_km = [0.0; 3];
     let mut velocity_km_per_second = [0.0; 3];
     for axis in 0..3 {
