@@ -390,7 +390,6 @@ fn second_granule_reverse_geometry_preserves_xyz_derivatives_at_interior_epochs(
     }
 }
 
-
 // Modification (2026-11-13): check one-sided derivatives at the exact
 // granule transition and inclusive coverage endpoint without sampling across
 // a deliberately discontinuous neighboring polynomial.
@@ -424,9 +423,7 @@ fn second_granule_boundary_velocities_match_one_sided_position_differences() {
             // Second-order one-sided derivative; direction accounts for
             // backward sampling at the final inclusive epoch.
             let finite_difference = direction
-                * (-3.0 * p0.position_km[axis]
-                    + 4.0 * p1.position_km[axis]
-                    - p2.position_km[axis])
+                * (-3.0 * p0.position_km[axis] + 4.0 * p1.position_km[axis] - p2.position_km[axis])
                 / (2.0 * h);
             assert!(
                 (p0.velocity_km_per_day[axis] - finite_difference).abs() < 1.0e-6,
