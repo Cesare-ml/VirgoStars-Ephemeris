@@ -23,6 +23,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/**'
       - '.github/workflows/rust-dev.yml'
   push:
     branches: [dev/ephemeris]
@@ -30,6 +31,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/**'
       - '.github/workflows/rust-dev.yml'
   workflow_dispatch:
 
@@ -56,6 +58,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Check offline Horizons reference parser
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test E1 SPK reference-matrix breadth audit
+        run: python3 -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -82,6 +86,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Horizons comparator regressions on Windows
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test E1 reference-matrix breadth audit on Windows
+        run: python -m unittest discover -s scripts/tests -p test_spk_e1_matrix.py
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -98,5 +104,7 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Horizons comparator regressions on macOS
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test E1 reference-matrix breadth audit on macOS
+        run: python3 -m unittest discover -s scripts/tests -p test_spk_e1_matrix.py
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
