@@ -7,6 +7,7 @@ The `inspect_de441_coverage` example reads a **caller-supplied classic little-en
 ```sh
 cargo run --offline --locked --example inspect_de441_coverage -- /path/to/de441.eph
 cargo run --offline --locked --example inspect_de441_coverage -- /path/to/de441.eph --at-jd 2451545.0
+cargo run --offline --locked --example inspect_de441_coverage -- /path/to/de441.eph --at-jd 2451545.0 --require-coverage
 cargo test --workspace --example inspect_de441_coverage --locked
 ```
 
@@ -17,7 +18,7 @@ format,epoch_scale,declared_start_jd,declared_end_jd,probe_jd,probe_status
 classic-de441,TDB,1000.000000000000,1032.000000000000,1016.000000000000,covered
 ```
 
-The sample above is from a **synthetic test fixture**, not an official JPL kernel. When no `--at-jd` is passed, `probe_jd` is empty and `probe_status` is `not_checked`; values outside the inclusive interval are reported as `out_of_coverage`. An out-of-coverage probe is a **valid diagnostic result** and exits successfully; consumers that require coverage must explicitly check `probe_status`. Missing/broken kernels, invalid flags and nonfinite probes cause a nonzero exit and an error on standard error before any CSV output.
+The sample above is from a **synthetic test fixture**, not an official JPL kernel. When no `--at-jd` is passed, `probe_jd` is empty and `probe_status` is `not_checked`; values outside the inclusive interval are reported as `out_of_coverage`. By default, an out-of-coverage probe is a **valid diagnostic result** and exits successfully; consumers can explicitly check `probe_status`. To fail closed in a script, supply `--at-jd <JD_TDB> --require-coverage`: when the epoch is outside declared coverage, the command exits with code **2**, writes an explanation to standard error and **emits no CSV on standard output**. The flag requires exactly one explicit finite `--at-jd` value and must follow it. The inclusive endpoints remain valid. Missing/broken kernels, invalid flags and nonfinite probes also cause a nonzero exit and an error on standard error before any CSV output. A strict-mode success still attests only to declared header coverage, not real coefficient integrity or scientific accuracy.
 
 **Scientific contract and limitations**
 
@@ -29,8 +30,8 @@ The sample above is from a **synthetic test fixture**, not an official JPL kerne
 
 ## Verification
 
-Five original deterministic tests cover the known synthetic header, inclusive boundaries, immediately out-of-bounds epochs, CLI argument shape and rejection of nonfinite TDB probes. CI is expected to run these specifically with `cargo test --workspace --example inspect_de441_coverage --locked`; review the status at the PR commit. There is **no bundled third-party ephemeris dataset** and no network access required.
+Eight original deterministic tests cover the known synthetic header, inclusive boundaries, immediately out-of-bounds epochs, CLI argument shape, rejection of nonfinite TDB probes, strict-option parsing, strict positive boundaries and fail-closed out-of-range behavior. CI is expected to run these specifically with `cargo test --workspace --example inspect_de441_coverage --locked`; review the status at the PR commit. There is **no bundled third-party ephemeris dataset** and no network access required.
 
 ## License and modifications
 
-Original Rust example and test fixture: CPAL-1.0, consistent with [LICENSE](../LICENSE) and [NOTICE](../NOTICE). Added on 2026-11-13. No NASA/JPL file, SPICE Toolkit code, Swiss Ephemeris source or Astrodienst dataset was incorporated. Required downstream VirgoStars attribution is described in [licensing and credits](LICENSING_AND_CREDITS.md); the original project is [VirgoStars](https://www.virgostars.it/).
+Original Rust example and test fixture: CPAL-1.0, consistent with [LICENSE](../LICENSE) and [NOTICE](../NOTICE). Added on 2026-11-13; updated on 2026-11-13 with the opt-in strict coverage gate. No NASA/JPL file, SPICE Toolkit code, Swiss Ephemeris source or Astrodienst dataset was incorporated. Required downstream VirgoStars attribution is described in [licensing and credits](LICENSING_AND_CREDITS.md); the original project is [VirgoStars](https://www.virgostars.it/).
