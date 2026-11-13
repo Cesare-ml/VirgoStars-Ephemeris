@@ -236,3 +236,34 @@ fn second_granule_xyz_boundaries_preserve_velocity_and_reverse_signs() {
         }
     }
 }
+
+#[test]
+fn second_granule_xyz_quarter_epochs_match_analytic_values() {
+    let mut bytes = cubic_fixture();
+    let second = RECORD_BYTES * 2 + (2 + 12) * 8;
+    for (index, value) in [1.0, 2.0, 3.0, 4.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (4 + index) * 8, value);
+    }
+    for (index, value) in [4.0, -2.0, 0.0, 1.0].into_iter().enumerate() {
+        write_f64(&mut bytes, second + (8 + index) * 8, value);
+    }
+
+    // JD 1020 and 1028 map to x=-1/2 and x=+1/2 respectively.
+    // T2=-1/2, T3=+1/-1; dT2/dx=-2/+2, dT3/dx=0.
+    // Derivatives in TDB days use dx/dJD=1/8.
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    for (jd, position, velocity) in [
+        (1020.0, [22.5, 2.5, 6.0], [-0.125, -0.5, -0.25]),
+        (1028.0, [17.5, -3.5, 2.0], [-0.125, 1.0, -0.25]),
+    ] {
+        let state = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        assert_eq!(state.position_km, position, "position at JD {jd}");
+        assert_eq!(state.velocity_km_per_day, velocity, "velocity at JD {jd}");
+    }
+}
