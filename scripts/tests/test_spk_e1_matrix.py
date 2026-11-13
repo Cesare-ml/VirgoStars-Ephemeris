@@ -45,6 +45,44 @@ CORE = [(10, 399), (301, 399), (399, 0)]
 ALL_PAIRS = CORE + [(4, 399), (5, 399)]
 
 
+def matched_synthetic_receipt():
+    """Fabricated metadata for consistency tests, never NAIF evidence."""
+    import hashlib
+    document = synthetic_document(ALL_PAIRS).replace(
+        AUDIT.COLUMNS,
+        "# generator_sha256=" + "b" * 64 + "\n"
+        "# ordered_kernel_names=synthetic.bsp\n"
+        "# ordered_kernel_sizes_bytes=42\n"
+        + AUDIT.COLUMNS,
+    )
+    receipt = {
+        "status": "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING",
+        "scientific_accuracy_certified": False,
+        "provenance_review_required": True,
+        "reference_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+        "case_count": 15,
+        "provider": "NAIF_SPICE",
+        "method": "spkezr",
+        "frame": "J2000",
+        "corrections": "NONE",
+        "time_scale": "TDB_SECONDS_PAST_J2000",
+        "position_units": "km",
+        "velocity_units": "km/s",
+        "max_position_component_km": 0.001,
+        "max_velocity_component_km_s": 0.000001,
+        "toolkit_version": "synthetic-not-real-toolkit",
+        "generator_sha256": "b" * 64,
+        "ordered_kernels": [
+            {"name": "synthetic.bsp", "size_bytes": 42, "sha256": "a" * 64}
+        ],
+        "rust_command": [
+            "cargo", "run", "--offline", "--locked", "--example",
+            "validate_spk_reference", "--",
+        ],
+    }
+    return document, receipt
+
+
 class E1MatrixAuditTests(unittest.TestCase):
     def test_complete_synthetic_five_pair_three_epoch_matrix_passes_breadth(self):
         rows = AUDIT.parse_reference(synthetic_document(ALL_PAIRS))
@@ -331,6 +369,177 @@ class E1MatrixAuditTests(unittest.TestCase):
                                "--epoch", "86400", "--epoch", "172800"])
         self.assertEqual(code, 2)
         self.assertEqual(json.loads(output.getvalue())["status"], "invalid")
+
+    def test_matching_numeric_receipt_declares_consistency_not_accuracy(self):
+        import hashlib
+
+        document, receipt = matched_synthetic_receipt()
+        AUDIT.verify_run_receipt(
+            document, hashlib.sha256(document.encode("utf-8")).hexdigest(),
+            15, receipt,
+        )
+        self.assertFalse(receipt["scientific_accuracy_certified"])
+        self.assertTrue(receipt["provenance_review_required"])
+
+    def test_receipt_rejects_changed_csv_or_false_digest(self):
+        import hashlib
+        import copy
+
+        document, receipt = matched_synthetic_receipt()
+        bad = copy.deepcopy(receipt)
+        bad["reference_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "reference SHA-256 differs"):
+            AUDIT.verify_run_receipt(
+                document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+            )
+        with self.assertRaisesRegex(ValueError, "reference SHA-256 differs"):
+            AUDIT.verify_run_receipt(
+                document, hashlib.sha256((document + " ").encode()).hexdigest(),
+                15, receipt,
+            )
+
+    def test_receipt_rejects_wrong_case_count_or_boolean_count(self):
+        import hashlib
+        import copy
+
+        document, receipt = matched_synthetic_receipt()
+        for count in (14, 16, True, "15"):
+            bad = copy.deepcopy(receipt)
+            bad["case_count"] = count
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "case count"):
+                AUDIT.verify_run_receipt(
+                    document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+                )
+
+    def test_receipt_rejects_invalid_status_false_flags_and_contract(self):
+        import hashlib
+        import copy
+
+        document, receipt = matched_synthetic_receipt()
+        mutations = (
+            ("status", "FAIL"),
+            ("scientific_accuracy_certified", True),
+            ("provenance_review_required", False),
+            ("frame", "ECLIPDATE"),
+            ("corrections", "LT"),
+            ("time_scale", "UTC"),
+            ("position_units", "m"),
+            ("velocity_units", "km/day"),
+            ("provider", "JPL_HORIZONS"),
+        )
+        for key, value in mutations:
+            bad = copy.deepcopy(receipt)
+            bad[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                AUDIT.verify_run_receipt(
+                    document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+                )
+
+    def test_receipt_rejects_generator_toolkit_and_kernel_manifest_mismatches(self):
+        import hashlib
+        import copy
+
+        document, receipt = matched_synthetic_receipt()
+        bad_receipts = []
+        for key, value in (
+            ("generator_sha256", "0" * 64),
+            ("toolkit_version", "WRONG"),
+            ("ordered_kernels", []),
+        ):
+            bad = copy.deepcopy(receipt)
+            bad[key] = value
+            bad_receipts.append(bad)
+        for field, value in (
+            ("name", "different.bsp"),
+            ("size_bytes", 43),
+            ("size_bytes", True),
+            ("sha256", "0" * 64),
+        ):
+            bad = copy.deepcopy(receipt)
+            bad["ordered_kernels"][0][field] = value
+            bad_receipts.append(bad)
+        for i, bad in enumerate(bad_receipts):
+            with self.subTest(i=i), self.assertRaises(ValueError):
+                AUDIT.verify_run_receipt(
+                    document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+                )
+
+    def test_receipt_rejects_unsafe_tolerances_and_noncanonical_command(self):
+        import hashlib
+        import copy
+
+        document, receipt = matched_synthetic_receipt()
+        for field in ("max_position_component_km", "max_velocity_component_km_s"):
+            for bad_value in (0, -1, float("inf"), float("nan"), True, "1"):
+                bad = copy.deepcopy(receipt)
+                bad[field] = bad_value
+                with self.subTest(field=field, value=bad_value), self.assertRaises(ValueError):
+                    AUDIT.verify_run_receipt(
+                        document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+                    )
+        bad = copy.deepcopy(receipt)
+        bad["rust_command"] = ["python", "pretend-pass"]
+        with self.assertRaisesRegex(ValueError, "canonical offline Rust"):
+            AUDIT.verify_run_receipt(
+                document, hashlib.sha256(document.encode()).hexdigest(), 15, bad
+            )
+
+    def test_receipt_cli_json_reports_consistency_on_matched_input(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+        import json
+
+        document, receipt = matched_synthetic_receipt()
+        with TemporaryDirectory() as directory:
+            csv = Path(directory) / "sample.csv"
+            evidence = Path(directory) / "receipt.json"
+            csv.write_bytes(document.encode())
+            evidence.write_text(json.dumps(receipt), encoding="utf-8")
+            out, err = StringIO(), StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                result = AUDIT.main([
+                    "--reference", str(csv), "--receipt", str(evidence), "--json"
+                ])
+            report = json.loads(out.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(err.getvalue(), "")
+            self.assertEqual(report["status"], "pass")
+            self.assertTrue(report["receipt_consistency_checked"])
+            self.assertFalse(report["scientific_accuracy_certified"])
+
+    def test_receipt_cli_fail_closed_on_mismatched_or_malformed_receipt(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        document, receipt = matched_synthetic_receipt()
+        with TemporaryDirectory() as directory:
+            csv = Path(directory) / "sample.csv"
+            evidence = Path(directory) / "receipt.json"
+            csv.write_bytes(document.encode())
+            for content in (json.dumps({**receipt, "case_count": 99}),
+                            "{not-json", "null"):
+                evidence.write_text(content, encoding="utf-8")
+                out = StringIO()
+                with redirect_stdout(out):
+                    result = AUDIT.main([
+                        "--reference", str(csv), "--receipt", str(evidence), "--json"
+                    ])
+                report = json.loads(out.getvalue())
+                self.assertEqual(result, 2)
+                self.assertEqual(report["status"], "invalid")
+                self.assertNotIn("reference_sha256", report)
+
+    def test_receipt_cannot_be_used_with_plan(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        with redirect_stderr(StringIO()):
+            self.assertEqual(AUDIT.main([
+                "--plan", "--receipt", "/unused.json",
+                "--planet", "4", "--planet", "5", "--epoch", "0",
+                "--epoch", "86400", "--epoch", "172800",
+            ]), 2)
 
     def test_cli_exit_status_distinguishes_pass_incomplete_and_invalid(self):
         with TemporaryDirectory() as folder:
