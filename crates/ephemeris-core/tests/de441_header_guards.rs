@@ -4,6 +4,7 @@
 // Modification (2026-11-13): reject mismatched DE identity and truncated headers.
 // Modification (2026-11-13): degenerate coverage and fractional record counts.
 // Modification (2026-11-13): guard extreme coefficient-pointer integers.
+// Modification (2026-11-13): align extreme first-word expectation with length validation.
 // See the repository LICENSE, NOTICE and CPAL Exhibit A.
 use std::io::Cursor;
 use virgostars_ephemeris_core::de441::{De441, De441Error};
@@ -229,11 +230,17 @@ fn rejects_extreme_coefficient_pointer_values_without_panicking() {
     ] {
         let mut bytes = synthetic_header();
         i32_field(&mut bytes, offset, value);
+        let result = De441::new(Cursor::new(bytes));
+        // A positive first-word index is structurally valid; the declared
+        // record length must still match the actual file. Coefficient counts
+        // and granule counts outside 1..=100 fail earlier.
+        let expected = if offset == 2844 {
+            "file length does not match header"
+        } else {
+            "invalid coefficient pointer"
+        };
         assert!(
-            matches!(
-                De441::new(Cursor::new(bytes)),
-                Err(De441Error::InvalidFile("invalid coefficient pointer"))
-            ),
+            matches!(result, Err(De441Error::InvalidFile(message)) if message == expected),
             "offset {offset}, value {value}"
         );
     }
