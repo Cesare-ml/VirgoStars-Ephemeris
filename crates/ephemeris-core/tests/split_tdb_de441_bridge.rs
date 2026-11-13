@@ -84,11 +84,7 @@ fn synthetic_de441_states_and_speeds_match_explicit_tdb_offsets() {
             .state(Body::Mercury, Body::SolarSystemBarycenter, epoch)
             .unwrap();
         let normalized = seconds / SECONDS_PER_DAY;
-        let expected = [
-            100.0 + 2.0 * normalized,
-            200.0 - 4.0 * normalized,
-            -50.0,
-        ];
+        let expected = [100.0 + 2.0 * normalized, 200.0 - 4.0 * normalized, -50.0];
         for (actual, expected) in state.position_km.iter().zip(expected) {
             assert!(
                 (actual - expected).abs() < 5.0e-9,
@@ -112,10 +108,8 @@ fn classic_reader_cannot_resolve_microseconds_after_f64_jd_collapse() {
         .unwrap();
 
     for microseconds in [-1.0e-6, 1.0e-6] {
-        let split = split_julian_day_tdb_from_et(
-            TdbSecondsPastJ2000::new(microseconds).unwrap(),
-        )
-        .unwrap();
+        let split =
+            split_julian_day_tdb_from_et(TdbSecondsPastJ2000::new(microseconds).unwrap()).unwrap();
         assert_ne!(split.midnight_fraction(), 0.5);
         let rounded = split.to_de441_epoch().unwrap();
         assert_eq!(rounded, JulianDateTdb(J2000_JD_TDB));
