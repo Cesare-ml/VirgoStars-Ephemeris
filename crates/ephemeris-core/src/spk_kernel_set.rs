@@ -441,6 +441,24 @@ mod tests {
     }
 
     #[test]
+    fn unrelated_higher_priority_target_is_ignored_for_selected_chain() {
+        let old = vec![seg(301, 399, 2, [2.0, 4.0], [0.0, 0.0])];
+        let mut unrelated = seg(999, 0, 9, [9.0, 0.0], [0.0, 0.0]);
+        unrelated.frame = 17;
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, old),
+            (SpkByteOrder::BigEndian, vec![unrelated]),
+        ]);
+        // Unsupported data for another body cannot mask a valid Moon link.
+        let moon = set.relative_state(301, 399, 5.0).unwrap();
+        assert_eq!(moon.position_km, [2.0, 4.0, 0.0]);
+        assert!(matches!(
+            set.direct_state(999, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+    }
+
+    #[test]
     fn invalid_load_keeps_existing_set_and_empty_has_explicit_errors() {
         let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
         assert!(set.is_empty());
