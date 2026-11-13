@@ -389,3 +389,49 @@ fn second_granule_reverse_geometry_preserves_xyz_derivatives_at_interior_epochs(
         }
     }
 }
+
+
+// Modification (2026-11-13): check one-sided derivatives at the exact
+// granule transition and inclusive coverage endpoint without sampling across
+// a deliberately discontinuous neighboring polynomial.
+#[test]
+fn second_granule_boundary_velocities_match_one_sided_position_differences() {
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let h = 1.0 / 4096.0;
+    for (jd, direction) in [(1016.0, 1.0), (1032.0, -1.0)] {
+        let p0 = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        let p1 = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd + direction * h),
+            )
+            .unwrap();
+        let p2 = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd + direction * 2.0 * h),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            // Second-order one-sided derivative; direction accounts for
+            // backward sampling at the final inclusive epoch.
+            let finite_difference = direction
+                * (-3.0 * p0.position_km[axis]
+                    + 4.0 * p1.position_km[axis]
+                    - p2.position_km[axis])
+                / (2.0 * h);
+            assert!(
+                (p0.velocity_km_per_day[axis] - finite_difference).abs() < 1.0e-6,
+                "one-sided derivative mismatch at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
