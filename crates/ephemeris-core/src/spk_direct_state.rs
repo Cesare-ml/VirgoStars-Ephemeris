@@ -280,6 +280,30 @@ pub fn direct_spk_state<R: Read + Seek>(
             "invalid record midpoint or radius",
         ));
     }
+    // Type 2/3 directory INIT and INTLEN define an equal-width record grid.
+    // A corrupt record could otherwise shift/resize its own Chebyshev time
+    // domain yet still evaluate to a plausible finite position and velocity.
+    // Allow only binary64 rounding at the scale of the encoded ET/interval.
+    let expected_midpoint =
+        layout.init + (record_index as f64 + 0.5) * layout.interval;
+    let expected_radius = layout.interval * 0.5;
+    let midpoint_tolerance = 32.0
+        * f64::EPSILON
+        * layout
+            .init
+            .abs()
+            .max(expected_midpoint.abs())
+            .max(layout.interval.abs());
+    let radius_tolerance = 32.0 * f64::EPSILON * layout.interval.abs();
+    if !expected_midpoint.is_finite()
+        || expected_radius <= 0.0
+        || (midpoint - expected_midpoint).abs() > midpoint_tolerance
+        || (radius - expected_radius).abs() > radius_tolerance
+    {
+        return Err(SpkStateError::InvalidSegment(
+            "SPK record midpoint/radius disagree with directory",
+        ));
+    }
     let x = (et - midpoint) / radius;
     if !x.is_finite() || !(-1.0..=1.0).contains(&x) {
         return Err(SpkStateError::InvalidSegment(
