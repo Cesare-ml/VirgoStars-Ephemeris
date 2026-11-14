@@ -288,6 +288,120 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         comparison.assert_not_called()
         self.assertFalse(receipt.exists())
 
+    def test_success_rechecks_both_inputs_and_git_after_cargo(self):
+        runner = mock.Mock(return_value=SimpleNamespace(
+            returncode=0, stdout="mocked vectors", stderr="",
+        ))
+        clean = {"source_git_commit_sha": self.source_sha(), "source_tree_clean": True}
+        source_checker = mock.Mock(return_value=clean)
+        with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+            with mock.patch.object(validator, "preflight", wraps=validator.preflight) as check:
+                report = validator.compare(
+                    *self.inputs(), self.source_sha(), runner=runner,
+                    source_checker=source_checker,
+                )
+        self.assertEqual(check.call_count, 2)
+        self.assertEqual(source_checker.call_count, 2)
+        self.assertTrue(report["postflight_integrity_ok"])
+        self.assertIsNone(report["postflight_integrity_error"])
+        self.assertEqual(report["schema_version"], 3)
+        self.assertEqual(report["cargo_exit_code"], 0)
+        self.assertEqual(
+            report["status"], "COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW",
+        )
+        self.assertFalse(report["scientific_validated"])
+
+    def test_detects_inputs_modified_while_cargo_runs(self):
+        for path in (self.kernel, self.reference):
+            with self.subTest(path=path.name):
+                original = path.read_bytes()
+
+                def changed_runner(*args, **kwargs):
+                    path.write_bytes(original + b"tampered")
+                    return SimpleNamespace(returncode=0, stdout="mocked", stderr="")
+
+                try:
+                    with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+                        result = validator.compare(
+                            *self.inputs(), self.source_sha(),
+                            runner=changed_runner,
+                            source_checker=lambda sha: {
+                                "source_git_commit_sha": sha,
+                                "source_tree_clean": True,
+                            },
+                        )
+                    self.assertEqual(result["status"], "POSTFLIGHT_INTEGRITY_FAILED")
+                    self.assertFalse(result["postflight_integrity_ok"])
+                    self.assertIn("SHA-256 differs", result["postflight_integrity_error"])
+                    self.assertEqual(result["cargo_exit_code"], 0)
+                    self.assertEqual(result["stdout"], "mocked")
+                    self.assertFalse(result["scientific_validated"])
+                finally:
+                    path.write_bytes(original)
+
+    def test_detects_git_source_modified_during_cargo(self):
+        source_checker = mock.Mock(side_effect=[
+            {"source_git_commit_sha": self.source_sha(), "source_tree_clean": True},
+            ValueError("source Git worktree must be clean before comparison"),
+        ])
+        with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+            result = validator.compare(
+                *self.inputs(), self.source_sha(),
+                runner=mock.Mock(return_value=SimpleNamespace(
+                    returncode=0, stdout="mocked result", stderr="",
+                )),
+                source_checker=source_checker,
+            )
+        self.assertEqual(source_checker.call_count, 2)
+        self.assertEqual(result["status"], "POSTFLIGHT_INTEGRITY_FAILED")
+        self.assertIn("worktree must be clean", result["postflight_integrity_error"])
+        self.assertFalse(result["postflight_integrity_ok"])
+
+    def test_detects_changed_source_evidence_without_error(self):
+        source_checker = mock.Mock(side_effect=[
+            {"source_git_commit_sha": self.source_sha(), "source_tree_clean": True},
+            {"source_git_commit_sha": "f" * 40, "source_tree_clean": True},
+        ])
+        with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+            result = validator.compare(
+                *self.inputs(), self.source_sha(),
+                runner=mock.Mock(return_value=SimpleNamespace(
+                    returncode=0, stdout="mocked", stderr="",
+                )),
+                source_checker=source_checker,
+            )
+        self.assertEqual(result["status"], "POSTFLIGHT_INTEGRITY_FAILED")
+        self.assertIn("evidence changed", result["postflight_integrity_error"])
+
+    def test_postflight_failure_exits_nonzero_even_if_cargo_succeeded(self):
+        receipt = Path(self.temp.name) / "postflight-error-receipt.json"
+        mocked = {
+            "schema_version": 3,
+            "status": "POSTFLIGHT_INTEGRITY_FAILED",
+            "postflight_integrity_ok": False,
+            "postflight_integrity_error": "kernel SHA-256 differs",
+            "cargo_exit_code": 0,
+            "stdout": "mock success",
+            "scientific_validated": False,
+        }
+        with mock.patch.object(validator, "compare", return_value=mocked) as compare:
+            code = validator.main([
+                "--kernel", str(self.kernel),
+                "--reference", str(self.reference),
+                "--kernel-sha256", self.expected_kernel,
+                "--reference-sha256", self.expected_reference,
+                "--position-km", "0.01",
+                "--velocity-km-per-day", "0.0001",
+                "--source-sha", self.source_sha(),
+                "--receipt", str(receipt),
+            ])
+        self.assertEqual(code, 1)
+        compare.assert_called_once()
+        self.assertEqual(
+            json.loads(receipt.read_text(encoding="utf-8"))["status"],
+            "POSTFLIGHT_INTEGRITY_FAILED",
+        )
+
     def test_receipt_must_not_overwrite_kernel_or_reference(self):
         for receipt in (self.kernel, self.reference):
             with self.subTest(receipt=receipt.name):
