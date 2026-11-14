@@ -258,6 +258,39 @@ impl<R: Read + Seek> De441<R> {
             return Err(De441Error::InvalidFile("invalid record count or size"));
         }
         let record_count = count as usize;
+
+        // Modification 2026-11-14: every declared Chebyshev subrecord must
+        // occupy distinguishable TDB Julian dates in the f64 reader API.
+        // Test the first and last principal record, where the binary64 ULP
+        // can be largest over the declared interval. Checking each boundary
+        // (rather than only granule width) also catches adjacent collisions.
+        let last_record_start = start + (record_count - 1) as f64 * step;
+        for pointer in pointers.iter().filter(|pointer| pointer.first != 0) {
+            let width = step / pointer.granules as f64;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(De441Error::InvalidFile(
+                    "coefficient granule dates exceed f64 JD resolution",
+                ));
+            }
+            for record_start in [start, last_record_start] {
+                let mut previous = record_start;
+                for granule in 1..pointer.granules {
+                    let boundary = record_start + granule as f64 * width;
+                    if !boundary.is_finite() || boundary <= previous {
+                        return Err(De441Error::InvalidFile(
+                            "coefficient granule dates exceed f64 JD resolution",
+                        ));
+                    }
+                    previous = boundary;
+                }
+                let record_end = record_start + step;
+                if !record_end.is_finite() || record_end <= previous {
+                    return Err(De441Error::InvalidFile(
+                        "coefficient granule dates exceed f64 JD resolution",
+                    ));
+                }
+            }
+        }
         let expected = (record_count as u64)
             .checked_add(2)
             .and_then(|n| n.checked_mul(record_size as u64))
@@ -441,8 +474,26 @@ impl<R: Read + Seek> De441<R> {
             }));
         }
         let width = self.step / p.granules as f64;
-        let granule = (((jd - record_start) / width).floor() as usize).min(p.granules - 1);
-        let x = 2.0 * (jd - (record_start + granule as f64 * width)) / width - 1.0;
+        // Modification 2026-11-14: division/floor can round an exact
+        // representable granule boundary just below its integer index.
+        // Binary-search the same rounded boundaries validated by new().
+        // At a boundary choose the following granule; at the inclusive
+        // final coverage endpoint choose the last one.
+        let (mut low, mut high) = (0usize, p.granules);
+        while low + 1 < high {
+            let mid = low + (high - low) / 2;
+            let boundary = record_start + mid as f64 * width;
+            if jd < boundary {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        let granule = low;
+        // Modification 2026-11-14: divide before doubling the normalized
+        // record offset. The old 2 * offset / width could overflow an
+        // intermediate even when the final Chebyshev abscissa is in [-1, 1].
+        let x = 2.0 * ((jd - (record_start + granule as f64 * width)) / width) - 1.0;
         let mut result = Components::default();
         for axis in 0..3 {
             let offset = (p.first - 1 + (granule * 3 + axis) * p.coefficients) * 8;
