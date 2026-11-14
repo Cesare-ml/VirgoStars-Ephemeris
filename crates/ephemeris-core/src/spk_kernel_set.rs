@@ -837,6 +837,49 @@ mod tests {
         assert!(empty.selected_segment(301, 0.0).unwrap().is_none());
     }
 
+    // Modification (2026-11-14): the one-file path and ordered-kernel set
+    // must invoke the same center-chain and Chebyshev semantics at both
+    // inclusive record endpoints, not only at an interior epoch.
+    #[test]
+    fn single_kernel_and_one_element_set_agree_at_record_endpoints() {
+        use crate::spk_relative_state::relative_spk_state;
+
+        for byte_order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for (moon_type, earth_type) in [(2, 3), (3, 2)] {
+                let fixture = kernel(
+                    byte_order,
+                    &[
+                        seg(301, 399, moon_type, [3.0, -2.0], [0.2, -0.1]),
+                        seg(399, 0, earth_type, [100.0, 10.0], [-0.3, 0.05]),
+                    ],
+                );
+                let mut single_source = Cursor::new(fixture.clone());
+                let single_index = inspect_spk(&mut single_source).unwrap();
+                let mut set = SpkKernelSet::new();
+                set.load(Cursor::new(fixture)).unwrap();
+                assert_eq!(set.kernel_count(), 1);
+
+                for et in [0.0, 5.0, 10.0] {
+                    for (target, center) in [(301, 399), (399, 301), (301, 0), (0, 301)] {
+                        let single = relative_spk_state(
+                            &mut single_source,
+                            &single_index,
+                            target,
+                            center,
+                            et,
+                        )
+                        .unwrap();
+                        let loaded = set.relative_state(target, center, et).unwrap();
+                        assert_eq!(
+                            loaded, single,
+                            "path mismatch for {byte_order:?}, types {moon_type}/{earth_type}, ET={et}, {target}->{center}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn invalid_load_keeps_existing_set_and_empty_has_explicit_errors() {
         let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
