@@ -23,6 +23,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/**'
       - '.github/workflows/rust-dev.yml'
   push:
     branches: [dev/ephemeris]
@@ -30,6 +31,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'scripts/**'
       - '.github/workflows/rust-dev.yml'
   workflow_dispatch:
 
@@ -49,6 +51,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check for accidentally tracked external kernels
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+          python3 scripts/check_repository_data_hygiene.py --repo .
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
