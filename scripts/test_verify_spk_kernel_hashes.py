@@ -10,6 +10,8 @@
 # Modification (2026-11-14): test ordered names/sizes and hash-only compatibility.
 # Modification (2026-11-14): regressions for SPK file change detection.
 # Modification (2026-11-14): reject zero-vector reference receipts in SHA preflight.
+# Modification (2026-11-14): regressions for malformed post-header pseudo-vector rows.
+# Modification (2026-11-14): reject out-of-range and Rust-incompatible numeric tokens.
 
 """Synthetic byte-level regression tests; NO NASA/JPL SPK data is bundled."""
 
@@ -148,15 +150,46 @@ class SpkSha256PreflightTests(unittest.TestCase):
         for text in (header_only, header_only + "\n  \n\t\n"):
             with self.subTest(reference_tail=repr(text[-20:])):
                 self.reference.write_text(text, encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "no astronomical vector rows"):
+                with self.assertRaisesRegex(ValueError, "no numeric astronomical vector rows"):
                     read_declared_manifest(self.reference)
-                with self.assertRaisesRegex(ValueError, "no astronomical vector rows"):
+                with self.assertRaisesRegex(ValueError, "no numeric astronomical vector rows"):
                     verify(self.reference, [self.first, self.second])
                 self.assertEqual(
                     main([str(self.reference), str(self.first), str(self.second)]),
                     1,
                 )
         # A genuine row restores the original hash-preflight behavior.
+        self.reference.write_text(valid, encoding="utf-8")
+        self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
+
+    def test_preflight_rejects_pseudo_rows_that_are_not_numeric_vectors(self):
+        """A nonempty body is not evidence of even one numeric SPK state."""
+        valid = self.reference.read_text(encoding="utf-8")
+        preamble = valid.split(CSV_HEADER, 1)[0] + CSV_HEADER + "\n"
+        malformed_rows = (
+            "not-a-vector\n",
+            CSV_HEADER + "\n",  # Repeated header, not a vector.
+            "0,301,399,1,2,3,4,5\n",  # Missing velocity component.
+            "0,301,399,1,2,3,4,5,\n",
+            "0,abc,399,1,2,3,4,5,6\n",
+            "nan,301,399,1,2,3,4,5,6\n",
+            "0,301,399,1,2,3,4,5,nan\n",
+            "0,301,399,1,2,3,4,5,inf\n",
+            "0,2147483648,399,1,2,3,4,5,6\n",  # i32 overflow.
+            "0,-2147483649,399,1,2,3,4,5,6\n",
+            "0,399,399,1,2,3,4,5,6\n",  # Same target and center.
+            "0,3_01,399,1,2,3,4,5,6\n",  # Python int would accept.
+            "0,٣٠١,399,1,2,3,4,5,6\n",  # Unicode digits, not Rust i32.
+            "0,301,399,1_0,2,3,4,5,6\n",  # Python float would accept.
+            "0,301,399,1,2,3,4,5,6_0\n",
+        )
+        for row in malformed_rows:
+            with self.subTest(row=row):
+                self.reference.write_text(preamble + row, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "no numeric astronomical vector rows"):
+                    read_declared_manifest(self.reference)
+                with self.assertRaisesRegex(ValueError, "no numeric astronomical vector rows"):
+                    verify(self.reference, [self.first, self.second])
         self.reference.write_text(valid, encoding="utf-8")
         self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
 
