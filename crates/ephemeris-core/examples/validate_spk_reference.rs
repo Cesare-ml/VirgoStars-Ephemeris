@@ -128,8 +128,10 @@ fn read_reference(content: &str) -> Result<Reference, String> {
             // For kernel identity fields, silently trimming a filename or
             // byte count could make a malformed manifest look valid. Preserve
             // the general metadata parser's historical whitespace behavior.
-            if matches!(key.trim(), "ordered_kernel_names" | "ordered_kernel_sizes_bytes")
-                && (value != value.trim() || raw != raw.trim_end())
+            if matches!(
+                key.trim(),
+                "ordered_kernel_names" | "ordered_kernel_sizes_bytes"
+            ) && (value != value.trim() || raw != raw.trim_end())
             {
                 return Err(format!("line {line_no}: whitespace in kernel manifest"));
             }
