@@ -259,10 +259,7 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         metadata_records.extend([record, record + 1]);
     }
     metadata_records.sort_unstable();
-    if metadata_records
-        .windows(2)
-        .any(|pair| pair[0] == pair[1])
-    {
+    if metadata_records.windows(2).any(|pair| pair[0] == pair[1]) {
         return Err(SpkIndexError::InvalidFile(
             "overlapping DAF summary or name records",
         ));
