@@ -111,3 +111,31 @@ fn sparse_high_order_series_matches_independent_endpoint_sums() {
         );
     }
 }
+
+#[test]
+fn high_order_interior_values_and_slopes_match_trigonometric_oracle() {
+    // Independent identity: T_n(cos(theta)) = cos(n*theta),
+    // dT_n/dx = n*sin(n*theta)/sin(theta).
+    // Interior points exercise Clenshaw beyond endpoint and midpoint identities.
+    for x in [-0.75_f64, -0.5, 0.25, 0.5, 0.75] {
+        let theta = x.acos();
+        for degree in [1_usize, 2, 7, 17, 32, 65, 99] {
+            let mut coefficients = vec![0.0; degree + 1];
+            coefficients[degree] = 1.0;
+            let actual = evaluate_chebyshev(&coefficients, x).unwrap();
+            let angle = degree as f64 * theta;
+            let expected_value = angle.cos();
+            let expected_slope = degree as f64 * angle.sin() / theta.sin();
+            assert!(
+                (actual.value - expected_value).abs() <= 1e-10,
+                "degree {degree}, x={x}, value: {} vs {expected_value}",
+                actual.value
+            );
+            assert!(
+                (actual.derivative_dx - expected_slope).abs() <= 1e-8,
+                "degree {degree}, x={x}, slope: {} vs {expected_slope}",
+                actual.derivative_dx
+            );
+        }
+    }
+}
