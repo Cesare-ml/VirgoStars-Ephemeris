@@ -235,9 +235,9 @@ fn rounded_internal_boundaries_select_following_granules_across_tdb_scales() {
                         JulianDateTdb(before),
                     )
                     .expect("immediately preceding epoch must select previous granule");
-                for axis in 0..3 {
+                for (axis, position) in previous.position_km.iter().enumerate() {
                     assert_eq!(
-                        previous.position_km[axis],
+                        *position,
                         (100 * (granule - 1) + axis + 1) as f64,
                         "JD {before}, preceding granule {}, axis {axis}",
                         granule - 1
