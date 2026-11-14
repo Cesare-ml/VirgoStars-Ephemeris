@@ -147,21 +147,9 @@ fn tilted_spherical_state_reconstructs_icrf_position_and_velocity() {
             [100.0, -350.0, 29.0],
             -0.27,
         ),
-        (
-            [1_000_000.0, -0.1, 0.0],
-            [0.0, 100.0, 0.0],
-            0.409_092_8,
-        ),
-        (
-            [-500_000.0, 1.0, 210_000.0],
-            [400.0, -12.0, 91.0],
-            -0.27,
-        ),
-        (
-            [1_000.0, 1_200.0, 10_000_000.0],
-            [10.0, -11.0, 2.0],
-            0.0,
-        ),
+        ([1_000_000.0, -0.1, 0.0], [0.0, 100.0, 0.0], 0.409_092_8),
+        ([-500_000.0, 1.0, 210_000.0], [400.0, -12.0, 91.0], -0.27),
+        ([1_000.0, 1_200.0, 10_000_000.0], [10.0, -11.0, 2.0], 0.0),
     ] {
         let state = synthetic_state(position, velocity);
         let spherical = project_fixed_axes(&state, tilt).unwrap();
@@ -178,10 +166,10 @@ fn tilted_spherical_state_reconstructs_icrf_position_and_velocity() {
         let x_prime = horizontal * cos_lon;
         let y_prime = horizontal * sin_lon;
         let z_prime = spherical.distance_km * sin_lat;
-        let vx_prime = horizontal_rate * cos_lon
-            - horizontal * sin_lon * spherical.longitude_rate_rad_per_day;
-        let vy_prime = horizontal_rate * sin_lon
-            + horizontal * cos_lon * spherical.longitude_rate_rad_per_day;
+        let vx_prime =
+            horizontal_rate * cos_lon - horizontal * sin_lon * spherical.longitude_rate_rad_per_day;
+        let vy_prime =
+            horizontal_rate * sin_lon + horizontal * cos_lon * spherical.longitude_rate_rad_per_day;
 
         // Inverse of the library's fixed passive +X rotation.
         let (sin_tilt, cos_tilt) = tilt.sin_cos();
