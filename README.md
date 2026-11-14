@@ -44,6 +44,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - Requirements and phased architecture being documented.
 - Experimental classic JPL DE441 binary reader in `src/jpl-de441.mjs` with isolated synthetic tests in `test/jpl-de441.test.mjs`.
 - Experimental Rust workspace in `Cargo.toml` and `crates/ephemeris-core/`, with a classic JPL DE441 binary reader and synthetic/integration tests. **This Rust reader is not an SPK `.bsp` reader** and is not scientifically validated; see [DE441 docs](docs/DE441.md).
+- Experimental Rust [decimal-hour Julian-day and reverse conversions](docs/DECIMAL_HOUR_JULIAN_API_2026-11-11.md), with explicit calendar and time-scale labels. These are calendar arithmetic, not Node bindings or time-scale conversions.
 - No production-ready engine, cross-language bindings, published package, numerical-parity claim, or production migration yet.
 - GitHub Actions CI for Node.js regression tests and Rust format/lint/test checks when a Cargo workspace exists on the checked-out branch; no automatic releases or deployment.
 
