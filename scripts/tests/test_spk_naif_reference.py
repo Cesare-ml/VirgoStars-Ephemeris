@@ -17,10 +17,13 @@
 
 """Offline, synthetic tests for the SPK reference producer, never JPL parity."""
 
+import contextlib
 import importlib.util
 import hashlib
+import io
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -259,6 +262,71 @@ class SpkReferenceTests(unittest.TestCase):
                 REFERENCE.write_reference_atomic(destination, "new reference", overwrite=True)
         self.assertEqual(destination.read_text(encoding="utf-8"), "old verified reference")
         self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+
+    def test_generate_cli_publishes_complete_hash_verified_reference(self):
+        destination = Path(self.folder.name) / "cli-reference.csv"
+        fake = FakeSpice()
+        command = [
+            "generate",
+            "--kernel", str(self.first),
+            "--kernel", str(self.second),
+            "--case", "301:399:0",
+            "--case", "399:0:123.25",
+            "--output", str(destination),
+        ]
+        with patch.dict(sys.modules, {"spiceypy": fake}):
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(REFERENCE.main(command), 0)
+        self.assertEqual(len(fake.queries), 2)
+        self.assertEqual(fake.clear_count, 2)
+        text = destination.read_text(encoding="utf-8")
+        self.assertIn(REFERENCE.COLUMNS + "\n", text)
+        REFERENCE.verify_reference_hashes(text, self.paths)
+        self.assertEqual(list(destination.parent.glob(".cli-reference.csv.*.tmp")), [])
+
+    def test_generate_cli_rejects_destination_created_during_spice_generation(self):
+        destination = Path(self.folder.name) / "racing.csv"
+        command = [
+            "generate",
+            "--kernel", str(self.first),
+            "--case", "301:399:0",
+            "--output", str(destination),
+        ]
+        actual_link = REFERENCE.os.link
+
+        def racing_link(source, target):
+            destination.write_text("concurrent scientist wrote this", encoding="utf-8")
+            return actual_link(source, target)
+
+        with patch.dict(sys.modules, {"spiceypy": FakeSpice()}):
+            with patch.object(REFERENCE.os, "link", side_effect=racing_link):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(REFERENCE.main(command), 1)
+        self.assertEqual(
+            destination.read_text(encoding="utf-8"),
+            "concurrent scientist wrote this",
+        )
+        self.assertEqual(list(destination.parent.glob(".racing.csv.*.tmp")), [])
+
+    def test_generate_cli_explicit_overwrite_keeps_published_csv_verifiable(self):
+        destination = Path(self.folder.name) / "replaced.csv"
+        destination.write_text("outdated reference", encoding="utf-8")
+        command = [
+            "generate", "--kernel", str(self.first),
+            "--case", "301:399:0",
+            "--output", str(destination),
+        ]
+        with patch.dict(sys.modules, {"spiceypy": FakeSpice()}):
+            with contextlib.redirect_stdout(io.StringIO()):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(REFERENCE.main(command), 1)
+                self.assertEqual(REFERENCE.main(command + ["--overwrite"]), 0)
+        document = destination.read_text(encoding="utf-8")
+        self.assertIn(REFERENCE.COLUMNS, document)
+        REFERENCE.verify_reference_hashes(document, [self.first])
+        self.assertEqual(list(destination.parent.glob(".replaced.csv.*.tmp")), [])
 
 
 if __name__ == "__main__":
