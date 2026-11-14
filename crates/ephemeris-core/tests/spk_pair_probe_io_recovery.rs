@@ -150,7 +150,10 @@ fn diagnostic_probes_keep_good_pairs_after_a_selected_kernel_read_failure() {
     assert_eq!(probes.len(), requests.len());
     for (index, &(target, center)) in requests.iter().enumerate() {
         assert_eq!(probes[index].request_index, index);
-        assert_eq!((probes[index].target_id, probes[index].center_id), (target, center));
+        assert_eq!(
+            (probes[index].target_id, probes[index].center_id),
+            (target, center)
+        );
     }
     for index in [0, 2, 4] {
         let state = probes[index].result.as_ref().unwrap();
@@ -163,7 +166,10 @@ fn diagnostic_probes_keep_good_pairs_after_a_selected_kernel_read_failure() {
             error,
             SpkRelativeError::Segment(SpkStateError::Io(_))
         ));
-        assert!(error.source().is_some(), "preserve the underlying I/O error");
+        assert!(
+            error.source().is_some(),
+            "preserve the underlying I/O error"
+        );
     }
     assert_eq!(kernels.kernel_count(), 2);
 }
