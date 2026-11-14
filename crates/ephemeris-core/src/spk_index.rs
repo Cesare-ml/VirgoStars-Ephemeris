@@ -444,8 +444,7 @@ mod tests {
 
                 // A legacy blank field may also be space-filled.
                 let mut blank = base.clone();
-                blank[FTPSTR_OFFSET..FTPSTR_OFFSET + FTPSTR_EXPECTED.len()]
-                    .fill(b' ');
+                blank[FTPSTR_OFFSET..FTPSTR_OFFSET + FTPSTR_EXPECTED.len()].fill(b' ');
                 assert_eq!(parse(blank).unwrap().byte_order, order);
 
                 let mut valid = base;
