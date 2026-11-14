@@ -70,9 +70,16 @@ fn synthetic_spk(order: SpkByteOrder, kind: i32) -> Vec<u8> {
     write_f64(&mut bytes, summary + 16, 1.0, order);
     write_f64(&mut bytes, summary + 24, 0.0, order);
     write_f64(&mut bytes, summary + 32, 10.0, order);
-    for (i, n) in [301, 399, 1, kind, FIRST_DATA_WORD as i32, final_address as i32]
-        .into_iter()
-        .enumerate()
+    for (i, n) in [
+        301,
+        399,
+        1,
+        kind,
+        FIRST_DATA_WORD as i32,
+        final_address as i32,
+    ]
+    .into_iter()
+    .enumerate()
     {
         write_i32(&mut bytes, summary + 40 + 4 * i, n, order);
     }
@@ -184,7 +191,11 @@ fn interrupted_and_chunked_reads_preserve_index_and_direct_xyz() {
             assert_eq!(state.position_km, [100.0, 20.0, 30.0]);
             assert_eq!(
                 state.velocity_km_per_second,
-                if kind == 2 { [2.0, 0.0, 0.0] } else { [4.0, 5.0, 6.0] }
+                if kind == 2 {
+                    [2.0, 0.0, 0.0]
+                } else {
+                    [4.0, 5.0, 6.0]
+                }
             );
         }
     }
