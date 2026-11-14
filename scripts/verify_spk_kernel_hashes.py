@@ -11,6 +11,7 @@
 # Modification (2026-11-14): detect observable kernel file changes during hashing.
 # Modification (2026-11-14): require at least one CSV vector row for hash preflight.
 # Modification (2026-11-14): recognize numeric vector rows rather than arbitrary post-header text.
+# Modification (2026-11-14): reject non-ASCII numeric tokens and out-of-i32 NAIF IDs in candidate rows.
 
 """Offline SHA-256 preflight for the experimental Rust SPK/NAIF comparator.
 
@@ -24,10 +25,15 @@ import hashlib
 import hmac
 import math
 import os
+import re
 from pathlib import Path
 import sys
 
 CSV_HEADER = "et_tdb_seconds,target_id,center_id,x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s"
+NAIF_ID_TOKEN = re.compile(r"[+-]?[0-9]+")
+FINITE_FLOAT_TOKEN = re.compile(
+    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+)
 
 
 def _is_numeric_vector_candidate(line: str) -> bool:
@@ -40,11 +46,18 @@ def _is_numeric_vector_candidate(line: str) -> bool:
     columns = [field.strip() for field in line.split(",")]
     if len(columns) != 9 or any(not field for field in columns):
         return False
+    if not all(NAIF_ID_TOKEN.fullmatch(value) for value in columns[1:3]):
+        return False
+    numeric_fields = (columns[0], *columns[3:])
+    if not all(FINITE_FLOAT_TOKEN.fullmatch(value) for value in numeric_fields):
+        return False
     try:
-        int(columns[1], 10)
-        int(columns[2], 10)
-        return all(math.isfinite(float(value)) for value in (columns[0], *columns[3:]))
-    except ValueError:
+        target, center = (int(value, 10) for value in columns[1:3])
+        if (target == center or
+                not all(-(2 ** 31) <= identifier < 2 ** 31 for identifier in (target, center))):
+            return False
+        return all(math.isfinite(float(value)) for value in numeric_fields)
+    except (ValueError, OverflowError):
         return False
 
 
