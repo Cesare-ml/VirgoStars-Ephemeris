@@ -225,12 +225,22 @@ fn position_and_velocity_scaling_respects_rate_units() {
                 assert_near(result.longitude_rad, baseline.longitude_rad, 2.0e-12);
                 assert_near(result.latitude_rad, baseline.latitude_rad, 2.0e-12);
                 let expected_distance = baseline.distance_km * position_scale;
-                assert_near(result.distance_km, expected_distance, expected_distance * 2.0e-12);
+                assert_near(
+                    result.distance_km,
+                    expected_distance,
+                    expected_distance * 2.0e-12,
+                );
 
                 let angular_multiplier = velocity_scale / position_scale;
                 for (actual, original) in [
-                    (result.longitude_rate_rad_per_day, baseline.longitude_rate_rad_per_day),
-                    (result.latitude_rate_rad_per_day, baseline.latitude_rate_rad_per_day),
+                    (
+                        result.longitude_rate_rad_per_day,
+                        baseline.longitude_rate_rad_per_day,
+                    ),
+                    (
+                        result.latitude_rate_rad_per_day,
+                        baseline.latitude_rate_rad_per_day,
+                    ),
                 ] {
                     let expected = original * angular_multiplier;
                     assert_near(actual, expected, expected.abs() * 2.0e-12 + 1.0e-12);
