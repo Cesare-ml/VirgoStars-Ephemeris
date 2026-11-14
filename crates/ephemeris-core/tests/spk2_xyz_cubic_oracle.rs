@@ -19,9 +19,7 @@
 //! derivative conversion across negative TDB ET epochs, record endpoints and
 //! finite differences. This is synthetic mathematics, NOT JPL/Horizons parity.
 
-use virgostars_ephemeris_core::{
-    ChebyshevPositionRecord, TdbSecondsPastJ2000, Vector3,
-};
+use virgostars_ephemeris_core::{ChebyshevPositionRecord, TdbSecondsPastJ2000, Vector3};
 
 const MIDPOINT_ET: f64 = -172_800.0;
 const RADIUS_SECONDS: f64 = 43_200.0;
@@ -104,8 +102,7 @@ fn three_axis_velocities_agree_with_independent_centered_time_differences() {
         let next = record.state_at(et(seconds + delta_et_seconds)).unwrap();
         let current = record.state_at(et(seconds)).unwrap();
         for axis in 0..3 {
-            let slope = (axes(next.position_km)[axis]
-                - axes(previous.position_km)[axis])
+            let slope = (axes(next.position_km)[axis] - axes(previous.position_km)[axis])
                 / (2.0 * delta_et_seconds);
             near(axes(current.velocity_km_per_second)[axis], slope, 2.0e-12);
         }
@@ -128,16 +125,13 @@ fn rejects_invalid_radius_and_coefficients_before_any_state_is_returned() {
     let coefficients = [vec![1.0], vec![2.0], vec![3.0]];
     for radius in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert!(
-            ChebyshevPositionRecord::new(et(MIDPOINT_ET), radius, coefficients.clone())
-                .is_err()
+            ChebyshevPositionRecord::new(et(MIDPOINT_ET), radius, coefficients.clone()).is_err()
         );
     }
-    assert!(
-        ChebyshevPositionRecord::new(
-            et(MIDPOINT_ET),
-            RADIUS_SECONDS,
-            [vec![1.0], vec![f64::NEG_INFINITY], vec![3.0]],
-        )
-        .is_err()
-    );
+    assert!(ChebyshevPositionRecord::new(
+        et(MIDPOINT_ET),
+        RADIUS_SECONDS,
+        [vec![1.0], vec![f64::NEG_INFINITY], vec![3.0]],
+    )
+    .is_err());
 }
