@@ -8,6 +8,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): verify optional ordered SPK basenames and byte sizes.
+# Modification (2026-11-14): require at least one CSV vector row for hash preflight.
 
 """Offline SHA-256 preflight for the experimental Rust SPK/NAIF comparator.
 
@@ -36,6 +37,7 @@ def read_declared_manifest(
     """
     metadata: dict[str, str] = {}
     saw_header = False
+    saw_vector_row = False
     with reference.open("r", encoding="utf-8") as stream:
         for line_no, raw in enumerate(stream, 1):
             line = raw.strip()
@@ -61,7 +63,12 @@ def read_declared_manifest(
                     raise ValueError(f"line {line_no}: unexpected CSV header")
                 saw_header = True
                 continue
-            # Astronomical vector rows are validated by the Rust comparator.
+            # Keep the scientific/CSV schema validation in the Rust
+            # comparator. Nevertheless, a header-only file is not a usable
+            # numerical reference and must not receive a green SHA preflight.
+            saw_vector_row = True
+    if not saw_vector_row:
+        raise ValueError("reference contains no astronomical vector rows")
     raw_hashes = metadata.get("ordered_kernel_sha256")
     if not saw_header or raw_hashes is None:
         raise ValueError("reference header or ordered_kernel_sha256 metadata missing")
