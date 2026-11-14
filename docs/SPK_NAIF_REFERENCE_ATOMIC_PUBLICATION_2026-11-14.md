@@ -44,11 +44,15 @@ a newer validator.
 
 ## Verification
 
-Seven additional deterministic Python unit tests under
+Ten additional deterministic Python unit tests under
 `scripts/tests/test_spk_naif_reference.py` cover successful publication,
 existing-file preservation, a deterministic simulated time-of-check/time-of-use
 race, explicit overwrite, simulated `fsync` failure, hard-link unavailability
 without unsafe fallback, and failed atomic replacement with cleanup.
+Three of the new tests exercise the **actual `main(["generate", ...])` CLI**
+with a mocked SpiceyPy implementation: valid CSV plus digest verification,
+a competing writer appearing during the command, and explicit overwrite
+on a pre-existing final CSV.
 No installed SpiceyPy/NAIF Toolkit or network is needed for these tests.
 
 ```bash
