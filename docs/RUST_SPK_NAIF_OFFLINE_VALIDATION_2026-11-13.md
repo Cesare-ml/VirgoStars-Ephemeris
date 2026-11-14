@@ -139,3 +139,42 @@ These tests exercise manifest integrity, load order, duplicate/invalid time/IDs,
 2026-11-13 (follow-up): added an offline `compare` orchestration command to the original `spk_naif_reference.py`, seven mocked safety tests, documentation for fail-closed verification before/after Rust and source-fingerprint compatibility. No data, deployment or release added.
 
 2026-11-13: added original validation-only `scripts/spk_naif_reference.py`, `scripts/tests/test_spk_naif_reference.py`, and read-only CI checks on three platforms. The source preserves the project CPAL-1.0/Exhibit A and VirgoStars attribution. No third-party source, kernel binary, network call, production component or runtime dependency was added to the Rust engine.
+
+## One-command, fail-closed local scientific-validation receipt (2026-11-13)
+
+The same [`scripts/spk_naif_reference.py`](../scripts/spk_naif_reference.py) now has a `run` mode to connect all three independent stages without copying them into a second validation tool:
+
+1. Call independently installed NAIF/SPICE through SpiceyPy to generate a fresh **J2000, geometric, TDB seconds past J2000, km and km/s** reference CSV from locally obtained SPK files. The script records the toolkit version, exact kernel names/sizes/hashes, generator source hash and UTC timestamp.
+2. Recompute and check source and kernel hashes, then invoke the canonical **Rust** comparator with `cargo run --offline --locked --example validate_spk_reference -- ...`. The comparison is offline and uses **caller-approved finite positive** per-axis position/velocity tolerances; no default accuracy thresholds are assumed.
+3. **Always recheck** the generated CSV bytes and every source/kernel hash after the Rust subprocess returns, fails, or cannot start. Require **Rust exit code 0** as an additional condition before writing a **new, non-overwriting JSON receipt** containing the reference digest, kernel manifests and order, exact Rust command, all comparator stdout/stderr, toolchain version reported by SPICE, case count, user-supplied tolerances and audit status `COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING`.
+
+### Operator command (Windows PowerShell)
+
+```powershell
+# Prerequisites: Rust toolchain, Python 3.10+, independently installed
+# SpiceyPy and a legally obtained JPL SPK file. Nothing is downloaded.
+# Do not put a receipt or external SPK kernel inside the Git repository.
+python scripts/spk_naif_reference.py run `
+  --kernel "C:\\kernels\\de440s.bsp" `
+  --case "301:399:0" `
+  --case "301:399:86400" `
+  --case "399:0:0" `
+  --reference "C:\\my-validation\\spk-2026-11-13.csv" `
+  --receipt "C:\\my-validation\\spk-2026-11-13.receipt.json" `
+  --max-position-km "<approved-positive-km>" `
+  --max-velocity-km-s "<approved-positive-km-per-second>"
+```
+
+Replace angle-bracket values with **review-approved numbers**, without quotes if preferred. Adapt the paths, kernels and test matrix to the actual binary's segment coverage. Additional `--kernel` flags preserve load order; additional `--case` flags add comparison rows. This command is **illustrative**: no test on a real kernel has been executed in this contribution.
+
+The tool **never overwrites** an existing reference or receipt, or writes a *success receipt* after a failed Rust comparator or after either file changes. On a comparison failure the generated CSV may remain on disk for troubleshooting; no success receipt is produced. The receipt is an **audit candidate, not an accuracy certificate**: `scientific_accuracy_certified=false` and `provenance_review_required=true` remain explicit even on successful comparisons. Operator review must still establish the authenticity of the kernel's source, real NAIF reference implementation, independent tolerance policy, JPL solution version, and quantitative error budget. Human review is required before using results in production.
+
+This mode is **not an astronomical implementation in Python**: SpiceyPy runs only to generate an independent reference, and all VirgoStars calculations and residual acceptance remain in Rust. No real JPL data or SpiceyPy dependency is added to CI.
+
+### Tests and security boundaries
+
+The existing `scripts/tests/test_spk_naif_reference.py` suite now includes five additional deterministic **mock-SPICE and mock-Cargo** integration regressions. They prove that an unsigned JSON evidence receipt is created only after an exit-zero comparator plus rehashed inputs, and that failed comparison, mutated kernel bytes or changed CSV bytes prevent any success receipt. Four added failure-path regressions verify that changed kernel/CSV bytes are still detected when Rust reports failure or cannot start, while an unmodified missing executable retains its original error. These are **synthetic workflow tests**: they do not establish SPK real-kernel accuracy. The JSON receipt is not cryptographically signed; every file/source hash is a digest rather than an identity or authenticity signature; provenance still requires independent review.
+
+**Modification record:** 2026-11-13 — updated the original CPAL-1.0 Python validation helper and tests; linked this orchestration workflow without adding a new duplicate script, extra runtime dependency to Rust, dataset, secret, release, deployment or automatic production action.
+
+**Modification record (2026-11-14):** rehash reference CSV, generator source and ordered local kernels in a `finally` block **even when Cargo returns nonzero or raises an operating-system error**. No comparator failure or input mutation can produce a success receipt. This does not make the JSON cryptographically signed, make the files immutable, authenticate a NAIF toolkit/kernel or demonstrate real-data positional accuracy.
