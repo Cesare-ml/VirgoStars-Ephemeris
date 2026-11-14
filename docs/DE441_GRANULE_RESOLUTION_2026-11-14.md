@@ -18,6 +18,15 @@ neighboring boundary, or nonfinite boundary returns
 `De441Error::InvalidFile("coefficient granule dates exceed f64 JD resolution")`.
 The original declared file-length, pointer and record-date checks remain.
 
+**Runtime granule selection:** division followed by `floor()` can round
+a date that is exactly equal to a representable inner boundary to the
+*previous* index, for example near `JD = 1 + 1/3` with three granules
+per day. The reader now binary-searches the same representable inner
+boundaries as the constructor preflight. An exact inner boundary selects
+the following granule; the inclusive final coverage date selects the
+final granule. The search needs at most seven comparisons for the
+supported 100 granules per record and does not read additional bytes.
+
 The check is cheap (at most 13 series × 2 records × 100 granules).
 It does not examine every internal principal record or validate
 coefficient payloads, file authenticity, physical accuracy, or all
@@ -44,6 +53,11 @@ representability guard**, not a proof of exact epoch arithmetic.
   samples just before an internal boundary select the preceding
   granule, the exact boundary selects the next, and the final
   coverage endpoint selects the final granule.
+- A seventh public API regression compares rounded internal boundaries
+  against their immediately preceding representable TDB dates for
+  3, 9 and 97 granules, positive and negative epochs, and inclusive
+  final endpoints. It exposes the old division/floor off-by-one bug
+  without depending on an external ephemeris file.
 
 No external ephemeris kernels are used. These fixtures prove only
 deterministic structural checks, not independent NASA/JPL/Horizons vector
