@@ -746,6 +746,172 @@ mod tests {
         assert!(epochs(CivilTimestamp::parse("2027-06-27T23:59:59Z").unwrap()).is_ok());
     }
 
+    // Civil effective dates and TAI-UTC values cross-checked against the
+    // published historical table from Hong Kong Observatory. This independent
+    // date fixture prevents an erroneous hard-coded MJD from self-validating.
+    // The first row is the 1972 UTC baseline, not an inserted leap second.
+    const LEAP_CIVIL_REFERENCE: &[(i32, u8, u8, i32)] = &[
+        (1972, 1, 1, 10),
+        (1972, 7, 1, 11),
+        (1973, 1, 1, 12),
+        (1974, 1, 1, 13),
+        (1975, 1, 1, 14),
+        (1976, 1, 1, 15),
+        (1977, 1, 1, 16),
+        (1978, 1, 1, 17),
+        (1979, 1, 1, 18),
+        (1980, 1, 1, 19),
+        (1981, 7, 1, 20),
+        (1982, 7, 1, 21),
+        (1983, 7, 1, 22),
+        (1985, 7, 1, 23),
+        (1988, 1, 1, 24),
+        (1990, 1, 1, 25),
+        (1991, 1, 1, 26),
+        (1992, 7, 1, 27),
+        (1993, 7, 1, 28),
+        (1994, 7, 1, 29),
+        (1996, 1, 1, 30),
+        (1997, 7, 1, 31),
+        (1999, 1, 1, 32),
+        (2006, 1, 1, 33),
+        (2009, 1, 1, 34),
+        (2012, 7, 1, 35),
+        (2015, 7, 1, 36),
+        (2017, 1, 1, 37),
+    ];
+
+    fn utc_civil_day(day_number: i64) -> CalendarDateTime {
+        JulianDate::new(day_number, 0.0, TimeScale::Ut1)
+            .unwrap()
+            .to_calendar(Calendar::ProlepticGregorian)
+            .unwrap()
+    }
+
+    fn timestamp_on_day(
+        day: CalendarDateTime,
+        hour: u8,
+        minute: u8,
+        second: f64,
+        offset_minutes: i16,
+    ) -> CivilTimestamp {
+        CivilTimestamp {
+            year: day.year,
+            month: day.month,
+            day: day.day,
+            hour,
+            minute,
+            second,
+            utc_offset_minutes: offset_minutes,
+        }
+    }
+
+    // Modification (2026-11-14): independently anchor every post-1972
+    // positive leap-second transition, not only the 2016/2017 example.
+    #[test]
+    fn all_historical_utc_leap_transitions_match_civil_dates_and_tt_steps() {
+        assert_eq!(LEAP_SECONDS.len(), LEAP_CIVIL_REFERENCE.len());
+
+        for (index, &(year, month, day, tai_minus_utc)) in LEAP_CIVIL_REFERENCE.iter().enumerate() {
+            let at_midnight = CalendarDateTime {
+                year,
+                month,
+                day,
+                hour: 0,
+                minute: 0,
+                second: 0.0,
+                scale: TimeScale::Ut1,
+            }
+            .to_julian_date(Calendar::ProlepticGregorian)
+            .unwrap();
+            let mjd = at_midnight.day_number() - 2_400_001;
+            assert_eq!(
+                LEAP_SECONDS[index],
+                (mjd, tai_minus_utc),
+                "historical TAI-UTC table entry {index} disagrees with civil effective date"
+            );
+            let after = epochs(timestamp_on_day(
+                utc_civil_day(at_midnight.day_number()),
+                0,
+                0,
+                0.0,
+                0,
+            ))
+            .unwrap();
+            assert_eq!(after.tai_utc, tai_minus_utc);
+
+            if index == 0 {
+                assert_eq!(tai_minus_utc, 10, "1972 baseline is not a leap insertion");
+                continue;
+            }
+            assert_eq!(
+                tai_minus_utc,
+                LEAP_CIVIL_REFERENCE[index - 1].3 + 1,
+                "all historical post-baseline adjustments are positive one-second leaps"
+            );
+            let previous_day = utc_civil_day(at_midnight.day_number() - 1);
+            let before = epochs(timestamp_on_day(previous_day, 23, 59, 59.0, 0)).unwrap();
+            assert_eq!(before.tai_utc, tai_minus_utc - 1);
+            assert_eq!(before.utc.day_number() + 1, after.utc.day_number());
+            // The UTC leap label 23:59:60 is deliberately unsupported.
+            // Its elapsed second is nevertheless reflected in TT: the
+            // adjacent *supported* 23:59:59 and 00:00:00 labels span 2 SI s.
+            near((after.tt_jd - before.tt_jd) * DAY_SECONDS, 2.0, 0.0001);
+        }
+    }
+
+    #[test]
+    fn all_leap_boundaries_normalize_extreme_utc_offsets_before_tai_lookup() {
+        for &(year, month, day, tai_minus_utc) in LEAP_CIVIL_REFERENCE.iter().skip(1) {
+            let next_midnight = CalendarDateTime {
+                year,
+                month,
+                day,
+                hour: 0,
+                minute: 0,
+                second: 0.0,
+                scale: TimeScale::Ut1,
+            }
+            .to_julian_date(Calendar::ProlepticGregorian)
+            .unwrap();
+            let new_day = utc_civil_day(next_midnight.day_number());
+            let previous_day = utc_civil_day(next_midnight.day_number() - 1);
+            let utc_before = epochs(timestamp_on_day(previous_day, 23, 59, 59.0, 0)).unwrap();
+            let utc_after = epochs(timestamp_on_day(new_day, 0, 0, 0.0, 0)).unwrap();
+
+            // A +14:00 label on the effective date is still in the previous
+            // UTC day, whereas -12:00 on the prior local date is already in
+            // the next UTC day. The leap-second selection must use UTC.
+            let plus_fourteen = epochs(timestamp_on_day(new_day, 13, 59, 59.0, 840)).unwrap();
+            let minus_twelve = epochs(timestamp_on_day(previous_day, 12, 0, 0.0, -720)).unwrap();
+
+            assert_eq!(plus_fourteen.tai_utc, tai_minus_utc - 1);
+            assert_eq!(minus_twelve.tai_utc, tai_minus_utc);
+            assert_eq!(plus_fourteen.utc.day_number(), utc_before.utc.day_number());
+            assert_eq!(minus_twelve.utc.day_number(), utc_after.utc.day_number());
+            near(
+                plus_fourteen.utc.midnight_fraction(),
+                utc_before.utc.midnight_fraction(),
+                1e-12,
+            );
+            near(
+                minus_twelve.utc.midnight_fraction(),
+                utc_after.utc.midnight_fraction(),
+                1e-12,
+            );
+            near(
+                (plus_fourteen.tt_jd - utc_before.tt_jd) * DAY_SECONDS,
+                0.0,
+                0.0001,
+            );
+            near(
+                (minus_twelve.tt_jd - utc_after.tt_jd) * DAY_SECONDS,
+                0.0,
+                0.0001,
+            );
+        }
+    }
+
     #[test]
     fn precession_matches_independent_erfa_pmat06_reference() {
         // ERFA t_pmat06 numerical conformance data; see THIRD_PARTY_NOTICES.md.
