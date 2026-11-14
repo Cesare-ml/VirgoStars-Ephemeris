@@ -145,7 +145,13 @@ fn mixed_high_order_interior_series_matches_trigonometric_oracle() {
     // Unlike single-basis checks, this exercises Clenshaw accumulation and
     // derivative accumulation simultaneously at non-symmetric interior epochs.
     // The independent oracle uses T_n(cos(theta)) = cos(n*theta).
-    let terms = [(0_usize, 0.75), (1, -1.25), (7, 0.5), (32, -0.125), (99, 0.0625)];
+    let terms = [
+        (0_usize, 0.75),
+        (1, -1.25),
+        (7, 0.5),
+        (32, -0.125),
+        (99, 0.0625),
+    ];
     let mut coefficients = vec![0.0; 100];
     for &(degree, coefficient) in &terms {
         coefficients[degree] = coefficient;
