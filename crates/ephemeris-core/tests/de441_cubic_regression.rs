@@ -647,7 +647,13 @@ fn first_granule_xyz_coefficients_remain_independent_near_transition() {
 
     let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
     let boundary = 1016.0_f64;
-    for jd in [1000.0, 1008.0, f64::from_bits(boundary.to_bits() - 1)] {
+    for jd in [
+        1000.0,
+        1004.0,
+        1008.0,
+        1012.0,
+        f64::from_bits(boundary.to_bits() - 1),
+    ] {
         let x = (jd - 1008.0) / 8.0;
         let t2 = 2.0 * x * x - 1.0;
         let t3 = 4.0 * x * x * x - 3.0 * x;
