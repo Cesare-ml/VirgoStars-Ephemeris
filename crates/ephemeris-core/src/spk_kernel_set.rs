@@ -417,10 +417,7 @@ mod tests {
                 seg(399, 3, 2, [5.0, 0.0], [1.0, 0.0]),
                 seg(3, 399, 3, [7.0, 0.0], [0.0, 0.0]),
             ];
-            let mut set = with_kernels(&[
-                (older_order, children),
-                (newer_order, parent_cycle),
-            ]);
+            let mut set = with_kernels(&[(older_order, children), (newer_order, parent_cycle)]);
 
             // The two required links are from the earlier kernel, and both
             // stop at the common ancestor 399. No link from the newer
