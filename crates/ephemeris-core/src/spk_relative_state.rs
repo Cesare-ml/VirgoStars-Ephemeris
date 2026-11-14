@@ -28,6 +28,9 @@ SPDX-License-Identifier: CPAL-1.0
 //! numerical JPL implementation.
 //! NAIF SPK background: <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html>
 
+//! Modification (2026-11-14): accumulate signed target/observer links with
+//! compensated sums, preserving small offsets during large-vector cancellation.
+
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
@@ -144,32 +147,73 @@ fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> (Vec<i32>
     (path, None)
 }
 
-/// Sum the existing direct SPK states from the start body to the ancestor.
+/// Neumaier-compensated summation of a geometric SPK state component.
 ///
-/// Each link is retrieved through the canonical evaluator; any unsupported
-/// selected frame/type or invalid coefficients therefore fail explicitly.
-fn to_ancestor<S: SpkStateResolver>(
+/// A high-magnitude link can round away a smaller but valid contribution.
+/// Accumulate both the target and *negative* observer links in one sequence,
+/// so cancellation across the two paths does not erase low-order components.
+/// This is roundoff control, not an independent astronomy implementation.
+///
+/// Modification (2026-11-14): preserve small signed link contributions
+/// across center-chain and target-minus-observer cancellation.
+#[derive(Clone, Copy, Default)]
+struct CompensatedSum {
+    value: f64,
+    correction: f64,
+}
+
+impl CompensatedSum {
+    fn add(&mut self, term: f64) -> Result<(), SpkRelativeError> {
+        let next = self.value + term;
+        if !next.is_finite() {
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+        let roundoff = if self.value.abs() >= term.abs() {
+            (self.value - next) + term
+        } else {
+            (term - next) + self.value
+        };
+        self.correction += roundoff;
+        if !self.correction.is_finite() {
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+        self.value = next;
+        Ok(())
+    }
+
+    fn finish(self) -> Result<f64, SpkRelativeError> {
+        let value = self.value + self.correction;
+        if !value.is_finite() {
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+        Ok(value)
+    }
+}
+
+/// Accumulate existing direct SPK links up to (but not including) the shared
+/// ancestor. The sign is +1 for target links and -1 for observer links.
+///
+/// Only links required by the chosen path are evaluated. Any unsupported
+/// selected segment or corrupt coefficients still fail without fallback.
+fn accumulate_to_ancestor<S: SpkStateResolver>(
     resolver: &mut S,
     path: &[i32],
     common: i32,
     et: f64,
-) -> Result<([f64; 3], [f64; 3]), SpkRelativeError> {
-    let mut position = [0.0_f64; 3];
-    let mut velocity = [0.0_f64; 3];
+    sign: f64,
+    sums: &mut [CompensatedSum; 6],
+) -> Result<(), SpkRelativeError> {
     for &body in path {
         if body == common {
             break;
         }
         let state = resolver.direct_state(body, et)?;
         for axis in 0..3 {
-            position[axis] += state.position_km[axis];
-            velocity[axis] += state.velocity_km_per_second[axis];
-            if !position[axis].is_finite() || !velocity[axis].is_finite() {
-                return Err(SpkRelativeError::NumericalOverflow);
-            }
+            sums[axis].add(sign * state.position_km[axis])?;
+            sums[axis + 3].add(sign * state.velocity_km_per_second[axis])?;
         }
     }
-    Ok((position, velocity))
+    Ok(())
 }
 
 /// Compute one geometric target-minus-center SPK state at one TDB/ET epoch.
@@ -249,17 +293,11 @@ pub(crate) fn resolve_relative<S: SpkStateResolver>(
         }
     };
 
-    let (target_position, target_velocity) = to_ancestor(resolver, &target_path, common, et)?;
-    let (center_position, center_velocity) = to_ancestor(resolver, &center_path, common, et)?;
-    let mut position_km = [0.0; 3];
-    let mut velocity_km_per_second = [0.0; 3];
-    for axis in 0..3 {
-        position_km[axis] = target_position[axis] - center_position[axis];
-        velocity_km_per_second[axis] = target_velocity[axis] - center_velocity[axis];
-        if !position_km[axis].is_finite() || !velocity_km_per_second[axis].is_finite() {
-            return Err(SpkRelativeError::NumericalOverflow);
-        }
-    }
+    let mut sums = [CompensatedSum::default(); 6];
+    accumulate_to_ancestor(resolver, &target_path, common, et, 1.0, &mut sums)?;
+    accumulate_to_ancestor(resolver, &center_path, common, et, -1.0, &mut sums)?;
+    let position_km = [sums[0].finish()?, sums[1].finish()?, sums[2].finish()?];
+    let velocity_km_per_second = [sums[3].finish()?, sums[4].finish()?, sums[5].finish()?];
     Ok(SpkRelativeState {
         target_id,
         center_id,
@@ -566,6 +604,121 @@ mod tests {
         assert!(matches!(
             compute(SpkByteOrder::LittleEndian, &specs, 301, 0, 11.0),
             Err(SpkRelativeError::Disconnected { .. })
+        ));
+    }
+}
+
+
+#[cfg(test)]
+mod compensated_chain_tests {
+    use super::*;
+
+    #[derive(Clone, Copy)]
+    struct Link {
+        target: i32,
+        center: i32,
+        position: [f64; 3],
+        velocity: [f64; 3],
+    }
+
+    struct MockResolver {
+        links: Vec<Link>,
+    }
+
+    impl SpkStateResolver for MockResolver {
+        fn selected_center(&self, body: i32, _et: f64) -> Option<i32> {
+            self.links
+                .iter()
+                .find(|link| link.target == body)
+                .map(|link| link.center)
+        }
+
+        fn direct_state(&mut self, body: i32, et: f64) -> Result<SpkDirectState, SpkStateError> {
+            let link = self
+                .links
+                .iter()
+                .find(|link| link.target == body)
+                .ok_or(SpkStateError::MissingSegment { target_id: body })?;
+            Ok(SpkDirectState {
+                target_id: link.target,
+                center_id: link.center,
+                frame_id: 1,
+                tdb_seconds_past_j2000: et,
+                position_km: link.position,
+                velocity_km_per_second: link.velocity,
+            })
+        }
+    }
+
+    fn link(
+        target: i32,
+        center: i32,
+        position: [f64; 3],
+        velocity: [f64; 3],
+    ) -> Link {
+        Link {
+            target,
+            center,
+            position,
+            velocity,
+        }
+    }
+
+    #[test]
+    fn tiny_links_survive_large_target_and_center_cancellation() {
+        // Independent exact arithmetic: (1e16 + 1) - 1e16 = 1.
+        // Each input is exactly representable, but ordinary f64 summation
+        // rounds 1e16 + 1 back to 1e16 before subtracting the observer.
+        let mut resolver = MockResolver {
+            links: vec![
+                link(100, 300, [1e16, -1e16, 0.0], [1e16, -1e16, 0.0]),
+                link(300, 0, [1.0, 2.0, 0.0], [1.0, 2.0, 0.0]),
+                link(200, 0, [1e16, -1e16, 0.0], [1e16, -1e16, 0.0]),
+            ],
+        };
+        let state = resolve_relative(&mut resolver, 100, 200, -123.0).unwrap();
+        assert_eq!(state.common_ancestor_id, 0);
+        assert_eq!(state.tdb_seconds_past_j2000, -123.0);
+        assert_eq!(state.position_km, [1.0, 2.0, 0.0]);
+        assert_eq!(state.velocity_km_per_second, [1.0, 2.0, 0.0]);
+
+        let reverse = resolve_relative(&mut resolver, 200, 100, -123.0).unwrap();
+        assert_eq!(reverse.position_km, [-1.0, -2.0, 0.0]);
+        assert_eq!(reverse.velocity_km_per_second, [-1.0, -2.0, 0.0]);
+    }
+
+    #[test]
+    fn signed_three_link_path_cancellation_keeps_unit_offset() {
+        // (1e16 + 1 - 1e16) is exactly one kilometre along x and
+        // one kilometre per second along y, despite losing the unit
+        // contribution with naive left-to-right binary64 accumulation.
+        let mut resolver = MockResolver {
+            links: vec![
+                link(100, 101, [1e16, 0.0, 0.0], [0.0, 1e16, 0.0]),
+                link(101, 102, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+                link(102, 0, [-1e16, 0.0, 0.0], [0.0, -1e16, 0.0]),
+            ],
+        };
+        let state = resolve_relative(&mut resolver, 100, 0, 0.0).unwrap();
+        assert_eq!(state.position_km, [1.0, 0.0, 0.0]);
+        assert_eq!(state.velocity_km_per_second, [0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn true_overflow_still_fails_closed() {
+        let mut resolver = MockResolver {
+            links: vec![
+                link(100, 0, [f64::MAX, 0.0, 0.0], [0.0; 3]),
+                link(200, 0, [-f64::MAX, 0.0, 0.0], [0.0; 3]),
+            ],
+        };
+        assert!(matches!(
+            resolve_relative(&mut resolver, 100, 200, 0.0),
+            Err(SpkRelativeError::NumericalOverflow)
+        ));
+        assert!(matches!(
+            resolve_relative(&mut resolver, 100, 200, f64::NAN),
+            Err(SpkRelativeError::InvalidEpoch)
         ));
     }
 }
