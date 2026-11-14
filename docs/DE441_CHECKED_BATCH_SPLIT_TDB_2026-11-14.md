@@ -118,3 +118,30 @@ body, center and typed source; updated the missing-series/coverage tests. Origin
 including the required `Powered by VirgoStars` attribution and
 [NOTICE](../NOTICE). No dependencies, external kernels, Swiss/NAIF code,
 credentials, releases, deployment or production migrations were added.
+
+## 2026-11-14 integration synchronization
+
+The three draft branches were **non-force synchronized** in the required
+dependency order. The bridge (#136) now includes the current experimental
+Rust SPK module exports in `lib.rs` and all development-branch files,
+without dropping `de441_epoch_bridge`. The scalar (#139) was synchronized
+on top of that updated bridge, and this batch (#194) on top of the
+updated scalar implementation. The incremental code paths remain exactly
+three, three and four changed files, respectively.
+
+The updated heads are independently traceable:
+
+- #136: `612c5960122c3b8cccd73dcc1eb7e9c74efc0e8f`
+- #139: `bdbde526150c66db54606ce19ce0bed63e38e96d`
+- #194 integration commit: `1af57a5aff312ca374325d340ed8b31b970aa165`
+
+The batch PR is **temporarily targeting `dev/ephemeris` only for
+authorized, read-only integration CI**. Once verified, restore the actual
+review base `feat/de441-checked-split-state-20261112`. No PR in this
+chain is to be merged to the development or production branches until
+its predecessor is integrated and the normal human review gate has
+been satisfied. A Rust CI pass tests only synthetic fixtures and
+code quality, not real NASA/JPL ephemeris accuracy.
+
+Modification 2026-11-14: integration note only; original CPAL-1.0 and
+VirgoStars attribution remain unchanged.
