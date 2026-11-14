@@ -17,20 +17,20 @@ fn binary_power_scaling_preserves_value_and_normalized_derivative() {
         for exponent in [-40, -8, 0, 8, 40] {
             for sign in [-1.0, 1.0] {
                 let scale = sign * 2.0_f64.powi(exponent);
-            let scaled: Vec<f64> = coefficients.iter().map(|c| c * scale).collect();
-            let sample = evaluate_chebyshev(&scaled, x).unwrap();
-            let value_tolerance = 1e-12 * scale.abs() * baseline.value.abs().max(1.0);
-            let derivative_tolerance =
-                1e-12 * scale.abs() * baseline.derivative_dx.abs().max(1.0);
-            assert!(
-                (sample.value - baseline.value * scale).abs() <= value_tolerance,
-                "value scaling failed at x={x}, exponent={exponent}, sign={sign}"
-            );
-            assert!(
-                (sample.derivative_dx - baseline.derivative_dx * scale).abs()
-                    <= derivative_tolerance,
-                "derivative scaling failed at x={x}, exponent={exponent}, sign={sign}"
-            );
+                let scaled: Vec<f64> = coefficients.iter().map(|c| c * scale).collect();
+                let sample = evaluate_chebyshev(&scaled, x).unwrap();
+                let value_tolerance = 1e-12 * scale.abs() * baseline.value.abs().max(1.0);
+                let derivative_tolerance =
+                    1e-12 * scale.abs() * baseline.derivative_dx.abs().max(1.0);
+                assert!(
+                    (sample.value - baseline.value * scale).abs() <= value_tolerance,
+                    "value scaling failed at x={x}, exponent={exponent}, sign={sign}"
+                );
+                assert!(
+                    (sample.derivative_dx - baseline.derivative_dx * scale).abs()
+                        <= derivative_tolerance,
+                    "derivative scaling failed at x={x}, exponent={exponent}, sign={sign}"
+                );
             }
         }
     }
