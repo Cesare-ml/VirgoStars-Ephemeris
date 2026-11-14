@@ -124,11 +124,7 @@ impl<R: Read + Seek> SpkStateResolver for SingleKernel<'_, R> {
 /// target-minus-center state, whose paths stop at the common ancestor. Cycles
 /// still fail closed if no shared ancestor is reachable without repeating a
 /// node. Only metadata is inspected; no unused coefficients are evaluated.
-fn ancestors<S: SpkStateResolver>(
-    resolver: &S,
-    body: i32,
-    et: f64,
-) -> (Vec<i32>, Option<i32>) {
+fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> (Vec<i32>, Option<i32>) {
     let mut path = Vec::new();
     let mut visited = HashSet::new();
     let mut node = body;
