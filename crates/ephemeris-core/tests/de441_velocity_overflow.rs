@@ -79,8 +79,7 @@ fn finite_linear_derivative_has_finite_velocity_without_intermediate_overflow() 
             assert_eq!(state.position_km[axis], slope * x);
             let expected = (slope / 32.0) * 2.0;
             assert!(
-                (state.velocity_km_per_day[axis] - expected).abs()
-                    <= expected.abs() * 1.0e-14,
+                (state.velocity_km_per_day[axis] - expected).abs() <= expected.abs() * 1.0e-14,
                 "axis {axis} at JD {jd}: expected {expected}, got {}",
                 state.velocity_km_per_day[axis]
             );
