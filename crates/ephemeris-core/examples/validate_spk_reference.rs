@@ -125,6 +125,14 @@ fn read_reference(content: &str) -> Result<Reference, String> {
                 .trim()
                 .split_once('=')
                 .ok_or_else(|| format!("line {line_no}: expected # key=value"))?;
+            // For kernel identity fields, silently trimming a filename or
+            // byte count could make a malformed manifest look valid. Preserve
+            // the general metadata parser's historical whitespace behavior.
+            if matches!(key.trim(), "ordered_kernel_names" | "ordered_kernel_sizes_bytes")
+                && (value != value.trim() || raw != raw.trim_end())
+            {
+                return Err(format!("line {line_no}: whitespace in kernel manifest"));
+            }
             let (key, value) = (key.trim(), value.trim());
             if key.is_empty() || value.is_empty() {
                 return Err(format!("line {line_no}: empty reference metadata"));
