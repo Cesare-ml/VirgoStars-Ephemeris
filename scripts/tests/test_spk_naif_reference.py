@@ -306,6 +306,43 @@ class SpkReferenceTests(unittest.TestCase):
             )
 
 
+    def test_compare_nonzero_rust_exit_still_detects_kernel_tampering(self):
+        reference = self._comparison_input()
+
+        def mutating_failure(argv, *, check):
+            contents = bytearray(self.first.read_bytes())
+            contents[0] ^= 1
+            self.first.write_bytes(contents)
+            return subprocess.CompletedProcess(argv, 17, "", "comparison failed")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "0.001", "0.000001", runner=mutating_failure
+            )
+
+    def test_compare_nonzero_rust_exit_still_detects_csv_tampering(self):
+        reference = self._comparison_input()
+
+        def mutating_failure(argv, *, check):
+            reference.write_bytes(reference.read_bytes() + b"modified")
+            return subprocess.CompletedProcess(argv, 17, "", "comparison failed")
+
+        with self.assertRaisesRegex(ValueError, "reference CSV changed"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "0.001", "0.000001", runner=mutating_failure
+            )
+
+    def test_compare_missing_cargo_without_mutation_keeps_original_error(self):
+        reference = self._comparison_input()
+
+        def missing_cargo(argv, *, check):
+            raise FileNotFoundError("synthetic missing cargo")
+
+        with self.assertRaisesRegex(FileNotFoundError, "synthetic missing cargo"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "0.001", "0.000001", runner=missing_cargo
+            )
+
     def test_one_command_audit_emits_replayable_receipt_only_after_rust_pass(self):
         reference = Path(self.folder.name) / "reference.csv"
         receipt = Path(self.folder.name) / "receipt.json"
