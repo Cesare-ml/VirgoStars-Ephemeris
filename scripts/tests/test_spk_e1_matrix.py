@@ -7,6 +7,7 @@
 # Contributors retain applicable rights in their own contributions under the terms of this License.
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): regressions for strict SPK receipt JSON parsing.
 
 """Synthetic input tests for E1 matrix breadth; NO astronomical accuracy claims."""
 
@@ -541,6 +542,72 @@ class E1MatrixAuditTests(unittest.TestCase):
                 self.assertEqual(result, 2)
                 self.assertEqual(report["status"], "invalid")
                 self.assertNotIn("reference_sha256", report)
+
+    def test_strict_receipt_json_rejects_duplicate_keys_at_all_depths(self):
+        # Modification (2026-11-14): even an overridden (unused) JSON field
+        # invalidates the audit receipt, at both top level and nested levels.
+        import json
+
+        _, receipt = matched_synthetic_receipt()
+        serialized = json.dumps(receipt)
+        duplicated_count = serialized.replace(
+            '"case_count": 15', '"case_count": 999, "case_count": 15', 1
+        )
+        original_hash = '"sha256": "' + "a" * 64 + '"'
+        duplicated_hash = (
+            '"sha256": "' + "0" * 64 + '", ' + original_hash
+        )
+        duplicated_nested = serialized.replace(
+            original_hash, duplicated_hash, 1
+        )
+        for variant in (duplicated_count, duplicated_nested):
+            self.assertNotEqual(variant, serialized)
+            with self.subTest(variant=variant[:80]), self.assertRaisesRegex(
+                ValueError, "duplicate receipt JSON key"
+            ):
+                AUDIT.parse_strict_receipt_json(variant)
+
+    def test_strict_receipt_json_rejects_nonstandard_numeric_constants(self):
+        import json
+
+        _, receipt = matched_synthetic_receipt()
+        serialized = json.dumps(receipt)
+        for token in ("NaN", "Infinity", "-Infinity"):
+            # Python's json.loads accepts these invalid JSON tokens by default.
+            injected = '{"unused": ' + token + ', ' + serialized[1:]
+            with self.subTest(token=token), self.assertRaisesRegex(
+                ValueError, "nonstandard receipt JSON constant"
+            ):
+                AUDIT.parse_strict_receipt_json(injected)
+
+    def test_receipt_cli_rejects_duplicate_keys_without_a_false_pass(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        import json
+
+        document, receipt = matched_synthetic_receipt()
+        with TemporaryDirectory() as directory:
+            csv = Path(directory) / "sample.csv"
+            evidence = Path(directory) / "receipt.json"
+            csv.write_bytes(document.encode("utf-8"))
+            receipt["reference_csv"] = str(csv.resolve())
+            receipt["rust_command"][7] = str(csv.resolve())
+            serialized = json.dumps(receipt)
+            duplicated = serialized.replace(
+                '"case_count": 15', '"case_count": 999, "case_count": 15', 1
+            )
+            self.assertNotEqual(duplicated, serialized)
+            evidence.write_text(duplicated, encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output):
+                exit_code = AUDIT.main([
+                    "--reference", str(csv), "--receipt", str(evidence), "--json"
+                ])
+            report = json.loads(output.getvalue())
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(report["status"], "invalid")
+            self.assertNotIn("reference_sha256", report)
+            self.assertFalse(report["scientific_accuracy_certified"])
 
     def test_receipt_rejects_substituted_comparator_argv_values(self):
         import copy
