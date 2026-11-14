@@ -354,7 +354,10 @@ fn fixed_tilt_projection_is_epoch_and_body_metadata_invariant() {
                     result.latitude_rate_rad_per_day,
                     baseline.latitude_rate_rad_per_day,
                 ),
-                (result.distance_rate_km_per_day, baseline.distance_rate_km_per_day),
+                (
+                    result.distance_rate_km_per_day,
+                    baseline.distance_rate_km_per_day,
+                ),
             ] {
                 assert_eq!(actual.to_bits(), expected.to_bits());
             }
