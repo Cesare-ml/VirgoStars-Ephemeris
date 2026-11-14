@@ -42,6 +42,11 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.equal(output.results[4].target, 'MarsBarycenter');
   assert.ok(Object.isFrozen(output.results[0]));
   assert.ok(Object.isFrozen(output.results));
+  const lunar = provider.calculateLunarPoints('2026-11-10T00:00:00Z');
+  assert.deepEqual(lunar.results.map(item=>item.point), ['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
+  assert.ok(Math.abs(lunar.results[0].distanceAu - 0.0025695552898) < 1e-10);
+  assert.ok(Math.abs(lunar.results[2].latitudeDeg + 3.9062) < 0.002);
+  assert.ok(Object.isFrozen(lunar.results));
   assert.throws(() => provider.calculate('bad date'), /exited with status/);
   const angles = provider.calculateHouseAngles({ut1JulianDay: 2461354.5, ttJulianDay: output.results[0].ttJulianDay, latitudeDeg: 41.9028, longitudeDegEast: 12.4964});
   assert.ok(Math.abs(angles.ascendantDeg - 157.82641479) < 0.01);

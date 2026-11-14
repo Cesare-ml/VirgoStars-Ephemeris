@@ -38,6 +38,7 @@ pub mod error;
 pub mod first_sky;
 pub mod house_angles;
 pub mod light_time;
+pub mod lunar_points;
 pub mod six_field_units;
 pub mod state;
 pub mod time;

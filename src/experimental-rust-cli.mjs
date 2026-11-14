@@ -22,6 +22,8 @@ import { spawnSync } from 'node:child_process';
 const HEADER = 'target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day';
 const TARGETS = Object.freeze(['Sun', 'Moon', 'Mercury', 'Venus', 'MarsBarycenter', 'JupiterBarycenter', 'SaturnBarycenter', 'UranusBarycenter', 'NeptuneBarycenter', 'PlutoBarycenter']);
 const ANGLE_HEADER = 'armc_deg,ascendant_deg,midheaven_deg,true_obliquity_deg';
+const LUNAR_HEADER = 'point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day';
+const LUNAR_POINTS = Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 
 /**
  * Construct an explicit offline provider. It returns experimental positions,
@@ -84,6 +86,19 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
         warnings: Object.freeze(['NOT_SWISS_PARITY', 'SOLAR_DEFLECTION_OMITTED', 'PLANET_SYSTEM_BARYCENTERS']),
         results: Object.freeze(results),
       });
+    },
+    calculateLunarPoints(timestamp) {
+      if (typeof timestamp !== 'string' || !timestamp.trim()) throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');
+      const lines = execute(['lunar',kernelPath,timestamp]);
+      if (lines.length !== LUNAR_POINTS.length + 1 || lines[0] !== LUNAR_HEADER) throw new Error('Invalid lunar-point CSV contract');
+      const results = lines.slice(1).map((line,index) => {
+        const [point,...parts]=line.split(',');
+        if(point!==LUNAR_POINTS[index] || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid lunar-point CSV row');
+        const [ttJulianDay,tdbJulianDay,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay]=parts.map(Number);
+        if(longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0) throw new Error('Out-of-range lunar-point CSV row');
+        return Object.freeze({point,ttJulianDay,tdbJulianDay,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay});
+      });
+      return Object.freeze({contract:'VIRGOSTARS_EXPERIMENTAL_LUNAR_POINTS_1', frame:'IAU2006_2000B_TRUE_ECLIPTIC_OF_DATE', center:'EARTH', timeModel:'BOUNDED_UTC_TRUNCATED_TDB', warnings:Object.freeze(['NOT_SWISS_PARITY','MEAN_MODEL_APPROXIMATE','MEAN_DISTANCES_NOMINAL']),results:Object.freeze(results)});
     },
     calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
       const values = [ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast];
