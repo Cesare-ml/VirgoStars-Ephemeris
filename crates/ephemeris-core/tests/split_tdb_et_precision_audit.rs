@@ -80,11 +80,31 @@ fn propagates_the_split_converter_range_restriction() {
 }
 
 #[test]
-fn rejects_negative_subpicosecond_boundary_when_euclidean_remainder_is_unrepresentable() {
-    assert_eq!(
-        audited(-1.0e-12, 1.0),
-        Err(SplitEpochAuditError::InvalidJulianDate(
-            CalendarError::UnrepresentableTime
-        ))
-    );
+fn tiny_negative_offset_reports_loss_instead_of_remainder_error() {
+    // At J2000 a -1 ps ET offset rounds to the same split JD as noon.
+    // The signed remainder must still be accepted and audited consistently
+    // with a +1 ps offset, not rejected as an artificial 86400-s remainder.
+    let et = TdbSecondsPastJ2000::new(-1.0e-12).unwrap();
+    let split = split_julian_day_tdb_from_et(et).unwrap();
+    assert_eq!(split.midnight_fraction(), 0.5);
+    assert!(matches!(
+        audited(-1.0e-12, 1.0e-13),
+        Err(SplitEpochAuditError::PrecisionLoss {
+            error_seconds,
+            max_error_seconds
+        }) if error_seconds == 1.0e-12 && max_error_seconds == 1.0e-13
+    ));
+    assert_eq!(audited(-1.0e-12, 1.0e-11), Ok(1.0e-12));
+}
+
+#[test]
+fn negative_picosecond_offset_can_round_below_noon() {
+    // -3 ps lies closer to the previous representable fraction than to
+    // exactly 0.5 day; the resulting quantization is reported, not hidden.
+    let et = TdbSecondsPastJ2000::new(-3.0e-12).unwrap();
+    let split = split_julian_day_tdb_from_et(et).unwrap();
+    assert_eq!(split.day_number(), 2_451_545);
+    assert!(split.midnight_fraction() < 0.5);
+    let audit = audited(-3.0e-12, 2.0e-12).unwrap();
+    assert!(audit > 0.0 && audit < 2.0e-12);
 }
