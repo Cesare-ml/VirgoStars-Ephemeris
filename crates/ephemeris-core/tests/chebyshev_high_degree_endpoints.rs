@@ -71,3 +71,43 @@ fn high_order_even_basis_has_zero_midpoint_slope() {
         assert_eq!(sample.derivative_dx, 0.0, "degree {degree}");
     }
 }
+
+#[test]
+fn sparse_high_order_series_matches_independent_endpoint_sums() {
+    // Mixed degrees detect accumulation errors missed by isolated basis fixtures.
+    let terms = [(0_usize, 3.0), (1, -2.0), (2, 5.0), (17, -4.0), (99, 7.0)];
+    let mut coefficients = vec![0.0; 100];
+    for (degree, coefficient) in terms {
+        coefficients[degree] = coefficient;
+    }
+
+    for x in [-1.0, 1.0] {
+        let expected_value: f64 = terms
+            .iter()
+            .map(|&(degree, coefficient)| {
+                if x == -1.0 && degree % 2 == 1 {
+                    -coefficient
+                } else {
+                    coefficient
+                }
+            })
+            .sum();
+        let expected_derivative: f64 = terms
+            .iter()
+            .map(|&(degree, coefficient)| {
+                let sign = if x == -1.0 && degree % 2 == 0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                coefficient * sign * (degree * degree) as f64
+            })
+            .sum();
+        let actual = evaluate_chebyshev(&coefficients, x).unwrap();
+        assert_eq!(actual.value, expected_value, "value at x={x}");
+        assert_eq!(
+            actual.derivative_dx, expected_derivative,
+            "derivative at x={x}"
+        );
+    }
+}
