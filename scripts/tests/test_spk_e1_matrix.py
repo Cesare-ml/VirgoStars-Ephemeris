@@ -8,6 +8,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): regressions for strict SPK receipt JSON parsing.
+# Modification (2026-11-14): ASCII-only float tokens match the Rust E1 CSV comparator contract.
 
 """Synthetic input tests for E1 matrix breadth; NO astronomical accuracy claims."""
 
@@ -175,6 +176,31 @@ class E1MatrixAuditTests(unittest.TestCase):
         ):
             with self.subTest(mutated=mutated), self.assertRaises(ValueError):
                 AUDIT.parse_reference(doc.replace(source, mutated, 1))
+
+    def test_e1_audit_rejects_python_only_numeric_tokens(self):
+        """Do not pass E1 breadth for CSV bytes rejected by Rust f64 parsing."""
+        document = synthetic_document(ALL_PAIRS)
+        source = "0.0,10,399,1,2,3,4,5,6"
+        for invalid in (
+            "0_0,10,399,1,2,3,4,5,6",
+            "٠.٠,10,399,1,2,3,4,5,6",  # Unicode Arabic-Indic digits.
+            "０.０,10,399,1,2,3,4,5,6",  # Unicode fullwidth digits.
+            "0.0,10,399,1_0,2,3,4,5,6",
+            "0.0,10,399,1,2,3,4,5,6_0",
+            "0.0,10,399,1,2e_0,3,4,5,6",
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "ASCII decimal"):
+                    AUDIT.parse_reference(document.replace(source, invalid, 1))
+
+    def test_e1_audit_accepts_finite_ascii_scientific_notation(self):
+        """Keep normal exponent, sign, and decimal forms accepted."""
+        document = synthetic_document(ALL_PAIRS)
+        source = "0.0,10,399,1,2,3,4,5,6"
+        valid = "+0.0,10,399,1e0,2e+0,.3,-4.5,5.0E-0,6."
+        rows = AUDIT.parse_reference(document.replace(source, valid, 1))
+        self.assertEqual(len(rows), 15)
+        self.assertEqual(AUDIT.audit_e1_matrix(rows)[0], [])
 
     def test_rejects_malformed_contract_and_late_metadata(self):
         doc = synthetic_document(ALL_PAIRS)
