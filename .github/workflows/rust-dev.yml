@@ -79,6 +79,8 @@ jobs:
         run: cargo test --workspace --example spk_state_at --locked
       - name: Test same-epoch SPK batch CLI on Linux
         run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on Linux
+        run: cargo test --workspace --example spk_probe_at --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -123,6 +125,8 @@ jobs:
         run: cargo test --workspace --example spk_state_at --locked
       - name: Test same-epoch SPK batch CLI on Windows
         run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on Windows
+        run: cargo test --workspace --example spk_probe_at --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -157,5 +161,7 @@ jobs:
         run: cargo test --workspace --example spk_state_at --locked
       - name: Test same-epoch SPK batch CLI on macOS
         run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on macOS
+        run: cargo test --workspace --example spk_probe_at --locked
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
