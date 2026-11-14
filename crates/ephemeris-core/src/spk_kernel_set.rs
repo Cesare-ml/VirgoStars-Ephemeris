@@ -696,10 +696,7 @@ mod tests {
         unsupported.frame = 17;
         set.load(Cursor::new(kernel(
             SpkByteOrder::BigEndian,
-            &[
-                unsupported,
-                seg(301, 0, 2, [4.0, 0.0], [0.0, 0.0]),
-            ],
+            &[unsupported, seg(301, 0, 2, [4.0, 0.0], [0.0, 0.0])],
         )))
         .unwrap();
         assert_eq!(set.declared_target_ids(), vec![-82, 301, 399]);
