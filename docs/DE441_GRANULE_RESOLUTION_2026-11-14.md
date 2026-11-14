@@ -27,6 +27,26 @@ the following granule; the inclusive final coverage date selects the
 final granule. The search needs at most seven comparisons for the
 supported 100 granules per record and does not read additional bytes.
 
+**Wide finite record windows:** normalization now divides the
+TDB-day offset by its positive, representable granule width before
+multiplying by two. This avoids spurious intermediate overflow in
+`2 * (jd - granule_start) / width - 1` when `width` is very large.
+It does not change the interpolation polynomial or the physical
+units. This is an IEEE-754 robustness regression, not a claim that
+the official DE441 kernel contains such extreme intervals.
+
+**Integration coordination (2026-11-14):** draft
+[PR #193](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/193)
+independently fixes selection of *principal coefficient records*
+against the original TDB Julian date. This PR #187 fixes selection of
+*granules inside a selected record* and checks granule resolution
+during header parsing. Both edit `de441.rs`; integrate them serially
+onto a current `dev/ephemeris` and re-run exact-head CI so neither
+boundary-selection fix is lost. Draft
+[PR #178](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/178)
+independently fixes large-derivative **velocity** normalization;
+preserve that change too. No automatic merge is performed.
+
 The check is cheap (at most 13 series × 2 records × 100 granules).
 It does not examine every internal principal record or validate
 coefficient payloads, file authenticity, physical accuracy, or all
@@ -58,6 +78,12 @@ representability guard**, not a proof of exact epoch arithmetic.
   3, 9 and 97 granules, positive and negative epochs, and inclusive
   final endpoints. It exposes the old division/floor off-by-one bug
   without depending on an external ephemeris file.
+- An eighth synthetic public API regression checks a one-granule
+  `1e308`-day record with constant and linear Chebyshev coefficients.
+  At the inclusive endpoint the old `2 * day_offset / width`
+  expression overflowed before division even though the normalized
+  coordinate is exactly `+1`; dividing before doubling preserves
+  finite analytical positions and km/day velocities.
 
 No external ephemeris kernels are used. These fixtures prove only
 deterministic structural checks, not independent NASA/JPL/Horizons vector
