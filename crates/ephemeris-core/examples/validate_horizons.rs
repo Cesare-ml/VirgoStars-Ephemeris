@@ -110,7 +110,7 @@ fn valid_horizons_query_url(url: &str) -> bool {
         let value = raw
             .strip_prefix("%27")
             .and_then(|v| v.strip_suffix("%27"))
-            .or_else(|| raw.strip_prefix('\\'').and_then(|v| v.strip_suffix('\\'')))
+            .or_else(|| raw.strip_prefix("'").and_then(|v| v.strip_suffix("'")))
             .unwrap_or(raw);
         if !value.eq_ignore_ascii_case(expected) {
             return false;
@@ -133,7 +133,7 @@ fn valid_horizons_query_url(url: &str) -> bool {
         let value = raw
             .strip_prefix("%27")
             .and_then(|v| v.strip_suffix("%27"))
-            .or_else(|| raw.strip_prefix('\\'').and_then(|v| v.strip_suffix('\\'')))
+            .or_else(|| raw.strip_prefix("'").and_then(|v| v.strip_suffix("'")))
             .unwrap_or(raw);
         value.eq_ignore_ascii_case("JD")
     } else {
