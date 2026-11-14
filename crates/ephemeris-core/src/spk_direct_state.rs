@@ -205,6 +205,14 @@ fn record_layout<R: Read + Seek>(
             "SPK record times disagree with coverage",
         ));
     }
+    // Modification (2026-11-14): each record width must advance binary64 ET
+    // at both ends of its declared grid. Otherwise distinct record epochs
+    // collapse onto the same f64 instant, making time selection ambiguous.
+    if init + interval == init || end - interval == end {
+        return Err(SpkStateError::InvalidSegment(
+            "SPK record interval unresolvable at f64 ET precision",
+        ));
+    }
     Ok(RecordLayout {
         first_address: segment.initial_address,
         count,
@@ -611,6 +619,76 @@ mod tests {
                 assert_eq!(at.position_km[0], 210.0);
                 let after = evaluate(bytes, 499, just_after).unwrap();
                 assert_eq!(after.position_km[0], 210.0);
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_spk_record_grid_with_unresolvable_tdb_seconds() {
+        // At 2^53 ET seconds, a 1-second record width cannot advance a
+        // binary64 epoch. The 2-second two-record span remains finite and
+        // would otherwise allow a plausible-looking state at the start.
+        let start = 9_007_199_254_740_992.0_f64;
+        let interval = 1.0;
+        assert_eq!(start + interval, start);
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let record_words = if kind == 2 { 8 } else { 14 };
+                let final_address = FIRST_WORD + 2 * record_words + 3;
+                let summary = 2 * RECORD_BYTES;
+                put_f64(&mut bytes, summary + 24, start, order);
+                put_f64(&mut bytes, summary + 32, start + 2.0, order);
+                let directory = (final_address - 4) * 8;
+                put_f64(&mut bytes, directory, start, order);
+                put_f64(&mut bytes, directory + 8, interval, order);
+                for index in 0..2 {
+                    let record = (FIRST_WORD - 1 + index * record_words) * 8;
+                    let midpoint = if index == 0 { start } else { start + 2.0 };
+                    put_f64(&mut bytes, record, midpoint, order);
+                    put_f64(&mut bytes, record + 8, 0.5, order);
+                }
+                assert!(matches!(
+                    evaluate(bytes, 499, start),
+                    Err(SpkStateError::InvalidSegment(
+                        "SPK record interval unresolvable at f64 ET precision"
+                    ))
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn accepts_spk_record_grid_with_resolvable_large_tdb_epochs() {
+        // At the same extreme epoch a four-second interval advances ET
+        // distinctly at both ends. Keep that representable case valid.
+        let start = 9_007_199_254_740_992.0_f64;
+        let interval = 4.0;
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let record_words = if kind == 2 { 8 } else { 14 };
+                let final_address = FIRST_WORD + 2 * record_words + 3;
+                let summary = 2 * RECORD_BYTES;
+                put_f64(&mut bytes, summary + 24, start, order);
+                put_f64(&mut bytes, summary + 32, start + 2.0 * interval, order);
+                let directory = (final_address - 4) * 8;
+                put_f64(&mut bytes, directory, start, order);
+                put_f64(&mut bytes, directory + 8, interval, order);
+                for index in 0..2 {
+                    let record = (FIRST_WORD - 1 + index * record_words) * 8;
+                    put_f64(
+                        &mut bytes,
+                        record,
+                        start + (index as f64 + 0.5) * interval,
+                        order,
+                    );
+                    put_f64(&mut bytes, record + 8, interval * 0.5, order);
+                }
+                let first = evaluate(bytes.clone(), 499, start + 2.0).unwrap();
+                let second = evaluate(bytes, 499, start + 6.0).unwrap();
+                assert_eq!(first.position_km, [100.0, 20.0, 30.0]);
+                assert_eq!(second.position_km, [200.0, 40.0, 50.0]);
             }
         }
     }
