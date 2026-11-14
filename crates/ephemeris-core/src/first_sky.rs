@@ -761,7 +761,7 @@ mod tests {
         let erfa_reference_meters = [
             -5_599_000.557_704_995,
             233_011.672_234_792_03,
-            -3_040_909.470_698_336_3,
+            -3_040_909.470_698_336,
         ];
         for axis in 0..3 {
             near(actual[axis], erfa_reference_meters[axis] / 1000.0, 1e-9);
