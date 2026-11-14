@@ -189,3 +189,22 @@ The existing `scripts/tests/test_spk_naif_reference.py` suite now includes five 
 2026-11-14 (SPK streaming safety): `scripts/verify_spk_kernel_hashes.py` now fails closed on observable descriptor/path identity changes during hash preflight. Three deterministic fault-injection tests model in-flight modification, opening a replaced file, and post-read pathname substitution. No new dependencies, kernel binaries, numerical algorithms, or independent astronomical accuracy claims.
 
 2026-11-14 Windows compatibility correction: The preflight intentionally excludes `st_ctime_ns` from the shared identity tuple after native Windows CI demonstrated false positives caused by differing path/descriptor creation-time metadata. Regression coverage preserves the stronger cross-platform device, file-ID, size and mtime comparisons. This is still not an atomic file lock.
+
+
+## 2026-11-14 — strengthen SHA-256 streaming in the NAIF generator
+
+The independent reference generator `scripts/spk_naif_reference.py` now checks **each local kernel's filesystem identity** at four points during `kernel_manifest()`: pathname before opening, file descriptor directly after opening, descriptor after streaming SHA-256, and pathname after closing. The stable fields are filesystem device, file ID/inode, byte size and modification time with nanosecond precision where supported.
+
+This closes a narrow gap left by only comparing **two complete manifest hashes** before and after NAIF/SPICE or Rust: a path replacement or same-size edit observed *inside one hash pass* could previously go unnoticed until a later manifest check, particularly when paths were swapped back. Detection now fails immediately before the generator publishes CSV reference metadata or an audited receipt. The reported byte size is taken from the **opened descriptor**, not a separate unguarded pathname stat.
+
+Three deterministic cross-platform tests simulate descriptor changes before and after reading, pathname replacement after closing, and confirm that unchanged local kernels retain the same names, sizes and SHA-256 digests. No real binary kernels are included; no network requests are made.
+
+This is an **observable-change guard, not a file lock or an atomic multi-file snapshot**. Filesystems may not provide identical metadata semantics, and it cannot prove that the independently invoked NAIF/SPICE or Rust process reads precisely those same bytes in every possible race. Hashes do not authenticate kernel provenance or establish scientific accuracy.
+
+Run the read-only Python regressions in CI:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
+```
+
+Also require normal Rust CI and native Windows/macOS results to pass on the exact PR head. This change touches only one Python validation helper, its existing regression suite and this documentation. No dependencies, license changes, privileged workflows, source provenance claims or distribution of NAIF/SPICE kernels. Original code remains under **CPAL-1.0**, with VirgoStars attribution and modification date 2026-11-14 preserved.
