@@ -141,9 +141,14 @@ impl<R: Read + Seek> SpkKernelSet<R> {
             .iter()
             .enumerate()
             .flat_map(|(kernel_index, entry)| {
-                entry.index.segments.iter().copied().filter_map(move |segment| {
-                    (segment.target_id == target_id).then_some((kernel_index, segment))
-                })
+                entry
+                    .index
+                    .segments
+                    .iter()
+                    .copied()
+                    .filter_map(move |segment| {
+                        (segment.target_id == target_id).then_some((kernel_index, segment))
+                    })
             })
             .collect()
     }
@@ -672,7 +677,10 @@ mod tests {
         assert_eq!(set.declared_segments_for_target(399), inventory);
 
         set.unload_last().unwrap();
-        assert_eq!(set.declared_segments_for_target(399), inventory[..2].to_vec());
+        assert_eq!(
+            set.declared_segments_for_target(399),
+            inventory[..2].to_vec()
+        );
     }
 
     #[test]
