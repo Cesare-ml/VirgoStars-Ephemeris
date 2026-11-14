@@ -38,7 +38,7 @@ println!("observation rounding: {} s", result.observation_quantization_error_sec
 
 ## Regression checks
 
-Seven new deterministic tests in `src/de441_checked_light_time.rs` construct a **synthetic** one-record classic-DE441 file where Earth is stationary at zero and a Mars-system barycenter remains 150 million km away. The tests assert:
+Eight deterministic tests in `src/de441_checked_light_time.rs` construct a **synthetic** one-record classic-DE441 file where Earth is stationary at zero and a Mars-system barycenter has a controlled constant X distance (normally 150 million km). The tests assert:
 
 1. The geometric result is the known constant vector; reception delay is `distance / c`, rates and velocities are zero; a cached coefficient record is reused.
 2. A too-strict observation budget rejects the epoch **before coefficient-record I/O**, while a looser budget permits the same input.
@@ -47,12 +47,14 @@ Seven new deterministic tests in `src/de441_checked_light_time.rs` construct a *
 5. Emission before the first file epoch does not extrapolate.
 6. Missing target series propagates as a reader error.
 7. Accepted output equals the old light-time API at the **same single-f64 rounded observation JD**, so the adapter does not alter its astronomical math.
+8. A synthetic 1 km reception path (~3.3 µs one-way delay) **must fail closed** with `LightTimeError::DidNotConverge` because that emission offset is not distinguishable from reception in the classic single-`f64` JD. The same wrapper **must succeed** for a 100 km path (~334 µs), preserving the target distance, physical delay, and reuse of a single cached coefficient record. This is a regression for the existing core precision guard, not a new light-time algorithm.
 
 Run `cargo fmt --all -- --check`, `cargo test --workspace --locked`, `cargo test --workspace --release --locked`, `cargo clippy --workspace --all-targets --locked -- -D warnings` plus the enabled public Rust development CI checks (Rustdoc, Windows cross-target, native Windows and macOS). Real JPL/Horizons parity is **not** validated by synthetic fixtures. A genuine externally obtained classic DE441 file and independent reference comparison remain required. No .eph or .bsp files are committed.
 
 ## Modification, provenance, license
 
 - 2026-11-12: added `crates/ephemeris-core/src/de441_checked_light_time.rs` and its `lib.rs` module export, alongside this document.
+- 2026-11-14: parametrized the artificial constant-distance fixture and added the sub-resolution emission-epoch fail-closed regression with a representable-delay control. No production math or public signature changed.
 - The existing light-time solver, DE441 kernel parser, calendar conversion and scientific algorithms are unchanged.
 - Original code remains under [CPAL-1.0](../LICENSE), with the required VirgoStars attribution preserved. See [NOTICE](../NOTICE) and [licensing guidance](LICENSING_AND_CREDITS.md). No third-party code or ephemeris data was added.
 
