@@ -276,24 +276,20 @@ fn inclined_circular_motion_matches_closed_form_angles_and_rates() {
         for phase in [0.0_f64, 0.31, 1.25, 2.73, -2.9] {
             let (sin_phase, cos_phase) = phase.sin_cos();
             let position = [RADIUS_KM * cos_phase, RADIUS_KM * sin_phase, 0.0];
-            let expected_longitude = (cos_tilt * sin_phase)
-                .atan2(cos_phase)
-                .rem_euclid(TAU);
+            let expected_longitude = (cos_tilt * sin_phase).atan2(cos_phase).rem_euclid(TAU);
             let expected_latitude = (-sin_tilt * sin_phase).asin();
-            let planar_sq = cos_phase * cos_phase
-                + cos_tilt * cos_tilt * sin_phase * sin_phase;
-            let latitude_denominator =
-                (1.0 - sin_tilt * sin_tilt * sin_phase * sin_phase).sqrt();
+            let planar_sq = cos_phase * cos_phase + cos_tilt * cos_tilt * sin_phase * sin_phase;
+            let latitude_denominator = (1.0 - sin_tilt * sin_tilt * sin_phase * sin_phase).sqrt();
             for omega in [-0.035, 0.035] {
                 let velocity = [
                     -RADIUS_KM * omega * sin_phase,
                     RADIUS_KM * omega * cos_phase,
                     0.0,
                 ];
-                let output = project_fixed_axes(&synthetic_state(position, velocity), tilt).unwrap();
+                let output =
+                    project_fixed_axes(&synthetic_state(position, velocity), tilt).unwrap();
                 let expected_longitude_rate = omega * cos_tilt / planar_sq;
-                let expected_latitude_rate =
-                    -omega * sin_tilt * cos_phase / latitude_denominator;
+                let expected_latitude_rate = -omega * sin_tilt * cos_phase / latitude_denominator;
 
                 assert_near(output.longitude_rad, expected_longitude, 5.0e-15);
                 assert_near(output.latitude_rad, expected_latitude, 5.0e-15);
