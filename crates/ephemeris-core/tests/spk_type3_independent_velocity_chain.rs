@@ -173,8 +173,8 @@ fn mixed_type_center_chain_preserves_independent_type3_velocity_series() {
 
             for axis in 0..3 {
                 let base_position = EMB_POSITION[axis] + EMB_SPEED[axis] * (et - MID_ET);
-                let stored_type3_velocity = MOON_VELOCITY_AT_MID[axis]
-                    + MOON_VELOCITY_SLOPE_IN_X[axis] * x;
+                let stored_type3_velocity =
+                    MOON_VELOCITY_AT_MID[axis] + MOON_VELOCITY_SLOPE_IN_X[axis] * x;
                 let combined_position = base_position + MOON_POSITION[axis];
                 let combined_velocity = EMB_SPEED[axis] + stored_type3_velocity;
 
@@ -182,7 +182,10 @@ fn mixed_type_center_chain_preserves_independent_type3_velocity_series() {
                 close(type2.velocity_km_per_second[axis], EMB_SPEED[axis]);
                 close(type3.position_km[axis], MOON_POSITION[axis]);
                 close(type3.velocity_km_per_second[axis], stored_type3_velocity);
-                close(direct_link.velocity_km_per_second[axis], stored_type3_velocity);
+                close(
+                    direct_link.velocity_km_per_second[axis],
+                    stored_type3_velocity,
+                );
                 close(combined.position_km[axis], combined_position);
                 close(combined.velocity_km_per_second[axis], combined_velocity);
                 close(reverse.position_km[axis], -combined_position);
@@ -206,8 +209,7 @@ fn stored_type3_velocity_is_not_forced_to_match_position_differences() {
     let after = kernels.relative_state(301, 0, 6.0).unwrap();
     let at_mid = kernels.relative_state(301, 0, MID_ET).unwrap();
     for axis in 0..3 {
-        let numerical_position_slope =
-            (after.position_km[axis] - before.position_km[axis]) / 2.0;
+        let numerical_position_slope = (after.position_km[axis] - before.position_km[axis]) / 2.0;
         close(numerical_position_slope, EMB_SPEED[axis]);
         close(
             at_mid.velocity_km_per_second[axis],
