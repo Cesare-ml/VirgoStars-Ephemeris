@@ -174,17 +174,17 @@ fn unrelated_invalid_coefficients_do_not_poison_valid_chains_or_seek_state() {
         // Reverse direction and direct Earth-relative Moon must remain
         // coherent without evaluating the unrelated broken target.
         let reverse = set.relative_state(0, 301, et).unwrap();
-        assert_vector(
-            reverse.position_km,
-            expected_pos.map(|value| -value),
-        );
+        assert_vector(reverse.position_km, expected_pos.map(|value| -value));
         assert_vector(
             reverse.velocity_km_per_second,
             expected_vel.map(|value| -value),
         );
         let moon_earth = set.relative_state(301, 399, et).unwrap();
         assert_eq!(moon_earth.common_ancestor_id, 399);
-        assert_vector(moon_earth.position_km, [4.0 - 0.5 * dt, -3.0 + 0.25 * dt, 0.0]);
+        assert_vector(
+            moon_earth.position_km,
+            [4.0 - 0.5 * dt, -3.0 + 0.25 * dt, 0.0],
+        );
         assert_vector(moon_earth.velocity_km_per_second, [-0.5, 0.25, 0.0]);
     }
 }
