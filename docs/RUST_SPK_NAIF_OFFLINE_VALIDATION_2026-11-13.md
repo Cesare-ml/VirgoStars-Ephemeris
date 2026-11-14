@@ -178,3 +178,33 @@ The existing `scripts/tests/test_spk_naif_reference.py` suite now includes five 
 **Modification record:** 2026-11-13 — updated the original CPAL-1.0 Python validation helper and tests; linked this orchestration workflow without adding a new duplicate script, extra runtime dependency to Rust, dataset, secret, release, deployment or automatic production action.
 
 **Modification record (2026-11-14):** rehash reference CSV, generator source and ordered local kernels in a `finally` block **even when Cargo returns nonzero or raises an operating-system error**. No comparator failure or input mutation can produce a success receipt. This does not make the JSON cryptographically signed, make the files immutable, authenticate a NAIF toolkit/kernel or demonstrate real-data positional accuracy.
+
+## Shared fail-closed comparison path (2026-11-14)
+
+After integrating #163 and #164, both `compare` (curated existing CSV)
+and `run` (fresh NAIF/SPICE CSV plus unsigned receipt) are available in the
+same script. Both now delegate the actual Cargo subprocess and input
+integrity checks to the single private `_run_rust_with_verified_inputs`
+helper. This prevents their post-run verification policies from drifting.
+
+The helper checks the original reference CSV's declared generator-source
+SHA-256, **ordered kernel** names/sizes/SHA-256 and byte-for-byte CSV contents
+before and after Cargo. Its `finally` block runs on success, nonzero exit or
+subprocess-start failure. If inputs are unchanged, the original Cargo error
+or return code is preserved; if inputs change, verification fails closed.
+The public CLI commands, individual subprocess argument lists, numerical
+threshold semantics and existing JSON receipt fields are unchanged. Three
+additional mocked tests specifically exercise `compare` with failing Rust
+and mutated kernel/CSV inputs, or missing Cargo with intact inputs. The
+pre-existing tests cover the analogous `run` failure modes.
+
+This is **not atomic file snapshotting**: concurrent mutation between hash
+checks remains theoretically possible. File digests authenticate neither
+kernel provenance nor independently generated reference vectors. The tests
+use fake runners/kernels, not real NASA/JPL SPK interpolation, so E1
+scientific parity and quantitative accuracy remain unverified.
+
+**Modification record:** 2026-11-14 — consolidate original offline
+verification-only code under CPAL-1.0 with unchanged Powered by VirgoStars
+attribution; no new packages, automatic downloads, external reference data,
+releases, deployment or production changes.

@@ -19,6 +19,7 @@
 
 Production astronomy remains canonical Rust. spiceypy is imported only when
 generating actual NAIF vectors; synthetic mocked tests are not proof of parity.
+Modification 2026-11-14: share fail-closed Rust subprocess input verification.
 """
 
 from __future__ import annotations
@@ -227,6 +228,34 @@ def positive_limit(value: str, label: str) -> str:
     return value
 
 
+def _run_rust_with_verified_inputs(
+    reference: Path,
+    paths: Sequence[Path],
+    original_csv: bytes,
+    command: Sequence[str],
+    *,
+    runner: Any,
+    reference_change_message: str,
+    **runner_options: Any,
+) -> Any:
+    """Run canonical Rust with identical fail-closed input checks for both CLIs.
+
+    Verify the original CSV's source and ordered kernel digests before the
+    subprocess, then recheck exact CSV bytes and every declared digest in a
+    finally block. Even a missing executable or a nonzero Rust exit cannot
+    hide changed input. This detects mutation but cannot provide a race-free
+    filesystem snapshot or authenticate independently generated NAIF vectors.
+    """
+    content = original_csv.decode("utf-8")
+    verify_reference_hashes(content, paths)
+    try:
+        return runner(list(command), **runner_options)
+    finally:
+        if reference.read_bytes() != original_csv:
+            raise ValueError(reference_change_message)
+        verify_reference_hashes(content, paths)
+
+
 def compare_reference(
     reference: Path,
     paths: Sequence[Path],
@@ -243,22 +272,21 @@ def compare_reference(
     position_limit = positive_limit(position_limit, "position limit (km)")
     velocity_limit = positive_limit(velocity_limit, "velocity limit (km/s)")
     original_csv = reference.read_bytes()
-    content = original_csv.decode("utf-8")
-    verify_reference_hashes(content, paths)
     argv = [
         "cargo", "run", "--offline", "--locked",
         "--example", "validate_spk_reference", "--",
         str(reference), position_limit, velocity_limit,
         *(str(path) for path in paths),
     ]
-    try:
-        result = runner(argv, check=False)
-    finally:
-        # A race-free filesystem snapshot is not available through this CLI.
-        # Detect changes made during the comparison, even if Rust exited nonzero.
-        if reference.read_bytes() != original_csv:
-            raise ValueError("reference CSV changed during Rust comparison")
-        verify_reference_hashes(content, paths)
+    result = _run_rust_with_verified_inputs(
+        reference,
+        paths,
+        original_csv,
+        argv,
+        runner=runner,
+        reference_change_message="reference CSV changed during Rust comparison",
+        check=False,
+    )
     return result.returncode
 
 
@@ -315,7 +343,8 @@ def run_validation(
     verify_reference_hashes(document, paths)
     with reference_path.open("x", encoding="utf-8", newline="\n") as output:
         output.write(document)
-    original_csv_digest = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+    original_csv = reference_path.read_bytes()
+    original_csv_digest = hashlib.sha256(original_csv).hexdigest()
     if repo_root is None:
         repo_root = Path(__file__).resolve().parents[1]
     command = [
@@ -331,25 +360,18 @@ def run_validation(
         format(velocity_limit, ".17g"),
         *(str(path.resolve()) for path in paths),
     ]
-    # The comparator may fail or fail to start. Even on those paths, check
-    # the bytes that were entrusted to it so a mutation is never obscured by
-    # an unrelated Rust exit status or missing executable. Never emit a
-    # success receipt after either a failed comparison or a failed rehash.
-    try:
-        completed = runner(
-            command,
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    finally:
-        if (
-            not reference_path.is_file()
-            or hashlib.sha256(reference_path.read_bytes()).hexdigest() != original_csv_digest
-        ):
-            raise ValueError("reference CSV bytes changed during Rust comparison")
-        verify_reference_hashes(reference_path.read_text(encoding="utf-8"), paths)
+    completed = _run_rust_with_verified_inputs(
+        reference_path,
+        paths,
+        original_csv,
+        command,
+        runner=runner,
+        reference_change_message="reference CSV bytes changed during Rust comparison",
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     if completed.returncode != 0:
         # Keep the reference for debugging, but never write a success receipt.
         raise ValueError(
