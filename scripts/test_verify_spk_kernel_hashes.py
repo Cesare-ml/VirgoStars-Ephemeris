@@ -11,6 +11,7 @@
 # Modification (2026-11-14): regressions for SPK file change detection.
 # Modification (2026-11-14): reject zero-vector reference receipts in SHA preflight.
 # Modification (2026-11-14): regressions for malformed post-header pseudo-vector rows.
+# Modification (2026-11-14): reject out-of-range and Rust-incompatible numeric tokens.
 
 """Synthetic byte-level regression tests; NO NASA/JPL SPK data is bundled."""
 
@@ -174,6 +175,13 @@ class SpkSha256PreflightTests(unittest.TestCase):
             "nan,301,399,1,2,3,4,5,6\n",
             "0,301,399,1,2,3,4,5,nan\n",
             "0,301,399,1,2,3,4,5,inf\n",
+            "0,2147483648,399,1,2,3,4,5,6\n",  # i32 overflow.
+            "0,-2147483649,399,1,2,3,4,5,6\n",
+            "0,399,399,1,2,3,4,5,6\n",  # Same target and center.
+            "0,3_01,399,1,2,3,4,5,6\n",  # Python int would accept.
+            "0,٣٠١,399,1,2,3,4,5,6\n",  # Unicode digits, not Rust i32.
+            "0,301,399,1_0,2,3,4,5,6\n",  # Python float would accept.
+            "0,301,399,1,2,3,4,5,6_0\n",
         )
         for row in malformed_rows:
             with self.subTest(row=row):
