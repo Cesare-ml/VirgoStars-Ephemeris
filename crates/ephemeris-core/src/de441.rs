@@ -490,7 +490,10 @@ impl<R: Read + Seek> De441<R> {
             }
         }
         let granule = low;
-        let x = 2.0 * (jd - (record_start + granule as f64 * width)) / width - 1.0;
+        // Modification 2026-11-14: divide before doubling the normalized
+        // record offset. The old 2 * offset / width could overflow an
+        // intermediate even when the final Chebyshev abscissa is in [-1, 1].
+        let x = 2.0 * ((jd - (record_start + granule as f64 * width)) / width) - 1.0;
         let mut result = Components::default();
         for axis in 0..3 {
             let offset = (p.first - 1 + (granule * 3 + axis) * p.coefficients) * 8;
