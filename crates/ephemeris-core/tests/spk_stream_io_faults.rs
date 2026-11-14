@@ -368,7 +368,6 @@ fn unreadable_high_priority_coefficient_never_falls_back_to_older_kernel() {
     }
 }
 
-
 #[test]
 fn batch_rejects_persistent_selected_kernel_io_until_explicit_unload() {
     for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
