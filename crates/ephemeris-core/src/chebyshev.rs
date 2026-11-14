@@ -28,30 +28,30 @@ pub struct ChebyshevSample {
     pub derivative_dx: f64,
 }
 
+fn validate_chebyshev_input(coefficients: &[f64], x: f64) -> Result<()> {
+    if coefficients.is_empty() {
+        return Err(EphemerisError::EmptyCoefficients);
+    }
+    if !x.is_finite() {
+        return Err(EphemerisError::NonFinite {
+            field: "normalized Chebyshev coordinate",
+        });
+    }
+    if coefficients.iter().any(|c| !c.is_finite()) {
+        return Err(EphemerisError::NonFinite {
+            field: "Chebyshev coefficient",
+        });
+    }
+    if !(-1.0..=1.0).contains(&x) {
+        return Err(EphemerisError::OutsideRecord { normalized_time: x });
+    }
+    Ok(())
+}
+
 /// Evaluate a Chebyshev series and its exact polynomial derivative.
 ///
 /// Rejects out-of-domain x rather than extrapolating SPK record coefficients.
 /// Endpoints -1 and +1 are allowed.
-fn validate_chebyshev_input(coefficients: &[f64], x: f64) -> Result<()> {
-        if coefficients.is_empty() {
-            return Err(EphemerisError::EmptyCoefficients);
-        }
-        if !x.is_finite() {
-            return Err(EphemerisError::NonFinite {
-                field: "normalized Chebyshev coordinate",
-            });
-        }
-        if coefficients.iter().any(|c| !c.is_finite()) {
-            return Err(EphemerisError::NonFinite {
-                field: "Chebyshev coefficient",
-            });
-        }
-        if !(-1.0..=1.0).contains(&x) {
-            return Err(EphemerisError::OutsideRecord { normalized_time: x });
-        }
-        Ok(())
-}
-
 pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSample> {
     validate_chebyshev_input(coefficients, x)?;
 
