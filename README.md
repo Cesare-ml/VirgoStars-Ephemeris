@@ -31,6 +31,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental Rust DAF/SPK metadata index](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [Experimental read-only SPK descriptor coverage inspector (not JPL-validated)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
 - [Experimental offline SPK geometric target/center state query CLI (not independent JPL validation)](docs/SPK_OFFLINE_STATE_QUERY_2026-11-14.md)
+- [Offline SPK direct-state diagnostic CSV report at an explicit TDB epoch (synthetic only)](docs/SPK_DIRECT_PROBE_CLI_2026-11-14.md)
 - [Experimental SPK type-2/type-3 direct-segment states (not JPL-validated)](docs/RUST_SPK_TYPE2_TYPE3_DIRECT_STATE_2026-11-12.md)
 - [Experimental single-kernel SPK center-chain states (not JPL-validated)](docs/RUST_SPK_CENTER_CHAINS_2026-11-12.md)
 - [Experimental loaded-kernel precedence and cross-file states (not JPL-validated)](docs/RUST_SPK_KERNEL_SET_PRIORITY_2026-11-13.md)
