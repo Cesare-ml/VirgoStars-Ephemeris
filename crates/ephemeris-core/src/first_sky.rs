@@ -639,7 +639,9 @@ mod tests {
     fn invalid_civil_date_exposes_calendar_source() {
         let error = CivilTimestamp::parse("2026-02-30T12:00:00Z").unwrap_err();
         assert!(matches!(
-            error.source().and_then(|source| source.downcast_ref::<CalendarError>()),
+            error
+                .source()
+                .and_then(|source| source.downcast_ref::<CalendarError>()),
             Some(CalendarError::InvalidDate)
         ));
     }
@@ -651,7 +653,9 @@ mod tests {
             actual: TimeScale::Tt,
         });
         assert!(matches!(
-            atomic.source().and_then(|source| source.downcast_ref::<AtomicTimeError>()),
+            atomic
+                .source()
+                .and_then(|source| source.downcast_ref::<AtomicTimeError>()),
             Some(AtomicTimeError::WrongInputScale {
                 expected: TimeScale::Tai,
                 actual: TimeScale::Tt,
