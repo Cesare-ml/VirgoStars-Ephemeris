@@ -93,7 +93,8 @@ fn valid_provenance_utc(value: &str) -> bool {
     let hour: u32 = value[11..13].parse().expect("two ASCII digits");
     let minute: u32 = value[14..16].parse().expect("two ASCII digits");
     let second: u32 = value[17..19].parse().expect("two ASCII digits");
-    let leap_year = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let leap_year =
+        year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
     let days_in_month = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
