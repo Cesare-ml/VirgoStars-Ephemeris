@@ -179,3 +179,83 @@ fn valid_granule_boundary_selects_next_series_and_final_endpoint_is_inclusive() 
         }
     }
 }
+
+#[test]
+fn rounded_internal_boundaries_select_following_granules_across_tdb_scales() {
+    // Modification 2026-11-14: floor((jd - record_start) / width) is
+    // sometimes one index too small at a representable boundary. For
+    // instance, jd = 1 + 1/3 rounded to f64 yields a quotient below 1.
+    // The parser must instead use the exact same rounded boundaries
+    // that it checked in De441::new.
+    for (start, step, granules) in [
+        (1.0, 1.0, 3),
+        (2_451_545.0, 1.0, 3),
+        (-2_451_545.0, 1.0, 3),
+        (0.0, 1.0, 9),
+        (1000.0, 32.0, 97),
+    ] {
+        let mut bytes = fixture(start, step, granules);
+        let width = step / f64::from(granules);
+        for granule in 0..granules as usize {
+            for axis in 0..3 {
+                let at = RECORD_BYTES * 2 + (2 + 3 * granule + axis) * 8;
+                put_f64(&mut bytes, at, (100 * granule + axis + 1) as f64);
+            }
+        }
+        let mut eph = De441::new(Cursor::new(bytes))
+            .expect("each synthetic granule boundary must be representable");
+        for granule in 0..granules as usize {
+            let boundary = start + granule as f64 * width;
+            let state = eph
+                .state(
+                    Body::Mercury,
+                    Body::SolarSystemBarycenter,
+                    JulianDateTdb(boundary),
+                )
+                .expect("boundary state must select its following granule");
+            for axis in 0..3 {
+                assert_eq!(
+                    state.position_km[axis],
+                    (100 * granule + axis + 1) as f64,
+                    "JD {boundary}, granule {granule}, axis {axis}"
+                );
+                assert_eq!(state.velocity_km_per_day[axis], 0.0);
+            }
+            if granule > 0 {
+                let before = if boundary > 0.0 {
+                    f64::from_bits(boundary.to_bits() - 1)
+                } else {
+                    f64::from_bits(boundary.to_bits() + 1)
+                };
+                assert!(before < boundary && before >= start);
+                let previous = eph
+                    .state(
+                        Body::Mercury,
+                        Body::SolarSystemBarycenter,
+                        JulianDateTdb(before),
+                    )
+                    .expect("immediately preceding epoch must select previous granule");
+                for axis in 0..3 {
+                    assert_eq!(
+                        previous.position_km[axis],
+                        (100 * (granule - 1) + axis + 1) as f64,
+                        "JD {before}, preceding granule {}, axis {axis}",
+                        granule - 1
+                    );
+                }
+            }
+        }
+        let final_epoch = start + step;
+        let final_state = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(final_epoch),
+            )
+            .expect("inclusive final endpoint must select last granule");
+        assert_eq!(
+            final_state.position_km[0],
+            (100 * (granules as usize - 1) + 1) as f64
+        );
+    }
+}
