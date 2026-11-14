@@ -292,10 +292,7 @@ fn failed_kernel_load_from_io_keeps_existing_state_and_index() {
                 io::ErrorKind::PermissionDenied
             );
             assert_eq!(kernels.kernel_count(), 1);
-            assert_eq!(
-                kernels.selected_segment(301, 5.0).unwrap().unwrap().0,
-                0
-            );
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 0);
             assert_eq!(kernels.relative_state(301, 399, 5.0).unwrap(), baseline);
         }
     }
@@ -324,10 +321,7 @@ fn unreadable_high_priority_coefficient_never_falls_back_to_older_kernel() {
             denied.deny = Some((start, start + words * 8));
             kernels.load(denied).unwrap();
             assert_eq!(kernels.kernel_count(), 2);
-            assert_eq!(
-                kernels.selected_segment(301, 5.0).unwrap().unwrap().0,
-                1
-            );
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 1);
 
             let direct_failure = kernels.direct_state(301, 5.0).unwrap_err();
             assert!(matches!(
