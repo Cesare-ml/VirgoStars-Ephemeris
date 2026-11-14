@@ -66,5 +66,12 @@ test('real Rust process and DE441 yield immutable labelled results', {
   const angles = provider.calculateHouseAngles({ut1JulianDay: 2461354.5, ttJulianDay: output.results[0].ttJulianDay, latitudeDeg: 41.9028, longitudeDegEast: 12.4964});
   assert.ok(Math.abs(angles.ascendantDeg - 157.82641479) < 0.01);
   assert.ok(Math.abs(angles.midheavenDeg - 63.67826746) < 0.01);
+  const horizontal=provider.calculateHorizontal({ut1JulianDay:2461354.5,ttJulianDay:output.results[0].ttJulianDay,latitudeDeg:41.9028,longitudeDegEast:12.4964,rightAscensionDeg:225.13669688642472,declinationDeg:-17.081149005284875});
+  assert.ok(Math.abs(horizontal.azimuthSouthWestDeg-214.65670592212305)<0.001);
+  assert.ok(Math.abs(horizontal.trueAltitudeDeg+61.42775066117141)<0.001);
+  assert.ok(horizontal.warnings.includes('NO_REFRACTION'));
+  const polar=provider.calculateHorizontal({ut1JulianDay:2451545,ttJulianDay:2451545,latitudeDeg:90,longitudeDegEast:0,rightAscensionDeg:0,declinationDeg:0});
+  assert.equal(polar.azimuthNorthEastDeg,null);
+  assert.equal(polar.azimuthSouthWestDeg,null);
   assert.throws(() => provider.calculateHouseAngles({ut1JulianDay: 2461354.5, ttJulianDay: 2461355.5, latitudeDeg: 41, longitudeDegEast: 12}), /exited with status/);
 });

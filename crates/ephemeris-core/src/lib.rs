@@ -34,6 +34,7 @@ pub mod civil_aberrated;
 pub mod coordinates;
 pub mod de441;
 pub mod earth_orientation;
+pub mod equatorial_horizontal;
 pub mod error;
 pub mod first_sky;
 pub mod house_angles;

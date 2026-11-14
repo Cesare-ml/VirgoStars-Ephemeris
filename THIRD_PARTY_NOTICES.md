@@ -21,3 +21,7 @@ coefficients and conformance values from ERFA `nut00b` and `num00b`:
 the NumFOCUS copyright and BSD-3 terms in
 [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt). No ERFA C
 implementation functions are included.
+
+`crates/ephemeris-core/tests/equatorial_horizontal.rs` also uses numerical
+conformance values from ERFA `t_hd2ae` under the same NumFOCUS copyright and
+BSD-3 terms. No ERFA implementation is copied or linked.
