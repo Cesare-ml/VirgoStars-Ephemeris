@@ -135,13 +135,21 @@ The updated heads are independently traceable:
 - #139: `bdbde526150c66db54606ce19ce0bed63e38e96d`
 - #194 integration commit: `1af57a5aff312ca374325d340ed8b31b970aa165`
 
-The batch PR is **temporarily targeting `dev/ephemeris` only for
-authorized, read-only integration CI**. Once verified, restore the actual
-review base `feat/de441-checked-split-state-20261112`. No PR in this
-chain is to be merged to the development or production branches until
-its predecessor is integrated and the normal human review gate has
-been satisfied. A Rust CI pass tests only synthetic fixtures and
-code quality, not real NASA/JPL ephemeris accuracy.
+The batch PR was temporarily retargeted to `dev/ephemeris` solely
+to exercise read-only **combined-stack integration CI** after the
+synchronization. The original unchanged-Rust-code head passed
+[workflow #43599540361](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/43599540361)
+on Linux, macOS and Windows, including format, tests, lint and the
+configured cross-platform checks. The normal review base is the
+actual parent branch `feat/de441-checked-split-state-20261112`;
+it must be restored after this temporary CI validation.
+
+The CI run uses synthetic fixtures and exercises the new SPK modules
+in the same Rust workspace; it does not acquire a genuine JPL kernel
+or demonstrate independent NASA/JPL numerical accuracy.
+No PR in this chain may be merged into development or production
+until its predecessor is integrated and human review requirements
+are satisfied.
 
 Modification 2026-11-14: integration note only; original CPAL-1.0 and
 VirgoStars attribution remain unchanged.
