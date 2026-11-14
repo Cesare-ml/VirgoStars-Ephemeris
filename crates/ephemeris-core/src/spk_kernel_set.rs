@@ -934,6 +934,88 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): metadata diagnostics must not perform
+    // hidden I/O after load. Numerical lookups still fail closed if the
+    // underlying data stream becomes temporarily unreadable.
+    #[test]
+    fn metadata_queries_never_reopen_unreadable_loaded_sources() {
+        use std::cell::Cell;
+        use std::io::{self, Read, Seek, SeekFrom};
+        use std::rc::Rc;
+
+        struct GuardedSource {
+            cursor: Cursor<Vec<u8>>,
+            block_reads: Rc<Cell<bool>>,
+        }
+
+        impl Read for GuardedSource {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.block_reads.get() {
+                    Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "injected post-index read denial",
+                    ))
+                } else {
+                    self.cursor.read(buffer)
+                }
+            }
+        }
+
+        impl Seek for GuardedSource {
+            fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+                self.cursor.seek(position)
+            }
+        }
+
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for spk_type in [2, 3] {
+                let blocked = Rc::new(Cell::new(false));
+                let source = GuardedSource {
+                    cursor: Cursor::new(kernel(
+                        order,
+                        &[seg(301, 399, spk_type, [17.0, 2.0], [0.5, -0.25])],
+                    )),
+                    block_reads: Rc::clone(&blocked),
+                };
+                let mut set = SpkKernelSet::new();
+                set.load(source).unwrap();
+                assert_eq!(set.kernel_count(), 1);
+                blocked.set(true);
+
+                let inventory = set.declared_segments_for_target(301);
+                assert_eq!(inventory.len(), 1);
+                assert_eq!(inventory[0].0, 0);
+                assert_eq!(inventory[0].1.center_id, 399);
+                assert_eq!(
+                    set.declared_coverage_boundaries_for_target(301),
+                    vec![0.0, 10.0]
+                );
+                assert!(set.declared_segments_for_target(399).is_empty());
+                assert_eq!(set.selected_segment(301, 5.0).unwrap(), Some(inventory[0]));
+                assert!(set.selected_segment(301, 11.0).unwrap().is_none());
+
+                // Metadata was available without a read, but the same
+                // source must not produce a plausible geometric vector.
+                assert!(matches!(
+                    set.direct_state(301, 5.0),
+                    Err(SpkStateError::Io(ref error))
+                        if error.kind() == io::ErrorKind::PermissionDenied
+                ));
+                assert!(matches!(
+                    set.relative_state(301, 399, 5.0),
+                    Err(SpkRelativeError::Segment(SpkStateError::Io(ref error)))
+                        if error.kind() == io::ErrorKind::PermissionDenied
+                ));
+
+                blocked.set(false);
+                let recovered = set.relative_state(301, 399, 5.0).unwrap();
+                assert_eq!(recovered.position_km, [17.0, 2.0, 0.0]);
+                assert_eq!(recovered.velocity_km_per_second, [0.5, -0.25, 0.0]);
+                assert_eq!(set.kernel_count(), 1);
+            }
+        }
+    }
+
     #[test]
     fn invalid_load_keeps_existing_set_and_empty_has_explicit_errors() {
         let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
