@@ -61,7 +61,9 @@ fn parse_pair(raw: &str) -> Result<(i32, i32), String> {
         .parse::<i32>()
         .map_err(|_| format!("invalid --pair center NAIF ID: {center:?}"))?;
     if target_id == center_id {
-        return Err("--pair target and center must differ (same-body zeros are not evidence)".into());
+        return Err(
+            "--pair target and center must differ (same-body zeros are not evidence)".into(),
+        );
     }
     Ok((target_id, center_id))
 }
@@ -265,19 +267,29 @@ mod tests {
     fn two_sources() -> Vec<Cursor<Vec<u8>>> {
         vec![
             synthetic_kernel(
-                399, 0, [100.0, 5.0], [3.0, -1.0], SpkByteOrder::LittleEndian,
+                399,
+                0,
+                [100.0, 5.0],
+                [3.0, -1.0],
+                SpkByteOrder::LittleEndian,
             ),
-            synthetic_kernel(
-                301, 399, [2.0, 4.0], [0.1, 0.2], SpkByteOrder::BigEndian,
-            ),
+            synthetic_kernel(301, 399, [2.0, 4.0], [0.1, 0.2], SpkByteOrder::BigEndian),
         ]
     }
 
     #[test]
     fn parses_explicit_epoch_ordered_pairs_and_dash_prefixed_path() {
         let values = [
-            "--et", "-2.5", "--pair", "301:399", "--pair", "-301:0",
-            "--pair", "301:399", "--", "-planet.bsp",
+            "--et",
+            "-2.5",
+            "--pair",
+            "301:399",
+            "--pair",
+            "-301:0",
+            "--pair",
+            "301:399",
+            "--",
+            "-planet.bsp",
         ]
         .map(str::to_string);
         assert_eq!(
@@ -347,22 +359,13 @@ mod tests {
     #[test]
     fn failed_batch_or_corrupt_kernel_never_writes_partial_csv() {
         let mut csv = Vec::new();
-        let error = evaluate_and_render(
-            two_sources(),
-            &[(301, 0), (999, 0)],
-            5.0,
-            &mut csv,
-        )
-        .unwrap_err();
+        let error =
+            evaluate_and_render(two_sources(), &[(301, 0), (999, 0)], 5.0, &mut csv).unwrap_err();
         assert!(error.to_string().contains("request 1"));
         assert!(csv.is_empty());
-        let error = evaluate_and_render(
-            [Cursor::new(vec![0_u8; 1024])],
-            &[(301, 0)],
-            5.0,
-            &mut csv,
-        )
-        .unwrap_err();
+        let error =
+            evaluate_and_render([Cursor::new(vec![0_u8; 1024])], &[(301, 0)], 5.0, &mut csv)
+                .unwrap_err();
         assert!(!error.to_string().is_empty());
         assert!(csv.is_empty());
     }
