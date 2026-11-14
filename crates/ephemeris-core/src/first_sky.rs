@@ -1026,7 +1026,9 @@ mod tests {
             horizontal_direction(direction, latitude, sidereal_angle).unwrap();
         near(altitude_deg.to_radians(), 0.447_218_630_499_048_6, 1e-13);
         near(
-            azimuth_deg.expect("off-zenith direction has azimuth").to_radians(),
+            azimuth_deg
+                .expect("off-zenith direction has azimuth")
+                .to_radians(),
             5.916_889_243_730_066,
             1e-13,
         );
