@@ -41,12 +41,12 @@ PLANET_IDS = frozenset({1, 2, 4, 5, 6, 7, 8, 9,
 REQUIRED_CONTRACT = {"provider": "NAIF_SPICE", "method": "spkezr",
                      "time_scale": "TDB", "frame": "J2000",
                      "corrections": "NONE", "units": "KM-S"}
-HEX64 = re.compile(r"[0-9a-fA-F]{64}\\Z")
+HEX64 = re.compile(r"[0-9a-fA-F]{64}\Z")
 # Python float() accepts digit separators and non-ASCII decimal digits
 # that Rust's f64::from_str does not. Reject those before coercion so the E1
 # breadth audit never approves a CSV rejected by the canonical comparator.
 FLOAT_TOKEN = re.compile(
-    r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?\\Z"
+    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z"
 )
 Rows = list[tuple[int, int, float]]
 
