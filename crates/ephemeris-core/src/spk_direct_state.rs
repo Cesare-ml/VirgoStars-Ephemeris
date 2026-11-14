@@ -490,7 +490,12 @@ mod tests {
             let final_address = FIRST_WORD + record_words + 3;
             let summary = 2 * RECORD_BYTES;
             put_f64(&mut bytes, summary + 32, 10.0, order);
-            put_i32(&mut bytes, summary + 40 + 5 * 4, final_address as i32, order);
+            put_i32(
+                &mut bytes,
+                summary + 40 + 5 * 4,
+                final_address as i32,
+                order,
+            );
             put_i32(&mut bytes, 84, (final_address + 1) as i32, order);
             let record_base = (FIRST_WORD - 1) * 8;
             let coefficients = [
