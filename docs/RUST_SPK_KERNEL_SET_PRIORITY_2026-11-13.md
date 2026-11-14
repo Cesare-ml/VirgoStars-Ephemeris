@@ -47,6 +47,17 @@ The experimental `SpkKernelSet` also offers read-only, in-memory metadata diagno
 
 All epochs here are **TDB/ET seconds past J2000**, not UTC dates or Julian days. These inventories use only the indexed DAF descriptors after load; they do not re-read the kernel and do not evaluate position or velocity. Consequently the union is an *upper bound on possible declared target coverage*, **not a guarantee of computable states**: unsupported types/frames, corrupt coefficients, shadowing and broken center chains remain possible. Use `selected_segment(target_id, et)` to diagnose effective descriptor priority and `direct_state`/`relative_state` for actual geometric state evaluation.
 
+### Evaluate selected direct coverage at an exact TDB/ET epoch (2026-11-14)
+
+The read-only `declared_coverage_intervals_for_target` inventory reports **declared** DAF time spans, even for unsupported or malformed SPK segment data. It is deliberately not an accuracy or usability certificate. To inspect a **single** epoch with real coefficient reads, use `SpkKernelSet::probe_direct_state(target_id, et)`. It returns `Result<Option<SpkDirectStateProbe>, SpkStateError>`:
+
+- Invalid/nonfinite ET returns the outer `InvalidEpoch` error. No covering segment returns `Ok(None)`.
+- When covered, `kernel_index` (zero-based, load order) and `descriptor` identify the actual highest-priority source, and `evaluation` holds the result from the canonical Rust type-2/3 direct evaluator.
+- The inner `evaluation` is `Ok(SpkDirectState)` on success or `Err(SpkStateError)` on unsupported frames/types, malformed records, interpolation or I/O failures. **Never** retry a shadowed older descriptor after an inner failure.
+- Existing `direct_state(target_id, et)` uses this same selection/evaluation path and continues returning `MissingSegment` for absent coverage, otherwise the actual geometric state or its error.
+
+This performs kernel reads at the requested epoch, unlike the metadata-only APIs. Success means **one direct target-relative-to-declared-center** geometric state was computed at that instant, in frame 1 (J2000/ICRF), with position km and velocity km/s. It does not imply whole-interval computability, a valid chain between arbitrary target and center, light-time/apparent corrections, or independent JPL/NAIF scientific accuracy.
+
 ### Segment precedence
 
 For a given target and finite epoch:
