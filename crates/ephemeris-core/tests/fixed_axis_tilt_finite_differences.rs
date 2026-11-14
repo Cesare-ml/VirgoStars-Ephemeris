@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 //
 // Modification (2026-11-14): add synthetic finite-difference checks for
-// tilted spherical rates, branch cuts, XYZ reconstruction, scaling, and analytic circular motion.
+// tilted spherical rates, branch cuts, XYZ reconstruction, scaling, analytic circle, and epoch invariance.
 
 //! Independent centered-difference oracle for the public fixed-axis rates.
 //! This only checks synthetic linear motion in a fixed ICRF Cartesian frame;
@@ -306,6 +306,62 @@ fn inclined_circular_motion_matches_closed_form_angles_and_rates() {
                 );
                 assert_near(output.distance_rate_km_per_day, 0.0, 1.0e-8);
             }
+        }
+    }
+}
+
+#[test]
+fn fixed_tilt_projection_is_epoch_and_body_metadata_invariant() {
+    // This API projects an already specified geometric ICRF state. It must
+    // neither advance the orbit nor silently substitute a date-dependent
+    // ecliptic when only the epoch/target/center labels change.
+    // The deliberately ancient/future epochs are NOT ephemeris coverage claims.
+    let position = [43_000_000.0, -79_000_000.0, 21_000_000.0];
+    let velocity = [3_500.0, 800.0, -900.0];
+    for tilt in [-0.27, 0.0, 0.409_092_8] {
+        let baseline = project_fixed_axes(&synthetic_state(position, velocity), tilt).unwrap();
+        for (epoch, target, center) in [
+            (
+                JulianDateTdb(-2_451_545.5),
+                Body::Sun,
+                Body::SolarSystemBarycenter,
+            ),
+            (JulianDateTdb(0.0), Body::Earth, Body::Sun),
+            (JulianDateTdb(2_451_545.0), Body::Moon, Body::Earth),
+            (
+                JulianDateTdb(8_000_000.25),
+                Body::MarsBarycenter,
+                Body::SolarSystemBarycenter,
+            ),
+        ] {
+            let mut input = synthetic_state(position, velocity);
+            input.epoch = epoch;
+            input.target = target;
+            input.center = center;
+            let result = project_fixed_axes(&input, tilt).unwrap();
+
+            // Exact equality is expected: neither body IDs nor TDB epoch
+            // participates in the fixed-axis Cartesian arithmetic.
+            for (actual, expected) in [
+                (result.longitude_rad, baseline.longitude_rad),
+                (result.latitude_rad, baseline.latitude_rad),
+                (result.distance_km, baseline.distance_km),
+                (
+                    result.longitude_rate_rad_per_day,
+                    baseline.longitude_rate_rad_per_day,
+                ),
+                (
+                    result.latitude_rate_rad_per_day,
+                    baseline.latitude_rate_rad_per_day,
+                ),
+                (result.distance_rate_km_per_day, baseline.distance_rate_km_per_day),
+            ] {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+            assert_eq!(result.epoch, epoch);
+            assert_eq!(result.target, target);
+            assert_eq!(result.center, center);
+            assert_eq!(result.tilt_rad, tilt);
         }
     }
 }
