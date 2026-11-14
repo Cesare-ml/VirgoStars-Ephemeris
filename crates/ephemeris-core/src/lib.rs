@@ -32,6 +32,7 @@ pub mod de441;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod spk_batch;
 pub mod spk_direct_state;
 pub mod spk_index;
 pub mod spk_kernel_set;
