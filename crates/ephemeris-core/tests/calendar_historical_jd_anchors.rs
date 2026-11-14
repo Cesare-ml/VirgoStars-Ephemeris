@@ -201,8 +201,7 @@ fn complete_four_century_cycles_round_trip_every_midnight() {
         );
 
         for offset in 0..expected_days {
-            let date = JulianDate::new(start.day_number() + offset, 0.0, TimeScale::Tt)
-                .unwrap();
+            let date = JulianDate::new(start.day_number() + offset, 0.0, TimeScale::Tt).unwrap();
             let calendar_date = date.to_calendar(calendar).unwrap();
             assert_eq!(
                 calendar_date.to_julian_date(calendar).unwrap(),
