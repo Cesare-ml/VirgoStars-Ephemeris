@@ -106,7 +106,7 @@ fn signed_zero_neighborhood_obeys_both_record_and_granule_boundaries() {
         (previous_pos16, 200.0),
         (16.0, 210.0),
         (next_pos16, 210.0),
-        (32.0, 210.0), // inclusive final endpoint
+        (32.0, 210.0),  // inclusive final endpoint
         (-tiny, 110.0), // backward record-cache invalidation
         (-16.0, 110.0),
         (0.0, 200.0),
