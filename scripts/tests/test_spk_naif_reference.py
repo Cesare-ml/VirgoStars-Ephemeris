@@ -273,6 +273,70 @@ class SpkReferenceTests(unittest.TestCase):
             )
         self.assertFalse(receipt.exists())
 
+    def test_failed_rust_comparison_detects_kernel_tampering(self):
+        reference = Path(self.folder.name) / "failed-rust-reference.csv"
+        receipt = Path(self.folder.name) / "failed-rust-receipt.json"
+
+        def corrupt_and_fail(command, **options):
+            contents = bytearray(self.first.read_bytes())
+            contents[0] ^= 1
+            self.first.write_bytes(contents)
+            return subprocess.CompletedProcess(command, 1, "", "synthetic Rust failure")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_and_fail,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
+    def test_failed_rust_comparison_detects_reference_tampering(self):
+        reference = Path(self.folder.name) / "failed-rust-reference.csv"
+        receipt = Path(self.folder.name) / "failed-rust-receipt.json"
+
+        def corrupt_and_fail(command, **options):
+            reference.write_bytes(reference.read_bytes() + b"modified")
+            return subprocess.CompletedProcess(command, 1, "", "synthetic Rust failure")
+
+        with self.assertRaisesRegex(ValueError, "CSV bytes changed"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_and_fail,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
+    def test_missing_cargo_still_rehashes_kernel_after_subprocess_error(self):
+        reference = Path(self.folder.name) / "missing-cargo-reference.csv"
+        receipt = Path(self.folder.name) / "missing-cargo-receipt.json"
+
+        def mutate_then_raise(command, **options):
+            self.second.write_bytes(self.second.read_bytes() + b"tampered")
+            raise FileNotFoundError("synthetic missing cargo")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=mutate_then_raise,
+            )
+        self.assertFalse(receipt.exists())
+
+    def test_missing_cargo_without_mutation_preserves_original_error(self):
+        reference = Path(self.folder.name) / "missing-cargo-reference.csv"
+        receipt = Path(self.folder.name) / "missing-cargo-receipt.json"
+
+        def unavailable(command, **options):
+            raise FileNotFoundError("synthetic missing cargo")
+
+        with self.assertRaisesRegex(FileNotFoundError, "synthetic missing cargo"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=unavailable,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
     def test_one_command_requires_explicit_finite_positive_limits_and_new_outputs(self):
         for bad in ("0", "-1", "inf", "nan", "abc"):
             with self.assertRaises(ValueError):
