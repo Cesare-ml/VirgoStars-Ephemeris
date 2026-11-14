@@ -17,7 +17,8 @@
 """Read-only integration-order audit for the experimental Rust SPK PR stack.
 
 Modification 2026-11-14: fail-closed dependency review independent of
-synthetic CI success. Never merges, approves or downloads ephemeris kernels.
+synthetic CI success, including transitive prerequisites and wrong-base
+ancestors. Never merges, approves or downloads ephemeris kernels.
 """
 from __future__ import annotations
 
@@ -78,33 +79,53 @@ def audit(snapshot: object) -> list[dict]:
     """Report dependency order only: NEVER claim CI or scientific accuracy."""
     records = validate_snapshot(snapshot)
     output = []
+    statuses = {}
     for number, dependencies, description in MANIFEST:
         record = records[number]
         unmerged = [parent for parent in dependencies if not records[parent]["merged"]]
+        # Prerequisites must themselves have a valid merge into the correct
+        # integration branch. A parent merged out of order or into the wrong
+        # base must NOT unlock its downstream PRs, even if GitHub says merged.
+        blockers = [parent for parent in dependencies if statuses[parent] != "MERGED"]
         if record["base"]["ref"] != INTEGRATION_BRANCH:
             status = "BASE_REVIEW"
-        elif record["merged"] and unmerged:
+        elif record["merged"] and blockers:
             status = "ORDER_CONFLICT"
         elif record["merged"]:
             status = "MERGED"
         elif record["state"] == "closed":
             status = "CLOSED_UNMERGED"
-        elif unmerged:
+        elif blockers:
             status = "BLOCKED"
         elif record["draft"]:
             status = "DRAFT_REVIEW"
         else:
             status = "HUMAN_REVIEW_REQUIRED"
+        statuses[number] = status
         output.append({
             "number": number,
             "description": description,
             "status": status,
             "unmerged_prerequisites": unmerged,
+            "blocking_prerequisites": blockers,
+            "merged": record["merged"],
             "draft": record["draft"],
             "base": record["base"]["ref"],
             "url": f"https://github.com/{REPOSITORY}/pull/{number}",
         })
     return output
+
+
+def next_review_stage(report: list[dict]) -> dict | None:
+    """First unmerged stage ready for *human* review, never auto-merge."""
+    for item in report:
+        if item["status"] in ("DRAFT_REVIEW", "HUMAN_REVIEW_REQUIRED"):
+            return {
+                "number": item["number"],
+                "status": item["status"],
+                "url": item["url"],
+            }
+    return None
 
 
 def fetch_live_snapshot() -> dict:
@@ -154,15 +175,19 @@ def main(argv: list[str] | None = None) -> int:
             "source": "GitHub REST" if args.live else "user-supplied offline snapshot",
             "scientific_accuracy_certified": False,
             "merge_authorized": False,
+            "next_review_stage": next_review_stage(report),
             "pull_requests": report,
         }, indent=2))
     else:
         for item in report:
-            missing = ",".join(f"#{n}" for n in item["unmerged_prerequisites"])
-            print(f'#{item["number"]}: {item["status"]}; prerequisites={missing or "-"}; '
+            missing = ",".join(f"#{n}" for n in item["blocking_prerequisites"])
+            print(f'#{item["number"]}: {item["status"]}; blocking={missing or "-"}; '
                   f'{item["description"]}')
+        next_stage = next_review_stage(report)
+        if next_stage is not None:
+            print(f'NEXT HUMAN REVIEW: #{next_stage["number"]} ({next_stage["status"]})')
         print("NOTE: dependency audit only; CI, human review and real JPL/NAIF validation are separate.")
-    if any(item["status"] == "ORDER_CONFLICT" for item in report):
+    if any(item["merged"] and item["status"] != "MERGED" for item in report):
         return 1
     if args.require_integrated and any(item["status"] != "MERGED" for item in report):
         return 1
