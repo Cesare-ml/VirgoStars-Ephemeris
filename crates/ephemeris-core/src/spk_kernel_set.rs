@@ -458,6 +458,82 @@ mod tests {
         ));
     }
 
+    // Modification (2026-11-14): test public kernel-stack rollback and
+    // reloading behavior with independently encoded little/big-endian fixtures.
+    #[test]
+    fn unloading_unsupported_overlay_restores_older_state_and_reloading_masks_it() {
+        let older = seg(301, 399, 2, [2.0, -3.0], [0.0, 0.0]);
+        let mut unsupported = seg(301, 4, 3, [8.0, 9.0], [1.0, 0.0]);
+        unsupported.frame = 17;
+
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, vec![older]),
+            (SpkByteOrder::BigEndian, vec![unsupported]),
+        ]);
+        assert_eq!(set.kernel_count(), 2);
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+
+        // The bad high-priority link must mask the older file, but unloading
+        // that file must restore exactly the original type-2 result.
+        let overlay = set.unload_last().expect("newer kernel is loaded");
+        assert_eq!(set.kernel_count(), 1);
+        let restored = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(restored.center_id, 399);
+        assert_eq!(restored.position_km, [2.0, -3.0, 0.0]);
+        assert_eq!(restored.velocity_km_per_second, [0.0; 3]);
+        assert_eq!(
+            set.relative_state(301, 399, 5.0).unwrap().position_km,
+            [2.0, -3.0, 0.0]
+        );
+
+        // The returned reader remains reusable, even if it was previously
+        // positioned by failed state evaluation.
+        set.load(overlay).unwrap();
+        assert_eq!(set.kernel_count(), 2);
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+        assert!(set.unload_last().is_some());
+        assert_eq!(set.direct_state(301, 5.0).unwrap(), restored);
+    }
+
+    #[test]
+    fn failed_kernel_load_never_changes_existing_selected_state() {
+        let mut set = with_kernels(&[
+            (
+                SpkByteOrder::LittleEndian,
+                vec![seg(301, 399, 2, [1.0, 2.0], [0.1, 0.2])],
+            ),
+            (
+                SpkByteOrder::BigEndian,
+                vec![seg(301, 399, 3, [3.0, 4.0], [0.3, 0.4])],
+            ),
+        ]);
+        let before = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(before.position_km, [3.0, 4.0, 0.0]);
+        assert_eq!(before.velocity_km_per_second, [0.3, 0.4, 0.0]);
+
+        // A malformed later file must not replace, clear, or partially
+        // reorder the validated kernel set.
+        let bad_header = Cursor::new(vec![0u8; 5 * RECORD_BYTES]);
+        assert!(set.load(bad_header).is_err());
+        assert_eq!(set.kernel_count(), 2);
+        assert_eq!(set.direct_state(301, 5.0).unwrap(), before);
+
+        // Unloading after a failed load must still remove the actual newest
+        // valid kernel, exposing the earlier type-2 source.
+        assert!(set.unload_last().is_some());
+        assert_eq!(set.kernel_count(), 1);
+        let earlier = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(earlier.center_id, 399);
+        assert_eq!(earlier.position_km, [1.0, 2.0, 0.0]);
+        assert_eq!(earlier.velocity_km_per_second, [0.1, 0.2, 0.0]);
+    }
+
     // Modification (2026-11-14): a later DAF summary/name pair must be
     // allocated before FREE, even if all segment data fits below FREE.
     // A rejected higher-priority file must not evict valid loaded kernels.
