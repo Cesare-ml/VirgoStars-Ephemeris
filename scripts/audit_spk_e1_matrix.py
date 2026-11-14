@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): fail closed on duplicate or nonstandard JSON receipt fields.
 # Modification (2026-11-14): align E1 CSV float tokens with the Rust comparator's ASCII decimal grammar.
+# Modification (2026-11-14): validate calendar-real UTC provenance timestamps in the E1 breadth audit.
 
 """Audit minimum E1 reference *case breadth*, without evaluating astronomy.
 
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from datetime import date
 from itertools import combinations
 import hashlib
 import hmac
@@ -49,6 +51,26 @@ FLOAT_TOKEN = re.compile(
     r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z"
 )
 Rows = list[tuple[int, int, float]]
+# Evidence-generation time is metadata, NOT the astronomical ET/TDB epoch.
+# Match Rust validate_spk_reference's calendar-valid UTC contract, including
+# optional nonempty, arbitrarily long fractional seconds.
+UTC_PROVENANCE = re.compile(
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})T"
+    r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]+)?Z\\Z"
+)
+
+
+def valid_provenance_utc(value: str) -> bool:
+    """Require real Gregorian UTC time; do not authenticate reference provenance."""
+    fields = UTC_PROVENANCE.fullmatch(value)
+    if fields is None:
+        return False
+    year, month, day, hour, minute, second = map(int, fields.groups())
+    try:
+        date(year, month, day)  # Reject year zero and non-Gregorian month/day.
+    except ValueError:
+        return False
+    return hour <= 23 and minute <= 59 and second <= 59
 
 
 def planet_system(target: int) -> int | None:
@@ -176,6 +198,10 @@ def parse_reference(content: str) -> Rows:
     for name in ("toolkit_version", "generated_utc", "reference_source"):
         if not metadata.get(name):
             raise ValueError(f"missing provenance metadata {name}")
+    if not valid_provenance_utc(metadata["generated_utc"]):
+        raise ValueError(
+            "generated_utc must be an actual YYYY-MM-DDTHH:MM:SS[.fraction]Z UTC date"
+        )
     hashes = metadata.get("ordered_kernel_sha256", "").split(";")
     if not hashes or not all(HEX64.fullmatch(hash_value.strip()) for hash_value in hashes):
         raise ValueError("ordered_kernel_sha256 must contain valid 64-hex digests")
