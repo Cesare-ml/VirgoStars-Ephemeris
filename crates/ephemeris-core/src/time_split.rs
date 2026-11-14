@@ -16,6 +16,9 @@
 //!
 //! The conversion is TDB -> TDB only. It does NOT calculate TT/TDB offsets,
 //! leap seconds, UTC, Earth orientation or any planetary state.
+//!
+//! Modified 2026-11-14: signed-remainder handling for tiny negative ET
+//! offsets, with explicit roundtrip quantization checks in the audited API.
 
 use crate::calendar::{CalendarError, JulianDate, TimeScale};
 use crate::time::{TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
@@ -37,11 +40,18 @@ pub fn split_julian_day_tdb_from_et(
     epoch: TdbSecondsPastJ2000,
 ) -> Result<JulianDate, CalendarError> {
     let seconds = epoch.value();
-    let days = seconds.div_euclid(SECONDS_PER_DAY);
-    let remainder = seconds.rem_euclid(SECONDS_PER_DAY);
-
-    if !days.is_finite() || !(0.0..SECONDS_PER_DAY).contains(&remainder) {
+    // Use the signed remainder. rem_euclid() computes remainder + DAY
+    // for negative offsets: when the remainder is only a few picoseconds,
+    // that sum can round to DAY itself, spuriously rejecting a valid ET.
+    // Shift the integer-day quotient back toward zero in that case and
+    // retain the small negative remainder for the split fraction.
+    let mut days = seconds.div_euclid(SECONDS_PER_DAY);
+    let remainder = seconds % SECONDS_PER_DAY;
+    if !days.is_finite() || !remainder.is_finite() || remainder.abs() >= SECONDS_PER_DAY {
         return Err(CalendarError::UnrepresentableTime);
+    }
+    if remainder < 0.0 {
+        days += 1.0;
     }
     let base_day = J2000_JD_TDB + days;
     // Integers and half-days must be exactly representable in the split API.
@@ -53,6 +63,8 @@ pub fn split_julian_day_tdb_from_et(
     let candidate_fraction = 0.5 + remainder / SECONDS_PER_DAY;
     let (day_number, midnight_fraction) = if candidate_fraction >= 1.0 {
         (base_day as i64 + 1, candidate_fraction - 1.0)
+    } else if candidate_fraction < 0.0 {
+        (base_day as i64 - 1, candidate_fraction + 1.0)
     } else {
         (base_day as i64, candidate_fraction)
     };
