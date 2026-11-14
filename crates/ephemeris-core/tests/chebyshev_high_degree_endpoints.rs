@@ -139,3 +139,40 @@ fn high_order_interior_values_and_slopes_match_trigonometric_oracle() {
         }
     }
 }
+
+#[test]
+fn mixed_high_order_interior_series_matches_trigonometric_oracle() {
+    // Unlike single-basis checks, this exercises Clenshaw accumulation and
+    // derivative accumulation simultaneously at non-symmetric interior epochs.
+    // The independent oracle uses T_n(cos(theta)) = cos(n*theta).
+    let terms = [(0_usize, 0.75), (1, -1.25), (7, 0.5), (32, -0.125), (99, 0.0625)];
+    let mut coefficients = vec![0.0; 100];
+    for &(degree, coefficient) in &terms {
+        coefficients[degree] = coefficient;
+    }
+
+    for x in [-0.875_f64, -0.375, 0.125, 0.625, 0.875] {
+        let theta = x.acos();
+        let expected_value: f64 = terms
+            .iter()
+            .map(|&(degree, coefficient)| coefficient * (degree as f64 * theta).cos())
+            .sum();
+        let expected_slope: f64 = terms
+            .iter()
+            .map(|&(degree, coefficient)| {
+                coefficient * degree as f64 * (degree as f64 * theta).sin() / theta.sin()
+            })
+            .sum();
+        let actual = evaluate_chebyshev(&coefficients, x).unwrap();
+        assert!(
+            (actual.value - expected_value).abs() <= 1e-10,
+            "x={x}: value {} vs {expected_value}",
+            actual.value
+        );
+        assert!(
+            (actual.derivative_dx - expected_slope).abs() <= 1e-8,
+            "x={x}: derivative {} vs {expected_slope}",
+            actual.derivative_dx
+        );
+    }
+}
