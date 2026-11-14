@@ -15,14 +15,19 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
-//! validated real-world astronomical positions are provided at this stage.
+//! No SPK file parsing, Earth orientation, UTC conversion, complete
+//! apparent-position pipeline or validated real-world positions are provided.
+//! A standalone observer-velocity annual-aberration direction stage is
+//! experimental and must not be mislabeled a complete apparent position.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
 
 #![forbid(unsafe_code)]
 
+pub mod aberration;
+pub mod aberration_state;
+pub mod aberrated_spherical;
 pub mod calendar;
 pub mod chebyshev;
 pub mod coordinates;
@@ -30,6 +35,7 @@ pub mod de441;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;
+pub mod six_field_units;
 pub mod state;
 pub mod time;
 
