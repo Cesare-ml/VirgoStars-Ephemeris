@@ -150,10 +150,7 @@ fn short_reads_still_reconstruct_complete_header_and_record() {
     let mut ephemeris = De441::new(stream).unwrap();
     assert_eq!(
         ephemeris.coverage(),
-        (
-            JulianDateTdb(START_JD),
-            JulianDateTdb(START_JD + 32.0)
-        )
+        (JulianDateTdb(START_JD), JulianDateTdb(START_JD + 32.0))
     );
     assert_known_state(&mut ephemeris);
 }
