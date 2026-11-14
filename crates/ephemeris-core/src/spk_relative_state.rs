@@ -117,22 +117,20 @@ impl<R: Read + Seek> SpkStateResolver for SingleKernel<'_, R> {
     }
 }
 
-/// Discover declared center ancestry, stopping at SSB (ID 0) or missing data.
+/// Discover declared center ancestry, stopping at SSB, missing data or a cycle.
 ///
-/// Selects the last covering descriptor for each link *without* evaluating
-/// coefficients. A missing path above a shared ancestor is harmless; missing
-/// connections between the requested bodies are not. A cycle is never followed.
-fn ancestors<S: SpkStateResolver>(
-    resolver: &S,
-    body: i32,
-    et: f64,
-) -> Result<Vec<i32>, SpkRelativeError> {
+/// Modification (2026-11-14): defer the cycle error until the nearest common
+/// ancestor is known. A cycle *above* that ancestor cannot affect the required
+/// target-minus-center state, whose paths stop at the common ancestor. Cycles
+/// still fail closed if no shared ancestor is reachable without repeating a
+/// node. Only metadata is inspected; no unused coefficients are evaluated.
+fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> (Vec<i32>, Option<i32>) {
     let mut path = Vec::new();
     let mut visited = HashSet::new();
     let mut node = body;
     loop {
         if !visited.insert(node) {
-            return Err(SpkRelativeError::Cycle { body_id: node });
+            return (path, Some(node));
         }
         path.push(node);
         if node == 0 {
@@ -143,7 +141,7 @@ fn ancestors<S: SpkStateResolver>(
             None => break,
         }
     }
-    Ok(path)
+    (path, None)
 }
 
 /// Sum the existing direct SPK states from the start body to the ancestor.
@@ -183,8 +181,9 @@ fn to_ancestor<S: SpkStateResolver>(
 ///
 /// Paths are composed through their first shared ancestor in the target's
 /// ancestry; a full solar-system-barycenter chain is *not* required if the
-/// bodies meet earlier. Unconnected paths and cycles fail closed, rather than
-/// returning approximate positions or falling back to lower-priority segments.
+/// bodies meet earlier. Unconnected paths and cycles that prevent reaching
+/// any shared ancestor fail closed. A cycle strictly beyond the shared ancestor
+/// is not evaluated and cannot invalidate the necessary finite paths.
 ///
 /// This does not implement multiple loaded kernels, non-J2000 frame rotations,
 /// planetary aberration, light time, or civil-time conversion. No velocities
@@ -228,16 +227,27 @@ pub(crate) fn resolve_relative<S: SpkStateResolver>(
         });
     }
 
-    let target_path = ancestors(resolver, target_id, et)?;
-    let center_path = ancestors(resolver, center_id, et)?;
-    let common = target_path
+    let (target_path, target_cycle) = ancestors(resolver, target_id, et);
+    let (center_path, center_cycle) = ancestors(resolver, center_id, et);
+    let common = match target_path
         .iter()
         .copied()
         .find(|node| center_path.contains(node))
-        .ok_or(SpkRelativeError::Disconnected {
-            target_id,
-            center_id,
-        })?;
+    {
+        Some(common) => common,
+        None => {
+            // A disconnected request must never turn a required cycle into
+            // a misleading "no data" result. Keep the original fail-closed
+            // cycle diagnostics, prioritizing the target side as before.
+            if let Some(body_id) = target_cycle.or(center_cycle) {
+                return Err(SpkRelativeError::Cycle { body_id });
+            }
+            return Err(SpkRelativeError::Disconnected {
+                target_id,
+                center_id,
+            });
+        }
+    };
 
     let (target_position, target_velocity) = to_ancestor(resolver, &target_path, common, et)?;
     let (center_position, center_velocity) = to_ancestor(resolver, &center_path, common, et)?;
@@ -458,6 +468,42 @@ mod tests {
                 center_id: 4
             })
         ));
+    }
+
+    // Modification (2026-11-14): upstream cycles are irrelevant if the
+    // requested target and center meet before reaching those cycles.
+    #[test]
+    fn shared_ancestor_before_cycle_keeps_required_relative_state() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let specs = [
+                segment(301, 399, 2, [3.0, 4.0], [0.25, -0.5]),
+                segment(302, 399, 3, [1.0, 1.0], [-0.125, 0.75]),
+                segment(399, 3, 2, [5.0, 0.0], [1.0, 0.0]),
+                segment(3, 399, 3, [7.0, 0.0], [0.0, 0.0]),
+            ];
+
+            // Direct child-to-parent and the reverse need exactly one link.
+            let moon_earth = compute(order, &specs, 301, 399, 5.0).unwrap();
+            assert_eq!(moon_earth.common_ancestor_id, 399);
+            assert_eq!(moon_earth.position_km, [3.0, 4.0, 0.0]);
+            assert_eq!(moon_earth.velocity_km_per_second, [0.25, -0.5, 0.0]);
+            let earth_moon = compute(order, &specs, 399, 301, 5.0).unwrap();
+            assert_eq!(earth_moon.position_km, [-3.0, -4.0, 0.0]);
+            assert_eq!(earth_moon.velocity_km_per_second, [-0.25, 0.5, 0.0]);
+
+            // Siblings also meet at 399; neither path needs 399 -> 3 -> 399.
+            let siblings = compute(order, &specs, 301, 302, 5.0).unwrap();
+            assert_eq!(siblings.common_ancestor_id, 399);
+            assert_eq!(siblings.position_km, [2.0, 3.0, 0.0]);
+            assert_eq!(siblings.velocity_km_per_second, [0.375, -1.25, 0.0]);
+
+            // The SSB request really needs an upstream connection: no shared
+            // ancestor precedes the cycle and so the operation must fail.
+            assert!(matches!(
+                compute(order, &specs, 301, 0, 5.0),
+                Err(SpkRelativeError::Cycle { body_id: 399 })
+            ));
+        }
     }
 
     #[test]
