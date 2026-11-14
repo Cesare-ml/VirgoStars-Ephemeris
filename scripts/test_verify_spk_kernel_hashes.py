@@ -8,16 +8,20 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): test ordered names/sizes and hash-only compatibility.
+# Modification (2026-11-14): regressions for SPK file change detection.
 # Modification (2026-11-14): reject zero-vector reference receipts in SHA preflight.
 
 """Synthetic byte-level regression tests; NO NASA/JPL SPK data is bundled."""
 
 import hashlib
+import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 from tempfile import TemporaryDirectory
 import unittest
 
-from verify_spk_kernel_hashes import CSV_HEADER, main, read_declared_hashes, read_declared_manifest, verify
+from verify_spk_kernel_hashes import CSV_HEADER, main, read_declared_hashes, read_declared_manifest, sha256_file, verify
 
 
 class SpkSha256PreflightTests(unittest.TestCase):
@@ -168,6 +172,94 @@ class SpkSha256PreflightTests(unittest.TestCase):
         self.first.write_bytes(self.first.read_bytes() + b"tampered")
         with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
             verify(self.reference, [self.first, self.second])
+
+    def test_rejects_same_size_in_flight_file_edit_without_a_false_sha_pass(self):
+        """Simulate a metadata change between two descriptor observations."""
+        real_fstat = os.fstat
+        calls = 0
+
+        def changed_second_fstat(fd):
+            nonlocal calls
+            calls += 1
+            result = real_fstat(fd)
+            if calls != 2:
+                return result
+            return SimpleNamespace(
+                st_dev=result.st_dev,
+                st_ino=result.st_ino,
+                st_size=result.st_size,  # Even unchanged byte length is unsafe.
+                st_mtime_ns=result.st_mtime_ns + 1,
+                st_ctime_ns=result.st_ctime_ns,
+            )
+
+        with patch("verify_spk_kernel_hashes.os.fstat", side_effect=changed_second_fstat):
+            with self.assertRaisesRegex(ValueError, "changed during SHA-256 read"):
+                verify(self.reference, [self.first, self.second])
+        self.assertEqual(calls, 2)
+
+    def test_ctime_disagreement_alone_does_not_reject_unchanged_kernel(self):
+        """Windows can report different creation-time fields for path and FD."""
+        actual_fstat = os.fstat
+
+        def different_ctime(fd):
+            result = actual_fstat(fd)
+            return SimpleNamespace(
+                st_dev=result.st_dev,
+                st_ino=result.st_ino,
+                st_size=result.st_size,
+                st_mtime_ns=result.st_mtime_ns,
+                st_ctime_ns=result.st_ctime_ns + 1_000_000_000,
+            )
+
+        with patch("verify_spk_kernel_hashes.os.fstat", side_effect=different_ctime):
+            self.assertEqual(
+                sha256_file(self.first),
+                hashlib.sha256(self.first.read_bytes()).hexdigest(),
+            )
+
+    def test_rejects_path_identity_change_between_open_and_hash(self):
+        """The opened inode must still be the one inspected by path."""
+        original_fstat = os.fstat
+
+        def changed_inode(fd):
+            result = original_fstat(fd)
+            return SimpleNamespace(
+                st_dev=result.st_dev,
+                st_ino=result.st_ino + 1,
+                st_size=result.st_size,
+                st_mtime_ns=result.st_mtime_ns,
+                st_ctime_ns=result.st_ctime_ns,
+            )
+
+        with patch("verify_spk_kernel_hashes.os.fstat", side_effect=changed_inode):
+            with self.assertRaisesRegex(ValueError, "path changed before SHA-256 read"):
+                sha256_file(self.first)
+
+    def test_rejects_path_swap_after_stream_before_returning_hash(self):
+        """The name must still reference the stream that supplied its bytes."""
+        actual_stat = Path.stat
+        calls = 0
+
+        def changed_final_path_stat(path, *args, **kwargs):
+            nonlocal calls
+            result = actual_stat(path, *args, **kwargs)
+            if path != self.first:
+                return result
+            calls += 1
+            if calls != 2:
+                return result
+            return SimpleNamespace(
+                st_dev=result.st_dev,
+                st_ino=result.st_ino + 1,
+                st_size=result.st_size,
+                st_mtime_ns=result.st_mtime_ns,
+                st_ctime_ns=result.st_ctime_ns,
+            )
+
+        with patch.object(Path, "stat", changed_final_path_stat):
+            with self.assertRaisesRegex(ValueError, "path changed during SHA-256 read"):
+                sha256_file(self.first)
+        self.assertEqual(calls, 2)
 
     def test_missing_kernel_and_manifest_count_mismatch_fail(self):
         with self.assertRaisesRegex(ValueError, "2 kernels but 1 paths"):
