@@ -112,10 +112,14 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         if !et.is_finite() {
             return Err(SpkStateError::InvalidEpoch);
         }
-        Ok(self.loaded.iter().enumerate().rev().find_map(|(index, entry)| {
-            select_covering_segment(&entry.index, target_id, et)
-                .map(|segment| (index, segment))
-        }))
+        Ok(self
+            .loaded
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(index, entry)| {
+                select_covering_segment(&entry.index, target_id, et).map(|segment| (index, segment))
+            }))
     }
 
     /// Direct target-minus-selected-segment-center state, km and km/s.
@@ -573,7 +577,10 @@ mod tests {
         assert_eq!(kernel_index, 1);
         assert_eq!((segment.target_id, segment.center_id), (301, 4));
         assert_eq!((segment.frame_id, segment.spk_type), (1, 3));
-        assert_eq!((segment.start_tdb_seconds, segment.end_tdb_seconds), (0.0, 10.0));
+        assert_eq!(
+            (segment.start_tdb_seconds, segment.end_tdb_seconds),
+            (0.0, 10.0)
+        );
         let state = set.direct_state(301, 5.0).unwrap();
         assert_eq!(state.center_id, segment.center_id);
         assert_eq!(state.position_km, [3.0, 0.0, 0.0]);
