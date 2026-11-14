@@ -198,3 +198,23 @@ fn high_order_finite_coefficients_report_arithmetic_overflow() {
         );
     }
 }
+
+#[test]
+fn high_order_nonfinite_tail_coefficients_are_rejected() {
+    // A corrupt coefficient at the far end of a long series must not be
+    // silently skipped, even if all earlier coefficients are valid.
+    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let mut coefficients = vec![0.0; 100];
+        coefficients[99] = invalid;
+        for x in [-1.0, 0.0, 1.0] {
+            let error = evaluate_chebyshev(&coefficients, x).unwrap_err();
+            assert_eq!(
+                error,
+                virgostars_ephemeris_core::EphemerisError::NonFinite {
+                    field: "Chebyshev coefficient"
+                },
+                "x={x}, invalid={invalid}"
+            );
+        }
+    }
+}
