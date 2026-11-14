@@ -98,5 +98,58 @@ class RepositoryDataHygieneTests(unittest.TestCase):
             self.assertEqual(checker.check_repository(root), [])
 
 
+    def test_indexed_kernel_magic_cannot_be_hidden_by_worktree_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            disguised = root / "opaque.dat"
+            disguised.write_bytes(b"DAF/SPK " + b"\0" * 80)
+            subprocess.run(["git", "add", "opaque.dat"], cwd=root, check=True)
+            # Git will commit the staged kernel, not these later worktree bytes.
+            disguised.write_text("harmless working-tree replacement")
+            self.assertEqual(
+                checker.check_repository(root),
+                [("opaque.dat", "NAIF DAF/SPK magic header")],
+            )
+            disguised.unlink()
+            self.assertEqual(
+                checker.check_repository(root),
+                [("opaque.dat", "NAIF DAF/SPK magic header")],
+            )
+
+    def test_unstaged_kernel_magic_cannot_mask_clean_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            path = root / "benign.dat"
+            path.write_text("staged project documentation")
+            subprocess.run(["git", "add", "benign.dat"], cwd=root, check=True)
+            path.write_bytes(b"JPL Planetary Ephemeris DE441" + b"\0" * 60)
+            self.assertEqual(checker.check_repository(root), [])
+            # Once staged, the byte-level guard must reject it.
+            subprocess.run(["git", "add", "benign.dat"], cwd=root, check=True)
+            self.assertEqual(
+                checker.check_repository(root),
+                [("benign.dat", "classic JPL planetary ephemeris magic header")],
+            )
+
+    def test_unmerged_index_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            oid = subprocess.run(
+                ["git", "hash-object", "-w", "--stdin"],
+                cwd=root, input=b"synthetic conflict", stdout=subprocess.PIPE, check=True,
+            ).stdout.decode("ascii").strip()
+            subprocess.run(
+                ["git", "update-index", "--index-info"],
+                cwd=root,
+                input=f"100644 {oid} 1\tconflicted.dat\n".encode(),
+                check=True,
+            )
+            with self.assertRaisesRegex(ValueError, "unmerged Git index"):
+                checker.check_repository(root)
+
+
 if __name__ == "__main__":
     unittest.main()
