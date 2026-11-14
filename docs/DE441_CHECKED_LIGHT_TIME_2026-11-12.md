@@ -59,3 +59,23 @@ Run `cargo fmt --all -- --check`, `cargo test --workspace --locked`, `cargo test
 - Original code remains under [CPAL-1.0](../LICENSE), with the required VirgoStars attribution preserved. See [NOTICE](../NOTICE) and [licensing guidance](LICENSING_AND_CREDITS.md). No third-party code or ephemeris data was added.
 
 **Review order:** merge/review #136 and #139 before considering this stacked adapter. Do not publish, deploy or migrate production based on these isolated deterministic tests.
+
+## Follow-up integration CI protocol (2026-11-14)
+
+This regression is deliberately added on the **#143 light-time draft**
+branch rather than changing the shared core solver. It checks the
+recently-added nonrepresentable emission-epoch guard **through the
+public opt-in checked API and real classic-record layout I/O**.
+Both fixtures are artificial constant-range vectors; the 100 km
+control confirms a valid small but representable delay is not
+rejected indiscriminately. Any failure in the first fixture must remain
+an explicit solver error, not an apparently successful zero-delay state.
+
+The feature branch inherits #136 (epoch bridge) and #139 (geometric
+state lookup), and must be reviewed only as the three incremental files
+relative to the updated #139 parent branch. The PR is briefly
+retargeted to `dev/ephemeris` solely to activate the repository's
+authorized read-only Linux, native Windows and native macOS Rust CI
+against the combined experimental SPK core; once verification is
+complete, restore the #139 review base. No approval, merge, deploy,
+kernel import or production change is authorized by a green CI run.
