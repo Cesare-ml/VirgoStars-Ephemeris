@@ -13,7 +13,7 @@
 
 It checks the file ID, dimensions, byte order, whole-record alignment, free-address range, segment coverage and data-span bounds, summary record count, link consistency and cycles. The reader preserves the **original forward order** of descriptors, which is necessary for later NAIF segment-priority semantics. A segment with an unsupported frame or type is **indexed as metadata**, not silently dropped or used for calculations. This allows a future evaluator to fail closed if the *selected* segment is unsupported.
 
-The `SpkIndex` intentionally does not return any positions or velocities. It does not parse name/comment records as human-readable metadata, check FTP corruption sentinels, verify full SPK type-2/3 record layout, compose NAIF center chains, interpret non-J2000 frames, resolve overlapping multi-kernel priorities, or convert UTC/TT to TDB. SPK type IDs are recorded but **not executed**.
+The `SpkIndex` intentionally does not return any positions or velocities. It does not parse name/comment records as human-readable metadata, verify full SPK type-2/3 record layout, compose NAIF center chains, interpret non-J2000 frames, resolve overlapping multi-kernel priorities, or convert UTC/TT to TDB. Populated DAF FTPSTR transfer-sentinel fields are verified byte-for-byte; legacy all-NUL or all-space sentinel fields remain accepted. SPK type IDs are recorded but **not executed**.
 
 ## Usage
 
@@ -95,9 +95,9 @@ changes.
 
 This is a **structural safety check**, not independent validation of real
 JPL/NAIF kernel contents, record type-2/type-3 interpolation, reference
-frames, center chains or astronomical accuracy. It does not detect arbitrary
-overlap between two coefficient segments, checksum corruption or separately
-reserved comment records.
+frames, center chains or astronomical accuracy. At the time of this earlier change, it did not detect arbitrary
+coefficient-segment overlaps, checksum corruption or separately reserved
+comment records. A subsequent address-span guard is documented below.
 
 Reproduce from the Rust workspace root:
 
@@ -114,3 +114,16 @@ Exhibit A notice and VirgoStars attribution (see [LICENSE](../LICENSE),
 [LICENSING_AND_CREDITS.md](LICENSING_AND_CREDITS.md)). No copied NAIF code
 or third-party binary kernel data was introduced. Confirm all CI jobs on the
 exact feature-branch commit before integration.
+
+
+## 2026-11-14 — reject aliasing between different DAF data arrays
+
+The NAIF [DAF Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/daf.html) describes appending data arrays at the next free word address. Each SPK descriptor identifies an **inclusive** range of 1-based, eight-byte DAF words. Previous index checks excluded summary/name metadata but could still accept two otherwise valid descriptors that referenced the **same coefficient words**, for example `513..516` and `515..518`.
+
+`inspect_spk` now additionally sorts all segment **word spans** by initial address and rejects any neighboring spans where the next start is less than or equal to the previous inclusive end. This detects identical, contained and partial overlaps across summary records and targets. It does **not** reject separate arrays merely because they share one 1024-byte **physical record** (for example `513..516` and `517..520`). It preserves the original segment descriptor order and SPK precedence in the returned index; sorting is used for validation only.
+
+New deterministic tests cover four overlapping address arrangements across distinct summary records in both LTL-IEEE and BIG-IEEE, unchanged valid kernels, and adjacent arrays sharing the same data record without intersecting in words. These fixtures are wholly synthetic and metadata-only. The failure is `SpkIndexError::InvalidFile("overlapping DAF segment data arrays")`; no kernel contents are read and no additional dependencies are introduced.
+
+Verification: `cargo fmt --all -- --check`, `cargo test --workspace --locked`, and `cargo clippy --workspace --all-targets --locked -- -D warnings` in read-only CI, including native macOS and Windows where available. Independent NASA/JPL state-vector comparison and legal review for externally obtained kernels remain separate requirements.
+
+Modification date: **2026-11-14**. The original CPAL-1.0 license, Exhibit A, required VirgoStars attribution and third-party exclusions remain unchanged. This change adds no external source code or kernel data.
