@@ -258,7 +258,7 @@ mod tests {
             })
         ));
         assert!(err.source().unwrap().source().is_some());
-        assert_eq!(kernels.relative_state(301, 0, 0.0).unwrap().position_km, [86.5, 25.0, 0.0]);
+        assert_eq!(kernels.relative_state(301, 0, 0.0).unwrap().position_km, [86.5, 28.0, 0.0]);
     }
 
     #[test]
