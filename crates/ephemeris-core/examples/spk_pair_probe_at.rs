@@ -30,9 +30,7 @@ use std::io::{self, Read, Seek, Write};
 
 use virgostars_ephemeris_core::spk_direct_state::SpkStateError;
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
-use virgostars_ephemeris_core::spk_pair_diagnostics::{
-    probe_relative_states_at, SpkRelativeProbe,
-};
+use virgostars_ephemeris_core::spk_pair_diagnostics::{probe_relative_states_at, SpkRelativeProbe};
 use virgostars_ephemeris_core::spk_relative_state::SpkRelativeError;
 
 const HEADER: &str = "et_tdb_seconds,request_index,target_id,center_id,status,common_ancestor_id,\
@@ -113,7 +111,10 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
         return Err(format!("at least one --pair is required; {}", usage()));
     }
     if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
-        return Err(format!("at least one local SPK file is required; {}", usage()));
+        return Err(format!(
+            "at least one local SPK file is required; {}",
+            usage()
+        ));
     }
     Ok(Arguments { et, pairs, paths })
 }
@@ -177,7 +178,12 @@ fn render<W: Write>(
                 for _ in 0..7 {
                     write!(output, ",")?;
                 }
-                writeln!(output, ",{},{}", error_code(error), quoted_csv(&error.to_string()))?;
+                writeln!(
+                    output,
+                    ",{},{}",
+                    error_code(error),
+                    quoted_csv(&error.to_string())
+                )?;
             }
         }
     }
@@ -268,7 +274,13 @@ mod tests {
         bytes[offset..offset + 8].copy_from_slice(&raw);
     }
 
-    fn kernel(order: Order, target: i32, center: i32, frame: i32, position: f64) -> Cursor<Vec<u8>> {
+    fn kernel(
+        order: Order,
+        target: i32,
+        center: i32,
+        frame: i32,
+        position: f64,
+    ) -> Cursor<Vec<u8>> {
         // Synthetic one-record Type-2 Chebyshev SPK with constant XYZ.
         let mut bytes = vec![0u8; 5 * 1024];
         bytes[..8].copy_from_slice(b"DAF/SPK ");
@@ -289,7 +301,10 @@ mod tests {
         let record = 4 * 1024;
         f64_at(&mut bytes, record, 5.0, order);
         f64_at(&mut bytes, record + 8, 5.0, order);
-        for (i, val) in [position, position * 2.0, -position].into_iter().enumerate() {
+        for (i, val) in [position, position * 2.0, -position]
+            .into_iter()
+            .enumerate()
+        {
             f64_at(&mut bytes, record + 16 + i * 16, val, order);
             f64_at(&mut bytes, record + 24 + i * 16, 0.0, order);
         }
@@ -329,8 +344,10 @@ mod tests {
         assert!(rows[2].contains(",disconnected,\"SPK target 999"));
         assert_eq!(rows[2].split(',').nth(5), Some(""));
         assert!(rows[3].contains(",2,399,0,ok,0,"));
-        assert_eq!(rows[1].split(',').skip(6).take(6).collect::<Vec<_>>(),
-                   rows[4].split(',').skip(6).take(6).collect::<Vec<_>>());
+        assert_eq!(
+            rows[1].split(',').skip(6).take(6).collect::<Vec<_>>(),
+            rows[4].split(',').skip(6).take(6).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -347,7 +364,11 @@ mod tests {
         assert!(rows[1].contains(",unsupported_frame,"));
         assert!(rows[2].contains(",ok,"));
         assert!(rows[3].contains(",unsupported_frame,"));
-        assert!(rows[1].split(',').skip(5).take(7).all(|field| field.is_empty()));
+        assert!(rows[1]
+            .split(',')
+            .skip(5)
+            .take(7)
+            .all(|field| field.is_empty()));
     }
 
     #[test]
@@ -355,10 +376,7 @@ mod tests {
         let mut corrupted = kernel(Order::Big, 301, 399, 1, 99.0);
         // Footer record-size word is invalid but descriptor remains valid.
         f64_at(corrupted.get_mut(), 4 * 1024 + 80, 0.0, Order::Big);
-        let sources = vec![
-            kernel(Order::Little, 301, 399, 1, 2.0),
-            corrupted,
-        ];
+        let sources = vec![kernel(Order::Little, 301, 399, 1, 2.0), corrupted];
         let (csv, counts) = evaluate(sources, &[(301, 399)], 5.0).unwrap();
         assert_eq!(counts, (1, 1));
         assert!(csv.contains(",invalid_segment,\""));
@@ -382,8 +400,7 @@ mod tests {
             let values = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
             assert!(parse_arguments(&values).is_err(), "accepted {values:?}");
         }
-        let values = ["--et", "-1.25", "--pair", "-10:399", "--", "-local.bsp"]
-            .map(str::to_owned);
+        let values = ["--et", "-1.25", "--pair", "-10:399", "--", "-local.bsp"].map(str::to_owned);
         assert_eq!(
             parse_arguments(&values).unwrap(),
             Arguments {
@@ -402,23 +419,29 @@ mod tests {
             &[(301, 399)],
             f64::INFINITY,
             &mut output
-        ).is_err());
+        )
+        .is_err());
         assert!(output.is_empty());
         assert!(evaluate_and_render(
             [Cursor::new(vec![0u8; 1024])],
             &[(301, 399)],
             5.0,
             &mut output
-        ).is_err());
+        )
+        .is_err());
         assert!(output.is_empty());
         assert!(evaluate_and_render(
             Vec::<Cursor<Vec<u8>>>::new(),
             &[(301, 399)],
             5.0,
             &mut output
-        ).is_err());
+        )
+        .is_err());
         assert!(output.is_empty());
         assert_eq!(quoted_csv("one,\"two\""), "\"one,\"\"two\"\"\"");
-        assert_eq!(error_code(&SpkRelativeError::NumericalOverflow), "numerical_overflow");
+        assert_eq!(
+            error_code(&SpkRelativeError::NumericalOverflow),
+            "numerical_overflow"
+        );
     }
 }
