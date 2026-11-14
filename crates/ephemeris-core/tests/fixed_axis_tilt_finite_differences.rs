@@ -42,7 +42,7 @@ fn shifted(mut state: StateVector, days: f64) -> StateVector {
         .iter_mut()
         .zip(state.velocity_km_per_day.iter())
     {
-        *position += velocity * days;
+        *position += *velocity * days;
     }
     state.epoch = JulianDateTdb(state.epoch.0 + days);
     state
