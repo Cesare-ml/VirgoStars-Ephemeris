@@ -268,6 +268,15 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
     for segment in &segments {
         let first_record = (segment.initial_address - 1) / words_per_record + 1;
         let last_record = (segment.final_address - 1) / words_per_record + 1;
+        // Modification (2026-11-14): record 1 is the DAF file header and
+        // records 2..FWARD-1 form its optional reserved/comment area. NAIF
+        // element records begin only after the first summary/name pair.
+        // A segment starting before FWARD therefore aliases non-array data.
+        if first_record < first as u64 {
+            return Err(SpkIndexError::InvalidFile(
+                "SPK segment overlaps DAF file record or comment area",
+            ));
+        }
         let position = metadata_records.partition_point(|&record| record < first_record);
         if let Some(&reserved_record) = metadata_records.get(position) {
             if reserved_record <= last_record {
@@ -500,6 +509,70 @@ mod tests {
                 ))
             ));
             assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
+        }
+    }
+
+    // Modification (2026-11-14): NAIF DAF comment records are not
+    // Chebyshev data, even when a descriptor stays within the file bounds.
+    #[test]
+    fn rejects_segments_aliasing_reserved_comments_in_both_endiannesses() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            // Existing fixture: header record 1, comment record 2,
+            // summary/name records 3/4 and element record 5.
+            let pointer = 2 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+            for (start, end) in [(129, 132), (249, 252)] {
+                let mut bytes = file(order, false);
+                put_i32(&mut bytes, pointer + 16, start, order);
+                put_i32(&mut bytes, pointer + 20, end, order);
+                assert!(matches!(
+                    parse(bytes),
+                    Err(SpkIndexError::InvalidFile(
+                        "SPK segment overlaps DAF file record or comment area"
+                    ))
+                ));
+            }
+            assert_eq!(parse(file(order, false)).unwrap().segments.len(), 1);
+        }
+    }
+
+    #[test]
+    fn validates_variable_comment_area_lengths_without_rejecting_valid_data() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            // Relocate the baseline summary/name/data trio to support a
+            // legal DAF with no comments (FWARD=2) or four reserved
+            // comment records (FWARD=6).
+            let original = file(order, false);
+            for first_summary in [2, 6] {
+                let mut bytes = vec![0u8; (first_summary + 2) * RECORD_BYTES];
+                bytes[..RECORD_BYTES].copy_from_slice(&original[..RECORD_BYTES]);
+                bytes[(first_summary - 1) * RECORD_BYTES..]
+                    .copy_from_slice(&original[2 * RECORD_BYTES..]);
+                put_i32(&mut bytes, 76, first_summary as i32, order);
+                put_i32(&mut bytes, 80, first_summary as i32, order);
+                let shift_words = (first_summary as i32 - 3) * 128;
+                put_i32(&mut bytes, 84, 517 + shift_words, order);
+                let pointer = (first_summary - 1) * RECORD_BYTES + 3 * WORD_BYTES + 16;
+                let data_first = 513 + shift_words;
+                put_i32(&mut bytes, pointer + 16, data_first, order);
+                put_i32(&mut bytes, pointer + 20, data_first + 3, order);
+                let parsed = parse(bytes.clone()).unwrap();
+                assert_eq!(parsed.segments.len(), 1);
+                assert_eq!(parsed.segments[0].initial_address, data_first as u64);
+
+                if first_summary > 2 {
+                    // The final reserved comment record (FWARD-1) was
+                    // previously accepted as segment coefficient data.
+                    let comment_first = (first_summary as i32 - 2) * 128 + 1;
+                    put_i32(&mut bytes, pointer + 16, comment_first, order);
+                    put_i32(&mut bytes, pointer + 20, comment_first + 3, order);
+                    assert!(matches!(
+                        parse(bytes),
+                        Err(SpkIndexError::InvalidFile(
+                            "SPK segment overlaps DAF file record or comment area"
+                        ))
+                    ));
+                }
+            }
         }
     }
 
