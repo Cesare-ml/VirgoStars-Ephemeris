@@ -550,3 +550,39 @@ fn adjacent_f64_epochs_at_granule_transition_select_correct_polynomials() {
         );
     }
 }
+
+// Regression (2026-11-14): reversed geometry must use the same granule
+// at the nearest representable epochs around a discontinuous transition.
+#[test]
+fn adjacent_granule_transition_epochs_reverse_position_and_velocity() {
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let boundary = 1016.0_f64;
+    let epochs = [
+        f64::from_bits(boundary.to_bits() - 1),
+        boundary,
+        f64::from_bits(boundary.to_bits() + 1),
+    ];
+    for jd in epochs {
+        let forward = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        let reverse = ephemeris
+            .state(
+                Body::SolarSystemBarycenter,
+                Body::Mercury,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            assert_eq!(forward.position_km[axis], -reverse.position_km[axis]);
+            assert_eq!(
+                forward.velocity_km_per_day[axis],
+                -reverse.velocity_km_per_day[axis]
+            );
+        }
+    }
+}
