@@ -57,10 +57,23 @@ pub struct GeocentricLightTimeState {
     pub velocity_km_per_day: [f64; 3],
 }
 
+/// Heliocentric reception light-time state in fixed ICRF axes. Velocity is
+/// the derivative of the returned vector per reception TDB day.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeliocentricLightTimeState {
+    pub target: Body,
+    pub observation_epoch: JulianDateTdb,
+    pub emission_epoch: JulianDateTdb,
+    pub light_time_seconds: f64,
+    pub light_time_rate: f64,
+    pub position_km: [f64; 3],
+    pub velocity_km_per_day: [f64; 3],
+}
+
 #[derive(Debug)]
 pub enum LightTimeError {
     Ephemeris(De441Error),
-    /// No geocentric direction exists for Earth or a zero-range target.
+    /// No direction exists for the observer itself or a zero-range target.
     UndefinedDirection,
     /// Non-finite geometry or an invalid light-time derivative denominator.
     InvalidGeometry,
@@ -112,21 +125,54 @@ pub fn geocentric_light_time<R: Read + Seek>(
     })
 }
 
+/// Reception light-time relative to the Sun. No aberration or gravitational
+/// deflection is added. The Sun as target has no direction and is rejected.
+pub fn heliocentric_light_time<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+) -> Result<HeliocentricLightTimeState, LightTimeError> {
+    let state = solve_from_observer(target, Body::Sun, observation_epoch, |body, epoch| {
+        ephemeris.state(body, Body::SolarSystemBarycenter, epoch)
+    })?;
+    Ok(HeliocentricLightTimeState {
+        target: state.target,
+        observation_epoch: state.observation_epoch,
+        emission_epoch: state.emission_epoch,
+        light_time_seconds: state.light_time_seconds,
+        light_time_rate: state.light_time_rate,
+        position_km: state.position_km,
+        velocity_km_per_day: state.velocity_km_per_day,
+    })
+}
+
 fn solve<F>(
     target: Body,
+    observation_epoch: JulianDateTdb,
+    barycentric_state: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from_observer(target, Body::Earth, observation_epoch, barycentric_state)
+}
+
+fn solve_from_observer<F>(
+    target: Body,
+    center: Body,
     observation_epoch: JulianDateTdb,
     mut barycentric_state: F,
 ) -> Result<GeocentricLightTimeState, LightTimeError>
 where
     F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
 {
-    if target == Body::Earth {
+    if target == center {
         return Err(LightTimeError::UndefinedDirection);
     }
     if !observation_epoch.0.is_finite() {
         return Err(LightTimeError::InvalidGeometry);
     }
-    let observer = barycentric_state(Body::Earth, observation_epoch)?;
+    let observer = barycentric_state(center, observation_epoch)?;
     let mut emission = observation_epoch;
     let mut previous = None;
     for _ in 0..MAX_ITERATIONS {
@@ -214,6 +260,43 @@ mod tests {
     use super::*;
 
     const JD: f64 = 2_451_545.0;
+
+    #[test]
+    fn sun_centered_light_time_uses_the_solar_observer() {
+        let state = solve_from_observer(
+            Body::MarsBarycenter,
+            Body::Sun,
+            JulianDateTdb(JD),
+            |body, epoch| {
+                let position_km = match body {
+                    Body::Sun => [20_000_000.0, 0.0, 0.0],
+                    Body::MarsBarycenter => [170_000_000.0, 0.0, 0.0],
+                    _ => return Err(De441Error::MissingSeries("test body")),
+                };
+                Ok(StateVector {
+                    target: body,
+                    center: Body::SolarSystemBarycenter,
+                    epoch,
+                    position_km,
+                    velocity_km_per_day: [0.0; 3],
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(state.position_km, [150_000_000.0, 0.0, 0.0]);
+        assert!(
+            (state.light_time_seconds - 150_000_000.0 / SPEED_OF_LIGHT_KM_PER_SECOND).abs() < 1e-10
+        );
+        assert!(matches!(
+            solve_from_observer(
+                Body::Sun,
+                Body::Sun,
+                JulianDateTdb(JD),
+                |_, _| unreachable!()
+            ),
+            Err(LightTimeError::UndefinedDirection)
+        ));
+    }
 
     #[test]
     fn resolves_only_an_adjacent_two_cycle_at_binary64_resolution() {

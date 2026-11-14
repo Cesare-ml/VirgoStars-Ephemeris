@@ -24,6 +24,7 @@ use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
 use virgostars_ephemeris_core::true_ecliptic::{
     geocentric_true_ecliptic_from_civil, geocentric_true_equatorial_from_civil,
+    heliocentric_true_ecliptic_from_civil,
 };
 
 const BODIES: [Body; 10] = [
@@ -154,9 +155,38 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         return Ok(());
     }
+    if args.len() == 4 && args[1] == "heliocentric" {
+        let civil = CivilTimestamp::parse(arg(3)?)?;
+        let (tt, tdb) = civil.to_tt_and_approximate_tdb()?;
+        let mut eph = De441::open(&args[2])?;
+        let results = BODIES
+            .into_iter()
+            .skip(1)
+            .map(|body| heliocentric_true_ecliptic_from_civil(&mut eph, body, civil))
+            .collect::<Result<Vec<_>, _>>()?;
+        println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        // The Sun relative to itself has no direction; zeros are an explicit
+        // legacy-shaped sentinel, not a physical spherical direction.
+        println!("Sun,{:.10},{:.10},0,0,0,0,0,0", tt, tdb.0);
+        for r in results {
+            println!(
+                "{:?},{:.10},{:.10},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+                r.target,
+                r.reception_tt_jd,
+                r.reception_tdb.0,
+                r.longitude_deg,
+                r.latitude_deg,
+                r.distance_au,
+                r.longitude_speed_deg_per_tdb_day,
+                r.latitude_speed_deg_per_tdb_day,
+                r.distance_speed_au_per_tdb_day
+            );
+        }
+        return Ok(());
+    }
     if args.len() != 3 {
         return Err(
-            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar|equatorial <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
+            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar|equatorial|heliocentric <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
         );
     }
     let timestamp = args[2].to_str().ok_or("timestamp must be UTF-8")?;
