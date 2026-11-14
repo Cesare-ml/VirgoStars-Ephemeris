@@ -31,8 +31,7 @@ use std::io::{self, Read, Seek, Write};
 
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
 
-const HEADER: &str =
-    "target_id,coverage_start_et_tdb_seconds,coverage_end_et_tdb_seconds";
+const HEADER: &str = "target_id,coverage_start_et_tdb_seconds,coverage_end_et_tdb_seconds";
 
 fn usage() -> &'static str {
     "usage: cargo run --offline --locked --example spk_coverage_union -- \
@@ -115,9 +114,8 @@ fn render<W: Write, R: Read + Seek>(
 }
 
 fn run<W: Write>(values: &[String], output: &mut W) -> Result<usize, Box<dyn Error>> {
-    let args = parse_arguments(values).map_err(|error| {
-        io::Error::new(io::ErrorKind::InvalidInput, error)
-    })?;
+    let args = parse_arguments(values)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let mut kernels = SpkKernelSet::new();
     for path in args.paths {
         kernels.load(File::open(path)?)?;
@@ -253,8 +251,7 @@ mod tests {
         };
         assert!(case(&[]).contains("at least one"));
         assert!(case(&["--target", "301"]).contains("at least one"));
-        assert!(case(&["--target", "301", "--target", "302", "a.bsp"])
-            .contains("duplicate"));
+        assert!(case(&["--target", "301", "--target", "302", "a.bsp"]).contains("duplicate"));
         assert!(case(&["--target", "999999999999999", "a.bsp"]).contains("i32"));
         assert!(case(&["--unknown", "a.bsp"]).contains("unknown"));
         let args = ["--target", "-10", "--", "-kernel.bsp"];
