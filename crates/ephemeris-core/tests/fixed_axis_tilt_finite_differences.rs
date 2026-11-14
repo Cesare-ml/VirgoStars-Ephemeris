@@ -104,14 +104,9 @@ fn tilted_longitude_rate_remains_continuous_across_zero_and_two_pi() {
     // while decreasing longitude crosses 0 -> 2pi. A raw subtraction would
     // spuriously report a large jump of opposite sign in both cases.
     let half_step_days = 0.01;
-    for (initial_y, transverse_rate, increasing) in
-        [(-0.1, 100.0, true), (0.1, -100.0, false)]
-    {
+    for (initial_y, transverse_rate, increasing) in [(-0.1, 100.0, true), (0.1, -100.0, false)] {
         for tilt in [0.409_092_8, -0.27] {
-            let state = synthetic_state(
-                [1_000_000.0, initial_y, 0.0],
-                [0.0, transverse_rate, 0.0],
-            );
+            let state = synthetic_state([1_000_000.0, initial_y, 0.0], [0.0, transverse_rate, 0.0]);
             let before = project_fixed_axes(&shifted(state, -half_step_days), tilt).unwrap();
             let after = project_fixed_axes(&shifted(state, half_step_days), tilt).unwrap();
             if increasing {
