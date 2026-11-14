@@ -305,6 +305,21 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
             }
         }
     }
+    // Modification (2026-11-14): DAF arrays are allocated as disjoint
+    // inclusive word-address intervals. A descriptor that aliases another
+    // segment's coefficient words is malformed, even when no DAF summary or
+    // name record is touched. Physical records can legitimately contain
+    // multiple consecutive arrays, so compare words rather than records.
+    let mut spans: Vec<_> = segments
+        .iter()
+        .map(|segment| (segment.initial_address, segment.final_address))
+        .collect();
+    spans.sort_unstable_by_key(|&(initial, _)| initial);
+    if spans.windows(2).any(|pair| pair[1].0 <= pair[0].1) {
+        return Err(SpkIndexError::InvalidFile(
+            "overlapping DAF segment data arrays",
+        ));
+    }
     Ok(SpkIndex {
         byte_order: order,
         segments,
@@ -617,6 +632,67 @@ mod tests {
             // The original fixture places FREE beyond both data and all
             // summary/name records; it must remain accepted in either order.
             assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
+        }
+    }
+
+    // Modification (2026-11-14): reject coefficient-word aliasing across
+    // summary records even when both descriptors avoid reserved metadata.
+    #[test]
+    fn rejects_overlapping_daf_segment_data_spans_in_both_byte_orders() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for (first, last) in [(513, 516), (514, 515), (515, 518), (516, 519)] {
+                let mut bytes = file(order, true);
+                // Record 6 has a distinct summary and its own record 7 name.
+                // Redirect only its data-array pointers into record 5.
+                let second = 5 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+                put_i32(&mut bytes, second + 16, first, order);
+                put_i32(&mut bytes, second + 20, last, order);
+                assert!(
+                    matches!(
+                        parse(bytes),
+                        Err(SpkIndexError::InvalidFile(
+                            "overlapping DAF segment data arrays"
+                        ))
+                    ),
+                    "must reject word overlap {first}..={last}, order={order:?}"
+                );
+            }
+            assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
+        }
+    }
+
+    #[test]
+    fn accepts_distinct_data_arrays_sharing_one_physical_daf_record() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut bytes = file(order, false);
+            // Record 3 contains two descriptors, record 4 their names, and
+            // record 5 holds two consecutive non-overlapping four-word arrays.
+            // Rejecting by physical record rather than by word would be wrong.
+            let summary = 2 * RECORD_BYTES;
+            put_f64(&mut bytes, summary + 16, 2.0, order);
+            let second = summary + (3 + SUMMARY_WORDS) * WORD_BYTES;
+            put_f64(&mut bytes, second, 0.0, order);
+            put_f64(&mut bytes, second + 8, 20.0, order);
+            for (i, number) in [301, 0, 1, 2, 517, 520].into_iter().enumerate() {
+                put_i32(&mut bytes, second + 16 + i * 4, number, order);
+            }
+            put_i32(&mut bytes, 84, 521, order);
+            let index = parse(bytes).expect("adjacent DAF arrays must not alias");
+            assert_eq!(index.segments.len(), 2);
+            assert_eq!(
+                (
+                    index.segments[0].initial_address,
+                    index.segments[0].final_address
+                ),
+                (513, 516)
+            );
+            assert_eq!(
+                (
+                    index.segments[1].initial_address,
+                    index.segments[1].final_address
+                ),
+                (517, 520)
+            );
         }
     }
 
