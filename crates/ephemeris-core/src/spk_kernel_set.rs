@@ -458,6 +458,44 @@ mod tests {
         ));
     }
 
+    // Modification (2026-11-14): a later DAF summary/name pair must be
+    // allocated before FREE, even if all segment data fits below FREE.
+    // A rejected higher-priority file must not evict valid loaded kernels.
+    #[test]
+    fn corrupt_free_pointer_in_chained_metadata_does_not_replace_loaded_kernel() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut set = with_kernels(&[(
+                SpkByteOrder::LittleEndian,
+                vec![seg(301, 399, 2, [2.0, 0.0], [0.0, 0.0])],
+            )]);
+
+            let mut corrupt = kernel(
+                order,
+                &[seg(301, 399, 2, [99.0, 0.0], [0.0, 0.0])],
+            );
+            // The original data ends at word 524, with FREE=525. Append
+            // summary record 6 and its name record 7 *without* advancing
+            // FREE. The metadata link is otherwise consistent.
+            corrupt.resize(7 * RECORD_BYTES, 0);
+            int(&mut corrupt, 80, 6, order); // Header LAST summary
+            double(&mut corrupt, 2 * RECORD_BYTES, 6.0, order); // NEXT
+            double(&mut corrupt, 5 * RECORD_BYTES + 8, 3.0, order); // PREV
+            // Last summary COUNT=0, allowed when an earlier summary has data.
+            assert!(matches!(
+                set.load(Cursor::new(corrupt)),
+                Err(SpkIndexError::InvalidFile(
+                    "DAF free pointer precedes summary or name allocation"
+                ))
+            ));
+            assert_eq!(set.kernel_count(), 1);
+            assert_eq!(set.direct_state(301, 5.0).unwrap().position_km[0], 2.0);
+            assert_eq!(
+                set.relative_state(301, 399, 5.0).unwrap().position_km[0],
+                2.0
+            );
+        }
+    }
+
     #[test]
     fn invalid_load_keeps_existing_set_and_empty_has_explicit_errors() {
         let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
