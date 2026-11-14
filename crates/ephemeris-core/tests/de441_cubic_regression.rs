@@ -689,7 +689,7 @@ fn first_granule_xyz_coefficients_remain_independent_near_transition() {
 }
 
 // Modification (2026-11-14): independently check all XYZ cubic coefficients
-// at interior epochs of the second synthetic granule, not only its boundary.
+// at interior epochs and the inclusive final endpoint of the second granule.
 #[test]
 fn second_granule_xyz_cubic_positions_and_velocities_match_analytic_interior_values() {
     let mut bytes = cubic_fixture();
@@ -702,7 +702,7 @@ fn second_granule_xyz_cubic_positions_and_velocities_match_analytic_interior_val
     }
 
     let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
-    for jd in [1020.0, 1024.0, 1028.0] {
+    for jd in [1020.0, 1024.0, 1028.0, 1032.0] {
         let x = (jd - 1024.0) / 8.0;
         let t2 = 2.0 * x * x - 1.0;
         let t3 = 4.0 * x * x * x - 3.0 * x;
