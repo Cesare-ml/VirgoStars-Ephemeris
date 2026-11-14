@@ -40,7 +40,13 @@ for result in states {
 # }
 ```
 
-Return type is `Result<Vec<CheckedDe441State>, CheckedStateError>`.
+Return type is `Result<Vec<CheckedDe441State>, CheckedBatchError>`. The
+new **batch-specific** error type is limited to this still-draft API:
+`CheckedBatchError::Epoch(EpochBridgeError)` identifies the shared epoch
+conversion failure; `CheckedBatchError::Request { index, target, center,
+source }` identifies the **zero-based** failed request and preserves the
+original typed `De441Error` as `source`. Both variants implement
+`std::error::Error::source()` so clients can inspect the underlying cause.
 Results preserve the order and duplicates of `requests`. For every pair,
 state metadata includes the **same rounded TDB JD** as the other pairs,
 position in **fixed ICRF km**, velocity in **fixed ICRF km per TDB day**, and
@@ -54,8 +60,8 @@ coefficient records. For empty requests, validate the epoch/budget and
 return an empty vector without record I/O.
 
 Any missing target series, invalid kernel, I/O error or out-of-coverage
-epoch is returned as an error, without a partial vector or approximate
-fallback. The reader's existing cache may still contain prior data after
+epoch is returned with its originating **request index/body/center**,
+without a partial vector or approximate fallback. The reader's existing cache may still contain prior data after
 an error, the same as for scalar lookups. No atomic I/O rollback is claimed.
 
 ## Verification
@@ -69,8 +75,10 @@ DE441 fixture in `de441_checked_state.rs`:
    budget permits multiple states sharing the same reported precision loss.
 3. Empty batches still reject non-TDB epochs, invalid budgets and lost
    precision, without record reads.
-4. A missing series in the middle of a batch fails the whole call, and
-   out-of-coverage errors are propagated.
+4. A missing Venus series in the **second** request fails the whole call,
+   reports index `1` and the original target/center, and exposes the typed
+   `De441Error::MissingSeries` through the error chain. An out-of-coverage
+   epoch reports the **first** request at index `0`.
 
 Execute `cargo fmt --all -- --check`, `cargo test --workspace --locked`,
 `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
@@ -104,7 +112,9 @@ The independent incremental review diff must be compared against
 
 Modified 2026-11-14: added `de441_checked_batch.rs`, exported it through
 `lib.rs`, added four synthetic tests to the existing checked scalar-state
-test module, and created this note. Original code remains CPAL-1.0,
+test module, and created this note. The still-draft batch API was then
+refined to return `CheckedBatchError` with the failed request index,
+body, center and typed source; updated the missing-series/coverage tests. Original code remains CPAL-1.0,
 including the required `Powered by VirgoStars` attribution and
 [NOTICE](../NOTICE). No dependencies, external kernels, Swiss/NAIF code,
 credentials, releases, deployment or production migrations were added.
