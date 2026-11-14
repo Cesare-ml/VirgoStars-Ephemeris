@@ -1,8 +1,8 @@
 # Experimental Rust SPK kernel-set priority and cross-file center chains
 
-**Date:** 2026-11-13 · **Status:** experimental, synthetic tests only.
+**Date:** 2026-11-13 · **Integration review:** 2026-11-14 · **Status:** experimental, synthetic tests only.
 
-This change depends on three **unmerged draft PRs**, reviewed in order: [#148 DAF/SPK index](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150 Type-2/3 primitive states](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150), [#157 single-file center chains](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157). **Do not merge this change before its dependencies.**
+The dependency sequence is now integrated on `dev/ephemeris` in order: [#148 DAF/SPK index](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150 Type-2/3 primitive states](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150) (including the MID/RADIUS coherence fix from #200), and [#157 single-file center chains](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157). The multi-kernel layer is an incremental extension of those modules; this change does **not** imply real-kernel validation or production readiness.
 
 ## Scope and public API
 
@@ -73,3 +73,5 @@ Run existing read-only Rust CI (`cargo fmt --all -- --check`, debug/release work
 2026-11-13: original implementation `crates/ephemeris-core/src/spk_kernel_set.rs`, refactoring of the preexisting geometric center-chain resolver to a shared internal `SpkStateResolver` interface, one `lib.rs` export, English documentation and README capability correction. All computational work stays in the canonical Rust engine; no duplicated astronomy in JavaScript or TypeScript.
 
 Original source remains under [CPAL-1.0](../LICENSE) with the required VirgoStars attribution: [NOTICE](../NOTICE), [licensing guidance](LICENSING_AND_CREDITS.md). No Swiss Ephemeris/NAIF Toolkit source, kernel data, external packages, releases, deployments, or production modifications were introduced.
+
+2026-11-14 integration reconciliation: preserved existing DAF/SPK index validation, Type-2/3 record-grid coherence, and single-kernel center-chain behavior while adding only the multi-kernel module, shared resolver refactor, API export and related docs. Reconciled without rewriting branch history; independent real-kernel comparison remains outstanding.

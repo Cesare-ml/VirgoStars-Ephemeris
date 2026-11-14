@@ -249,6 +249,34 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         previous = current;
         current = next;
     }
+    // Modification (2026-11-14): a DAF summary record and its immediately
+    // following name record are metadata, never Chebyshev coefficient data.
+    // Validate after traversal because a later summary may be interspersed
+    // with earlier coefficient records. This also catches a summary link
+    // that incorrectly aliases another summary's name record.
+    let mut metadata_records = Vec::new();
+    for &record in &visited {
+        metadata_records.extend([record, record + 1]);
+    }
+    metadata_records.sort_unstable();
+    if metadata_records.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(SpkIndexError::InvalidFile(
+            "overlapping DAF summary or name records",
+        ));
+    }
+    let words_per_record = (RECORD_BYTES / WORD_BYTES) as u64;
+    for segment in &segments {
+        let first_record = (segment.initial_address - 1) / words_per_record + 1;
+        let last_record = (segment.final_address - 1) / words_per_record + 1;
+        let position = metadata_records.partition_point(|&record| record < first_record);
+        if let Some(&reserved_record) = metadata_records.get(position) {
+            if reserved_record <= last_record {
+                return Err(SpkIndexError::InvalidFile(
+                    "SPK segment overlaps DAF summary or name record",
+                ));
+            }
+        }
+    }
     Ok(SpkIndex {
         byte_order: order,
         segments,
@@ -418,6 +446,61 @@ mod tests {
         let mut b = file(order, false);
         put_i32(&mut b, record + 16 + 12, 0, order);
         assert!(parse(b).is_err());
+    }
+
+    // Modification (2026-11-14): data addresses must not alias any DAF
+    // summary or the immediately following name record, in either byte order.
+    #[test]
+    fn rejects_segment_data_overlapping_primary_summary_or_name_record() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for (first, last) in [(257, 260), (385, 388), (509, 516)] {
+                let mut bytes = file(order, false);
+                let pointer = 2 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+                put_i32(&mut bytes, pointer + 16, first, order);
+                put_i32(&mut bytes, pointer + 20, last, order);
+                assert!(matches!(
+                    parse(bytes),
+                    Err(SpkIndexError::InvalidFile(
+                        "SPK segment overlaps DAF summary or name record"
+                    ))
+                ));
+            }
+            assert_eq!(parse(file(order, false)).unwrap().segments.len(), 1);
+        }
+    }
+
+    #[test]
+    fn rejects_data_aliasing_later_summary_and_name_records() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for (first, last) in [(641, 644), (769, 772), (638, 899)] {
+                let mut bytes = file(order, true);
+                let pointer = 2 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+                put_i32(&mut bytes, pointer + 16, first, order);
+                put_i32(&mut bytes, pointer + 20, last, order);
+                assert!(matches!(
+                    parse(bytes),
+                    Err(SpkIndexError::InvalidFile(
+                        "SPK segment overlaps DAF summary or name record"
+                    ))
+                ));
+            }
+
+            // Record 4 is the name record of summary 3. A corrupt link
+            // cannot reinterpret it as another valid summary record.
+            let mut bytes = file(order, true);
+            put_f64(&mut bytes, 2 * RECORD_BYTES, 4.0, order);
+            put_i32(&mut bytes, 80, 4, order);
+            put_f64(&mut bytes, 3 * RECORD_BYTES, 0.0, order);
+            put_f64(&mut bytes, 3 * RECORD_BYTES + 8, 3.0, order);
+            put_f64(&mut bytes, 3 * RECORD_BYTES + 16, 0.0, order);
+            assert!(matches!(
+                parse(bytes),
+                Err(SpkIndexError::InvalidFile(
+                    "overlapping DAF summary or name records"
+                ))
+            ));
+            assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
+        }
     }
 
     #[test]
