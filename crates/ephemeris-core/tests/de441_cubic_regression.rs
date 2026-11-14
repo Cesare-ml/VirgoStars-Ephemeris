@@ -633,3 +633,51 @@ fn adjacent_granule_transition_epochs_keep_xyz_coefficients_separate() {
         }
     }
 }
+
+#[test]
+fn first_granule_xyz_coefficients_remain_independent_near_transition() {
+    let mut bytes = cubic_fixture();
+    let first = RECORD_BYTES * 2 + 2 * 8;
+    for (index, value) in [3.0, -2.0, 1.0, 0.5].into_iter().enumerate() {
+        write_f64(&mut bytes, first + (4 + index) * 8, value);
+    }
+    for (index, value) in [-4.0, 1.0, -2.0, 1.5].into_iter().enumerate() {
+        write_f64(&mut bytes, first + (8 + index) * 8, value);
+    }
+
+    let mut ephemeris = De441::new(Cursor::new(bytes)).unwrap();
+    let boundary = 1016.0_f64;
+    for jd in [1000.0, 1008.0, f64::from_bits(boundary.to_bits() - 1)] {
+        let x = (jd - 1008.0) / 8.0;
+        let t2 = 2.0 * x * x - 1.0;
+        let t3 = 4.0 * x * x * x - 3.0 * x;
+        let dt3 = 12.0 * x * x - 3.0;
+        let expected_position = [
+            10.0 + 2.0 * x + 3.0 * t2 + 4.0 * t3,
+            3.0 - 2.0 * x + t2 + 0.5 * t3,
+            -4.0 + x - 2.0 * t2 + 1.5 * t3,
+        ];
+        let expected_velocity = [
+            (2.0 + 12.0 * x + 4.0 * dt3) / 8.0,
+            (-2.0 + 4.0 * x + 0.5 * dt3) / 8.0,
+            (1.0 - 8.0 * x + 1.5 * dt3) / 8.0,
+        ];
+        let state = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        for axis in 0..3 {
+            assert!(
+                (state.position_km[axis] - expected_position[axis]).abs() < 1.0e-10,
+                "first-granule XYZ position mismatch at JD {jd}, axis {axis}"
+            );
+            assert!(
+                (state.velocity_km_per_day[axis] - expected_velocity[axis]).abs() < 1.0e-10,
+                "first-granule XYZ velocity mismatch at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
