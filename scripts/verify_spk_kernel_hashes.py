@@ -10,6 +10,7 @@
 # Modification (2026-11-14): verify optional ordered SPK basenames and byte sizes.
 # Modification (2026-11-14): detect observable kernel file changes during hashing.
 # Modification (2026-11-14): require at least one CSV vector row for hash preflight.
+# Modification (2026-11-14): recognize numeric vector rows rather than arbitrary post-header text.
 
 """Offline SHA-256 preflight for the experimental Rust SPK/NAIF comparator.
 
@@ -21,11 +22,30 @@ correct. No third-party dependencies, downloads or astronomical calculations.
 import argparse
 import hashlib
 import hmac
+import math
 import os
 from pathlib import Path
 import sys
 
 CSV_HEADER = "et_tdb_seconds,target_id,center_id,x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s"
+
+
+def _is_numeric_vector_candidate(line: str) -> bool:
+    """Recognize one plausible vector row, without replacing Rust CSV validation.
+
+    The SHA-256 preflight must not treat arbitrary post-header text (including
+    a repeated CSV header) as astronomical evidence. The canonical Rust
+    comparator still validates the full scientific reference contract.
+    """
+    columns = [field.strip() for field in line.split(",")]
+    if len(columns) != 9 or any(not field for field in columns):
+        return False
+    try:
+        int(columns[1], 10)
+        int(columns[2], 10)
+        return all(math.isfinite(float(value)) for value in (columns[0], *columns[3:]))
+    except ValueError:
+        return False
 
 
 def read_declared_manifest(
@@ -65,12 +85,12 @@ def read_declared_manifest(
                     raise ValueError(f"line {line_no}: unexpected CSV header")
                 saw_header = True
                 continue
-            # Keep the scientific/CSV schema validation in the Rust
-            # comparator. Nevertheless, a header-only file is not a usable
-            # numerical reference and must not receive a green SHA preflight.
-            saw_vector_row = True
+            # This is deliberately only a numeric row-shape check. The Rust
+            # comparator alone validates the entire reference CSV and science.
+            if _is_numeric_vector_candidate(line):
+                saw_vector_row = True
     if not saw_vector_row:
-        raise ValueError("reference contains no astronomical vector rows")
+        raise ValueError("reference contains no numeric astronomical vector rows")
     raw_hashes = metadata.get("ordered_kernel_sha256")
     if not saw_header or raw_hashes is None:
         raise ValueError("reference header or ordered_kernel_sha256 metadata missing")
