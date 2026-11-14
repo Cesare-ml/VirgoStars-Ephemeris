@@ -22,7 +22,22 @@ use virgostars_ephemeris_core::de441::{Body, De441};
 use virgostars_ephemeris_core::first_sky::CivilTimestamp;
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
-use virgostars_ephemeris_core::true_ecliptic::geocentric_true_ecliptic_from_civil;
+use virgostars_ephemeris_core::true_ecliptic::{
+    geocentric_true_ecliptic_from_civil, geocentric_true_equatorial_from_civil,
+};
+
+const BODIES: [Body; 10] = [
+    Body::Sun,
+    Body::Moon,
+    Body::Mercury,
+    Body::Venus,
+    Body::MarsBarycenter,
+    Body::JupiterBarycenter,
+    Body::SaturnBarycenter,
+    Body::UranusBarycenter,
+    Body::NeptuneBarycenter,
+    Body::PlutoBarycenter,
+];
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args_os().collect();
@@ -115,28 +130,40 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         return Ok(());
     }
+    if args.len() == 4 && args[1] == "equatorial" {
+        let civil = CivilTimestamp::parse(arg(3)?)?;
+        let mut eph = De441::open(&args[2])?;
+        let results = BODIES
+            .into_iter()
+            .map(|body| geocentric_true_equatorial_from_civil(&mut eph, body, civil))
+            .collect::<Result<Vec<_>, _>>()?;
+        println!("target,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tdb_day,declination_deg_per_tdb_day,distance_au_per_tdb_day");
+        for r in results {
+            println!(
+                "{:?},{:.10},{:.10},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+                r.target,
+                r.reception_tt_jd,
+                r.reception_tdb.0,
+                r.right_ascension_deg,
+                r.declination_deg,
+                r.distance_au,
+                r.right_ascension_speed_deg_per_tdb_day,
+                r.declination_speed_deg_per_tdb_day,
+                r.distance_speed_au_per_tdb_day
+            );
+        }
+        return Ok(());
+    }
     if args.len() != 3 {
         return Err(
-            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
+            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar|equatorial <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
         );
     }
     let timestamp = args[2].to_str().ok_or("timestamp must be UTF-8")?;
     let civil = CivilTimestamp::parse(timestamp)?;
     let mut eph = De441::open(&args[1])?;
-    let bodies = [
-        Body::Sun,
-        Body::Moon,
-        Body::Mercury,
-        Body::Venus,
-        Body::MarsBarycenter,
-        Body::JupiterBarycenter,
-        Body::SaturnBarycenter,
-        Body::UranusBarycenter,
-        Body::NeptuneBarycenter,
-        Body::PlutoBarycenter,
-    ];
-    let mut results = Vec::with_capacity(bodies.len());
-    for body in bodies {
+    let mut results = Vec::with_capacity(BODIES.len());
+    for body in BODIES {
         results.push(geocentric_true_ecliptic_from_civil(&mut eph, body, civil)?);
     }
     println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");

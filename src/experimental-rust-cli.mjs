@@ -24,6 +24,7 @@ const TARGETS = Object.freeze(['Sun', 'Moon', 'Mercury', 'Venus', 'MarsBarycente
 const ANGLE_HEADER = 'armc_deg,ascendant_deg,midheaven_deg,true_obliquity_deg';
 const LUNAR_HEADER = 'point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day';
 const LUNAR_POINTS = Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
+const EQUATORIAL_HEADER = 'target,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tdb_day,declination_deg_per_tdb_day,distance_au_per_tdb_day';
 
 /**
  * Construct an explicit offline provider. It returns experimental positions,
@@ -99,6 +100,19 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
         return Object.freeze({point,ttJulianDay,tdbJulianDay,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay});
       });
       return Object.freeze({contract:'VIRGOSTARS_EXPERIMENTAL_LUNAR_POINTS_1', frame:'IAU2006_2000B_TRUE_ECLIPTIC_OF_DATE', center:'EARTH', timeModel:'BOUNDED_UTC_TRUNCATED_TDB', warnings:Object.freeze(['NOT_SWISS_PARITY','MEAN_MODEL_APPROXIMATE','MEAN_DISTANCES_NOMINAL']),results:Object.freeze(results)});
+    },
+    calculateEquatorial(timestamp) {
+      if (typeof timestamp !== 'string' || !timestamp.trim()) throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');
+      const lines=execute(['equatorial',kernelPath,timestamp]);
+      if(lines.length!==TARGETS.length+1 || lines[0]!==EQUATORIAL_HEADER) throw new Error('Invalid equatorial CSV contract');
+      const results=lines.slice(1).map((line,index)=>{
+        const [target,...parts]=line.split(',');
+        if(target!==TARGETS[index] || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid equatorial CSV row');
+        const [ttJulianDay,tdbJulianDay,rightAscensionDeg,declinationDeg,distanceAu,rightAscensionSpeedDegPerTdbDay,declinationSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay]=parts.map(Number);
+        if(rightAscensionDeg<0 || rightAscensionDeg>=360 || Math.abs(declinationDeg)>90 || distanceAu<=0) throw new Error('Out-of-range equatorial CSV row');
+        return Object.freeze({target,ttJulianDay,tdbJulianDay,rightAscensionDeg,declinationDeg,distanceAu,rightAscensionSpeedDegPerTdbDay,declinationSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
+      });
+      return Object.freeze({contract:'VIRGOSTARS_EXPERIMENTAL_DE441_TRUE_EQUATORIAL_1',frame:'IAU2006_2000B_TRUE_EQUATOR_OF_DATE',center:'EARTH',corrections:'LIGHT_TIME_ANNUAL_ABERRATION',timeModel:'BOUNDED_UTC_TRUNCATED_TDB',warnings:Object.freeze(['NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','PLANET_SYSTEM_BARYCENTERS']),results:Object.freeze(results)});
     },
     calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
       const values = [ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast];

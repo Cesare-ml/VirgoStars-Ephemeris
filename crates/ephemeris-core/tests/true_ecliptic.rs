@@ -19,7 +19,8 @@ use virgostars_ephemeris_core::aberration_state::{
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::true_ecliptic::{
-    geocentric_true_ecliptic, project_true_ecliptic, TrueEclipticError,
+    geocentric_true_ecliptic, geocentric_true_equatorial, project_true_ecliptic,
+    project_true_equatorial, TrueEclipticError,
 };
 
 fn delta(a: f64, b: f64) -> f64 {
@@ -87,6 +88,91 @@ fn incoherent_scales_and_missing_frame_history_are_rejected() {
         project_true_ecliptic(&sample(t), t),
         Err(TrueEclipticError::Orientation(_))
     ));
+}
+
+#[test]
+fn moving_equatorial_rates_agree_with_position_differences() {
+    let t = 2_451_545.0;
+    let h = 0.02;
+    let center = project_true_equatorial(&sample(t), t).unwrap();
+    let a = project_true_equatorial(&sample(t - h), t - h).unwrap();
+    let b = project_true_equatorial(&sample(t + h), t + h).unwrap();
+    let span = (t + h) - (t - h);
+    assert!(
+        (center.right_ascension_speed_deg_per_tdb_day
+            - delta(b.right_ascension_deg, a.right_ascension_deg) / span)
+            .abs()
+            < 2e-7
+    );
+    assert!(
+        (center.declination_speed_deg_per_tdb_day - (b.declination_deg - a.declination_deg) / span)
+            .abs()
+            < 2e-7
+    );
+    assert!(
+        (center.distance_speed_au_per_tdb_day - (b.distance_au - a.distance_au) / span).abs()
+            < 2e-9
+    );
+    assert!(matches!(
+        project_true_equatorial(&sample(t), t + 1.0),
+        Err(TrueEclipticError::IncoherentEpoch)
+    ));
+}
+
+#[test]
+#[ignore = "requires DE441_PATH pointing to an external classic JPL DE441 binary"]
+fn true_equatorial_matches_recorded_swiss_sample_at_same_tt() {
+    let mut eph = De441::open(std::env::var_os("DE441_PATH").expect("set DE441_PATH")).unwrap();
+    let tt = 2_461_354.500_800_741;
+    let tdb = JulianDateTdb(2_461_354.500_800_725);
+    // Swiss 0.5.17, same local DE441, swe_calc(TT, JPLEPH|SPEED|EQUATORIAL).
+    // Loose comparison limits do not establish independent scientific accuracy.
+    for (body, ra, dec, dist) in [
+        (
+            Body::Sun,
+            225.13669688642472,
+            -17.081149005284875,
+            0.9904801297010831,
+        ),
+        (
+            Body::Moon,
+            231.98126372218556,
+            -24.00822518494715,
+            0.0026723304358203352,
+        ),
+        (
+            Body::Mercury,
+            214.44960154471735,
+            -12.372684577507627,
+            0.7332818069086801,
+        ),
+        (
+            Body::Venus,
+            200.46980504375202,
+            -11.44562216419675,
+            0.30768946726419966,
+        ),
+        (
+            Body::MarsBarycenter,
+            145.96438622338124,
+            15.540680571668778,
+            1.358155892721995,
+        ),
+        (
+            Body::JupiterBarycenter,
+            147.84002808091148,
+            13.76041974600778,
+            5.36134941128455,
+        ),
+    ] {
+        let state = geocentric_true_equatorial(&mut eph, body, tdb, tt).unwrap();
+        assert!(
+            delta(state.right_ascension_deg, ra).abs() < 0.0001,
+            "{body:?}"
+        );
+        assert!((state.declination_deg - dec).abs() < 0.0001, "{body:?}");
+        assert!((state.distance_au - dist).abs() < 1e-7, "{body:?}");
+    }
 }
 
 #[test]
