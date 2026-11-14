@@ -16,6 +16,9 @@
 //!
 //! An explicitly supplied fixed rotation is not an ecliptic-of-date model:
 //! no precession, nutation, frame bias or apparent corrections are applied.
+//!
+//! Modified 2026-11-14: guard the fixed-axis longitude-rate numerator against
+//! avoidable floating-point overflow when the final derivative is finite.
 
 use std::error::Error;
 use std::f64::consts::TAU;
@@ -104,7 +107,16 @@ pub fn project_fixed_axes(
     }
     let (ux, uy) = (x / planar, y / planar);
     let planar_rate = ux * vx + uy * vy;
-    let longitude_rate = (ux * vy - uy * vx) / planar;
+    // Divide before taking the cross product for distances >= 1 km. With
+    // finite but very large velocities, the unscaled numerator can overflow
+    // even when the angular rate itself is representable. For sub-km planar
+    // distances retain the numerator-first form to avoid premature overflow
+    // from dividing otherwise finite velocity components by tiny distances.
+    let longitude_rate = if planar >= 1.0 {
+        ux * (vy / planar) - uy * (vx / planar)
+    } else {
+        (ux * vy - uy * vx) / planar
+    };
     let latitude_rate =
         (planar / distance) * (vz / distance) - (z / distance) * (planar_rate / distance);
     let distance_rate = (planar / distance) * planar_rate + (z / distance) * vz;
