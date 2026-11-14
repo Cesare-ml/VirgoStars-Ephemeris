@@ -635,7 +635,11 @@ mod tests {
     // fixed-epoch ICRF-to-mean-equator bias/precession rotation.
     #[test]
     fn mean_date_precession_matrix_preserves_orthonormal_right_handed_axes() {
-        for jd_tt in [2_451_545.0, 2_400_000.5 + 50_123.999_9, 2_400_000.5 + 54_388.0] {
+        for jd_tt in [
+            2_451_545.0,
+            2_400_000.5 + 50_123.999_9,
+            2_400_000.5 + 54_388.0,
+        ] {
             let (matrix, _) = mean_date_matrix(jd_tt);
             for i in 0..3 {
                 for j in 0..3 {
@@ -645,10 +649,8 @@ mod tests {
             }
             let determinant = matrix[0][0]
                 * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-                - matrix[0][1]
-                    * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
-                + matrix[0][2]
-                    * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
             near(determinant, 1.0, 2.0e-14);
         }
     }
