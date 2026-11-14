@@ -72,6 +72,8 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
       - name: Test local SPK coverage inspector on Linux
         run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test explicit SPK state query on Linux
+        run: cargo test --workspace --example spk_state_at --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -110,6 +112,8 @@ jobs:
         run: python -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
       - name: Test local SPK coverage inspector on Windows
         run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test explicit SPK state query on Windows
+        run: cargo test --workspace --example spk_state_at --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -138,5 +142,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
       - name: Test local SPK coverage inspector on macOS
         run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test explicit SPK state query on macOS
+        run: cargo test --workspace --example spk_state_at --locked
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
