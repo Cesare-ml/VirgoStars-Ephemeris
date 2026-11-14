@@ -114,6 +114,69 @@ pub fn relative_states_at<R: Read + Seek>(
     Ok(states)
 }
 
+/// Failure of a multi-epoch geometric SPK batch.
+///
+/// Both the zero-based epoch index and the original same-epoch failure are
+/// retained. In particular, a failed pair keeps its zero-based pair index.
+#[derive(Debug)]
+pub struct SpkEpochBatchError {
+    pub epoch_index: usize,
+    pub et_tdb_seconds: f64,
+    pub cause: SpkBatchError,
+}
+
+impl fmt::Display for SpkEpochBatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SPK multi-epoch batch epoch {} (ET={} TDB seconds past J2000) failed: {}",
+            self.epoch_index, self.et_tdb_seconds, self.cause
+        )
+    }
+}
+
+impl Error for SpkEpochBatchError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
+/// Compute an ordered matrix of geometric target-center states across ETs.
+///
+/// The **outer** vector follows the supplied epoch list, including duplicates
+/// and nonmonotonic epochs; each **inner** vector follows the original request
+/// order and preserves repeated pairs. No implicit time conversion, sorting,
+/// interpolation between epochs, or deduplication is performed. Every epoch
+/// is a caller-supplied finite number of TDB seconds since J2000; every state
+/// uses NAIF J2000/ICRF frame 1 and geometric km and km/s units.
+///
+/// Reuses the canonical same-epoch evaluator; an invalid epoch or any failed
+/// pair aborts the entire matrix with an epoch index and nested pair index.
+/// Results from earlier epochs are not returned on failure. An empty epoch
+/// list succeeds with an empty outer vector; an empty pair list yields one
+/// empty inner vector per valid epoch, while still rejecting nonfinite ET.
+///
+/// This does not implement apparent corrections or independent JPL validation.
+/// Modification (2026-11-14): explicitly support offline multi-epoch queries
+/// without another center-chain implementation.
+pub fn relative_states_for_epochs<R: Read + Seek>(
+    kernels: &mut SpkKernelSet<R>,
+    requests: &[(i32, i32)],
+    epochs_tdb_seconds: &[f64],
+) -> Result<Vec<Vec<SpkRelativeState>>, SpkEpochBatchError> {
+    let mut matrix = Vec::with_capacity(epochs_tdb_seconds.len());
+    for (epoch_index, &et) in epochs_tdb_seconds.iter().enumerate() {
+        let states =
+            relative_states_at(kernels, requests, et).map_err(|cause| SpkEpochBatchError {
+                epoch_index,
+                et_tdb_seconds: et,
+                cause,
+            })?;
+        matrix.push(states);
+    }
+    Ok(matrix)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,6 +413,68 @@ mod tests {
         assert!((recovered[2].velocity_km_per_second[0] - 3.1).abs() < 1e-12);
         assert!((recovered[2].velocity_km_per_second[1] + 0.8).abs() < 1e-12);
         assert_eq!(set.kernel_count(), 2);
+    }
+
+    #[test]
+    fn multiple_epochs_preserve_epoch_pair_order_and_repeat_consistency() {
+        let mut set = two_kernels();
+        let requests = [(301, 0), (399, 0), (301, 399), (301, 0)];
+        let epochs = [10.0, 0.0, 5.0, 5.0];
+        let matrix = relative_states_for_epochs(&mut set, &requests, &epochs).unwrap();
+        assert_eq!(matrix.len(), epochs.len());
+        for (epoch_index, &et) in epochs.iter().enumerate() {
+            assert_eq!(matrix[epoch_index].len(), requests.len());
+            for (pair_index, &(target, center)) in requests.iter().enumerate() {
+                let individual = set.relative_state(target, center, et).unwrap();
+                assert_eq!(matrix[epoch_index][pair_index], individual);
+            }
+            assert_eq!(matrix[epoch_index][0], matrix[epoch_index][3]);
+        }
+        assert_eq!(matrix[2], matrix[3]);
+        assert_eq!(matrix[0][0].position_km, [117.5, 5.0, 0.0]);
+        assert_eq!(matrix[1][0].position_km, [86.5, 13.0, 0.0]);
+        assert!((matrix[2][0].velocity_km_per_second[0] - 3.1).abs() < 1e-12);
+        assert!((matrix[2][0].velocity_km_per_second[1] + 0.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn failed_later_epoch_reports_epoch_and_pair_without_partial_matrix() {
+        let mut set = two_kernels();
+        let requests = [(399, 0), (301, 0), (399, 301)];
+        let error = relative_states_for_epochs(&mut set, &requests, &[5.0, 11.0]).unwrap_err();
+        assert_eq!(error.epoch_index, 1);
+        assert_eq!(error.et_tdb_seconds, 11.0);
+        assert!(matches!(
+            error.cause,
+            SpkBatchError::Request {
+                index: 0,
+                target_id: 399,
+                center_id: 0,
+                cause: SpkRelativeError::Disconnected { .. }
+            }
+        ));
+        assert_eq!(set.kernel_count(), 2);
+        let recovered = relative_states_for_epochs(&mut set, &requests, &[5.0]).unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0][0].position_km, [100.0, 5.0, 0.0]);
+    }
+
+    #[test]
+    fn multi_epoch_rejects_invalid_et_even_without_pair_requests() {
+        let mut empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(relative_states_for_epochs(&mut empty, &[(301, 0)], &[])
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            relative_states_for_epochs(&mut empty, &[], &[0.0, 5.0]).unwrap(),
+            vec![Vec::new(), Vec::new()]
+        );
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = relative_states_for_epochs(&mut empty, &[], &[0.0, invalid]).unwrap_err();
+            assert_eq!(err.epoch_index, 1);
+            assert!(matches!(err.cause, SpkBatchError::InvalidEpoch));
+            assert!(err.source().is_some());
+        }
     }
 
     #[test]
