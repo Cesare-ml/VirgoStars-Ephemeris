@@ -302,8 +302,22 @@ impl<R: Read + Seek> De441<R> {
         let components = if target == center {
             Components::default()
         } else {
-            let record_index =
-                (((jd - self.start) / self.step).floor() as usize).min(self.record_count - 1);
+            // Modification 2026-11-14: subtracting the epoch from a distant
+            // file start can round a value just *before* a record boundary
+            // onto that boundary. Compare the original TDB JD against the
+            // header-defined boundaries instead of dividing a rounded delta.
+            // A boundary selects the following record; the final endpoint
+            // remains in the last record.
+            let (mut low, mut high) = (0usize, self.record_count);
+            while low + 1 < high {
+                let mid = low + (high - low) / 2;
+                if jd < self.start + mid as f64 * self.step {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+            }
+            let record_index = low;
             if self.cached_record_index != Some(record_index) {
                 // Invalidate before I/O: a short read may partially overwrite
                 // the buffer, including the previously cached record.
