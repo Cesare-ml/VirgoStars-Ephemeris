@@ -59,7 +59,9 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
                 if et.is_some() {
                     return Err("duplicate --et option".into());
                 }
-                let raw = values.get(index + 1).ok_or("--et requires TDB seconds past J2000")?;
+                let raw = values
+                    .get(index + 1)
+                    .ok_or("--et requires TDB seconds past J2000")?;
                 let value = raw.parse::<f64>().map_err(|_| "invalid --et TDB epoch")?;
                 if !value.is_finite() {
                     return Err("--et must be finite TDB seconds past J2000".into());
@@ -82,7 +84,10 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
     }
     let et = et.ok_or_else(|| format!("missing --et; {}", usage()))?;
     if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
-        return Err(format!("at least one explicit local SPK file required; {}", usage()));
+        return Err(format!(
+            "at least one explicit local SPK file required; {}",
+            usage()
+        ));
     }
     Ok(Arguments { et, paths })
 }
@@ -100,7 +105,10 @@ fn render<W: Write, R: Read + Seek>(
     writeln!(output, "{HEADER}")?;
 
     for target in &targets {
-        if next_winner.peek().is_some_and(|row| row.target_id == *target) {
+        if next_winner
+            .peek()
+            .is_some_and(|row| row.target_id == *target)
+        {
             let row = next_winner.next().expect("selected winner");
             let segment = row.descriptor;
             let candidate = segment.frame_id == 1 && matches!(segment.spk_type, 2 | 3);
@@ -202,7 +210,10 @@ mod tests {
         put_f64(&mut bytes, summary + 16, 1.0, order);
         put_f64(&mut bytes, summary + 24, start, order);
         put_f64(&mut bytes, summary + 32, end, order);
-        for (slot, value) in [target, center, frame, kind, 513, 516].into_iter().enumerate() {
+        for (slot, value) in [target, center, frame, kind, 513, 516]
+            .into_iter()
+            .enumerate()
+        {
             put_i32(&mut bytes, summary + 40 + 4 * slot, value, order);
         }
         Cursor::new(bytes)
@@ -210,16 +221,23 @@ mod tests {
 
     fn fixtures() -> SpkKernelSet<Cursor<Vec<u8>>> {
         let mut set = SpkKernelSet::new();
-        set.load(kernel(Order::Little, 399, 0, 1, 2, -10.0, -2.0)).unwrap();
-        set.load(kernel(Order::Big, 301, 399, 1, 2, 0.0, 10.0)).unwrap();
+        set.load(kernel(Order::Little, 399, 0, 1, 2, -10.0, -2.0))
+            .unwrap();
+        set.load(kernel(Order::Big, 301, 399, 1, 2, 0.0, 10.0))
+            .unwrap();
         // Newer unsupported frame and SPK type must be kept, not hidden.
-        set.load(kernel(Order::Little, 301, 4, 17, 9, 4.0, 8.0)).unwrap();
+        set.load(kernel(Order::Little, 301, 4, 17, 9, 4.0, 8.0))
+            .unwrap();
         set
     }
 
     fn rows(output: &[u8]) -> Vec<Vec<&str>> {
-        std::str::from_utf8(output).unwrap().lines()
-            .skip(1).map(|line| line.split(',').collect()).collect()
+        std::str::from_utf8(output)
+            .unwrap()
+            .lines()
+            .skip(1)
+            .map(|line| line.split(',').collect())
+            .collect()
     }
 
     #[test]
@@ -233,7 +251,10 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().all(|row| row.len() == 12));
         assert_eq!((rows[0][1], rows[0][2]), ("301", "covered"));
-        assert_eq!((rows[0][3], rows[0][4], rows[0][5], rows[0][6], rows[0][7]), ("2", "4", "17", "9", "false"));
+        assert_eq!(
+            (rows[0][3], rows[0][4], rows[0][5], rows[0][6], rows[0][7]),
+            ("2", "4", "17", "9", "false")
+        );
         assert_eq!((rows[0][10], rows[0][11]), ("513", "516"));
         assert_eq!((rows[1][1], rows[1][2]), ("399", "missing"));
         assert!(rows[1][3..].iter().all(|field| field.is_empty()));
@@ -249,7 +270,10 @@ mod tests {
         assert_eq!(rows(&out)[0][3], "2");
         out.clear();
         render(&mut out, &set, f64::from_bits(8.0_f64.to_bits() + 1)).unwrap();
-        assert_eq!((rows(&out)[0][2], rows(&out)[0][3], rows(&out)[0][7]), ("covered", "1", "true"));
+        assert_eq!(
+            (rows(&out)[0][2], rows(&out)[0][3], rows(&out)[0][7]),
+            ("covered", "1", "true")
+        );
         out.clear();
         render(&mut out, &set, -10.0).unwrap();
         assert_eq!((rows(&out)[0][2], rows(&out)[1][2]), ("missing", "covered"));
@@ -266,7 +290,9 @@ mod tests {
         let mut out = Vec::new();
         assert_eq!(render(&mut out, &set, -1.0).unwrap(), 2);
         let rows = rows(&out);
-        assert!(rows.iter().all(|row| row[2] == "missing" && row[3..].iter().all(|v| v.is_empty())));
+        assert!(rows
+            .iter()
+            .all(|row| row[2] == "missing" && row[3..].iter().all(|v| v.is_empty())));
         assert!(rows.iter().all(|row| row.len() == 12));
     }
 
@@ -293,7 +319,10 @@ mod tests {
         ];
         assert_eq!(
             parse_arguments(&values).unwrap(),
-            Arguments { et: -0.25, paths: vec!["-kernel.bsp"] }
+            Arguments {
+                et: -0.25,
+                paths: vec!["-kernel.bsp"]
+            }
         );
     }
 
@@ -303,7 +332,11 @@ mod tests {
         let mut out = Vec::new();
         assert!(render(&mut out, &set, f64::NAN).is_err());
         assert!(out.is_empty());
-        let invalid = vec!["--et".to_string(), "5".to_string(), "no-such-spk-file.bsp".to_string()];
+        let invalid = vec![
+            "--et".to_string(),
+            "5".to_string(),
+            "no-such-spk-file.bsp".to_string(),
+        ];
         assert!(run(&invalid, &mut out).is_err());
         assert!(out.is_empty());
         let empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
