@@ -622,6 +622,39 @@ mod tests {
         epochs(CivilTimestamp::parse(value).unwrap()).unwrap()
     }
 
+    // Modification (2026-11-14): independently anchor the IAU 2006 mean
+    // obliquity to ERFA's published eraObl06 conformance fixture (TT, radians).
+    #[test]
+    fn iau_2006_mean_obliquity_matches_erfa_obl06_reference() {
+        // ERFA src/t_erfa_c.c, t_obl06: TT JD = 2400000.5 + 54388.0.
+        let (_, obliquity_rad) = mean_date_matrix(2_400_000.5 + 54_388.0);
+        near(obliquity_rad, 0.409_074_922_938_725_8, 1.0e-14);
+    }
+
+    // Modification (2026-11-14): guard orthonormality and handedness of the
+    // fixed-epoch ICRF-to-mean-equator bias/precession rotation.
+    #[test]
+    fn mean_date_precession_matrix_preserves_orthonormal_right_handed_axes() {
+        for jd_tt in [
+            2_451_545.0,
+            2_400_000.5 + 50_123.999_9,
+            2_400_000.5 + 54_388.0,
+        ] {
+            let (matrix, _) = mean_date_matrix(jd_tt);
+            for i in 0..3 {
+                for j in 0..3 {
+                    let dot: f64 = (0..3).map(|k| matrix[i][k] * matrix[j][k]).sum();
+                    near(dot, if i == j { 1.0 } else { 0.0 }, 2.0e-14);
+                }
+            }
+            let determinant = matrix[0][0]
+                * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+            near(determinant, 1.0, 2.0e-14);
+        }
+    }
+
     #[test]
     fn civil_offset_and_leap_seconds_are_applied_after_utc_normalization() {
         let a = at("2026-11-10T13:30:00+01:00");
