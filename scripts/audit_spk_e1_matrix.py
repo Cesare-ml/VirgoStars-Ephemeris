@@ -8,6 +8,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): fail closed on duplicate or nonstandard JSON receipt fields.
+# Modification (2026-11-14): align E1 CSV float tokens with the Rust comparator's ASCII decimal grammar.
 
 """Audit minimum E1 reference *case breadth*, without evaluating astronomy.
 
@@ -40,7 +41,13 @@ PLANET_IDS = frozenset({1, 2, 4, 5, 6, 7, 8, 9,
 REQUIRED_CONTRACT = {"provider": "NAIF_SPICE", "method": "spkezr",
                      "time_scale": "TDB", "frame": "J2000",
                      "corrections": "NONE", "units": "KM-S"}
-HEX64 = re.compile(r"[0-9a-fA-F]{64}\Z")
+HEX64 = re.compile(r"[0-9a-fA-F]{64}\\Z")
+# Python float() accepts digit separators and non-ASCII decimal digits
+# that Rust's f64::from_str does not. Reject those before coercion so the E1
+# breadth audit never approves a CSV rejected by the canonical comparator.
+FLOAT_TOKEN = re.compile(
+    r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?\\Z"
+)
 Rows = list[tuple[int, int, float]]
 
 
@@ -138,6 +145,10 @@ def parse_reference(content: str) -> Rows:
         fields = [part.strip() for part in line.split(",")]
         if len(fields) != 9:
             raise ValueError(f"line {line_number}: expected nine fields")
+        if any(not FLOAT_TOKEN.fullmatch(token) for token in (fields[0], *fields[3:])):
+            raise ValueError(
+                f"line {line_number}: ET/vector values must use ASCII decimal float tokens"
+            )
         try:
             et = float(fields[0])
             target, center = int(fields[1]), int(fields[2])
