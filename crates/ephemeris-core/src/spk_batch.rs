@@ -20,6 +20,7 @@
 //! This adapter never substitutes missing data or returns a partial batch.
 //!
 //! Modified 2026-11-14: initial batch API, no new astronomical algorithms.
+//! Modified 2026-11-14: batch I/O failure-chain and rollback regression tests.
 
 use std::error::Error;
 use std::fmt;
@@ -118,7 +119,7 @@ pub fn relative_states_at<R: Read + Seek>(
 mod tests {
     use super::*;
     use crate::spk_direct_state::SpkStateError;
-    use std::io::Cursor;
+    use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
     #[derive(Clone, Copy)]
     enum Order {
@@ -188,6 +189,45 @@ mod tests {
             put_f64(&mut bytes, record + 64 + i * 8, value, order);
         }
         Cursor::new(bytes)
+    }
+
+    // A higher-priority kernel can index successfully, then fail later when
+    // the selected Type-2 coefficient record is actually read. The directory
+    // at byte offset 4160 remains readable to isolate the failure to state
+    // evaluation, not DAF index validation.
+    struct ReadFault {
+        source: Cursor<Vec<u8>>,
+        deny_coefficients: bool,
+    }
+
+    impl ReadFault {
+        fn new(source: Cursor<Vec<u8>>, deny_coefficients: bool) -> Self {
+            Self {
+                source,
+                deny_coefficients,
+            }
+        }
+    }
+
+    impl Read for ReadFault {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            let position = self.source.position();
+            if self.deny_coefficients && (4096..4160).contains(&position) {
+                return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+            }
+            let count = if self.deny_coefficients && position < 4096 {
+                buffer.len().min((4096 - position) as usize)
+            } else {
+                buffer.len()
+            };
+            self.source.read(&mut buffer[..count])
+        }
+    }
+
+    impl Seek for ReadFault {
+        fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+            self.source.seek(position)
+        }
     }
 
     fn two_kernels() -> SpkKernelSet<Cursor<Vec<u8>>> {
@@ -266,6 +306,73 @@ mod tests {
             relative_states_at(&mut set, &[(301, 399)], 5.0).unwrap()[0].position_km,
             [2.0, 4.0, 0.0]
         );
+    }
+
+    // Modification (2026-11-14): a successful prefix must never disguise
+    // an I/O error in a later high-priority request. Preserve the full cause
+    // chain and restore the old result only after an explicit unload.
+    #[test]
+    fn selected_kernel_io_failure_reports_batch_index_and_restores_after_unload() {
+        for (older, newer) in [(Order::Little, Order::Big), (Order::Big, Order::Little)] {
+            let mut set = SpkKernelSet::<ReadFault>::new();
+            set.load(ReadFault::new(
+                kernel(399, 0, [100.0, 5.0], [3.0, -1.0], older, 1),
+                false,
+            ))
+            .unwrap();
+            set.load(ReadFault::new(
+                kernel(301, 399, [2.0, 4.0], [0.1, 0.2], newer, 1),
+                false,
+            ))
+            .unwrap();
+
+            let requests = [(399, 0), (301, 399), (301, 0), (301, 399)];
+            let original = relative_states_at(&mut set, &requests, 5.0).unwrap();
+            assert_eq!(original.len(), requests.len());
+
+            let overlay_order = match newer {
+                Order::Little => Order::Big,
+                Order::Big => Order::Little,
+            };
+            set.load(ReadFault::new(
+                kernel(301, 399, [999.0, 888.0], [2.0, 3.0], overlay_order, 1),
+                true,
+            ))
+            .unwrap();
+            assert_eq!(set.kernel_count(), 3);
+            assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 2);
+
+            let failure = relative_states_at(&mut set, &requests, 5.0).unwrap_err();
+            assert!(matches!(
+                &failure,
+                SpkBatchError::Request {
+                    index: 1,
+                    target_id: 301,
+                    center_id: 399,
+                    cause: SpkRelativeError::Segment(SpkStateError::Io(error))
+                } if error.kind() == io::ErrorKind::PermissionDenied
+            ));
+            let relative_cause = failure.source().expect("batch request cause");
+            let selected_cause = relative_cause.source().expect("SPK segment cause");
+            let io_cause = selected_cause.source().expect("underlying I/O cause");
+            assert_eq!(
+                io_cause.downcast_ref::<io::Error>().unwrap().kind(),
+                io::ErrorKind::PermissionDenied
+            );
+            // A failure must not evict or silently skip the selected kernel.
+            assert_eq!(set.kernel_count(), 3);
+            assert!(matches!(
+                relative_states_at(&mut set, &requests[1..], 5.0),
+                Err(SpkBatchError::Request { index: 0, .. })
+            ));
+
+            assert!(set.unload_last().is_some());
+            assert_eq!(set.kernel_count(), 2);
+            assert_eq!(
+                relative_states_at(&mut set, &requests, 5.0).unwrap(),
+                original
+            );
+        }
     }
 
     #[test]
