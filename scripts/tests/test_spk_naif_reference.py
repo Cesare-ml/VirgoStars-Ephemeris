@@ -343,6 +343,57 @@ class SpkReferenceTests(unittest.TestCase):
                 reference, self.paths, "0.001", "0.000001", runner=missing_cargo
             )
 
+    def test_compare_failure_still_detects_generator_source_mutation(self):
+        # Use an isolated source copy: changing its bytes simulates a helper
+        # update during Cargo without ever mutating the repository checkout.
+        from unittest.mock import patch
+
+        source = Path(self.folder.name) / "isolated_spk_helper.py"
+        source.write_bytes(MODULE_PATH.read_bytes())
+        reference = Path(self.folder.name) / "independent-source.csv"
+        source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        with patch.object(REFERENCE, "__file__", str(source)):
+            document = REFERENCE.generate_reference(
+                self.paths,
+                REFERENCE.parse_cases(["301:399:0"]),
+                FakeSpice(),
+                generated_utc="2026-11-14T12:00:00Z",
+                generator_digest=source_digest,
+            )
+            reference.write_text(document, encoding="utf-8")
+
+            def change_source_and_fail(command, *, check):
+                source.write_bytes(source.read_bytes() + b"# changed during Rust\n")
+                return subprocess.CompletedProcess(command, 19, "", "comparison failed")
+
+            with self.assertRaisesRegex(ValueError, "generator SHA256 mismatch"):
+                REFERENCE.compare_reference(
+                    reference, self.paths, "0.001", "0.000001",
+                    runner=change_source_and_fail,
+                )
+
+    def test_run_failure_still_detects_generator_source_mutation(self):
+        from unittest.mock import patch
+
+        source = Path(self.folder.name) / "isolated_spk_helper.py"
+        source.write_bytes(MODULE_PATH.read_bytes())
+        reference = Path(self.folder.name) / "new-independent-source.csv"
+        receipt = Path(self.folder.name) / "new-independent-source.receipt.json"
+
+        def change_source_and_fail(command, *, cwd, check, capture_output, text):
+            source.write_bytes(source.read_bytes() + b"# changed during Rust\n")
+            return subprocess.CompletedProcess(command, 31, "", "comparison failed")
+
+        with patch.object(REFERENCE, "__file__", str(source)):
+            with self.assertRaisesRegex(ValueError, "generator SHA256 mismatch"):
+                REFERENCE.run_validation(
+                    self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                    FakeSpice(), runner=change_source_and_fail,
+                    repo_root=Path(self.folder.name),
+                )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
     def test_one_command_audit_emits_replayable_receipt_only_after_rust_pass(self):
         reference = Path(self.folder.name) / "reference.csv"
         receipt = Path(self.folder.name) / "receipt.json"
