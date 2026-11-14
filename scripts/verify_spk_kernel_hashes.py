@@ -131,7 +131,10 @@ def sha256_file(path: Path) -> str:
     with path.open("rb") as stream:
         opened = _file_identity(os.fstat(stream.fileno()))
         if opened != path_before:
-            raise ValueError(f"kernel path changed before SHA-256 read: {path}")
+            raise ValueError(
+                f"kernel path changed before SHA-256 read: {path}; "
+                f"before={path_before!r}; opened={opened!r}"
+            )
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
         if _file_identity(os.fstat(stream.fileno())) != opened:
