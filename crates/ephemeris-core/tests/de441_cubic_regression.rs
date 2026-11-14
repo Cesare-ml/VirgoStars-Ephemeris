@@ -53,6 +53,32 @@ fn cubic_fixture() -> Vec<u8> {
     bytes
 }
 
+// Modification (2026-11-14): reject invalid epochs before the identity-state
+// shortcut, and preserve inclusive coverage semantics at both endpoints.
+#[test]
+fn identity_states_are_zero_only_for_valid_tdb_epochs() {
+    use virgostars_ephemeris_core::de441::De441Error;
+
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    for jd in [1000.0, 1016.0, 1032.0] {
+        let state = ephemeris
+            .state(Body::Mercury, Body::Mercury, JulianDateTdb(jd))
+            .unwrap();
+        assert_eq!(state.position_km, [0.0; 3]);
+        assert_eq!(state.velocity_km_per_day, [0.0; 3]);
+        assert_eq!(state.epoch, JulianDateTdb(jd));
+    }
+    for jd in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 999.0, 1033.0] {
+        assert!(
+            matches!(
+                ephemeris.state(Body::Mercury, Body::Mercury, JulianDateTdb(jd)),
+                Err(De441Error::OutsideCoverage { .. })
+            ),
+            "invalid identity-state epoch must be rejected: {jd}"
+        );
+    }
+}
+
 #[test]
 fn cubic_chebyshev_position_and_analytic_velocity_match_independent_polynomials() {
     // T0=1, T1=x, T2=2x²-1, T3=4x³-3x.
