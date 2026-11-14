@@ -672,7 +672,7 @@ mod tests {
         assert_eq!(set.declared_segments_for_target(399), inventory);
 
         set.unload_last().unwrap();
-        assert_eq!(set.declared_segments_for_target(399), inventory[..2]);
+        assert_eq!(set.declared_segments_for_target(399), inventory[..2].to_vec());
     }
 
     #[test]
