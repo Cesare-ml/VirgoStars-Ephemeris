@@ -98,9 +98,24 @@ fn doubling_record_duration_halves_speed_without_changing_positions() {
             .state_at(TdbSecondsPastJ2000::new(5_000.0 + 50.0 * x).unwrap())
             .unwrap();
         for (pa, pb, va, vb) in [
-            (a.position_km.x, b.position_km.x, a.velocity_km_per_second.x, b.velocity_km_per_second.x),
-            (a.position_km.y, b.position_km.y, a.velocity_km_per_second.y, b.velocity_km_per_second.y),
-            (a.position_km.z, b.position_km.z, a.velocity_km_per_second.z, b.velocity_km_per_second.z),
+            (
+                a.position_km.x,
+                b.position_km.x,
+                a.velocity_km_per_second.x,
+                b.velocity_km_per_second.x,
+            ),
+            (
+                a.position_km.y,
+                b.position_km.y,
+                a.velocity_km_per_second.y,
+                b.velocity_km_per_second.y,
+            ),
+            (
+                a.position_km.z,
+                b.position_km.z,
+                a.velocity_km_per_second.z,
+                b.velocity_km_per_second.z,
+            ),
         ] {
             near(pa, pb);
             near(va, 2.0 * vb);
@@ -112,7 +127,9 @@ fn doubling_record_duration_halves_speed_without_changing_positions() {
 fn rejects_times_outside_both_synthetic_record_radii() {
     for radius_seconds in [25.0, 50.0] {
         let polynomial = record(radius_seconds);
-        for et in [5_000.0 - radius_seconds - 0.125, 5_000.0 + radius_seconds + 0.125] {
+        let before = 5_000.0 - radius_seconds - 0.125;
+        let after = 5_000.0 + radius_seconds + 0.125;
+        for et in [before, after] {
             assert!(matches!(
                 polynomial.state_at(TdbSecondsPastJ2000::new(et).unwrap()),
                 Err(EphemerisError::OutsideRecord { .. })
