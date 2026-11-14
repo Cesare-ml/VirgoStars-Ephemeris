@@ -145,11 +145,8 @@ where
     )?;
     let mut emission = observation_epoch;
     for _ in 0..MAX_ITERATIONS {
-        let body = checked_barycentric_state(
-            barycentric_state(target, emission)?,
-            target,
-            emission,
-        )?;
+        let body =
+            checked_barycentric_state(barycentric_state(target, emission)?, target, emission)?;
         let position =
             std::array::from_fn::<_, 3, _>(|i| body.position_km[i] - observer.position_km[i]);
         let range = position[0].hypot(position[1]).hypot(position[2]);
