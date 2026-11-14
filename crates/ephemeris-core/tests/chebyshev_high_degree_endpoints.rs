@@ -57,3 +57,17 @@ fn high_order_basis_has_expected_midpoint_parity() {
         assert_eq!(sample.derivative_dx, expected, "degree {degree}");
     }
 }
+
+#[test]
+fn high_order_even_basis_has_zero_midpoint_slope() {
+    // T_(2k)(0) = (-1)^k and T'_(2k)(0) = 0.
+    // This complements the odd-degree midpoint test and guards both parity classes.
+    for degree in [0_usize, 2, 4, 16, 32, 64, 98] {
+        let mut coefficients = vec![0.0; degree + 1];
+        coefficients[degree] = 1.0;
+        let sample = evaluate_chebyshev(&coefficients, 0.0).unwrap();
+        let expected = if (degree / 2) % 2 == 0 { 1.0 } else { -1.0 };
+        assert_eq!(sample.value, expected, "degree {degree}");
+        assert_eq!(sample.derivative_dx, 0.0, "degree {degree}");
+    }
+}
