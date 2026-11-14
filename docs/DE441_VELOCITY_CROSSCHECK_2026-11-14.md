@@ -27,10 +27,13 @@ subnormal ULP. This integration branch adds the PR #178 runtime fix and
 tests, and replaces the copied PR #187 test with the exact 1-ULP-aware
 version from its latest pinned head.
 
-The combined synthetic suite now includes **20 original focused tests**:
+The combined synthetic suite includes **20 original focused tests**:
 #174 (2), #182 (4), #187 (8), #193 (3), #178 (3).
-This count refers to the five cited PR test files only; additional
-workspace tests remain present. This branch contains no real ephemeris
+The separate cross-feature file adds **3 tests**, bringing the total to
+**23 focused synthetic regressions across six files**. The cross-feature
+file is copied from integration-only PR #198 at SHA
+`600455f348b9d56ce5760273a04e15a66bb167fd` with an additional
+analytic extreme-slope regression. Existing workspace tests add more coverage. This branch contains no real ephemeris
 kernel, independent NASA/JPL reference vector or external dependency.
 
 ## Combined invariants
@@ -47,6 +50,14 @@ kernel, independent NASA/JPL reference vector or external dependency.
    avoiding spurious overflow for very wide finite records.
 6. Chebyshev derivative scaling preserves finite km/day velocity where
    valid and avoids losing the smallest subnormal at two-day width.
+7. New cross-feature regressions select exactly the next principal record
+   and Chebyshev granule at TDB JD -16, 0 and +16, while the smallest
+   representable negative JD stays in the preceding record. They exercise
+   backward cache selection and synthetic archival-scale negative epochs.
+8. A Chebyshev T1 coefficient of `1e308` produces the representable
+   `1.25e307` km/TDB-day derivative for a 16-day granule. Boundary
+   transitions must keep the correct signed geometric XYZ km position,
+   and avoid intermediate overflow in derivative scaling (PR #178).
 
 **Scientific interpretation:** input time is one binary64 **Julian Date TDB**;
 output is **geometric ICRF Cartesian state** in km and km/day,
@@ -75,3 +86,19 @@ No `main`, `dev/ephemeris`, or original draft branch was merged or
 rewritten to create this crosscheck. No packages/releases or deployment.
 Preserve CPAL-1.0 Exhibit A headers and required **Powered by VirgoStars**
 attribution, https://www.virgostars.it/.
+
+## Cross-feature follow-up (2026-11-14)
+
+The additional file `crates/ephemeris-core/tests/de441_combined_boundary_guards.rs`
+contains three integration-only synthetic Rust tests. The first two were
+copied from the separately successful PR #198 cross-check, and a third
+covers all five upstream fixes in one run: record/granule boundaries,
+finite extreme velocity from a 1e308 Chebyshev T1 coefficient, inclusive
+last endpoint and cache rewind across JD zero. It is deliberately not a
+planetary ephemeris accuracy test.
+
+The prior green run on `d07586e895ce9697d635e87bac60ff185b222067`
+preceded this new test file and cannot certify the new head. Re-run the
+read-only three-platform CI on the exact updated branch SHA, record the
+result, and keep this duplicate PR **unmerged**. Upstream PR review and
+real NASA/JPL comparison remain separate human approval gates.
