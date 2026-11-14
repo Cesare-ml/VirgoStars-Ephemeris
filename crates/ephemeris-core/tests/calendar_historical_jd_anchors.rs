@@ -48,7 +48,7 @@ fn j2000_noon_is_exact_tdb_anchor_without_scale_conversion() {
 }
 
 #[test]
-fn 1582_proleptic_calendar_choices_are_explicit_not_a_hidden_cutover() {
+fn gregorian_1582_proleptic_calendar_choices_are_explicit_not_a_hidden_cutover() {
     // Known identical JD: 1582-10-15 Gregorian = 1582-10-05 Julian.
     // Each independently represents JD 2299160.5 at midnight.
     let gregorian = day(1582, 10, 15, 0, TimeScale::Tt)
