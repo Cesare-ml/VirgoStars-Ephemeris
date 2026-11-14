@@ -1003,6 +1003,79 @@ mod tests {
         near(opposite[2], base[2], 1e-9);
     }
 
+    // Modification (2026-11-14): independently anchor the experimental
+    // geometric horizontal projection to ERFA t_hd2ae (see third-party notices).
+    #[test]
+    fn geometric_horizontal_coordinates_match_independent_erfa_hd2ae() {
+        // ERFA t_hd2ae: hour angle 1.1 rad, declination 1.2 rad,
+        // observer latitude 0.3 rad. Encode the same hour angle using
+        // local sidereal angle - equatorial right ascension = 1.1 rad.
+        let hour_angle = 1.1_f64;
+        let declination = 1.2_f64;
+        let latitude = 0.3_f64;
+        let sidereal_angle = 0.7_f64;
+        let right_ascension = sidereal_angle - hour_angle;
+        let length_km = 42_000.0;
+        let direction = [
+            length_km * declination.cos() * right_ascension.cos(),
+            length_km * declination.cos() * right_ascension.sin(),
+            length_km * declination.sin(),
+        ];
+
+        let (altitude_deg, azimuth_deg) =
+            horizontal_direction(direction, latitude, sidereal_angle).unwrap();
+        near(altitude_deg.to_radians(), 0.447_218_630_499_048_6, 1e-13);
+        near(
+            azimuth_deg
+                .expect("off-zenith direction has azimuth")
+                .to_radians(),
+            5.916_889_243_730_066,
+            1e-13,
+        );
+
+        // Azimuth and altitude describe direction, so changing a positive
+        // distance scale or adding a sidereal full turn cannot change them.
+        for scale in [0.0001, 10_000.0] {
+            let scaled = direction.map(|x| x * scale);
+            let (scaled_alt, scaled_az) =
+                horizontal_direction(scaled, latitude, sidereal_angle).unwrap();
+            near(scaled_alt, altitude_deg, 1e-11);
+            near(scaled_az.unwrap(), azimuth_deg.unwrap(), 1e-11);
+        }
+        let (rotated_alt, rotated_az) =
+            horizontal_direction(direction, latitude, sidereal_angle + TAU).unwrap();
+        near(rotated_alt, altitude_deg, 1e-11);
+        near(rotated_az.unwrap(), azimuth_deg.unwrap(), 1e-11);
+    }
+
+    #[test]
+    fn geometric_zenith_and_nadir_have_no_defined_azimuth() {
+        let latitude = 0.3_f64;
+        let sidereal_angle = 0.7_f64;
+        let zenith = [
+            latitude.cos() * sidereal_angle.cos(),
+            latitude.cos() * sidereal_angle.sin(),
+            latitude.sin(),
+        ];
+
+        let (zenith_alt, zenith_az) =
+            horizontal_direction(zenith, latitude, sidereal_angle).unwrap();
+        near(zenith_alt, 90.0, 1e-12);
+        assert_eq!(zenith_az, None);
+
+        let (nadir_alt, nadir_az) =
+            horizontal_direction(zenith.map(|x| -x), latitude, sidereal_angle).unwrap();
+        near(nadir_alt, -90.0, 1e-12);
+        assert_eq!(nadir_az, None);
+
+        // A sufficiently nonzero horizontal displacement restores a
+        // well-defined azimuth, rather than collapsing the whole sky.
+        let perturbed = [zenith[0], zenith[1] + 1e-10, zenith[2]];
+        let (_, near_zenith_az) =
+            horizontal_direction(perturbed, latitude, sidereal_angle).unwrap();
+        assert!(near_zenith_az.is_some());
+    }
+
     #[test]
     fn gmst_and_wgs84_geometries_match_reference_and_cardinal_directions() {
         let j2000 = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
