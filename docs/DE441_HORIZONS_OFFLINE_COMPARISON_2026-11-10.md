@@ -184,3 +184,45 @@ project)**. The executable source has the existing CPAL-1.0 Exhibit A notice.
 No changes to the `LICENSE`, `NOTICE`, required **Powered by VirgoStars**
 attribution (https://www.virgostars.it/), astronomical computation,
 external dependencies or dataset redistribution.
+
+
+## Horizons provenance metadata syntax checks — 2026-11-14
+
+The offline Rust `validate_horizons` example now **rejects malformed
+provenance metadata before comparing any vectors**. The curated reference
+CSV must supply both of the following:
+
+- `query_url`: an HTTPS request URL at exactly
+  `https://ssd.jpl.nasa.gov/api/horizons.api?...` or
+  `https://ssd-api.jpl.nasa.gov/api/horizons.api?...`, with a nonempty
+  query and no raw whitespace, control characters or URL fragment.
+  Non-JPL hosts, lookalike suffix domains, unencrypted HTTP, local files,
+  empty query strings and embedded URL fragments fail closed.
+- `retrieved_utc`: Gregorian calendar timestamp in
+  `YYYY-MM-DDTHH:MM:SSZ` or the same format with 1–9 fractional-second
+  digits before `Z`. Invalid Gregorian days/leap days, local timestamps,
+  numeric offsets, missing `Z` and invalid clock fields are rejected.
+  The timestamp is a **record of retrieval**, not the ephemeris epoch and
+  is never converted to TDB. Leap-second textual `23:59:60Z` is not
+  accepted by this normal-second timestamp contract.
+
+The checks reject references that are *syntactically unauditable*; they
+**do not authenticate** Horizons responses or prove that the API returned
+DE441 rather than a different solution. A valid-looking official URL
+could still carry incorrect target, center, time, units or correction
+settings. Independently inspect the saved original response, the actual
+Horizons solution line and the full request parameters. The SHA-pinned
+offline preflight proposed separately in PR #212 remains complementary,
+not replaced by these checks.
+
+Two new Rust example tests (using synthetic metadata only) cover host
+spoofing, unencrypted and malformed URLs, Gregorian leap dates, time
+zones and fractional seconds. These run under the existing read-only CI
+invocation `cargo test --workspace --example validate_horizons --locked`.
+No real DE441 kernel, JPL dataset, new dependency or network request is
+introduced; no numerical accuracy result is claimed.
+
+Modification record: 2026-11-14,
+`crates/ephemeris-core/examples/validate_horizons.rs` and this
+documentation, under the existing original CPAL-1.0 Exhibit A notice
+and VirgoStars attribution.
