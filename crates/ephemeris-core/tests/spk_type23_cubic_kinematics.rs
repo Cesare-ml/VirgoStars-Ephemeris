@@ -83,16 +83,9 @@ fn synthetic_spk(order: SpkByteOrder, kind: i32) -> Vec<u8> {
     put_f64(&mut bytes, summary + 16, 1.0, order);
     put_f64(&mut bytes, summary + 24, -10.0, order);
     put_f64(&mut bytes, summary + 32, 0.0, order);
-    for (index, value) in [
-        499,
-        10,
-        1,
-        kind,
-        FIRST_WORD as i32,
-        final_word as i32,
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, value) in [499, 10, 1, kind, FIRST_WORD as i32, final_word as i32]
+        .into_iter()
+        .enumerate()
     {
         put_i32(&mut bytes, summary + 40 + index * 4, value, order);
     }
@@ -138,10 +131,8 @@ fn polynomial_oracle(coefficients: [f64; 4], x: f64) -> (f64, f64) {
         + coefficients[1] * x
         + coefficients[2] * (2.0 * x2 - 1.0)
         + coefficients[3] * (4.0 * x2 * x - 3.0 * x);
-    let velocity = (coefficients[1]
-        + 4.0 * coefficients[2] * x
-        + coefficients[3] * (12.0 * x2 - 3.0))
-        / 5.0;
+    let velocity =
+        (coefficients[1] + 4.0 * coefficients[2] * x + coefficients[3] * (12.0 * x2 - 3.0)) / 5.0;
     (position, velocity)
 }
 
@@ -164,8 +155,14 @@ fn type2_and_type3_cubic_states_match_independent_polynomial_oracle() {
         for et in [-10.0, -9.0, -7.5, -5.0, -2.5, -1.0, 0.0] {
             let type2 = direct_spk_state(&mut type2_file, &type2_index, 499, et).unwrap();
             let type3 = direct_spk_state(&mut type3_file, &type3_index, 499, et).unwrap();
-            assert_eq!((type2.target_id, type2.center_id, type2.frame_id), (499, 10, 1));
-            assert_eq!((type3.target_id, type3.center_id, type3.frame_id), (499, 10, 1));
+            assert_eq!(
+                (type2.target_id, type2.center_id, type2.frame_id),
+                (499, 10, 1)
+            );
+            assert_eq!(
+                (type3.target_id, type3.center_id, type3.frame_id),
+                (499, 10, 1)
+            );
             assert_eq!(type2.tdb_seconds_past_j2000, et);
             assert_eq!(type3.tdb_seconds_past_j2000, et);
             for (axis, &coefficients) in POSITION.iter().enumerate() {
