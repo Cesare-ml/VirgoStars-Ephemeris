@@ -56,6 +56,36 @@ pub struct SpkDirectStateProbe {
     pub evaluation: Result<SpkDirectState, SpkStateError>,
 }
 
+/// Failure while indexing one input in an atomic SPK kernel load.
+///
+/// `input_index` is zero-based within the attempted batch, not within the
+/// previously loaded stack. Earlier successfully indexed batch inputs are
+/// deliberately not made visible on failure.
+#[derive(Debug)]
+pub struct SpkKernelLoadError {
+    pub input_index: usize,
+    pub error: SpkIndexError,
+}
+
+impl std::fmt::Display for SpkKernelLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SPK batch input {} failed indexing: {}",
+            self.input_index, self.error
+        )
+    }
+}
+
+impl std::error::Error for SpkKernelLoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+// Modification (2026-11-14): stage all input indexes before committing an
+// ordered multi-kernel update; reject partial updates with an indexed error.
+
 struct LoadedSpk<R> {
     source: R,
     index: SpkIndex,
@@ -93,6 +123,33 @@ impl<R: Read + Seek> SpkKernelSet<R> {
     pub fn load(&mut self, mut source: R) -> Result<(), SpkIndexError> {
         let index = inspect_spk(&mut source)?;
         self.loaded.push(LoadedSpk { source, index });
+        Ok(())
+    }
+
+    /// Atomically add multiple caller-supplied kernels in their given load order.
+    ///
+    /// Every input is indexed before any of them is made visible. If an index
+    /// fails, the existing stack (including source cursors) is unchanged and
+    /// no input from this batch remains loaded. The zero-based failing input
+    /// index is returned alongside the original `SpkIndexError`.
+    ///
+    /// Like `load`, this only verifies DAF/SPK indexes; coefficient records
+    /// may fail on later state evaluation. Empty batches succeed unchanged.
+    /// The attempted input readers are consumed, including on failure.
+    ///
+    /// Geometric states are still ET/TDB seconds past J2000, frame 1
+    /// J2000/ICRF, km and km/TDB-second. No network or kernel fallback.
+    pub fn load_batch_atomic(
+        &mut self,
+        sources: impl IntoIterator<Item = R>,
+    ) -> Result<(), SpkKernelLoadError> {
+        let mut staged = Vec::new();
+        for (input_index, mut source) in sources.into_iter().enumerate() {
+            let index = inspect_spk(&mut source)
+                .map_err(|error| SpkKernelLoadError { input_index, error })?;
+            staged.push(LoadedSpk { source, index });
+        }
+        self.loaded.extend(staged);
         Ok(())
     }
 
@@ -1503,5 +1560,76 @@ mod tests {
         ));
         assert!(set.unload_last().is_some());
         assert!(set.unload_last().is_none());
+    }
+
+    #[test]
+    fn atomic_batch_does_not_publish_valid_prefix_when_later_index_fails() {
+        for (first_order, overlay_order) in [
+            (SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian),
+            (SpkByteOrder::BigEndian, SpkByteOrder::LittleEndian),
+        ] {
+            let mut set = with_kernels(&[(
+                first_order,
+                vec![seg(301, 399, 2, [2.0, 3.0], [0.5, -0.25])],
+            )]);
+            let previous = set.direct_state(301, 5.0).unwrap();
+            let previously_selected = set.selected_segment(301, 5.0).unwrap();
+            let overlay = Cursor::new(kernel(
+                overlay_order,
+                &[seg(301, 4, 3, [99.0, -17.0], [0.0, 1.0])],
+            ));
+            let invalid = Cursor::new(vec![0_u8; RECORD_BYTES]);
+            let failure = set
+                .load_batch_atomic(vec![overlay, invalid])
+                .expect_err("invalid second input must reject entire batch");
+
+            assert_eq!(failure.input_index, 1);
+            assert!(matches!(
+                &failure.error,
+                SpkIndexError::InvalidFile(_) | SpkIndexError::Io(_)
+            ));
+            assert!(std::error::Error::source(&failure).is_some());
+            assert_eq!(set.kernel_count(), 1);
+            assert_eq!(set.selected_segment(301, 5.0).unwrap(), previously_selected);
+            assert_eq!(set.direct_state(301, 5.0).unwrap(), previous);
+            assert_eq!(
+                set.relative_state(301, 399, 5.0).unwrap().position_km,
+                previous.position_km
+            );
+        }
+    }
+
+    #[test]
+    fn atomic_batch_preserves_load_priority_and_unload_order() {
+        let first = Cursor::new(kernel(
+            SpkByteOrder::LittleEndian,
+            &[seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])],
+        ));
+        let second = Cursor::new(kernel(
+            SpkByteOrder::BigEndian,
+            &[seg(301, 4, 3, [4.0, 1.0], [0.25, 0.5])],
+        ));
+        let mut set = SpkKernelSet::new();
+        set.load_batch_atomic(Vec::<Cursor<Vec<u8>>>::new())
+            .unwrap();
+        assert!(set.is_empty());
+        set.load_batch_atomic(vec![first, second]).unwrap();
+
+        assert_eq!(set.kernel_count(), 2);
+        assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 1);
+        let newest = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(newest.center_id, 4);
+        assert_eq!(newest.position_km, [4.0, 1.0, 0.0]);
+        assert_eq!(newest.velocity_km_per_second, [0.25, 0.5, 0.0]);
+
+        set.unload_last().unwrap();
+        assert_eq!(set.kernel_count(), 1);
+        assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 0);
+        let previous = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(previous.center_id, 399);
+        assert_eq!(previous.position_km, [1.0, 0.0, 0.0]);
+        assert_eq!(previous.velocity_km_per_second, [0.0; 3]);
+        set.unload_last().unwrap();
+        assert!(set.is_empty());
     }
 }
