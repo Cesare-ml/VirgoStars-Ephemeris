@@ -47,6 +47,7 @@ struct Case {
 #[derive(Debug)]
 struct Reference {
     ordered_kernel_sha256: Vec<String>,
+    declared_kernel_files: Option<Vec<(String, u64)>>,
     cases: Vec<Case>,
 }
 
@@ -124,6 +125,16 @@ fn read_reference(content: &str) -> Result<Reference, String> {
                 .trim()
                 .split_once('=')
                 .ok_or_else(|| format!("line {line_no}: expected # key=value"))?;
+            // For kernel identity fields, silently trimming a filename or
+            // byte count could make a malformed manifest look valid. Preserve
+            // the general metadata parser's historical whitespace behavior.
+            if matches!(
+                key.trim(),
+                "ordered_kernel_names" | "ordered_kernel_sizes_bytes"
+            ) && (value != value.trim() || raw != raw.trim_end())
+            {
+                return Err(format!("line {line_no}: whitespace in kernel manifest"));
+            }
             let (key, value) = (key.trim(), value.trim());
             if key.is_empty() || value.is_empty() {
                 return Err(format!("line {line_no}: empty reference metadata"));
@@ -237,10 +248,54 @@ fn read_reference(content: &str) -> Result<Reference, String> {
             "ordered_kernel_sha256 must contain semicolon-separated 64-hex SHA256 digests".into(),
         );
     }
+    // Modification (2026-11-14): honor optional generator-declared names
+    // and byte sizes even when this Rust example runs without Python preflight.
+    // Older hash-only reference CSVs remain supported.
+    let declared_kernel_files = match (
+        metadata.get("ordered_kernel_names"),
+        metadata.get("ordered_kernel_sizes_bytes"),
+    ) {
+        (None, None) => None,
+        (Some(names), Some(sizes)) => {
+            let names: Vec<_> = names.split(';').collect();
+            let sizes: Vec<_> = sizes.split(';').collect();
+            if names.len() != ordered_kernel_sha256.len()
+                || sizes.len() != ordered_kernel_sha256.len()
+            {
+                return Err("declared kernel name/size/hash counts differ".into());
+            }
+            let mut files = Vec::with_capacity(names.len());
+            for (name, size) in names.into_iter().zip(sizes) {
+                if name.is_empty()
+                    || name == "."
+                    || name == ".."
+                    || name.trim() != name
+                    || name.contains('/')
+                    || name.contains('\\')
+                {
+                    return Err("declared kernel names must be plain basenames".into());
+                }
+                if size.is_empty()
+                    || size.len() > 20
+                    || !size.bytes().all(|byte| byte.is_ascii_digit())
+                    || (size.len() > 1 && size.starts_with('0'))
+                {
+                    return Err("declared kernel sizes must be canonical decimal bytes".into());
+                }
+                let size = size
+                    .parse::<u64>()
+                    .map_err(|_| "declared kernel size exceeds u64 byte range")?;
+                files.push((name.to_owned(), size));
+            }
+            Some(files)
+        }
+        _ => return Err("declared kernel names and sizes must appear together".into()),
+    };
     // These are user-declared hashes, NOT cryptographically verified by this
     // dependency-free example. Verify them independently at execution time.
     Ok(Reference {
         ordered_kernel_sha256,
+        declared_kernel_files,
         cases,
     })
 }
@@ -294,6 +349,43 @@ fn input_error(message: impl Into<String>) -> Box<dyn Error> {
     Box::new(io::Error::new(io::ErrorKind::InvalidInput, message.into()))
 }
 
+/// Check optional ordered kernel basenames and lengths before scientific I/O.
+///
+/// The CSV's SHA-256 declarations are not authenticated by this example.
+/// Use the separate SHA-256 preflight to verify actual kernel bytes.
+fn verify_declared_kernel_files(
+    reference: &Reference,
+    paths: &[String],
+) -> Result<(), Box<dyn Error>> {
+    let Some(declared) = &reference.declared_kernel_files else {
+        return Ok(());
+    };
+    if paths.len() != declared.len() {
+        return Err(input_error("declared kernel filename/size count mismatch"));
+    }
+    for (index, (path, (expected_name, expected_size))) in
+        paths.iter().zip(declared.iter()).enumerate()
+    {
+        let basename = std::path::Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str());
+        if basename != Some(expected_name.as_str()) {
+            return Err(input_error(format!(
+                "kernel {} filename/load-order mismatch (expected {expected_name})",
+                index + 1
+            )));
+        }
+        let size = fs::metadata(path)?.len();
+        if size != *expected_size {
+            return Err(input_error(format!(
+                "kernel {} byte size mismatch (expected {expected_size}, found {size})",
+                index + 1
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn tolerance(value: &str, name: &str) -> Result<f64, Box<dyn Error>> {
     let result = value
         .parse::<f64>()
@@ -325,6 +417,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             paths.len()
         )));
     }
+
+    verify_declared_kernel_files(&reference, paths)?;
 
     let mut kernels = SpkKernelSet::new();
     for path in paths {
@@ -459,6 +553,93 @@ mod tests {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         );
         assert_eq!(read_reference(&two).unwrap().ordered_kernel_sha256.len(), 2);
+    }
+
+    // Modification (2026-11-14): direct Rust invocation must reject
+    // wrong ordered filenames/sizes instead of silently ignoring provenance
+    // fields emitted by the independent NAIF/SPICE reference generator.
+    fn with_manifest(name: &str, size: &str) -> String {
+        BASELINE.replace(
+            CSV_COLUMNS,
+            &format!(
+                "# ordered_kernel_names={name}\n# ordered_kernel_sizes_bytes={size}\n{CSV_COLUMNS}"
+            ),
+        )
+    }
+
+    #[test]
+    fn optional_kernel_manifest_accepts_legacy_but_rejects_malformed_declarations() {
+        assert!(read_reference(BASELINE)
+            .unwrap()
+            .declared_kernel_files
+            .is_none());
+        let parsed = read_reference(&with_manifest("one.bsp", "3")).unwrap();
+        assert_eq!(
+            parsed.declared_kernel_files,
+            Some(vec![("one.bsp".to_string(), 3)])
+        );
+
+        for (name, size) in [
+            ("", "3"),
+            ("../one.bsp", "3"),
+            ("dir\\one.bsp", "3"),
+            ("one.bsp ", "3"),
+            ("one.bsp", ""),
+            ("one.bsp", "-1"),
+            ("one.bsp", "03"),
+            ("one.bsp", "1.5"),
+            ("one.bsp", "18446744073709551616"),
+            ("one.bsp;two.bsp", "3;4"),
+        ] {
+            assert!(
+                read_reference(&with_manifest(name, size)).is_err(),
+                "accepted manifest {name:?} size {size:?}"
+            );
+        }
+        let names_only = BASELINE.replace(
+            CSV_COLUMNS,
+            &format!("# ordered_kernel_names=one.bsp\n{CSV_COLUMNS}"),
+        );
+        assert!(read_reference(&names_only).is_err());
+        let sizes_only = BASELINE.replace(
+            CSV_COLUMNS,
+            &format!("# ordered_kernel_sizes_bytes=3\n{CSV_COLUMNS}"),
+        );
+        assert!(read_reference(&sizes_only).is_err());
+    }
+
+    #[test]
+    fn direct_rust_preflight_rejects_wrong_name_size_and_load_order() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "virgostars-spk-manifest-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let file = directory.join("first.bsp");
+        fs::write(&file, b"abc").unwrap();
+        let paths = vec![file.to_string_lossy().into_owned()];
+
+        let correct = read_reference(&with_manifest("first.bsp", "3")).unwrap();
+        verify_declared_kernel_files(&correct, &paths).unwrap();
+
+        let wrong_name = read_reference(&with_manifest("second.bsp", "3")).unwrap();
+        assert!(verify_declared_kernel_files(&wrong_name, &paths)
+            .unwrap_err()
+            .to_string()
+            .contains("filename/load-order mismatch"));
+        let wrong_size = read_reference(&with_manifest("first.bsp", "4")).unwrap();
+        assert!(verify_declared_kernel_files(&wrong_size, &paths)
+            .unwrap_err()
+            .to_string()
+            .contains("byte size mismatch"));
+        fs::remove_file(&file).unwrap();
+        fs::remove_dir(&directory).unwrap();
     }
 
     #[test]
