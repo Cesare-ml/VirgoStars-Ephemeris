@@ -7,7 +7,7 @@
 
 ## Purpose
 
-Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental reader supports the classic DE441 binary; SPK support is planned. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
+Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental state reader supports the classic DE441 binary. Rust DAF/SPK **metadata indexing** is experimental; SPK position/velocity evaluation is still planned. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
 
 **Language decision:** The canonical astronomical core is written in **Rust**, with thin WebAssembly/TypeScript and PyO3/maturin Python bindings planned so all consumers share the same algorithms. The bindings are not implemented. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).
 
@@ -27,6 +27,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Italian overview](docs/README.it.md)
 - [Experimental DE441 reader](docs/DE441.md)
+- [Experimental Rust DAF/SPK metadata index (no state evaluation)](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
@@ -47,6 +48,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 - Experimental Rust workspace: `Cargo.toml`, `crates/ephemeris-core/`, and the classic binary DE441 reader documented in [docs/DE441.md](docs/DE441.md).
 - Experimental time-and-place CLI computes topocentric geometric positions using an externally supplied DE441 binary; see its documented time range and approximations.
+- The experimental Rust `spk_index::inspect_spk` reads NAIF DAF/SPK file headers and segment descriptors in both IEEE byte orders; it **does not** compute positions or velocities.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
 - Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
