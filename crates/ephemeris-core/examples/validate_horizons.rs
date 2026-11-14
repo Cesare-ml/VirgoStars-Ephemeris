@@ -61,6 +61,78 @@ fn body_from_name(name: &str) -> Option<Body> {
     })
 }
 
+// Modification 2026-11-14: reject metadata that is not even a syntactically
+// auditable official Horizons API request or UTC acquisition timestamp.
+// A well-formed URL/timestamp is NOT proof of the response's provenance.
+fn valid_horizons_query_url(url: &str) -> bool {
+    let query = url
+        .strip_prefix("https://ssd.jpl.nasa.gov/api/horizons.api?")
+        .or_else(|| url.strip_prefix("https://ssd-api.jpl.nasa.gov/api/horizons.api?"));
+    matches!(
+        query,
+        Some(q) if !q.is_empty()
+            && !q.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'#')
+    )
+}
+
+// Accept a Gregorian UTC 'Z' timestamp with seconds and optional 1–9
+// fractional digits, e.g. 2026-11-14T13:45:00.123Z. Do not silently
+// interpret timezone offsets or a local civil time as UTC.
+fn valid_retrieved_utc(value: &str) -> bool {
+    let Some(body) = value.strip_suffix('Z') else {
+        return false;
+    };
+    let (whole, fraction) = match body.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (body, None),
+    };
+    if let Some(fraction) = fraction {
+        if fraction.is_empty()
+            || fraction.len() > 9
+            || !fraction.bytes().all(|digit| digit.is_ascii_digit())
+        {
+            return false;
+        }
+    }
+    if whole.len() != 19 {
+        return false;
+    }
+    let bytes = whole.as_bytes();
+    if bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes
+            .iter()
+            .enumerate()
+            .any(|(index, digit)| ![4, 7, 10, 13, 16].contains(&index) && !digit.is_ascii_digit())
+    {
+        return false;
+    }
+    let (Ok(year), Ok(month), Ok(day), Ok(hour), Ok(minute), Ok(second)) = (
+        whole[0..4].parse::<u32>(),
+        whole[5..7].parse::<u32>(),
+        whole[8..10].parse::<u32>(),
+        whole[11..13].parse::<u32>(),
+        whole[14..16].parse::<u32>(),
+        whole[17..19].parse::<u32>(),
+    ) else {
+        return false;
+    };
+    if year == 0 || !(1..=12).contains(&month) || hour > 23 || minute > 59 || second > 59 {
+        return false;
+    }
+    let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let max_day = match month {
+        2 if leap_year => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    (1..=max_day).contains(&day)
+}
+
 fn parse_reference(source: &str) -> Result<Reference, String> {
     let mut metadata: BTreeMap<&str, &str> = BTreeMap::new();
     let mut cases: Vec<Case> = Vec::new();
@@ -150,6 +222,12 @@ fn parse_reference(source: &str) -> Result<Reference, String> {
         if !metadata.contains_key(key) {
             return Err(format!("metadata {key} is required for provenance"));
         }
+    }
+    if !valid_horizons_query_url(metadata["query_url"]) {
+        return Err("metadata query_url must be an HTTPS JPL Horizons API request with a query".into());
+    }
+    if !valid_retrieved_utc(metadata["retrieved_utc"]) {
+        return Err("metadata retrieved_utc must be a valid Gregorian UTC Z timestamp".into());
     }
     let target = body_from_name(
         metadata
@@ -432,6 +510,65 @@ mod tests {
         ] {
             let message = parse_reference(&format!("{VALID}{second_row}")).unwrap_err();
             assert!(message.contains("strictly increasing"), "{message}");
+        }
+    }
+
+    #[test]
+    fn rejects_unreviewable_horizons_query_urls() {
+        const GOOD: &str = "https://ssd.jpl.nasa.gov/api/horizons.api?example";
+        for bad in [
+            "http://ssd.jpl.nasa.gov/api/horizons.api?example",
+            "https://ssd.jpl.nasa.gov.evil.example/api/horizons.api?example",
+            "https://ssd.jpl.nasa.gov@evil.example/api/horizons.api?example",
+            "https://ssd.jpl.nasa.gov/api/horizons.api",
+            "https://ssd.jpl.nasa.gov/api/horizons.api?",
+            "https://ssd.jpl.nasa.gov/api/horizons.api?x=y#fragment",
+            "https://ssd.jpl.nasa.gov/api/horizons.api?x=bad value",
+            "file:///tmp/fabricated.csv",
+        ] {
+            assert!(!valid_horizons_query_url(bad), "{bad}");
+            assert!(
+                parse_reference(&malformed_reference(GOOD, bad)).is_err(),
+                "{bad}"
+            );
+        }
+        assert!(valid_horizons_query_url(GOOD));
+        assert!(valid_horizons_query_url(
+            "https://ssd-api.jpl.nasa.gov/api/horizons.api?format=text"
+        ));
+    }
+
+    #[test]
+    fn requires_real_gregorian_utc_timestamp_with_explicit_z_suffix() {
+        const GOOD: &str = "2026-11-10T00:00:00Z";
+        for bad in [
+            "2026-11-10T00:00:00",
+            "2026-11-10T01:00:00+01:00",
+            "2026-02-30T00:00:00Z",
+            "2025-02-29T00:00:00Z",
+            "2026-13-10T00:00:00Z",
+            "2026-11-10T24:00:00Z",
+            "2026-11-10T00:61:00Z",
+            "2026-11-10T00:00:60Z",
+            "2026-11-10T00:00:00.Z",
+            "2026-11-10T00:00:00.1234567890Z",
+            "2026-11-10 00:00:00Z",
+            "0000-01-01T00:00:00Z",
+        ] {
+            assert!(!valid_retrieved_utc(bad), "{bad}");
+            assert!(
+                parse_reference(&malformed_reference(GOOD, bad)).is_err(),
+                "{bad}"
+            );
+        }
+        for good in [
+            GOOD,
+            "2024-02-29T23:59:59Z",
+            "2000-02-29T00:00:00.123456789Z",
+            "2026-11-10T00:00:00.1Z",
+        ] {
+            assert!(valid_retrieved_utc(good), "{good}");
+            assert!(parse_reference(&malformed_reference(GOOD, good)).is_ok());
         }
     }
 
