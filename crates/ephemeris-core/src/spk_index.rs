@@ -35,6 +35,10 @@ const RECORD_BYTES: usize = 1024;
 const WORD_BYTES: usize = 8;
 const SUMMARY_WORDS: usize = 5;
 const MAX_SUMMARIES: usize = 25;
+// Modification (2026-11-14): NAIF's 28-byte DAF FTP transfer validator lives
+// at file-record byte offset 699, independent of DAF integer byte order.
+const FTPSTR_OFFSET: usize = 699;
+const FTPSTR_EXPECTED: &[u8; 28] = b"FTPSTR:\r:\n:\r\n:\r\0:\x81:\x10\xce:ENDFTP";
 
 /// Byte ordering as declared in the DAF file record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -161,6 +165,20 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
     };
     if integer(&file_record, 8, order) != 2 || integer(&file_record, 12, order) != 6 {
         return Err(SpkIndexError::InvalidFile("SPK requires ND=2 and NI=6"));
+    }
+    // NAIF DAF required reading defines FTPSTR at 0-based byte 699.
+    // Older DAF/SPK headers and synthetic legacy fixtures can have an absent
+    // marker (all NULs or all ASCII spaces). If the field is populated, its
+    // entire 28-byte sequence must match: a changed CR/LF/NUL/control byte
+    // can indicate text-mode FTP corruption and must not be ignored.
+    let ftpstr = &file_record[FTPSTR_OFFSET..FTPSTR_OFFSET + FTPSTR_EXPECTED.len()];
+    if ftpstr != &FTPSTR_EXPECTED[..]
+        && !ftpstr.iter().all(|&byte| byte == 0)
+        && !ftpstr.iter().all(|&byte| byte == b' ')
+    {
+        return Err(SpkIndexError::InvalidFile(
+            "invalid DAF FTP transfer validation string",
+        ));
     }
     let first = integer(&file_record, 76, order);
     let last = integer(&file_record, 80, order);
@@ -412,6 +430,69 @@ mod tests {
         let mut b = file(order, false);
         b.pop();
         assert!(parse(b).is_err());
+    }
+
+    // Modification (2026-11-14): validate the original NAIF DAF FTPSTR
+    // byte sequence, including embedded CR, LF, NUL and high-bit bytes.
+    #[test]
+    fn validates_present_daf_ftpstr_byte_for_byte_in_both_endiannesses() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for chained in [false, true] {
+                // Existing legacy/synthetic headers do not populate FTPSTR.
+                let base = file(order, chained);
+                assert_eq!(parse(base.clone()).unwrap().byte_order, order);
+
+                // A legacy blank field may also be space-filled.
+                let mut blank = base.clone();
+                blank[FTPSTR_OFFSET..FTPSTR_OFFSET + FTPSTR_EXPECTED.len()]
+                    .fill(b' ');
+                assert_eq!(parse(blank).unwrap().byte_order, order);
+
+                let mut valid = base;
+                valid[FTPSTR_OFFSET..FTPSTR_OFFSET + FTPSTR_EXPECTED.len()]
+                    .copy_from_slice(FTPSTR_EXPECTED);
+                assert_eq!(parse(valid.clone()).unwrap().byte_order, order);
+
+                for offset in 0..FTPSTR_EXPECTED.len() {
+                    let mut altered = valid.clone();
+                    altered[FTPSTR_OFFSET + offset] ^= 1;
+                    assert!(
+                        matches!(
+                            parse(altered),
+                            Err(SpkIndexError::InvalidFile(
+                                "invalid DAF FTP transfer validation string"
+                            ))
+                        ),
+                        "corrupt FTPSTR byte {offset} in {order:?}, chained={chained}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_partially_populated_or_nul_space_mixed_ftpstr() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut partial = file(order, false);
+            partial[FTPSTR_OFFSET..FTPSTR_OFFSET + 7].copy_from_slice(b"FTPSTR:");
+            assert!(matches!(
+                parse(partial),
+                Err(SpkIndexError::InvalidFile(
+                    "invalid DAF FTP transfer validation string"
+                ))
+            ));
+
+            // Do not treat arbitrary combinations of blank bytes as a
+            // missing marker: only entirely NUL or entirely space is absent.
+            let mut mixed = file(order, false);
+            mixed[FTPSTR_OFFSET] = b' ';
+            assert!(matches!(
+                parse(mixed),
+                Err(SpkIndexError::InvalidFile(
+                    "invalid DAF FTP transfer validation string"
+                ))
+            ));
+        }
     }
 
     #[test]
