@@ -158,14 +158,10 @@ mod tests {
     fn two_kernels() -> SpkKernelSet<Cursor<Vec<u8>>> {
         let mut kernels = SpkKernelSet::new();
         kernels
-            .load(kernel(
-                399, 0, [100.0, 5.0], [3.0, -1.0], Order::Little, 1,
-            ))
+            .load(kernel(399, 0, [100.0, 5.0], [3.0, -1.0], Order::Little, 1))
             .unwrap();
         kernels
-            .load(kernel(
-                301, 399, [2.0, 4.0], [0.1, 0.2], Order::Big, 1,
-            ))
+            .load(kernel(301, 399, [2.0, 4.0], [0.1, 0.2], Order::Big, 1))
             .unwrap();
         kernels
     }
@@ -198,27 +194,32 @@ mod tests {
                 &kernels.relative_state(pairs[i].0, pairs[i].1, 5.0).unwrap()
             );
         }
-        assert_eq!(rows[0].result.as_ref().unwrap(), rows[4].result.as_ref().unwrap());
+        assert_eq!(
+            rows[0].result.as_ref().unwrap(),
+            rows[4].result.as_ref().unwrap()
+        );
     }
 
     #[test]
     fn unsupported_high_priority_overlay_is_not_skipped_and_other_pairs_survive() {
         let mut kernels = two_kernels();
         kernels
-            .load(kernel(
-                301, 399, [7.0, 7.0], [0.0, 0.0], Order::Little, 17,
-            ))
+            .load(kernel(301, 399, [7.0, 7.0], [0.0, 0.0], Order::Little, 17))
             .unwrap();
         let pairs = [(301, 399), (399, 0), (301, 0)];
         let probes = probe_relative_states_at(&mut kernels, &pairs, 5.0).unwrap();
         assert!(matches!(
             probes[0].result,
-            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(17)))
+            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(
+                17
+            )))
         ));
         assert!(probes[1].result.is_ok());
         assert!(matches!(
             probes[2].result,
-            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(17)))
+            Err(SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(
+                17
+            )))
         ));
         assert_eq!(kernels.kernel_count(), 3);
         kernels.unload_last().unwrap();
@@ -229,7 +230,9 @@ mod tests {
     #[test]
     fn finite_empty_set_and_same_body_identity_are_explicit() {
         let mut empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
-        assert!(probe_relative_states_at(&mut empty, &[], 0.0).unwrap().is_empty());
+        assert!(probe_relative_states_at(&mut empty, &[], 0.0)
+            .unwrap()
+            .is_empty());
         let pairs = [(777, 777), (777, 0), (777, 777)];
         let result = probe_relative_states_at(&mut empty, &pairs, -100.0).unwrap();
         assert_eq!(result.len(), 3);
