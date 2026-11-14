@@ -26,7 +26,8 @@ paths, files shorter than **1,000,000,000 bytes** (defensive engineering
 heuristic specific to the expected full classic DE441 distribution),
 nonclassic DE441 header/magic/version, an altered kernel or reference
 hash, nonpositive/nonfinite declared error tolerances, and an output
-receipt path which would overwrite either input.
+receipt path which would overwrite either input, an existing receipt,
+or a file inside the Git source checkout.
 
 The existing Rust parser remains the authority for complete header,
 coverage, body identity, reference CSV metadata, time, frame,
@@ -105,8 +106,13 @@ The receipt (schema version **2**) records both input hashes, kernel
 basename and bytes, the exact verified Git commit and clean-tree status,
 declared component tolerances, command/exit status and full Rust
 stdout/stderr. Failures cause nonzero exit; mismatched fingerprints,
-unapproved commits and dirty worktrees stop **before Cargo**. A receipt path that equals either input is
-rejected without opening it for output.
+unapproved commits and dirty worktrees stop **before Cargo**.
+
+**Preservation:** every receipt is created exclusively (no overwrite).
+A destination that already exists, aliases either input, or resolves
+inside the Git source checkout is rejected before comparison.
+Choose a fresh receipt name for each experiment and keep it outside
+the repository, even when a previous experiment failed.
 
 A zero Cargo exit produces the deliberately limited status
 `COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW`,
