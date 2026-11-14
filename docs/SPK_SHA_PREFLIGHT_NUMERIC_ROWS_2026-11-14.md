@@ -16,8 +16,11 @@ the malformed scientific reference.
 ## Change
 
 A candidate row must now have **nine nonempty comma-separated fields**:
-an ET scalar, two integer NAIF ID fields and six finite numeric vector
-components. ET must also be finite. Text-only rows and nonfinite placeholders
+a finite TDB ET scalar, two distinct signed 32-bit decimal NAIF IDs and six
+finite numeric vector components. The preflight checks ASCII decimal tokens
+(rather than Python-only Unicode digits or numeric underscores), then the
+finite numeric values and the signed-i32 ID bounds. Both ET and each vector
+component must be finite. Text-only rows and nonfinite placeholders
 no longer satisfy the minimum row-presence requirement. All identity checks
 (ordered SHA-256, optional names and sizes, observable file swap detection)
 stay unchanged.
@@ -38,7 +41,8 @@ python -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
 ```
 
 The test uses **synthetic bytes only** and covers repeated headers,
-incomplete fields, noninteger IDs, nonfinite ET/velocities, valid rows
+incomplete fields, noninteger/out-of-range/same IDs, Unicode numeric tokens,
+Python-only underscores, nonfinite ET/velocities, valid rows
 and existing ordered-file identity checks. No external kernel is bundled,
 downloaded or executed.
 
