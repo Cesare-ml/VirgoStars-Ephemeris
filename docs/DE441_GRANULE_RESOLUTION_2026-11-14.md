@@ -35,6 +35,15 @@ representability guard**, not a proof of exact epoch arithmetic.
 - Valid two-granule layouts at two-ULP and 32-day scales, with finite
   geometric Mercury-relative-to-SSB state samples.
 - A valid single-granule one-ULP interval.
+- A two-record TDB JD grid spanning 2^20, where the first record's
+  three-granule partition is representable but the second record's
+  two inner boundaries coincide after binary64 rounding. The guard
+  rejects the combined file without incorrectly rejecting the first
+  record on its own.
+- Public `De441::state` regression with distinct constant coefficients:
+  samples just before an internal boundary select the preceding
+  granule, the exact boundary selects the next, and the final
+  coverage endpoint selects the final granule.
 
 No external ephemeris kernels are used. These fixtures prove only
 deterministic structural checks, not independent NASA/JPL/Horizons vector
