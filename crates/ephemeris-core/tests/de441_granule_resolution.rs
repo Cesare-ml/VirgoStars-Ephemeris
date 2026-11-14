@@ -108,5 +108,8 @@ fn accepts_single_granule_at_one_ulp_time_step() {
     let one_ulp = f64::from_bits(start.to_bits() + 1) - start;
     let eph = De441::new(Cursor::new(fixture(start, one_ulp, 1)))
         .expect("single granule has distinguishable start/end");
-    assert_eq!(eph.coverage(), (JulianDateTdb(start), JulianDateTdb(start + one_ulp)));
+    assert_eq!(
+        eph.coverage(),
+        (JulianDateTdb(start), JulianDateTdb(start + one_ulp))
+    );
 }
