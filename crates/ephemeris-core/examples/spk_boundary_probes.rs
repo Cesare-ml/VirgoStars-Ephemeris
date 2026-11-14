@@ -247,8 +247,14 @@ mod tests {
     fn next_binary64_neighbor_handles_zero_negative_and_finite_extremes() {
         assert_eq!(neighbor(0.0, true), Some(f64::from_bits(1)));
         assert_eq!(neighbor(-0.0, false), Some(-f64::from_bits(1)));
-        assert_eq!(neighbor(8.0, true), Some(f64::from_bits(8.0_f64.to_bits() + 1)));
-        assert_eq!(neighbor(-8.0, false), Some(f64::from_bits((-8.0_f64).to_bits() + 1)));
+        assert_eq!(
+            neighbor(8.0, true),
+            Some(f64::from_bits(8.0_f64.to_bits() + 1))
+        );
+        assert_eq!(
+            neighbor(-8.0, false),
+            Some(f64::from_bits((-8.0_f64).to_bits() + 1))
+        );
         assert_eq!(neighbor(f64::MAX, true), None);
         assert_eq!(neighbor(-f64::MAX, false), None);
     }
@@ -266,7 +272,11 @@ mod tests {
         let mut output = Vec::new();
         assert_eq!(render(&mut output, &kernels, 399).unwrap(), 12);
         let text = String::from_utf8(output).unwrap();
-        let rows: Vec<Vec<&str>> = text.lines().skip(1).map(|line| line.split(',').collect()).collect();
+        let rows: Vec<Vec<&str>> = text
+            .lines()
+            .skip(1)
+            .map(|line| line.split(',').collect())
+            .collect();
         assert_eq!(rows.len(), 12);
         assert!(rows.iter().all(|row| row.len() == 8));
         // First boundary: below zero has no coverage; at/after zero use older kernel.
@@ -288,13 +298,19 @@ mod tests {
     #[test]
     fn empty_target_and_invalid_paths_fail_before_any_output() {
         let mut kernels = SpkKernelSet::new();
-        kernels.load(Cursor::new(synthetic_spk(false, 399, 0, 0.0, 10.0))).unwrap();
+        kernels
+            .load(Cursor::new(synthetic_spk(false, 399, 0, 0.0, 10.0)))
+            .unwrap();
         let mut output = Vec::new();
         assert!(render(&mut output, &kernels, 301).is_err());
         assert!(output.is_empty());
 
         let mut bad_output = Vec::new();
-        let bad_args = vec!["--target".to_string(), "399".to_string(), "no-such-spk-file.bsp".to_string()];
+        let bad_args = vec![
+            "--target".to_string(),
+            "399".to_string(),
+            "no-such-spk-file.bsp".to_string(),
+        ];
         assert!(run(&bad_args, &mut bad_output).is_err());
         assert!(bad_output.is_empty());
     }
