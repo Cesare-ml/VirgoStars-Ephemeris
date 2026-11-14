@@ -502,7 +502,10 @@ fn adjacent_f64_epochs_inside_coverage_remain_evaluable() {
             )
             .unwrap();
         assert!(state.position_km.iter().all(|value| value.is_finite()));
-        assert!(state.velocity_km_per_day.iter().all(|value| value.is_finite()));
+        assert!(state
+            .velocity_km_per_day
+            .iter()
+            .all(|value| value.is_finite()));
         assert_eq!(state.epoch, JulianDateTdb(jd));
     }
 }
