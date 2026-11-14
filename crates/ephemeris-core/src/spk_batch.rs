@@ -192,24 +192,10 @@ mod tests {
 
     fn two_kernels() -> SpkKernelSet<Cursor<Vec<u8>>> {
         let mut set = SpkKernelSet::new();
-        set.load(kernel(
-            399,
-            0,
-            [100.0, 5.0],
-            [3.0, -1.0],
-            Order::Little,
-            1,
-        ))
-        .unwrap();
-        set.load(kernel(
-            301,
-            399,
-            [2.0, 4.0],
-            [0.1, 0.2],
-            Order::Big,
-            1,
-        ))
-        .unwrap();
+        set.load(kernel(399, 0, [100.0, 5.0], [3.0, -1.0], Order::Little, 1))
+            .unwrap();
+        set.load(kernel(301, 399, [2.0, 4.0], [0.1, 0.2], Order::Big, 1))
+            .unwrap();
         set
     }
 
@@ -266,8 +252,7 @@ mod tests {
             17,
         ))
         .unwrap();
-        let failure = relative_states_at(&mut set, &[(399, 0), (301, 399)], 5.0)
-            .unwrap_err();
+        let failure = relative_states_at(&mut set, &[(399, 0), (301, 399)], 5.0).unwrap_err();
         assert!(matches!(
             failure,
             SpkBatchError::Request {
@@ -278,9 +263,7 @@ mod tests {
         ));
         set.unload_last().unwrap();
         assert_eq!(
-            relative_states_at(&mut set, &[(301, 399)], 5.0)
-                .unwrap()[0]
-                .position_km,
+            relative_states_at(&mut set, &[(301, 399)], 5.0).unwrap()[0].position_km,
             [2.0, 4.0, 0.0]
         );
     }
@@ -302,9 +285,7 @@ mod tests {
             ));
         }
         assert_eq!(
-            relative_states_at(&mut empty, &[(301, 301)], 5.0)
-                .unwrap()[0]
-                .position_km,
+            relative_states_at(&mut empty, &[(301, 301)], 5.0).unwrap()[0].position_km,
             [0.0; 3]
         );
     }
