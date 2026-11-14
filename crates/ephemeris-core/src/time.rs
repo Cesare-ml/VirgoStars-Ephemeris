@@ -54,7 +54,16 @@ impl std::fmt::Display for AtomicTimeError {
     }
 }
 
-impl std::error::Error for AtomicTimeError {}
+// Modification (2026-11-14): expose the underlying calendar failure to
+// standard error-chain diagnostics without altering TAI/TT calculations.
+impl std::error::Error for AtomicTimeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidJulianDate(error) => Some(error),
+            Self::WrongInputScale { .. } => None,
+        }
+    }
+}
 
 impl From<CalendarError> for AtomicTimeError {
     fn from(error: CalendarError) -> Self {
@@ -225,6 +234,38 @@ mod tests {
         assert!(
             ((1.0 - previous_day_tai.midnight_fraction()) * SECONDS_PER_DAY - 22.184).abs() < 1e-8
         );
+    }
+
+    #[test]
+    fn out_of_range_atomic_conversion_exposes_calendar_cause() {
+        // The source must come from an actual checked TAI -> TT conversion,
+        // not from a manually manufactured enum variant.
+        let epoch = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tai).unwrap();
+        let error = tai_to_tt(epoch).unwrap_err();
+        assert_eq!(
+            error,
+            AtomicTimeError::InvalidJulianDate(CalendarError::YearOutOfRange)
+        );
+        let source = std::error::Error::source(&error).expect("calendar cause");
+        assert_eq!(
+            source.downcast_ref::<CalendarError>(),
+            Some(&CalendarError::YearOutOfRange)
+        );
+        assert!(source.source().is_none());
+    }
+
+    #[test]
+    fn atomic_scale_mismatch_has_no_nested_calendar_error() {
+        let epoch = JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap();
+        let error = tt_to_tai(epoch).unwrap_err();
+        assert_eq!(
+            error,
+            AtomicTimeError::WrongInputScale {
+                expected: TimeScale::Tt,
+                actual: TimeScale::Tdb,
+            }
+        );
+        assert!(std::error::Error::source(&error).is_none());
     }
 
     #[test]
