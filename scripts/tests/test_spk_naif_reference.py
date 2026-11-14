@@ -164,32 +164,29 @@ class SpkReferenceTests(unittest.TestCase):
                         REFERENCE.kernel_manifest([self.first])
 
     def test_manifest_rejects_path_replacement_after_descriptor_close(self):
-        from types import SimpleNamespace
         from unittest.mock import patch
 
-        original_stat = Path.stat
+        original_identity = REFERENCE._kernel_stat_identity
         calls = 0
 
-        def simulated_replacement(path, *args, **kwargs):
+        def simulated_replacement(stat):
             nonlocal calls
-            result = original_stat(path, *args, **kwargs)
-            if path == self.first:
-                calls += 1
-                # Path.is_file() first, pre-open stat second, final path
-                # identity check third. The byte stream itself is untouched.
-                if calls == 3:
-                    return SimpleNamespace(
-                        st_dev=result.st_dev,
-                        st_ino=result.st_ino + 1,
-                        st_size=result.st_size,
-                        st_mtime_ns=result.st_mtime_ns,
-                    )
-            return result
+            calls += 1
+            identity = original_identity(stat)
+            # The fourth identity probe is the pathname check after closing:
+            # 1) preopen path; 2) opened fd; 3) fd after bytes; 4) path after.
+            # Patch the identity probe rather than pathlib's private stat
+            # call graph, which differs across Python and OS releases.
+            if calls == 4:
+                return identity[0], identity[1] + 1, identity[2], identity[3]
+            return identity
 
-        with patch.object(Path, "stat", simulated_replacement):
+        with patch.object(
+            REFERENCE, "_kernel_stat_identity", side_effect=simulated_replacement
+        ):
             with self.assertRaisesRegex(ValueError, "path changed during hashing"):
                 REFERENCE.kernel_manifest([self.first])
-        self.assertGreaterEqual(calls, 3)
+        self.assertEqual(calls, 4)
 
     def test_manifest_normal_file_identity_matches_hash_and_order(self):
         manifest = REFERENCE.kernel_manifest(self.paths)
