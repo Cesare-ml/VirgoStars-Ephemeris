@@ -37,6 +37,7 @@ pub mod spk_direct_state;
 pub mod spk_effective_index;
 pub mod spk_index;
 pub mod spk_kernel_set;
+pub mod spk_pair_diagnostics;
 pub mod spk_relative_state;
 pub mod state;
 pub mod time;
