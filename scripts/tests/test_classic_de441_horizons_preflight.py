@@ -164,11 +164,20 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
 
     def test_receipt_must_not_overwrite_kernel_or_reference(self):
         for receipt in (self.kernel, self.reference):
-            with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
-                with self.assertRaises(ValueError):
-                    # Directly check the same-file guard used by main.
-                    if receipt.resolve() in (self.kernel.resolve(), self.reference.resolve()):
-                        raise ValueError("receipt must not overwrite an input")
+            with self.subTest(receipt=receipt.name):
+                original = receipt.read_bytes()
+                with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+                    rc = validator.main([
+                        "--kernel", str(self.kernel),
+                        "--reference", str(self.reference),
+                        "--kernel-sha256", self.expected_kernel,
+                        "--reference-sha256", self.expected_reference,
+                        "--position-km", "0.01",
+                        "--velocity-km-per-day", "0.0001",
+                        "--receipt", str(receipt),
+                    ])
+                self.assertEqual(rc, 1)
+                self.assertEqual(receipt.read_bytes(), original)
 
 
 if __name__ == "__main__":
