@@ -23,10 +23,13 @@ SPDX-License-Identifier: CPAL-1.0
 //! and an I/O error from the selected coefficient record. No JPL data is used.
 //! Modification (2026-11-14): multi-kernel load failure and selected-source
 //! I/O errors must preserve priority, provenance and rollback guarantees.
+//! Modification (2026-11-14): preserve the batch failure index and full
+//! I/O source chain for a persistently unreadable high-priority overlay.
 
 use std::error::Error;
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
+use virgostars_ephemeris_core::spk_batch::{relative_states_at, SpkBatchError};
 use virgostars_ephemeris_core::spk_direct_state::{direct_spk_state, SpkStateError};
 use virgostars_ephemeris_core::spk_index::{inspect_spk, SpkByteOrder, SpkIndexError};
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
@@ -361,6 +364,81 @@ fn unreadable_high_priority_coefficient_never_falls_back_to_older_kernel() {
             assert!(kernels.unload_last().is_some());
             assert_eq!(kernels.kernel_count(), 1);
             assert_eq!(kernels.relative_state(301, 399, 5.0).unwrap(), baseline);
+        }
+    }
+}
+
+#[test]
+fn batch_rejects_persistent_selected_kernel_io_until_explicit_unload() {
+    for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+        for kind in [2, 3] {
+            // The first valid batch request comes from an Earth->SSB kernel.
+            // The second needs the older Moon->Earth kernel, which is then
+            // shadowed by a newer, unreadable mixed-endian Moon->Earth file.
+            let mut earth = synthetic_spk(order, kind);
+            write_i32(&mut earth, 2 * RECORD_BYTES + 40, 399, order);
+            write_i32(&mut earth, 2 * RECORD_BYTES + 44, 0, order);
+            let mut kernels = SpkKernelSet::<InjectedReader>::new();
+            kernels.load(InjectedReader::new(earth, 17)).unwrap();
+            kernels
+                .load(InjectedReader::new(synthetic_spk(order, kind), 11))
+                .unwrap();
+
+            let requests = [(399, 0), (301, 399), (301, 0), (301, 399)];
+            let original = relative_states_at(&mut kernels, &requests, 5.0).unwrap();
+            assert_eq!(original.len(), requests.len());
+
+            let newer_order = match order {
+                SpkByteOrder::LittleEndian => SpkByteOrder::BigEndian,
+                SpkByteOrder::BigEndian => SpkByteOrder::LittleEndian,
+            };
+            let mut unreadable = InjectedReader::new(synthetic_spk(newer_order, kind), 13);
+            let start = (FIRST_DATA_WORD - 1) as u64 * 8;
+            let record_words = if kind == 2 { 8 } else { 14 };
+            unreadable.deny = Some((start, start + record_words * 8));
+            kernels.load(unreadable).unwrap();
+            assert_eq!(kernels.kernel_count(), 3);
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 2);
+
+            let failure = relative_states_at(&mut kernels, &requests, 5.0).unwrap_err();
+            assert!(matches!(
+                &failure,
+                SpkBatchError::Request {
+                    index: 1,
+                    target_id: 301,
+                    center_id: 399,
+                    cause: SpkRelativeError::Segment(SpkStateError::Io(error))
+                } if error.kind() == io::ErrorKind::PermissionDenied
+            ));
+            let relative_error = failure.source().expect("batch error source");
+            let state_error = relative_error.source().expect("relative segment error");
+            let io_error = state_error.source().expect("original stream I/O error");
+            assert_eq!(
+                io_error.downcast_ref::<io::Error>().unwrap().kind(),
+                io::ErrorKind::PermissionDenied
+            );
+            assert_eq!(kernels.kernel_count(), 3);
+
+            // Repeating only the failing request must now report index zero.
+            // The source stays selected and the error stays persistent.
+            assert!(matches!(
+                relative_states_at(&mut kernels, &requests[1..], 5.0),
+                Err(SpkBatchError::Request {
+                    index: 0,
+                    target_id: 301,
+                    center_id: 399,
+                    ..
+                })
+            ));
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 2);
+
+            // Only the caller's explicit unload can restore the older source.
+            assert!(kernels.unload_last().is_some());
+            assert_eq!(kernels.kernel_count(), 2);
+            assert_eq!(
+                relative_states_at(&mut kernels, &requests, 5.0).unwrap(),
+                original
+            );
         }
     }
 }
