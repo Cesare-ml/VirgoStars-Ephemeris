@@ -14,6 +14,7 @@
 # 
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): detect file edits and path swaps during each NAIF kernel hash.
 
 """Validation-only independent NAIF/SPICE reference producer and SPK SHA256 verifier.
 
@@ -29,6 +30,7 @@ import hashlib
 import json
 import hmac
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -76,18 +78,43 @@ def parse_cases(values: Sequence[str]) -> list[tuple[int, int, float]]:
     return result
 
 
+def _kernel_stat_identity(stat: os.stat_result) -> tuple[int, int, int, int]:
+    """Compare the opened kernel with its pathname before/after streaming.
+
+    st_atime changes on some systems just by reading; st_ctime has different
+    pathname/fd semantics on Windows. Neither is an appropriate stability
+    invariant for this cross-platform read-only preflight.
+    """
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
 def kernel_manifest(paths: Sequence[Path]) -> list[tuple[str, int, str]]:
+    """Hash the opened kernel, rejecting observable in-flight edits and swaps.
+
+    This detects edits to the same file during a SHA-256 pass, and path
+    replacement between stat/open and open/close. It is not a filesystem lock
+    or an atomic snapshot of files subsequently loaded by NAIF/SPICE or Rust.
+    Modification (2026-11-14): fail closed on observable hash-stream races.
+    """
     if not paths:
         raise ValueError("at least one --kernel is required")
     manifest = []
     for path in paths:
         if not path.is_file():
             raise ValueError(f"SPK kernel not found: {path}")
+        before = _kernel_stat_identity(path.stat())
         sha = hashlib.sha256()
         with path.open("rb") as source:
+            opened = _kernel_stat_identity(os.fstat(source.fileno()))
+            if opened != before:
+                raise ValueError(f"SPK kernel path changed before hashing: {path}")
             while chunk := source.read(1024 * 1024):
                 sha.update(chunk)
-        manifest.append((path.name, path.stat().st_size, sha.hexdigest()))
+            if _kernel_stat_identity(os.fstat(source.fileno())) != opened:
+                raise ValueError(f"SPK kernel changed during hashing: {path}")
+        if _kernel_stat_identity(path.stat()) != opened:
+            raise ValueError(f"SPK kernel path changed during hashing: {path}")
+        manifest.append((path.name, opened[2], sha.hexdigest()))
     return manifest
 
 

@@ -135,6 +135,67 @@ class SpkReferenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
             REFERENCE.verify_reference_hashes(document, self.paths)
 
+    # Modification (2026-11-14): hash each opened file against stable
+    # stat/fstat identity throughout the read, not just between two hashes.
+    def test_manifest_rejects_changed_open_descriptor_before_and_after_streaming(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        original_fstat = REFERENCE.os.fstat
+
+        def changed_stat(real, *, extra_mtime_ns=0):
+            return SimpleNamespace(
+                st_dev=real.st_dev, st_ino=real.st_ino,
+                st_size=real.st_size, st_mtime_ns=real.st_mtime_ns + extra_mtime_ns,
+            )
+
+        for changed_call, reason in [(1, "before hashing"), (2, "during hashing")]:
+            calls = 0
+
+            def simulated_edit(fd):
+                nonlocal calls
+                calls += 1
+                stat = original_fstat(fd)
+                return changed_stat(stat, extra_mtime_ns=1 if calls == changed_call else 0)
+
+            with self.subTest(changed_call=changed_call):
+                with patch.object(REFERENCE.os, "fstat", side_effect=simulated_edit):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        REFERENCE.kernel_manifest([self.first])
+
+    def test_manifest_rejects_path_replacement_after_descriptor_close(self):
+        from unittest.mock import patch
+
+        original_identity = REFERENCE._kernel_stat_identity
+        calls = 0
+
+        def simulated_replacement(stat):
+            nonlocal calls
+            calls += 1
+            identity = original_identity(stat)
+            # The fourth identity probe is the pathname check after closing:
+            # 1) preopen path; 2) opened fd; 3) fd after bytes; 4) path after.
+            # Patch the identity probe rather than pathlib's private stat
+            # call graph, which differs across Python and OS releases.
+            if calls == 4:
+                return identity[0], identity[1] + 1, identity[2], identity[3]
+            return identity
+
+        with patch.object(
+            REFERENCE, "_kernel_stat_identity", side_effect=simulated_replacement
+        ):
+            with self.assertRaisesRegex(ValueError, "path changed during hashing"):
+                REFERENCE.kernel_manifest([self.first])
+        self.assertEqual(calls, 4)
+
+    def test_manifest_normal_file_identity_matches_hash_and_order(self):
+        manifest = REFERENCE.kernel_manifest(self.paths)
+        self.assertEqual([row[0] for row in manifest], ["first.bsp", "second.bsp"])
+        for path, (name, size, digest) in zip(self.paths, manifest):
+            self.assertEqual(name, path.name)
+            self.assertEqual(size, path.stat().st_size)
+            self.assertEqual(digest, hashlib.sha256(path.read_bytes()).hexdigest())
+
     def test_missing_duplicate_or_invalid_metadata_and_wrong_kernel_count(self):
         document = self.reference()
         for changed in (
