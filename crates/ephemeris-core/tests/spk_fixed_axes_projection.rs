@@ -84,19 +84,15 @@ fn spk_and_de441_adapters_share_angles_and_scale_rates_by_seconds_per_day() {
 fn circular_motion_and_negative_longitude_rate_have_analytic_oracles() {
     let radius = 384_400.0;
     let rate = 1.0e-5;
-    let prograde = project_spk_fixed_axes(
-        &state([radius, 0.0, 0.0], [0.0, radius * rate, 0.0]),
-        0.0,
-    )
-    .unwrap();
+    let prograde =
+        project_spk_fixed_axes(&state([radius, 0.0, 0.0], [0.0, radius * rate, 0.0]), 0.0).unwrap();
     near(prograde.longitude_rad, 0.0, 1e-15);
     near(prograde.latitude_rad, 0.0, 1e-15);
     near(prograde.longitude_rate_rad_per_second, rate, 1e-15);
     near(prograde.distance_km, radius, 1e-9);
     near(prograde.distance_rate_km_per_second, 0.0, 1e-12);
     let retrograde =
-        project_spk_fixed_axes(&state([1.0, -1.0, 0.0], [-1.0, -1.0, 0.0]), 0.0)
-            .unwrap();
+        project_spk_fixed_axes(&state([1.0, -1.0, 0.0], [-1.0, -1.0, 0.0]), 0.0).unwrap();
     near(retrograde.longitude_rad, 7.0 * PI / 4.0, 1e-15);
     near(retrograde.longitude_rate_rad_per_second, -1.0, 1e-15);
     assert!((0.0..TAU).contains(&prograde.longitude_rad));
@@ -116,7 +112,11 @@ fn centered_difference_agrees_with_per_second_analytic_rates_in_tilted_axes() {
     let before = at(-dt);
     let after = at(dt);
     let dlongitude = (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
-    near(middle.longitude_rate_rad_per_second, dlongitude / (2.0 * dt), 1e-10);
+    near(
+        middle.longitude_rate_rad_per_second,
+        dlongitude / (2.0 * dt),
+        1e-10,
+    );
     near(
         middle.latitude_rate_rad_per_second,
         (after.latitude_rad - before.latitude_rad) / (2.0 * dt),
