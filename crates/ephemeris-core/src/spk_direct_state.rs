@@ -30,7 +30,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::chebyshev::evaluate_chebyshev;
+use crate::chebyshev::{evaluate_chebyshev, evaluate_chebyshev_value};
 use crate::error::EphemerisError;
 use crate::spk_index::{SpkByteOrder, SpkIndex, SpkSegmentDescriptor};
 
@@ -273,13 +273,28 @@ pub fn direct_spk_state<R: Read + Seek>(
             "epoch outside SPK record directory",
         ));
     }
-    // On exact record boundaries choose the following record. The final
-    // inclusive endpoint remains in the final record.
-    let relative = ((et - layout.init) / layout.interval).floor();
-    if !relative.is_finite() || relative < 0.0 {
-        return Err(SpkStateError::InvalidSegment("invalid SPK record index"));
+    // On an exact boundary choose the following record, except at the final
+    // inclusive endpoint. Dividing (et - INIT) by INTLEN can round an epoch
+    // immediately *before* a boundary up to an integer and select the wrong
+    // record. Compare the original f64 ET directly against the directory's
+    // representable record starts instead; do not round the epoch first.
+    // Modification (2026-11-14): fail closed if a boundary overflows.
+    let mut record_index = 0_u64;
+    let mut upper = layout.count;
+    while upper - record_index > 1 {
+        let middle = record_index + (upper - record_index) / 2;
+        let boundary = layout.init + middle as f64 * layout.interval;
+        if !boundary.is_finite() {
+            return Err(SpkStateError::InvalidSegment(
+                "nonfinite SPK record boundary",
+            ));
+        }
+        if et < boundary {
+            upper = middle;
+        } else {
+            record_index = middle;
+        }
     }
-    let record_index = (relative as u64).min(layout.count - 1);
     let address = layout
         .first_address
         .checked_add(
@@ -294,6 +309,28 @@ pub fn direct_spk_state<R: Read + Seek>(
     if !midpoint.is_finite() || !radius.is_finite() || radius <= 0.0 {
         return Err(SpkStateError::InvalidSegment(
             "invalid record midpoint or radius",
+        ));
+    }
+    // Type 2/3 directory INIT and INTLEN define an equal-width record grid.
+    // A corrupt record could otherwise shift/resize its own Chebyshev time
+    // domain yet still evaluate to a plausible finite position and velocity.
+    // Allow only binary64 rounding at the scale of the encoded ET/interval.
+    let expected_midpoint = layout.init + (record_index as f64 + 0.5) * layout.interval;
+    let expected_radius = layout.interval * 0.5;
+    let epoch_scale = layout
+        .init
+        .abs()
+        .max(expected_midpoint.abs())
+        .max(layout.interval.abs());
+    let midpoint_tolerance = 32.0 * f64::EPSILON * epoch_scale;
+    let radius_tolerance = 32.0 * f64::EPSILON * layout.interval.abs();
+    if !expected_midpoint.is_finite()
+        || expected_radius <= 0.0
+        || (midpoint - expected_midpoint).abs() > midpoint_tolerance
+        || (radius - expected_radius).abs() > radius_tolerance
+    {
+        return Err(SpkStateError::InvalidSegment(
+            "SPK record midpoint/radius disagree with directory",
         ));
     }
     let x = (et - midpoint) / radius;
@@ -311,10 +348,15 @@ pub fn direct_spk_state<R: Read + Seek>(
         for i in 0..layout.component_coefficients {
             coeffs.push(read_f64(&bytes, (start + i) * 8, index.byte_order));
         }
-        let sample = evaluate_chebyshev(&coeffs, x)?;
-        values[component] = sample.value;
-        if component < 3 {
+        if segment.spk_type == 2 {
+            // Type 2 has positions only: its velocity is the derivative.
+            let sample = evaluate_chebyshev(&coeffs, x)?;
+            values[component] = sample.value;
             derivatives[component] = sample.derivative_dx / radius;
+        } else {
+            // Type 3 stores position and velocity independently. Never
+            // require an unused derivative to be representable.
+            values[component] = evaluate_chebyshev_value(&coeffs, x)?;
         }
     }
     let position_km = [values[0], values[1], values[2]];
@@ -451,6 +493,58 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): a type-3 segment needs only the six
+    // polynomial values, never the derivative of the velocity polynomial.
+    #[test]
+    fn type3_does_not_reject_finite_state_for_unused_derivative_overflow() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            // Repack the existing synthetic Type-3 fixture as one 4-term
+            // record covering [0, 10] TDB/ET seconds.
+            let mut bytes = make_kernel(order, 3);
+            let record_words = 2 + 6 * 4;
+            let final_address = FIRST_WORD + record_words + 3;
+            let summary = 2 * RECORD_BYTES;
+            put_f64(&mut bytes, summary + 32, 10.0, order);
+            put_i32(
+                &mut bytes,
+                summary + 40 + 5 * 4,
+                final_address as i32,
+                order,
+            );
+            put_i32(&mut bytes, 84, (final_address + 1) as i32, order);
+            let record_base = (FIRST_WORD - 1) * 8;
+            let coefficients = [
+                [0.0, 0.0, 0.0, 8.0e307],
+                [20.0, 0.0, 0.0, 0.0],
+                [30.0, 0.0, 0.0, 0.0],
+                [7.0, 0.0, 0.0, 0.0],
+                [8.0, 0.0, 0.0, 0.0],
+                [-3.0, 0.0, 0.0, 0.0],
+            ];
+            for (component, row) in coefficients.iter().enumerate() {
+                for (index, &coefficient) in row.iter().enumerate() {
+                    put_f64(
+                        &mut bytes,
+                        record_base + (2 + 4 * component + index) * 8,
+                        coefficient,
+                        order,
+                    );
+                }
+            }
+            let footer = (final_address - 4) * 8;
+            for (index, value) in [0.0, 10.0, record_words as f64, 1.0]
+                .into_iter()
+                .enumerate()
+            {
+                put_f64(&mut bytes, footer + index * 8, value, order);
+            }
+            let s = evaluate(bytes, 499, 5.0).unwrap();
+            assert_eq!(s.position_km, [0.0, 20.0, 30.0]);
+            assert_eq!(s.velocity_km_per_second, [7.0, 8.0, -3.0]);
+            assert_eq!(s.tdb_seconds_past_j2000, 5.0);
+        }
+    }
+
     #[test]
     fn type3_independent_velocity_km_per_second_in_both_endiannesses() {
         for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
@@ -473,6 +567,52 @@ mod tests {
         assert_eq!(at_boundary.position_km[0], 210.0);
         assert_eq!(at_boundary.velocity_km_per_second[0], -2.0);
         assert_eq!(evaluate(bytes, 499, 20.0).unwrap().position_km[0], 190.0);
+    }
+
+    // The smallest finite ET before zero must remain in the first record.
+    // (et - INIT) / INTLEN rounds to 1.0 at this boundary and the previous
+    // floor-based implementation silently selected record two instead.
+    // Modification (2026-11-14): exercise both SPK types/byte orders.
+    #[test]
+    fn near_zero_record_boundary_uses_original_tdb_epoch() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let summary = 2 * RECORD_BYTES;
+                put_f64(&mut bytes, summary + 24, -10.0, order);
+                put_f64(&mut bytes, summary + 32, 10.0, order);
+
+                let components = if kind == 2 { 3 } else { 6 };
+                let record_words = 2 + 2 * components;
+                for record in 0..2 {
+                    let offset = (FIRST_WORD - 1 + record * record_words) * 8;
+                    put_f64(
+                        &mut bytes,
+                        offset,
+                        if record == 0 { -5.0 } else { 5.0 },
+                        order,
+                    );
+                }
+                let final_address = FIRST_WORD + 2 * record_words + 3;
+                let directory = (final_address - 4) * 8;
+                put_f64(&mut bytes, directory, -10.0, order);
+
+                let just_before = -f64::from_bits(1);
+                let just_after = f64::from_bits(1);
+                assert_eq!(
+                    ((just_before - (-10.0)) / 10.0).floor(),
+                    1.0,
+                    "fixture must reproduce f64 quotient rounding"
+                );
+
+                let before = evaluate(bytes.clone(), 499, just_before).unwrap();
+                assert_eq!(before.position_km[0], 110.0);
+                let at = evaluate(bytes.clone(), 499, 0.0).unwrap();
+                assert_eq!(at.position_km[0], 210.0);
+                let after = evaluate(bytes, 499, just_after).unwrap();
+                assert_eq!(after.position_km[0], 210.0);
+            }
+        }
     }
 
     #[test]
@@ -549,6 +689,49 @@ mod tests {
             let mut bytes = valid.clone();
             put_f64(&mut bytes, at, value, order);
             assert!(evaluate(bytes, 499, 5.0).is_err());
+        }
+    }
+
+    #[test]
+    fn type2_and_type3_reject_record_grid_mismatch_in_both_byte_orders() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let record_words = if kind == 2 { 8 } else { 14 };
+                let valid = make_kernel(order, kind);
+                for record_index in 0..2 {
+                    let et = if record_index == 0 { 5.0 } else { 15.0 };
+                    let offset = (FIRST_WORD - 1 + record_index * record_words) * 8;
+                    for (word, wrong) in [(0, et + 1.0), (8, 4.0), (8, 6.0)] {
+                        let mut bytes = valid.clone();
+                        put_f64(&mut bytes, offset + word, wrong, order);
+                        assert!(
+                            matches!(
+                                evaluate(bytes, 499, et),
+                                Err(SpkStateError::InvalidSegment(
+                                    "SPK record midpoint/radius disagree with directory"
+                                ))
+                            ),
+                            "type {kind}, record {record_index}, field {word}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn type2_and_type3_accept_sub_ulp_scale_directory_roundoff() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let offset = (FIRST_WORD - 1) * 8;
+                put_f64(&mut bytes, offset, 5.0 + 10.0 * f64::EPSILON, order);
+                put_f64(&mut bytes, offset + 8, 5.0 + 10.0 * f64::EPSILON, order);
+                let state = evaluate(bytes, 499, 5.0).unwrap();
+                assert_eq!((state.target_id, state.center_id), (499, 10));
+                assert!(state.position_km.iter().all(|v| v.is_finite()));
+                assert!(state.velocity_km_per_second.iter().all(|v| v.is_finite()));
+            }
         }
     }
 }
