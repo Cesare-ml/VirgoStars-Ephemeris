@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): regressions for strict SPK receipt JSON parsing.
 # Modification (2026-11-14): ASCII-only float tokens match the Rust E1 CSV comparator contract.
+# Modification (2026-11-14): match Rust calendar-real UTC receipt metadata validation.
 
 """Synthetic input tests for E1 matrix breadth; NO astronomical accuracy claims."""
 
@@ -176,6 +177,52 @@ class E1MatrixAuditTests(unittest.TestCase):
         ):
             with self.subTest(mutated=mutated), self.assertRaises(ValueError):
                 AUDIT.parse_reference(doc.replace(source, mutated, 1))
+
+    def test_e1_generated_utc_matches_rust_calendar_contract(self):
+        """E1 breadth must never pass a timestamp rejected by Rust."""
+        document = synthetic_document(ALL_PAIRS)
+        original = "generated_utc=2026-11-13T00:00:00Z"
+        valid = (
+            "2026-11-14T15:30:42Z",
+            "2024-02-29T23:59:59.123456Z",
+            "2000-02-29T00:00:00Z",
+            "1900-03-01T00:00:00Z",
+            "0001-01-01T00:00:00.123456789Z",
+            "9999-12-31T23:59:59Z",
+        )
+        invalid = (
+            "2026-02-30T12:00:00Z",
+            "2025-02-29T00:00:00Z",
+            "1900-02-29T00:00:00Z",
+            "0000-01-01T00:00:00Z",
+            "2026-13-01T00:00:00Z",
+            "2026-11-00T00:00:00Z",
+            "2026-11-14T24:00:00Z",
+            "2026-11-14T00:60:00Z",
+            "2026-11-14T00:00:60Z",
+            "2026-11-14T00:00:00+00:00",
+            "2026-11-14T00:00:00",
+            "2026-11-14 00:00:00Z",
+            "2026-11-14T00:00:00.Z",
+            "2026-11-14T00:00:00.2xZ",
+            "2026-11-14T00:00:00ZZ",
+            "2026-11-14T00:00:00z",
+            "٢٠٢٦-١١-١٤T٠٠:٠٠:٠٠Z",
+            "2026-11-14T00:00:00.١Z",
+            "2026-11-14T00:00:00.1Zextra",
+            "2026-11-14T00:00Z",
+        )
+        for utc in valid:
+            with self.subTest(valid=utc):
+                self.assertTrue(AUDIT.valid_provenance_utc(utc))
+                rows = AUDIT.parse_reference(document.replace(original, f"generated_utc={utc}"))
+                self.assertEqual(len(rows), 15)
+                self.assertEqual(AUDIT.audit_e1_matrix(rows)[0], [])
+        for utc in invalid:
+            with self.subTest(invalid=utc):
+                self.assertFalse(AUDIT.valid_provenance_utc(utc))
+                with self.assertRaisesRegex(ValueError, "generated_utc must be an actual"):
+                    AUDIT.parse_reference(document.replace(original, f"generated_utc={utc}"))
 
     def test_e1_audit_rejects_python_only_numeric_tokens(self):
         """Do not pass E1 breadth for CSV bytes rejected by Rust f64 parsing."""
