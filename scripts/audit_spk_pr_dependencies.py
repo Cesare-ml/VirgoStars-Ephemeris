@@ -23,6 +23,7 @@ ancestors. Never merges, approves or downloads ephemeris kernels.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import os
 import sys
@@ -71,7 +72,19 @@ def validate_snapshot(snapshot: object) -> dict[int, dict]:
             raise AuditInputError(f"PR #{number}: missing base branch")
         if merged and state != "closed":
             raise AuditInputError(f"PR #{number}: merged PR is not closed")
-        result[number] = raw
+        merged_at = raw.get("merged_at")
+        if merged:
+            if not isinstance(merged_at, str):
+                raise AuditInputError(f"PR #{number}: merged_at timestamp is required")
+            try:
+                instant = datetime.fromisoformat(merged_at.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise AuditInputError(f"PR #{number}: invalid merged_at timestamp") from error
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise AuditInputError(f"PR #{number}: merged_at must include a timezone")
+        elif merged_at is not None:
+            raise AuditInputError(f"PR #{number}: unmerged PR has merged_at timestamp")
+        result[number] = {**raw, "_merge_instant": instant if merged else None}
     return result
 
 
@@ -92,7 +105,15 @@ def audit(snapshot: object) -> list[dict]:
         elif record["merged"] and blockers:
             status = "ORDER_CONFLICT"
         elif record["merged"]:
-            status = "MERGED"
+            instant = record["_merge_instant"]
+            parent_times = [records[parent]["_merge_instant"] for parent in dependencies]
+            if any(parent_time > instant for parent_time in parent_times):
+                status = "ORDER_CONFLICT"
+            elif any(parent_time == instant for parent_time in parent_times):
+                # Second-resolution merge metadata cannot prove which merged first.
+                status = "ORDER_UNVERIFIED"
+            else:
+                status = "MERGED"
         elif record["state"] == "closed":
             status = "CLOSED_UNMERGED"
         elif blockers:
@@ -109,6 +130,7 @@ def audit(snapshot: object) -> list[dict]:
             "unmerged_prerequisites": unmerged,
             "blocking_prerequisites": blockers,
             "merged": record["merged"],
+            "merged_at": record.get("merged_at"),
             "draft": record["draft"],
             "base": record["base"]["ref"],
             "url": f"https://github.com/{REPOSITORY}/pull/{number}",
