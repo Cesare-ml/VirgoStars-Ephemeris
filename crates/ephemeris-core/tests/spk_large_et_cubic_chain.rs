@@ -77,12 +77,7 @@ fn position_chebyshev([a, b, c, d]: Polynomial) -> [f64; 4] {
 /// SPK Type 3 stores its velocity series separately, in km/TDB-second.
 fn type3_velocity_chebyshev([_a, b, c, d]: Polynomial) -> [f64; 4] {
     let r2 = RADIUS_S * RADIUS_S;
-    [
-        b + 1.5 * d * r2,
-        2.0 * c * RADIUS_S,
-        1.5 * d * r2,
-        0.0,
-    ]
+    [b + 1.5 * d * r2, 2.0 * c * RADIUS_S, 1.5 * d * r2, 0.0]
 }
 
 fn kernel(order: SpkByteOrder, midpoint: f64, segments: &[Segment]) -> Cursor<Vec<u8>> {
