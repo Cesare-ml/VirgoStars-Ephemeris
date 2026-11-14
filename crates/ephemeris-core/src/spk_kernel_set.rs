@@ -801,7 +801,10 @@ mod tests {
         let restored = set.probe_direct_state(301, 5.0).unwrap().unwrap();
         assert_eq!(restored.kernel_index, 0);
         assert_eq!(restored.descriptor.center_id, 399);
-        assert_eq!(restored.evaluation.unwrap(), set.direct_state(301, 5.0).unwrap());
+        assert_eq!(
+            restored.evaluation.unwrap(),
+            set.direct_state(301, 5.0).unwrap()
+        );
         assert!(set.probe_direct_state(301, 11.0).unwrap().is_none());
         assert!(set.probe_direct_state(999, 5.0).unwrap().is_none());
         assert!(matches!(
