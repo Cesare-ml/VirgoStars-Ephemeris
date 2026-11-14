@@ -252,6 +252,42 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
                 )
         runner.assert_not_called()
 
+    def test_existing_receipt_is_never_overwritten_or_compared(self):
+        receipt = Path(self.temp.name) / "prior-validation.json"
+        original = b"PRIOR VALIDATION RECEIPT MUST SURVIVE"
+        receipt.write_bytes(original)
+        with mock.patch.object(validator, "compare") as comparison:
+            rc = validator.main([
+                "--kernel", str(self.kernel),
+                "--reference", str(self.reference),
+                "--kernel-sha256", self.expected_kernel,
+                "--reference-sha256", self.expected_reference,
+                "--position-km", "0.01",
+                "--velocity-km-per-day", "0.0001",
+                "--source-sha", self.source_sha(),
+                "--receipt", str(receipt),
+            ])
+        self.assertEqual(rc, 1)
+        self.assertEqual(receipt.read_bytes(), original)
+        comparison.assert_not_called()
+
+    def test_receipt_inside_git_checkout_is_rejected_before_cargo(self):
+        receipt = SCRIPT.resolve().parents[1] / "_NEVER_CREATE_SCIENCE_RECEIPT.json"
+        with mock.patch.object(validator, "compare") as comparison:
+            rc = validator.main([
+                "--kernel", str(self.kernel),
+                "--reference", str(self.reference),
+                "--kernel-sha256", self.expected_kernel,
+                "--reference-sha256", self.expected_reference,
+                "--position-km", "0.01",
+                "--velocity-km-per-day", "0.0001",
+                "--source-sha", self.source_sha(),
+                "--receipt", str(receipt),
+            ])
+        self.assertEqual(rc, 1)
+        comparison.assert_not_called()
+        self.assertFalse(receipt.exists())
+
     def test_receipt_must_not_overwrite_kernel_or_reference(self):
         for receipt in (self.kernel, self.reference):
             with self.subTest(receipt=receipt.name):
