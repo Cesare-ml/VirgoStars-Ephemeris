@@ -7,6 +7,7 @@
 # Contributors retain applicable rights in their own contributions under the terms of this License.
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): test ordered names/sizes and hash-only compatibility.
 
 """Synthetic byte-level regression tests; NO NASA/JPL SPK data is bundled."""
 
@@ -15,7 +16,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from verify_spk_kernel_hashes import CSV_HEADER, main, read_declared_hashes, verify
+from verify_spk_kernel_hashes import CSV_HEADER, main, read_declared_hashes, read_declared_manifest, verify
 
 
 class SpkSha256PreflightTests(unittest.TestCase):
@@ -40,6 +41,99 @@ class SpkSha256PreflightTests(unittest.TestCase):
             + CSV_HEADER + "\n0,301,399,1,2,3,4,5,6\n",
             encoding="utf-8",
         )
+
+    def add_manifest(self, names=None, sizes=None):
+        """Insert optional ordered kernel declarations before the CSV header."""
+        content = self.reference.read_text(encoding="utf-8")
+        fields = []
+        if names is not None:
+            fields.append("# ordered_kernel_names=" + ";".join(names))
+        if sizes is not None:
+            fields.append("# ordered_kernel_sizes_bytes=" + ";".join(map(str, sizes)))
+        self.reference.write_text(
+            content.replace(CSV_HEADER, "\n".join(fields) + "\n" + CSV_HEADER),
+            encoding="utf-8",
+        )
+
+    def test_full_manifest_validates_names_sizes_and_hashes(self):
+        self.add_manifest(
+            names=["first.bsp", "second.bsp"],
+            sizes=[self.first.stat().st_size, self.second.stat().st_size],
+        )
+        hashes, names, sizes = read_declared_manifest(self.reference)
+        self.assertEqual(len(hashes), 2)
+        self.assertEqual(names, ["first.bsp", "second.bsp"])
+        self.assertEqual(sizes, [self.first.stat().st_size, self.second.stat().st_size])
+        self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
+        self.assertEqual(main([str(self.reference), str(self.first), str(self.second)]), 0)
+
+    def test_identical_bytes_swapped_files_rejected_by_names(self):
+        # Hash checks alone cannot detect reversing two same-byte kernel files.
+        self.first.write_bytes(b"identical synthetic bytes")
+        self.second.write_bytes(b"identical synthetic bytes")
+        digest = hashlib.sha256(self.first.read_bytes()).hexdigest()
+        self.write_reference([digest, digest])
+        self.assertEqual(len(verify(self.reference, [self.second, self.first])), 2)
+        self.add_manifest(
+            names=["first.bsp", "second.bsp"],
+            sizes=[self.first.stat().st_size, self.second.stat().st_size],
+        )
+        with self.assertRaisesRegex(ValueError, "filename/load-order mismatch"):
+            verify(self.reference, [self.second, self.first])
+        self.assertEqual(main([str(self.reference), str(self.second), str(self.first)]), 1)
+
+    def test_full_manifest_rejects_wrong_size_even_if_sha_is_correct(self):
+        self.add_manifest(
+            names=["first.bsp", "second.bsp"],
+            sizes=[self.first.stat().st_size + 1, self.second.stat().st_size],
+        )
+        with self.assertRaisesRegex(ValueError, "byte size mismatch"):
+            verify(self.reference, [self.first, self.second])
+
+    def test_partial_duplicate_or_invalid_manifests_fail_closed(self):
+        actual_names = ["first.bsp", "second.bsp"]
+        actual_sizes = [self.first.stat().st_size, self.second.stat().st_size]
+        self.add_manifest(names=actual_names)
+        with self.assertRaisesRegex(ValueError, "declared together"):
+            read_declared_manifest(self.reference)
+        self.write_reference([
+            hashlib.sha256(self.first.read_bytes()).hexdigest(),
+            hashlib.sha256(self.second.read_bytes()).hexdigest(),
+        ])
+        self.add_manifest(sizes=actual_sizes)
+        with self.assertRaisesRegex(ValueError, "declared together"):
+            read_declared_manifest(self.reference)
+        for names, sizes, expected in (
+            (["first.bsp"], actual_sizes, "counts differ"),
+            (actual_names, [actual_sizes[0]], "counts differ"),
+            (["../first.bsp", "second.bsp"], actual_sizes, "plain, nonempty basenames"),
+            (["first\\hidden.bsp", "second.bsp"], actual_sizes, "plain, nonempty basenames"),
+            (["", "second.bsp"], actual_sizes, "plain, nonempty basenames"),
+            (actual_names, ["01", str(actual_sizes[1])], "canonical decimal"),
+            (actual_names, ["-1", str(actual_sizes[1])], "canonical decimal"),
+            (actual_names, ["1.0", str(actual_sizes[1])], "canonical decimal"),
+            (actual_names, ["9" * 100, str(actual_sizes[1])], "canonical decimal"),
+        ):
+            with self.subTest(names=names, sizes=sizes):
+                self.write_reference([
+                    hashlib.sha256(self.first.read_bytes()).hexdigest(),
+                    hashlib.sha256(self.second.read_bytes()).hexdigest(),
+                ])
+                self.add_manifest(names=names, sizes=sizes)
+                with self.assertRaisesRegex(ValueError, expected):
+                    read_declared_manifest(self.reference)
+        self.write_reference([
+            hashlib.sha256(self.first.read_bytes()).hexdigest(),
+            hashlib.sha256(self.second.read_bytes()).hexdigest(),
+        ])
+        self.add_manifest(names=actual_names, sizes=actual_sizes)
+        content = self.reference.read_text(encoding="utf-8")
+        self.reference.write_text(
+            content.replace(CSV_HEADER, "# ordered_kernel_names=first.bsp;second.bsp\n" + CSV_HEADER),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate ordered_kernel_names"):
+            read_declared_manifest(self.reference)
 
     def test_success_preserves_load_order(self):
         self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
