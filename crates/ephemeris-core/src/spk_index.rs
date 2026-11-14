@@ -305,6 +305,21 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
             }
         }
     }
+    // Modification (2026-11-14): DAF arrays are allocated as disjoint
+    // inclusive word-address intervals. A descriptor that aliases another
+    // segment's coefficient words is malformed, even when no DAF summary or
+    // name record is touched. Physical records can legitimately contain
+    // multiple consecutive arrays, so compare words rather than records.
+    let mut spans: Vec<_> = segments
+        .iter()
+        .map(|segment| (segment.initial_address, segment.final_address))
+        .collect();
+    spans.sort_unstable_by_key(|&(initial, _)| initial);
+    if spans.windows(2).any(|pair| pair[1].0 <= pair[0].1) {
+        return Err(SpkIndexError::InvalidFile(
+            "overlapping DAF segment data arrays",
+        ));
+    }
     Ok(SpkIndex {
         byte_order: order,
         segments,
