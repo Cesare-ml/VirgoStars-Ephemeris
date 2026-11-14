@@ -351,11 +351,9 @@ pub fn direct_spk_state<R: Read + Seek>(
     // Pure relative tolerance grows with |INIT| and can otherwise exceed
     // the whole record width at extreme finite ET. A >25%-record midpoint
     // shift cannot be justified as harmless binary64 rounding.
-    let midpoint_tolerance =
-        (32.0 * f64::EPSILON * epoch_scale).min(0.25 * layout.interval);
+    let midpoint_tolerance = (32.0 * f64::EPSILON * epoch_scale).min(0.25 * layout.interval);
     let radius_tolerance = 32.0 * f64::EPSILON * layout.interval.abs();
-    if !expected_midpoint.is_finite()
-        || expected_radius <= 0.0
+    if expected_radius <= 0.0
         || (midpoint - expected_midpoint).abs() > midpoint_tolerance
         || (radius - expected_radius).abs() > radius_tolerance
     {
