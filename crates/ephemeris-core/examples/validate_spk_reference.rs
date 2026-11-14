@@ -50,6 +50,61 @@ struct Reference {
     cases: Vec<Case>,
 }
 
+/// Accept canonical, calendar-valid UTC provenance timestamps only.
+///
+/// This timestamp records *when evidence was produced*, not the TDB/ET epoch
+/// used for any astronomical vector. Leap-second notation is deliberately
+/// excluded because the generator uses standard UTC datetimes, never :60.
+/// Modification (2026-11-14): reject ambiguous or impossible audit dates.
+fn valid_provenance_utc(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() < 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes.last() != Some(&b'Z')
+    {
+        return false;
+    }
+    if bytes.len() == 20 {
+        if bytes[19] != b'Z' {
+            return false;
+        }
+    } else if bytes[19] != b'.'
+        || bytes[20..bytes.len() - 1].is_empty()
+        || !bytes[20..bytes.len() - 1]
+            .iter()
+            .all(|digit| digit.is_ascii_digit())
+    {
+        return false;
+    }
+    let fields = [(0, 4), (5, 7), (8, 10), (11, 13), (14, 16), (17, 19)];
+    if fields
+        .iter()
+        .any(|&(start, end)| !bytes[start..end].iter().all(|digit| digit.is_ascii_digit()))
+    {
+        return false;
+    }
+    let year: u32 = value[0..4].parse().expect("four ASCII digits");
+    let month: u32 = value[5..7].parse().expect("two ASCII digits");
+    let day: u32 = value[8..10].parse().expect("two ASCII digits");
+    let hour: u32 = value[11..13].parse().expect("two ASCII digits");
+    let minute: u32 = value[14..16].parse().expect("two ASCII digits");
+    let second: u32 = value[17..19].parse().expect("two ASCII digits");
+    let leap_year =
+        year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    year != 0 && day >= 1 && day <= days_in_month && hour <= 23 && minute <= 59 && second <= 59
+}
+
 fn read_reference(content: &str) -> Result<Reference, String> {
     let mut metadata = BTreeMap::<String, String>::new();
     let mut cases = Vec::new();
@@ -154,6 +209,16 @@ fn read_reference(content: &str) -> Result<Reference, String> {
         if !metadata.contains_key(key) {
             return Err(format!("reference metadata {key} is required"));
         }
+    }
+    if !valid_provenance_utc(
+        metadata
+            .get("generated_utc")
+            .expect("generated_utc presence checked above"),
+    ) {
+        return Err(
+            "reference generated_utc must be an actual YYYY-MM-DDTHH:MM:SS[.fraction]Z UTC date"
+                .into(),
+        );
     }
     let hashes = metadata
         .get("ordered_kernel_sha256")
@@ -415,6 +480,50 @@ mod tests {
     fn duplicate_metadata_or_late_metadata_never_override_contract() {
         assert!(read_reference(&format!("# frame=J2000\n{BASELINE}")).is_err());
         assert!(read_reference(&format!("{BASELINE}# frame=J2000\n")).is_err());
+    }
+
+    #[test]
+    fn utc_provenance_requires_a_real_calendar_date_and_explicit_z() {
+        for valid in [
+            "2026-11-14T15:30:42Z",
+            "2024-02-29T23:59:59.123456Z",
+            "2000-02-29T00:00:00Z",
+            "1900-03-01T00:00:00Z",
+        ] {
+            assert!(valid_provenance_utc(valid), "expected valid: {valid}");
+            let changed = change(
+                "generated_utc=2026-11-13T00:00:00Z",
+                &format!("generated_utc={valid}"),
+            );
+            assert!(read_reference(&changed).is_ok(), "{valid}");
+        }
+        for invalid in [
+            "2026-02-30T12:00:00Z",
+            "2025-02-29T00:00:00Z",
+            "1900-02-29T00:00:00Z",
+            "0000-01-01T00:00:00Z",
+            "2026-13-01T00:00:00Z",
+            "2026-11-00T00:00:00Z",
+            "2026-11-14T24:00:00Z",
+            "2026-11-14T00:60:00Z",
+            "2026-11-14T00:00:60Z",
+            "2026-11-14T00:00:00+00:00",
+            "2026-11-14T00:00:00",
+            "2026-11-14 00:00:00Z",
+            "2026-11-14T00:00:00.Z",
+            "2026-11-14T00:00:00.2xZ",
+            "2026-11-14T00:00:00ZZ",
+        ] {
+            assert!(
+                !valid_provenance_utc(invalid),
+                "expected invalid: {invalid}"
+            );
+            let changed = change(
+                "generated_utc=2026-11-13T00:00:00Z",
+                &format!("generated_utc={invalid}"),
+            );
+            assert!(read_reference(&changed).is_err(), "{invalid}");
+        }
     }
 
     #[test]
