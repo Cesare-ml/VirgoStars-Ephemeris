@@ -176,6 +176,26 @@ class SpkSha256PreflightTests(unittest.TestCase):
                 verify(self.reference, [self.first, self.second])
         self.assertEqual(calls, 2)
 
+    def test_ctime_disagreement_alone_does_not_reject_unchanged_kernel(self):
+        """Windows can report different creation-time fields for path and FD."""
+        actual_fstat = os.fstat
+
+        def different_ctime(fd):
+            result = actual_fstat(fd)
+            return SimpleNamespace(
+                st_dev=result.st_dev,
+                st_ino=result.st_ino,
+                st_size=result.st_size,
+                st_mtime_ns=result.st_mtime_ns,
+                st_ctime_ns=result.st_ctime_ns + 1_000_000_000,
+            )
+
+        with patch("verify_spk_kernel_hashes.os.fstat", side_effect=different_ctime):
+            self.assertEqual(
+                sha256_file(self.first),
+                hashlib.sha256(self.first.read_bytes()).hexdigest(),
+            )
+
     def test_rejects_path_identity_change_between_open_and_hash(self):
         """The opened inode must still be the one inspected by path."""
         original_fstat = os.fstat
