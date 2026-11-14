@@ -101,9 +101,9 @@ pub fn checked_state_at_split_tdb<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::de441_checked_batch::checked_states_at_split_tdb;
     use crate::calendar::TimeScale;
     use crate::de441::JulianDateTdb;
+    use crate::de441_checked_batch::checked_states_at_split_tdb;
     use std::cell::Cell;
     use std::io::{self, Cursor, SeekFrom};
     use std::rc::Rc;
@@ -339,7 +339,9 @@ mod tests {
         let requests = [(Body::Mercury, Body::SolarSystemBarycenter); 3];
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &requests, fractional_tdb(), 0.000_001),
-            Err(CheckedStateError::Epoch(EpochBridgeError::PrecisionLoss { .. }))
+            Err(CheckedStateError::Epoch(
+                EpochBridgeError::PrecisionLoss { .. }
+            ))
         ));
         assert_eq!(reads.get(), 0);
         let accepted =
@@ -358,9 +360,11 @@ mod tests {
     #[test]
     fn batch_empty_requests_still_validate_epoch_and_error_budget() {
         let (mut ephemeris, reads) = reader();
-        assert!(checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), 0.0)
-            .unwrap()
-            .is_empty());
+        assert!(
+            checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), 0.0)
+                .unwrap()
+                .is_empty()
+        );
         let wrong_scale = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], wrong_scale, 0.0),
@@ -368,11 +372,15 @@ mod tests {
         ));
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), f64::INFINITY),
-            Err(CheckedStateError::Epoch(EpochBridgeError::InvalidErrorBudget))
+            Err(CheckedStateError::Epoch(
+                EpochBridgeError::InvalidErrorBudget
+            ))
         ));
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], fractional_tdb(), 0.0),
-            Err(CheckedStateError::Epoch(EpochBridgeError::PrecisionLoss { .. }))
+            Err(CheckedStateError::Epoch(
+                EpochBridgeError::PrecisionLoss { .. }
+            ))
         ));
         assert_eq!(reads.get(), 0);
     }
@@ -393,7 +401,9 @@ mod tests {
         let beyond = JulianDate::new(2_451_580, 0.5, TimeScale::Tdb).unwrap();
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &requests, beyond, 0.0),
-            Err(CheckedStateError::Ephemeris(De441Error::OutsideCoverage { .. }))
+            Err(CheckedStateError::Ephemeris(
+                De441Error::OutsideCoverage { .. }
+            ))
         ));
     }
 }
