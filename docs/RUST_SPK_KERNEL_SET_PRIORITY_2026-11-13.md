@@ -34,7 +34,7 @@ if let Some((load_index, descriptor)) = kernels.selected_segment(301, 0.0)? {
 # }
 ```
 
-The inspect method uses exactly the same last-loaded / last-covering selection as `direct_state`, now by a shared selection path. It does **not** verify Chebyshev bytes, check frame/type support, or test center-chain connectivity. Thus even a selected descriptor with unsupported frame, unsupported type, or corrupt coefficients must still cause `direct_state` to fail rather than falling back to a lower-priority kernel. Index 0 is the oldest loaded source; a successful unload changes later indexes. The method returns `Ok(None)` for missing target/time coverage, including an empty set, and `InvalidEpoch` for NaN/infinite TDB/ET. These are metadata-only synthetic contract checks and do not establish NASA/JPL numerical parity.
+The inspect method uses exactly the same last-loaded / last-covering selection as `direct_state`, now by a shared selection path. It does **not** verify Chebyshev bytes, check frame/type support, or test center-chain connectivity. Thus even a selected descriptor with unsupported frame, unsupported type, or corrupt coefficients must still cause `direct_state` to fail rather than falling back to a lower-priority kernel. Index 0 is the oldest loaded source; unloading the newest kernel does not renumber surviving sources, but may change the winning selection. The method returns `Ok(None)` for missing target/time coverage, including an empty set, and `InvalidEpoch` for NaN/infinite TDB/ET. These are metadata-only synthetic contract checks and do not establish NASA/JPL numerical parity.
 
 ### Segment precedence
 
