@@ -101,3 +101,25 @@ fn truly_unrepresentable_velocity_still_fails_closed() {
         Err(De441Error::InvalidFile("non-finite interpolated state"))
     ));
 }
+
+#[test]
+fn preserves_representable_subnormal_velocity_at_short_record_width() {
+    // With width = 2 days, d(T1)/dJD = 1. A divide-then-multiply
+    // implementation loses the smallest positive subnormal to zero.
+    let mut bytes = linear_fixture(2.0);
+    for axis in 0..3 {
+        let offset = RECORD_BYTES * 2 + (2 + axis * 2) * 8 + 8;
+        write_f64(&mut bytes, offset, f64::from_bits(1));
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    let state = eph
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1001.0),
+        )
+        .unwrap();
+    for velocity in state.velocity_km_per_day {
+        assert_eq!(velocity, f64::from_bits(1));
+    }
+}
