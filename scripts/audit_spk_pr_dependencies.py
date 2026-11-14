@@ -81,14 +81,14 @@ def audit(snapshot: object) -> list[dict]:
     for number, dependencies, description in MANIFEST:
         record = records[number]
         unmerged = [parent for parent in dependencies if not records[parent]["merged"]]
-        if record["merged"] and unmerged:
+        if record["base"]["ref"] != INTEGRATION_BRANCH:
+            status = "BASE_REVIEW"
+        elif record["merged"] and unmerged:
             status = "ORDER_CONFLICT"
         elif record["merged"]:
             status = "MERGED"
         elif record["state"] == "closed":
             status = "CLOSED_UNMERGED"
-        elif record["base"]["ref"] != INTEGRATION_BRANCH:
-            status = "BASE_REVIEW"
         elif unmerged:
             status = "BLOCKED"
         elif record["draft"]:
@@ -151,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({
             "repository": REPOSITORY,
             "integration_branch": INTEGRATION_BRANCH,
+            "source": "GitHub REST" if args.live else "user-supplied offline snapshot",
             "scientific_accuracy_certified": False,
             "merge_authorized": False,
             "pull_requests": report,
