@@ -35,11 +35,18 @@ fn put_i32(bytes: &mut [u8], offset: usize, value: i32) {
 // each record, with T0 = 100*record + 10*granule + axis, T1 = 2.
 // This fixture is not an independent NASA/JPL astronomical reference.
 fn fixture() -> Vec<u8> {
+    fixture_starting_at(START_TDB_JD)
+}
+
+// Shift the exact same synthetic coefficient layout to a specified TDB JD.
+// The 128-day window can model an edge of the full DE441 epoch range without
+// allocating a huge external ephemeris file.
+fn fixture_starting_at(start_tdb_jd: f64) -> Vec<u8> {
     let mut bytes = vec![0; RECORD_BYTES * 6];
     let title = b"JPL Planetary Ephemeris DE441";
     bytes[..title.len()].copy_from_slice(title);
-    put_f64(&mut bytes, 2652, START_TDB_JD);
-    put_f64(&mut bytes, 2660, END_TDB_JD);
+    put_f64(&mut bytes, 2652, start_tdb_jd);
+    put_f64(&mut bytes, 2660, start_tdb_jd + 128.0);
     put_f64(&mut bytes, 2668, 32.0);
     put_f64(&mut bytes, 2688, 81.0);
     put_i32(&mut bytes, 2840, 441);
@@ -56,7 +63,7 @@ fn fixture() -> Vec<u8> {
 
     for record in 0..4 {
         let base = RECORD_BYTES * (record + 2);
-        let record_start = START_TDB_JD + record as f64 * 32.0;
+        let record_start = start_tdb_jd + record as f64 * 32.0;
         put_f64(&mut bytes, base, record_start);
         put_f64(&mut bytes, base + 8, record_start + 32.0);
         for granule in 0..2 {
@@ -143,4 +150,46 @@ fn negative_out_of_coverage_does_not_clamp_to_first_record() {
     }
     // An invalid lookup must not poison a later valid lookup.
     assert_eq!(mercury(&mut eph, -64.0), [-2.0, -1.0, 0.0]);
+}
+
+#[test]
+fn de441_era_extremes_preserve_record_selection_and_inclusive_endpoints() {
+    // These are DE441-like endpoint Julian dates, but coefficient records
+    // remain entirely synthetic. No real kernel or JPL reference is read.
+    for start in [-3_027_215.5, 7_930_192.5 - 128.0] {
+        let end = start + 128.0;
+        let mut eph = De441::new(Cursor::new(fixture_starting_at(start))).unwrap();
+        assert_eq!(eph.coverage(), (JulianDateTdb(start), JulianDateTdb(end)));
+
+        for (offset, expected) in [
+            (0.0, [-2.0, -1.0, 0.0]),
+            (16.0, [8.0, 9.0, 10.0]),
+            (32.0, [98.0, 99.0, 100.0]),
+            (96.0, [298.0, 299.0, 300.0]),
+            (127.5, [311.875, 312.875, 313.875]),
+            (128.0, [312.0, 313.0, 314.0]),
+        ] {
+            assert_eq!(
+                mercury(&mut eph, start + offset),
+                expected,
+                "JD {}",
+                start + offset
+            );
+        }
+
+        for outside in [start - 1.0, end + 1.0] {
+            assert!(matches!(
+                eph.state(
+                    Body::Mercury,
+                    Body::SolarSystemBarycenter,
+                    JulianDateTdb(outside)
+                ),
+                Err(De441Error::OutsideCoverage { .. })
+            ));
+        }
+
+        // After invalid and far-end queries, the first record remains
+        // addressable; cache state must not change the returned vector.
+        assert_eq!(mercury(&mut eph, start), [-2.0, -1.0, 0.0]);
+    }
 }
