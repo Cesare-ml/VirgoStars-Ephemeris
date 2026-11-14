@@ -100,20 +100,37 @@ fn nonzero_positive_and_negative_tilts_preserve_cartesian_motion_derivatives() {
 
 #[test]
 fn tilted_longitude_rate_remains_continuous_across_zero_and_two_pi() {
-    // The tiny negative Y component starts just below longitude 2pi.
-    // With a positive Y velocity, the two finite-difference points straddle 0.
-    let state = synthetic_state([1_000_000.0, -0.1, 0.0], [0.0, 100.0, 0.0]);
-    let tilt = 0.409_092_8;
+    // Check both wrap directions: increasing longitude crosses 2pi -> 0,
+    // while decreasing longitude crosses 0 -> 2pi. A raw subtraction would
+    // spuriously report a large jump of opposite sign in both cases.
     let half_step_days = 0.01;
-    let before = project_fixed_axes(&shifted(state, -half_step_days), tilt).unwrap();
-    let after = project_fixed_axes(&shifted(state, half_step_days), tilt).unwrap();
-    assert!(before.longitude_rad > TAU - 0.001);
-    assert!(after.longitude_rad < 0.001);
+    for (initial_y, transverse_rate, increasing) in
+        [(-0.1, 100.0, true), (0.1, -100.0, false)]
+    {
+        for tilt in [0.409_092_8, -0.27] {
+            let state = synthetic_state(
+                [1_000_000.0, initial_y, 0.0],
+                [0.0, transverse_rate, 0.0],
+            );
+            let before = project_fixed_axes(&shifted(state, -half_step_days), tilt).unwrap();
+            let after = project_fixed_axes(&shifted(state, half_step_days), tilt).unwrap();
+            if increasing {
+                assert!(before.longitude_rad > TAU - 0.001);
+                assert!(after.longitude_rad < 0.001);
+            } else {
+                assert!(before.longitude_rad < 0.001);
+                assert!(after.longitude_rad > TAU - 0.001);
+            }
 
-    let projection = project_fixed_axes(&state, tilt).unwrap();
-    let numeric = centered_rates(state, tilt, half_step_days);
-    assert!(projection.longitude_rate_rad_per_day > 0.0);
-    assert_near(projection.longitude_rate_rad_per_day, numeric[0], 2.0e-11);
-    assert_near(projection.latitude_rate_rad_per_day, numeric[1], 2.0e-11);
-    assert_near(projection.distance_rate_km_per_day, numeric[2], 5.0e-4);
+            let projection = project_fixed_axes(&state, tilt).unwrap();
+            let numeric = centered_rates(state, tilt, half_step_days);
+            assert_eq!(
+                projection.longitude_rate_rad_per_day.signum(),
+                transverse_rate.signum(),
+            );
+            assert_near(projection.longitude_rate_rad_per_day, numeric[0], 2.0e-11);
+            assert_near(projection.latitude_rate_rad_per_day, numeric[1], 2.0e-11);
+            assert_near(projection.distance_rate_km_per_day, numeric[2], 5.0e-4);
+        }
+    }
 }
