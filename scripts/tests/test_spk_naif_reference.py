@@ -22,6 +22,7 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "spk_naif_reference.py"
@@ -192,6 +193,54 @@ class SpkReferenceTests(unittest.TestCase):
         self.assertEqual(REFERENCE.main(command), 0)
         self.second.unlink()
         self.assertEqual(REFERENCE.main(command), 1)
+
+    def test_atomic_reference_publish_creates_verified_csv_without_temporary_files(self):
+        csv = self.reference()
+        destination = Path(self.folder.name) / "naif.csv"
+        REFERENCE.write_reference_atomic(destination, csv, overwrite=False)
+        self.assertEqual(destination.read_text(encoding="utf-8"), csv)
+        REFERENCE.verify_reference_hashes(destination.read_text(encoding="utf-8"), self.paths)
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+    def test_atomic_reference_publish_never_overwrites_existing_output(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        destination.write_text("existing scientific evidence", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "output exists"):
+            REFERENCE.write_reference_atomic(destination, "new evidence", overwrite=False)
+        self.assertEqual(destination.read_text(encoding="utf-8"), "existing scientific evidence")
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+    def test_atomic_reference_publish_race_cannot_overwrite_new_competing_file(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        actual_link = REFERENCE.os.link
+
+        def competing_creation(source, target):
+            destination.write_text("created after the earlier existence check", encoding="utf-8")
+            return actual_link(source, target)
+
+        with patch.object(REFERENCE.os, "link", side_effect=competing_creation):
+            with self.assertRaisesRegex(ValueError, "output exists"):
+                REFERENCE.write_reference_atomic(destination, "new scientific data", overwrite=False)
+        self.assertEqual(
+            destination.read_text(encoding="utf-8"),
+            "created after the earlier existence check",
+        )
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+    def test_atomic_reference_publish_replaces_existing_only_on_explicit_opt_in(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        destination.write_text("old", encoding="utf-8")
+        REFERENCE.write_reference_atomic(destination, "new\n", overwrite=True)
+        self.assertEqual(destination.read_text(encoding="utf-8"), "new\n")
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+    def test_atomic_reference_publish_write_failure_removes_staging_file(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        with patch.object(REFERENCE.os, "fsync", side_effect=OSError("injected fsync failure")):
+            with self.assertRaisesRegex(OSError, "injected fsync failure"):
+                REFERENCE.write_reference_atomic(destination, "not durable", overwrite=False)
+        self.assertFalse(destination.exists())
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
 
 
 if __name__ == "__main__":
