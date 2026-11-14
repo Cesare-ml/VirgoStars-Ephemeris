@@ -113,3 +113,69 @@ fn accepts_single_granule_at_one_ulp_time_step() {
         (JulianDateTdb(start), JulianDateTdb(start + one_ulp))
     );
 }
+
+fn two_record_fixture(start: f64, step: f64, granules: i32) -> Vec<u8> {
+    let mut bytes = fixture(start, step, granules);
+    // Duplicate the synthetic first coefficient record, update the
+    // second record's time tags and the header's final coverage date.
+    let record = bytes[RECORD_BYTES * 2..RECORD_BYTES * 3].to_vec();
+    bytes.extend_from_slice(&record);
+    put_f64(&mut bytes, 2660, start + 2.0 * step);
+    put_f64(&mut bytes, RECORD_BYTES * 3, start + step);
+    put_f64(&mut bytes, RECORD_BYTES * 3 + 8, start + 2.0 * step);
+    bytes
+}
+
+#[test]
+fn rejects_granule_collapse_only_in_last_principal_record() {
+    // Binary64 spacing doubles at 2^20 JD. The first record has four
+    // representable half-ULPs, enough for three granules. The second
+    // has only two full ULPs, so its internal boundaries collide.
+    let pivot = 1_048_576.0_f64;
+    let higher_ulp = f64::from_bits(pivot.to_bits() + 1) - pivot;
+    let step = 2.0 * higher_ulp;
+    let start = pivot - step;
+    assert!(
+        De441::new(Cursor::new(fixture(start, step, 3))).is_ok(),
+        "the first record alone must have distinct granule boundaries"
+    );
+    assert_unresolvable(two_record_fixture(start, step, 3));
+}
+
+#[test]
+fn valid_granule_boundary_selects_next_series_and_final_endpoint_is_inclusive() {
+    let mut bytes = fixture(1000.0, 32.0, 2);
+    // Each Mercury T0 coefficient stores a unique (granule, axis)
+    // marker. Checking the actual public state API proves that a
+    // boundary selects the following granule and the last endpoint
+    // selects the preceding one, not a zero-duration phantom record.
+    for granule in 0..2 {
+        for axis in 0..3 {
+            let offset = RECORD_BYTES * 2 + (2 + granule * 3 + axis) * 8;
+            put_f64(&mut bytes, offset, (granule * 100 + axis) as f64);
+        }
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    let immediately_before = f64::from_bits(1016.0_f64.to_bits() - 1);
+    for (epoch, selected_granule) in [
+        (1000.0, 0),
+        (immediately_before, 0),
+        (1016.0, 1),
+        (1032.0, 1),
+    ] {
+        let state = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(epoch),
+            )
+            .expect("synthetic constant coefficients must interpolate");
+        for axis in 0..3 {
+            assert_eq!(
+                state.position_km[axis],
+                (selected_granule * 100 + axis) as f64
+            );
+            assert_eq!(state.velocity_km_per_day[axis], 0.0);
+        }
+    }
+}
