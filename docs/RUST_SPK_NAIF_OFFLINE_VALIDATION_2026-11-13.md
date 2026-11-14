@@ -15,6 +15,9 @@ Use the NAIF Toolkit's independent SPICE implementation `spkezr` with **exactly 
 - **Units:** **km** for X/Y/Z and **km/s** for VX/VY/VZ, as returned by NAIF `spkezr`.
 - **Provenance:** NAIF Toolkit version, independent raw output/query or script, generated UTC, ordered SPK filename, byte length and SHA-256 digest. Record the actual origin/rights of each kernel and the reference output. Do not commit SPK files or generated external reference output without separate rights review.
 
+The Rust reference CSV comparator now requires `generated_utc` to contain a **calendar-valid UTC timestamp** in `YYYY-MM-DDTHH:MM:SSZ` format, optionally followed by fractional seconds before `Z` (for example `2026-11-14T15:30:42.123Z`). Gregorian month/day rules, including leap years, and hour/minute/second bounds are checked. Local timezone offsets, malformed or impossible dates, year zero and leap-second `:60` notation are rejected; the independent Python producer uses ordinary UTC `datetime` and never emits `:60`. This metadata timestamp records when the **evidence was generated**; it is **not** the TDB/ET epoch of a reference vector and the format check does not establish provenance or scientific accuracy.
+
+
 Source: [official NAIF `spkezr_c` reference](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkezr_c.html), which specifies `et` in TDB seconds past J2000, `NONE` as geometric, and return units in km and km/sec.
 
 ## Required local CSV
@@ -178,3 +181,5 @@ The existing `scripts/tests/test_spk_naif_reference.py` suite now includes five 
 **Modification record:** 2026-11-13 — updated the original CPAL-1.0 Python validation helper and tests; linked this orchestration workflow without adding a new duplicate script, extra runtime dependency to Rust, dataset, secret, release, deployment or automatic production action.
 
 **Modification record (2026-11-14):** rehash reference CSV, generator source and ordered local kernels in a `finally` block **even when Cargo returns nonzero or raises an operating-system error**. No comparator failure or input mutation can produce a success receipt. This does not make the JSON cryptographically signed, make the files immutable, authenticate a NAIF toolkit/kernel or demonstrate real-data positional accuracy.
+
+2026-11-14 (UTC evidence guard): Rust comparator now rejects impossible or ambiguous `generated_utc` metadata with deterministic tests using synthetic CSVs. Kernel data, reference values and astronomical algorithms are untouched; real NAIF validation remains outstanding.
