@@ -25,6 +25,7 @@ const ANGLE_HEADER = 'armc_deg,ascendant_deg,midheaven_deg,true_obliquity_deg';
 const LUNAR_HEADER = 'point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day';
 const LUNAR_POINTS = Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 const EQUATORIAL_HEADER = 'target,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tdb_day,declination_deg_per_tdb_day,distance_au_per_tdb_day';
+const HORIZONTAL_HEADER = 'true_altitude_deg,azimuth_north_east_deg,azimuth_south_west_deg';
 
 /**
  * Construct an explicit offline provider. It returns experimental positions,
@@ -139,6 +140,23 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if ([armcDeg, ascendantDeg, midheavenDeg].some(value => value < 0 || value >= 360) || trueObliquityDeg <= 0 || trueObliquityDeg >= 90) throw new Error('Out-of-range angle CSV row');
       return Object.freeze({ armcDeg, ascendantDeg, midheavenDeg, trueObliquityDeg,
         model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME', ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast });
+    },
+    calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
+      const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];
+      if(!values.every(Number.isFinite))throw new TypeError('Finite UT1, TT, location and equatorial direction are required');
+      const lines=execute(['horizontal',...values.map(String)]);
+      if(lines.length!==2 || lines[0]!==HORIZONTAL_HEADER)throw new Error('Invalid horizontal CSV contract');
+      const parts=lines[1].split(',');
+      if(parts.length!==3 || !parts[0].trim() || !Number.isFinite(Number(parts[0])))throw new Error('Invalid horizontal CSV row');
+      const trueAltitudeDeg=Number(parts[0]);
+      let azimuthNorthEastDeg=null,azimuthSouthWestDeg=null;
+      if(parts[1]!=='undefined' || parts[2]!=='undefined') {
+        if(!parts[1].trim() || !parts[2].trim() || !Number.isFinite(Number(parts[1])) || !Number.isFinite(Number(parts[2])))throw new Error('Invalid horizontal azimuth');
+        azimuthNorthEastDeg=Number(parts[1]); azimuthSouthWestDeg=Number(parts[2]);
+        if(azimuthNorthEastDeg<0 || azimuthNorthEastDeg>=360 || azimuthSouthWestDeg<0 || azimuthSouthWestDeg>=360)throw new Error('Out-of-range horizontal azimuth');
+      }
+      if(Math.abs(trueAltitudeDeg)>90)throw new Error('Out-of-range horizontal altitude');
+      return Object.freeze({trueAltitudeDeg,azimuthNorthEastDeg,azimuthSouthWestDeg,model:'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME',warnings:Object.freeze(['NO_REFRACTION','INPUT_PARALLAX_NOT_APPLIED','NO_POLAR_MOTION'])});
     },
   });
 }

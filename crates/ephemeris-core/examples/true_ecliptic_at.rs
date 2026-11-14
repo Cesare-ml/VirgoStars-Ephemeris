@@ -19,6 +19,7 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
     julday_f64, revjul_f64, DecimalHourDateTime,
 };
 use virgostars_ephemeris_core::de441::{Body, De441};
+use virgostars_ephemeris_core::equatorial_horizontal::true_equatorial_to_horizontal;
 use virgostars_ephemeris_core::first_sky::CivilTimestamp;
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
@@ -65,6 +66,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 8 && args[1] == "horizontal" {
+        let output = true_equatorial_to_horizontal(
+            arg(2)?.parse()?,
+            arg(3)?.parse()?,
+            arg(4)?.parse()?,
+            arg(5)?.parse()?,
+            arg(6)?.parse()?,
+            arg(7)?.parse()?,
+        )?;
+        println!("true_altitude_deg,azimuth_north_east_deg,azimuth_south_west_deg");
+        match (output.azimuth_north_east_deg, output.azimuth_south_west_deg) {
+            (Some(north), Some(south)) => println!(
+                "{:.12},{:.12},{:.12}",
+                output.true_altitude_deg, north, south
+            ),
+            (None, None) => println!("{:.12},undefined,undefined", output.true_altitude_deg),
+            _ => return Err("inconsistent horizontal result".into()),
+        }
+        return Ok(());
+    }
     if args.len() == 8 && args[1] == "julday" {
         let input = DecimalHourDateTime {
             year: arg(2)?.parse()?,
@@ -186,7 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if args.len() != 3 {
         return Err(
-            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar|equatorial|heliocentric <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
+            "usage: true_ecliptic_at <classic-de441.eph> <ISO timestamp> | lunar|equatorial|heliocentric <classic-de441.eph> <ISO timestamp> | angles <JD-UT1> <JD-TT> <latitude> <east-longitude> | horizontal <JD-UT1> <JD-TT> <latitude> <east-longitude> <RA> <declination> | julday <year> <month> <day> <decimal-hour> <calendar> <scale> | revjul <JD> <calendar> <scale>".into(),
         );
     }
     let timestamp = args[2].to_str().ok_or("timestamp must be UTF-8")?;
