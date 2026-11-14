@@ -286,22 +286,31 @@ def run_validation(
         format(velocity_limit, ".17g"),
         *(str(path.resolve()) for path in paths),
     ]
-    completed = runner(
-        command,
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    # The comparator may fail or fail to start. Even on those paths, check
+    # the bytes that were entrusted to it so a mutation is never obscured by
+    # an unrelated Rust exit status or missing executable. Never emit a
+    # success receipt after either a failed comparison or a failed rehash.
+    try:
+        completed = runner(
+            command,
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        if (
+            not reference_path.is_file()
+            or hashlib.sha256(reference_path.read_bytes()).hexdigest() != original_csv_digest
+        ):
+            raise ValueError("reference CSV bytes changed during Rust comparison")
+        verify_reference_hashes(reference_path.read_text(encoding="utf-8"), paths)
     if completed.returncode != 0:
         # Keep the reference for debugging, but never write a success receipt.
         raise ValueError(
             f"Rust SPK comparator exited {completed.returncode}; "
             f"stderr={completed.stderr[-1600:]} stdout={completed.stdout[-1600:]}"
         )
-    if not reference_path.is_file() or hashlib.sha256(reference_path.read_bytes()).hexdigest() != original_csv_digest:
-        raise ValueError("reference CSV bytes changed during Rust comparison")
-    verify_reference_hashes(reference_path.read_text(encoding="utf-8"), paths)
     manifest = kernel_manifest(paths)
     receipt = {
         "status": "COMPARATOR_PASS_PROVENANCE_REVIEW_PENDING",
