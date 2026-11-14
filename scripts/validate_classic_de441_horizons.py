@@ -106,6 +106,40 @@ def preflight(
     }
 
 
+def source_provenance(*, git_runner=subprocess.run) -> dict:
+    """Pin the exact clean checkout that supplies the Rust Cargo binary.
+
+    Git's recorded HEAD alone is insufficient if tracked or untracked
+    source files can influence what Cargo compiles.
+    """
+    root = Path(__file__).resolve().parents[1]
+
+    def git(*args: str) -> str:
+        completed = git_runner(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise ValueError(f"git {' '.join(args)} failed; source must be verifiable")
+        return completed.stdout.strip()
+
+    actual_root = git("rev-parse", "--show-toplevel")
+    if not actual_root or Path(actual_root).resolve() != root.resolve():
+        raise ValueError("comparison source must be the expected Git repository root")
+    commit = git("rev-parse", "HEAD")
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise ValueError("source Git HEAD must be a complete 40-hex commit SHA")
+    if git("status", "--porcelain=v1", "--untracked-files=all"):
+        raise ValueError("source Git worktree must be clean before comparison")
+    return {
+        "source_git_commit_sha": commit,
+        "source_tree_clean": True,
+    }
+
+
 def compare(
     kernel: Path,
     reference: Path,
@@ -115,12 +149,14 @@ def compare(
     velocity_tolerance: str,
     *,
     runner=subprocess.run,
+    source_checker=source_provenance,
 ) -> dict:
-    """Run only after both pinned file digests and source header match."""
+    """Run only after pinned file digests and clean Git source are checked."""
     inputs = preflight(
         kernel, reference, kernel_sha256, reference_sha256,
         position_tolerance, velocity_tolerance,
     )
+    source = source_checker()
     command = [
         "cargo", "run", "--locked", "--quiet",
         "-p", "virgostars-ephemeris-core",
@@ -136,7 +172,8 @@ def compare(
         check=False,
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "source": source,
         "status": (
             "COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW"
             if completed.returncode == 0 else "COMPARISON_FAILED"
@@ -181,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         exit_code = 0 if report["cargo_exit_code"] == 0 else 1
     except (ValueError, OSError) as exc:
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "PREFLIGHT_FAILED",
             "scientific_validated": False,
             "error": str(exc),
