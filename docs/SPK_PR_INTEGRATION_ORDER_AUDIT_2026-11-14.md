@@ -118,12 +118,16 @@ distinguish GitHub's raw merge flag from safe dependency readiness.
 
 ### Checked live snapshot — 2026-11-14
 
-The GitHub read-only inspection performed on 2026-11-14 found that
-#148, #150, #157, and #159 were merged into `dev/ephemeris`.
-The next sequential step is **draft PR #160**, with #162 and #164
-blocked behind it; #165 is an independent scientific-coverage check.
-This is a dated observation, not a continuously updated status claim.
-Rerun `--live` to verify the status before any human review.
+The read-only GitHub inspection on **2026-11-14** found that
+#148, #150, #157, #159, and **#160** were merged into `dev/ephemeris`.
+The observed `merged_at` timestamps (UTC) increased in dependency order:
+`12:58:06`, `13:04:58`, `13:09:45`, `13:13:53`, and `13:19:10`.
+The next sequential step is **draft PR #162** (independent NAIF/SPICE
+reference generation), with #164 still blocked behind it; #165 remains
+an independent reference-breadth audit. This observation confirms
+**metadata order only**, not whether any source tree or kernel has been
+independently validated. It is a dated snapshot, not live status:
+rerun `--live` and review exact heads and CI before any integration.
 
 ## Scientific boundary and ownership
 
