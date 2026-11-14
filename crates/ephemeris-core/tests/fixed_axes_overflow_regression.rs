@@ -49,8 +49,10 @@ fn large_finite_velocity_yields_finite_representable_angular_rate() {
     relative_near(projected.distance_km, 2.0_f64.sqrt() * 1.0e100, 1.0e-14);
     assert!(projected.distance_rate_km_per_day.abs() <= 1.0e293);
     assert_eq!(projected.latitude_rate_rad_per_day, 0.0);
-    assert_eq!((projected.target, projected.center, projected.epoch),
-               (state.target, state.center, state.epoch));
+    assert_eq!(
+        (projected.target, projected.center, projected.epoch),
+        (state.target, state.center, state.epoch)
+    );
 }
 
 #[test]
