@@ -404,6 +404,41 @@ mod tests {
     }
 
     #[test]
+    fn cross_file_upstream_cycle_does_not_block_earlier_shared_ancestor() {
+        for (older_order, newer_order) in [
+            (SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian),
+            (SpkByteOrder::BigEndian, SpkByteOrder::LittleEndian),
+        ] {
+            let children = vec![
+                seg(301, 399, 2, [3.0, 4.0], [0.25, -0.5]),
+                seg(302, 399, 3, [1.0, 1.0], [-0.125, 0.75]),
+            ];
+            let parent_cycle = vec![
+                seg(399, 3, 2, [5.0, 0.0], [1.0, 0.0]),
+                seg(3, 399, 3, [7.0, 0.0], [0.0, 0.0]),
+            ];
+            let mut set = with_kernels(&[
+                (older_order, children),
+                (newer_order, parent_cycle),
+            ]);
+
+            // The two required links are from the earlier kernel, and both
+            // stop at the common ancestor 399. No link from the newer
+            // cycle is required to produce their relative state.
+            let siblings = set.relative_state(301, 302, 5.0).unwrap();
+            assert_eq!(siblings.common_ancestor_id, 399);
+            assert_eq!(siblings.position_km, [2.0, 3.0, 0.0]);
+            assert_eq!(siblings.velocity_km_per_second, [0.375, -1.25, 0.0]);
+
+            // A root-relative request requires an unbroken ancestor chain.
+            assert!(matches!(
+                set.relative_state(301, 0, 5.0),
+                Err(SpkRelativeError::Cycle { body_id: 399 })
+            ));
+        }
+    }
+
+    #[test]
     fn cycles_created_across_files_are_rejected() {
         let mut set = with_kernels(&[
             (
