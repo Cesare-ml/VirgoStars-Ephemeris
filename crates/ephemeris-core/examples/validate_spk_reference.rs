@@ -513,7 +513,10 @@ mod tests {
             "2026-11-14T00:00:00.2xZ",
             "2026-11-14T00:00:00ZZ",
         ] {
-            assert!(!valid_provenance_utc(invalid), "expected invalid: {invalid}");
+            assert!(
+                !valid_provenance_utc(invalid),
+                "expected invalid: {invalid}"
+            );
             let changed = change(
                 "generated_utc=2026-11-13T00:00:00Z",
                 &format!("generated_utc={invalid}"),
