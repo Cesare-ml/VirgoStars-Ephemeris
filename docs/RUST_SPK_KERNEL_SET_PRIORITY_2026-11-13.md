@@ -58,6 +58,14 @@ The read-only `declared_coverage_intervals_for_target` inventory reports **decla
 
 This performs kernel reads at the requested epoch, unlike the metadata-only APIs. Success means **one direct target-relative-to-declared-center** geometric state was computed at that instant, in frame 1 (J2000/ICRF), with position km and velocity km/s. It does not imply whole-interval computability, a valid chain between arbitrary target and center, light-time/apparent corrections, or independent JPL/NAIF scientific accuracy.
 
+### Evaluate a whole-kernel direct-state snapshot (2026-11-14)
+
+`SpkKernelSet::probe_direct_states_at(et)` composes the existing, authoritative `declared_target_ids()` and `probe_direct_state(target_id, et)` routines. It returns `Result<Vec<(i32, SpkDirectStateProbe)>, SpkStateError>`, **sorted by signed NAIF target ID** and containing exactly one entry per target that has a declared covering descriptor at the requested finite ET. Targets declared only outside this instant are omitted; the no-filter inventory remains available through `declared_target_ids()`. A nonfinite epoch is an outer `InvalidEpoch` error, including on an empty kernel set.
+
+Each returned probe contains the winning kernel load index, original DAF descriptor and `evaluation` result from the **actual coefficient read/interpolation**. An unsupported or corrupt highest-priority segment produces an error **inside its own probe**; no implicit fallback to older kernels occurs and independent successes for other targets are still reported. Use this diagnostic method to audit a mixed-quality SPK stack rather than the atomic success/failure semantics of a science-oriented batch relative-state query.
+
+These are **single-epoch direct** target-relative-to-selected-center samples, on the TDB seconds-past-J2000 scale, frame 1 J2000/ICRF, with km and km/s values only where evaluation succeeds. The report does not certify a full coverage interval, center-chain connectivity, physical/apparent corrections, or independent NASA/JPL reference parity.
+
 ### Segment precedence
 
 For a given target and finite epoch:
