@@ -44,7 +44,7 @@ python3 scripts/audit_spk_pr_dependencies.py --live --require-integrated
 For offline/CI regression inspection, supply an explicit snapshot keyed by
 string PR numbers. Each value must contain GitHub-compatible fields
 `number` (integer), `state` (`open`/`closed`), `merged` (boolean),
-`draft` (boolean), and `base.ref` (string):
+`draft` (boolean), `base.ref` (string), and `merged_at` (timezone-aware ISO 8601 timestamp when merged; null otherwise):
 
 ```sh
 python3 scripts/audit_spk_pr_dependencies.py --snapshot /path/to/pr-status.json --json
@@ -59,9 +59,10 @@ dependent changes** before integration.
 
 ## Status and exit contract
 
-- `MERGED`: the PR is reported merged into `dev/ephemeris` and its listed
-  prerequisites are also merged into that branch. This is a GitHub metadata
-  check, **not** an audit of equivalence or numerical accuracy.
+- `MERGED`: GitHub reports this PR merged into `dev/ephemeris`; each
+  prerequisite is validly merged **strictly earlier** according to
+  timezone-aware `merged_at` timestamps. This remains a GitHub metadata
+  check, **not** proof of integrated source equivalence or accuracy.
 - `BLOCKED`: at least one prerequisite is not **validly merged into
   `dev/ephemeris`**. A GitHub-merged parent with a wrong base or an
   earlier out-of-order merge **must not** unlock its descendants.
@@ -70,14 +71,33 @@ dependent changes** before integration.
   **Never** interpret as automatic merge permission or green CI.
 - `CLOSED_UNMERGED`: PR is closed without a merge.
 - `BASE_REVIEW`: the PR targets a branch other than `dev/ephemeris`.
-- `ORDER_CONFLICT`: a PR was marked merged while its direct prerequisite
-  does not have a valid `MERGED` audit status, including transitively.
-  This may require human reconciliation of a cherry-pick or previous merge.
+- `ORDER_CONFLICT`: a PR was marked merged while a prerequisite lacks
+  a valid `MERGED` audit status, or its recorded merge timestamp is
+  **strictly earlier** than the prerequisite's timestamp. The conflict
+  propagates transitively and requires human reconciliation.
+- `ORDER_UNVERIFIED`: a merged PR and a direct prerequisite share the
+  same recorded merge instant. The order cannot be proven from GitHub
+  timestamp precision alone; do not treat it as merged safely.
 
 Default exit is `0` for a valid status report even with blocked/draft work,
 `1` if an out-of-order merge **or a merged PR with the wrong target branch**
-exists, `2` for missing/malformed or inaccessible status input. With `--require-integrated`, exit `1` until **all eight**
+exists (or merge chronology cannot be established), `2` for missing,
+malformed or inaccessible status input. With `--require-integrated`, exit `1` until **all eight**
 manifest PRs report `MERGED` without conflicts or wrong-base metadata.
+
+### Merge timestamp verification
+
+`merged_at` is mandatory and timezone-aware for every PR marked merged.
+A missing, malformed, timezone-naive merge timestamp (or a non-null timestamp
+for an unmerged PR) is rejected with exit code `2`. The auditor normalizes
+UTC offsets before comparing instants: `12:00:00Z` and `13:00:00+01:00`
+are identical. An identical-second merge pair is classified as
+`ORDER_UNVERIFIED` and exits `1` (never silently treated as safe). The
+JSON report also includes each PR's original `merged_at` field.
+
+This is **conservative merge metadata checking**, not a Git commit-history
+or tree-equivalence proof: squashes, cherry-picks, and subsequent changes
+still require manual inspection. Offline snapshots are untrusted.
 
 ## Next review stage (advisory only)
 
