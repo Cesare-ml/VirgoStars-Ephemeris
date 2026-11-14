@@ -79,6 +79,33 @@ fn identity_states_are_zero_only_for_valid_tdb_epochs() {
     }
 }
 
+// Modification (2026-11-14): test the nearest representable epochs just
+// outside coverage, not only whole-day offsets. The identity shortcut must
+// never turn an out-of-range request into a successful zero state.
+#[test]
+fn adjacent_f64_epochs_outside_coverage_are_rejected_for_all_geometries() {
+    use virgostars_ephemeris_core::de441::De441Error;
+
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let before_start = f64::from_bits(1000.0_f64.to_bits() - 1);
+    let after_end = f64::from_bits(1032.0_f64.to_bits() + 1);
+    for jd in [before_start, after_end] {
+        for (target, center) in [
+            (Body::Mercury, Body::Mercury),
+            (Body::Mercury, Body::SolarSystemBarycenter),
+            (Body::SolarSystemBarycenter, Body::Mercury),
+        ] {
+            assert!(
+                matches!(
+                    ephemeris.state(target, center, JulianDateTdb(jd)),
+                    Err(De441Error::OutsideCoverage { .. })
+                ),
+                "epoch immediately outside coverage must fail: {jd}"
+            );
+        }
+    }
+}
+
 #[test]
 fn cubic_chebyshev_position_and_analytic_velocity_match_independent_polynomials() {
     // T0=1, T1=x, T2=2x²-1, T3=4x³-3x.
