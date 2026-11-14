@@ -35,10 +35,18 @@ class RepositoryDataHygieneTests(unittest.TestCase):
             "data/de441.eph", "kernels/DE440S.BSP", "x/foo.se1",
             "pck/site.BPC", "frames/model.tf", "leap.tls.gz",
             "nested/planet.BSP.XZ", "earth.tpc.zst", "sclk.tsc.zip",
+            # Modification (2026-11-14): layered archives and tar aliases.
+            "data/de441.eph.tar.gz", "archives/DE440.BSP.ZIP.XZ",
+            "venus.se1.TGZ", "leap.tls.tbz2", "earth.bpc.txz",
+            "nested/kernel.BSP.TAR.ZST", "sclk.tsc.zip.gz",
         ]:
             with self.subTest(name=name):
                 self.assertTrue(checker.is_kernel_path(name))
-        for name in ["src/engine.rs", "data/reference.csv", "docs/de441.eph.md", "astrometry.bsp.txt"]:
+        for name in [
+            "src/engine.rs", "data/reference.csv", "docs/de441.eph.md",
+            "astrometry.bsp.txt", "docs/bundle.tar.gz",
+            "docs/model.bsp.notes.gz", "data/reference.csv.zip",
+        ]:
             with self.subTest(name=name):
                 self.assertFalse(checker.is_kernel_path(name))
 
@@ -66,6 +74,20 @@ class RepositoryDataHygieneTests(unittest.TestCase):
             self.assertEqual(
                 checker.check_repository(root),
                 [("venus.bsp", "external kernel/ephemeris filename")],
+            )
+
+    def test_git_index_blocks_multilayer_archive_without_magic_header(self):
+        # Checking tracked names is necessary: a compressed tarball will not
+        # start with raw SPK magic and may be renamed or layered arbitrarily.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            archive = root / "MERCURY.BSP.TAR.GZ"
+            archive.write_bytes(b"synthetic placeholder, not a real kernel")
+            subprocess.run(["git", "add", archive.name], cwd=root, check=True)
+            self.assertEqual(
+                checker.check_repository(root),
+                [(archive.name, "external kernel/ephemeris filename")],
             )
 
     def test_untracked_external_file_does_not_fail_distribution_check(self):
