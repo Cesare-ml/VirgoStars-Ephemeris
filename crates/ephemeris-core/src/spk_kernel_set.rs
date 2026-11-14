@@ -200,6 +200,52 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         boundaries
     }
 
+    /// Sorted union of inclusive, declared TDB/ET coverage spans for a target.
+    ///
+    /// Overlapping intervals and intervals sharing an endpoint are coalesced.
+    /// Disjoint intervals remain separate even when their endpoints differ
+    /// by only one representable `f64` step: this is not a tolerance-based
+    /// estimate. Negative and positive zero are both returned as +0.0.
+    /// SPK index validation guarantees finite, ordered descriptor endpoints.
+    ///
+    /// This is metadata-only and retains unsupported or shadowed segments.
+    /// It cannot certify computable coverage, supported frames/types, valid
+    /// coefficients or center-chain connectivity; use `selected_segment`
+    /// and actual state evaluation for those checks. No kernel I/O is needed
+    /// after `load`. All times are TDB seconds past J2000.
+    ///
+    /// Modification (2026-11-14): report time gaps without merging across
+    /// uncovered epochs or silently filtering higher-priority declarations.
+    pub fn declared_coverage_intervals_for_target(&self, target_id: i32) -> Vec<(f64, f64)> {
+        let mut spans: Vec<(f64, f64)> = self
+            .declared_segments_for_target(target_id)
+            .into_iter()
+            .map(|(_, segment)| {
+                let start = segment.start_tdb_seconds;
+                let end = segment.end_tdb_seconds;
+                (
+                    if start == 0.0 { 0.0 } else { start },
+                    if end == 0.0 { 0.0 } else { end },
+                )
+            })
+            .collect();
+        spans.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
+
+        let mut merged: Vec<(f64, f64)> = Vec::with_capacity(spans.len());
+        for (start, end) in spans {
+            if let Some((_, last_end)) = merged.last_mut() {
+                if start <= *last_end {
+                    if end > *last_end {
+                        *last_end = end;
+                    }
+                    continue;
+                }
+            }
+            merged.push((start, end));
+        }
+        merged
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -715,6 +761,87 @@ mod tests {
         assert_eq!(set.declared_target_ids(), vec![-82, 301]);
         set.unload_last().unwrap();
         assert!(set.declared_target_ids().is_empty());
+    }
+
+    // Modification (2026-11-14): interval union is based on declared
+    // inclusive SPK coverage, not whether a segment is executable.
+    #[test]
+    fn declared_coverage_intervals_preserve_gaps_and_union_mixed_endian_overlays() {
+        let make = |target: i32, start: f64, end: f64, spk_type: i32| {
+            let mut segment = seg(target, 0, spk_type, [0.0, 0.0], [0.0, 0.0]);
+            segment.coverage_start = start;
+            segment.coverage_end = end;
+            segment
+        };
+        let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(set.declared_coverage_intervals_for_target(301).is_empty());
+        set.load(Cursor::new(kernel(
+            SpkByteOrder::LittleEndian,
+            &[
+                make(301, -10.0, -7.0, 2),
+                make(301, -5.0, -0.0, 2),
+                make(301, 3.0, 3.0, 3),
+                make(301, 6.0, 9.0, 2),
+                make(399, -100.0, 100.0, 2),
+            ],
+        )))
+        .unwrap();
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(301),
+            vec![(-10.0, -7.0), (-5.0, 0.0), (3.0, 3.0), (6.0, 9.0)]
+        );
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(301)[1]
+                .1
+                .to_bits(),
+            0.0_f64.to_bits(),
+        );
+
+        // Newer segments bridge two earlier gaps and touch existing spans.
+        // The last segment is unsupported for evaluation but still declared.
+        set.load(Cursor::new(kernel(
+            SpkByteOrder::BigEndian,
+            &[
+                make(301, -8.0, -4.0, 3),
+                make(301, -0.0, 3.0, 2),
+                make(301, 9.0, 12.0, 9),
+            ],
+        )))
+        .unwrap();
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(301),
+            vec![(-10.0, 3.0), (6.0, 12.0)]
+        );
+        assert!(set.selected_segment(301, 5.0).unwrap().is_none());
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(399),
+            vec![(-100.0, 100.0)]
+        );
+        assert!(set.declared_coverage_intervals_for_target(999).is_empty());
+
+        set.unload_last().unwrap();
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(301),
+            vec![(-10.0, -7.0), (-5.0, 0.0), (3.0, 3.0), (6.0, 9.0)]
+        );
+        set.unload_last().unwrap();
+        assert!(set.declared_coverage_intervals_for_target(301).is_empty());
+    }
+
+    #[test]
+    fn declared_coverage_intervals_do_not_bridge_one_ulp_gaps() {
+        let after_one = f64::from_bits(1.0_f64.to_bits() + 1);
+        let mut first = seg(301, 0, 2, [0.0, 0.0], [0.0, 0.0]);
+        first.coverage_start = 0.0;
+        first.coverage_end = 1.0;
+        let mut second = seg(301, 0, 3, [0.0, 0.0], [0.0, 0.0]);
+        second.coverage_start = after_one;
+        second.coverage_end = 2.0;
+        let set = with_kernels(&[(SpkByteOrder::BigEndian, vec![second, first])]);
+        assert_eq!(
+            set.declared_coverage_intervals_for_target(301),
+            vec![(0.0, 1.0), (after_one, 2.0)]
+        );
     }
 
     // Modification (2026-11-14): selection diagnostics must report the exact

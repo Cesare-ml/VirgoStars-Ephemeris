@@ -36,6 +36,17 @@ if let Some((load_index, descriptor)) = kernels.selected_segment(301, 0.0)? {
 
 The inspect method uses exactly the same last-loaded / last-covering selection as `direct_state`, now by a shared selection path. It does **not** verify Chebyshev bytes, check frame/type support, or test center-chain connectivity. Thus even a selected descriptor with unsupported frame, unsupported type, or corrupt coefficients must still cause `direct_state` to fail rather than falling back to a lower-priority kernel. Index 0 is the oldest loaded source; unloading the newest kernel does not renumber surviving sources, but may change the winning selection. The method returns `Ok(None)` for missing target/time coverage, including an empty set, and `InvalidEpoch` for NaN/infinite TDB/ET. These are metadata-only synthetic contract checks and do not establish NASA/JPL numerical parity.
 
+### Declared target inventory and coverage gaps (2026-11-14)
+
+The experimental `SpkKernelSet` also offers read-only, in-memory metadata diagnostics:
+
+- `declared_target_ids()`: sorted unique signed NAIF IDs that occur as segment **targets**, not IDs that occur only as centers.
+- `declared_segments_for_target(target_id)`: original descriptors in load/DAF order, including duplicates and masked entries.
+- `declared_coverage_boundaries_for_target(target_id)`: sorted unique raw start/end boundaries, including those inside overlapping spans.
+- `declared_coverage_intervals_for_target(target_id)`: sorted **union of inclusive declared spans** as `Vec<(f64, f64)>`. Overlaps and exactly touching endpoints merge; true gaps remain distinct, even when separated by a single binary64 step. Signed zero is normalized to positive zero.
+
+All epochs here are **TDB/ET seconds past J2000**, not UTC dates or Julian days. These inventories use only the indexed DAF descriptors after load; they do not re-read the kernel and do not evaluate position or velocity. Consequently the union is an *upper bound on possible declared target coverage*, **not a guarantee of computable states**: unsupported types/frames, corrupt coefficients, shadowing and broken center chains remain possible. Use `selected_segment(target_id, et)` to diagnose effective descriptor priority and `direct_state`/`relative_state` for actual geometric state evaluation.
+
 ### Segment precedence
 
 For a given target and finite epoch:
