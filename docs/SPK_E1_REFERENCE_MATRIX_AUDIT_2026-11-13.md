@@ -4,7 +4,7 @@
 
 ## Why this gate exists
 
-Issue [#3](https://github.com/Cesare-ml/VirgoStars-Ephemeris/issues/3) requires multiple target/observer states and at least three epochs before scientific acceptance. A validator accepting a single well-formed row could otherwise return success even though the reference set is far too narrow. The standalone [`scripts/audit_spk_e1_matrix.py`](../scripts/audit_spk_e1_matrix.py) checks **only CSV structure and case breadth**, independent of unmerged NAIF/SPK implementation PRs.
+Issue [#3](https://github.com/Cesare-ml/VirgoStars-Ephemeris/issues/3) requires multiple target/observer states and at least three epochs before scientific acceptance. A validator accepting a single well-formed row could otherwise return success even though the reference set is far too narrow. The standalone [`scripts/audit_spk_e1_matrix.py`](../scripts/audit_spk_e1_matrix.py) checks **only CSV structure and case breadth**, independent of the already-integrated NAIF/SPK implementation.
 
 The audit does *not* calculate astronomical vectors or authenticate any claimed `provider=NAIF_SPICE`, SHA-256, JPL kernel, toolkit version, or source script. Rust remains the only VirgoStars astronomical engine. Run the separate canonical Rust/NAIF comparators and verify real-kernel hashes/provenance before making any scientific claims.
 
@@ -31,7 +31,7 @@ python3 scripts/audit_spk_e1_matrix.py --plan \
   --epoch 0 --epoch 86400 --epoch 172800
 ```
 
-The 15 output lines use the exact `--case TARGET:CENTER:ET` syntax accepted by the experimental `scripts/spk_naif_reference.py generate/run` commands in unmerged drafts #162/#164. For example, the first and last printed lines are `--case 10:399:0` and `--case 5:399:172800`. Review them and pass them as repeated `--case` arguments; the planning command **does not execute** SPICE or Cargo. On Windows, use `python` and PowerShell backticks instead of bash line continuations, or issue a single-line command.
+The 15 output lines use the exact `--case TARGET:CENTER:ET` syntax accepted by the experimental `scripts/spk_naif_reference.py generate/run` commands in integrated generator and validator #162/#164. For example, the first and last printed lines are `--case 10:399:0` and `--case 5:399:172800`. Review them and pass them as repeated `--case` arguments; the planning command **does not execute** SPICE or Cargo. On Windows, use `python` and PowerShell backticks instead of bash line continuations, or issue a single-line command.
 
 For planetary test pairs the planner uses **Earth center (399)** as observer, without silently substituting barycenters or changing a caller-supplied target ID. It rejects `--planet 4 --planet 499` as **one** Mars system, nonfinite/duplicate epochs including `-0` versus `0`, and an incomplete set of planets or epochs. Actual kernel support for chosen targets, frames, centers and ET values must be established from the relevant SPK descriptors before running NAIF. This planner sets up the minimum general-purpose E1 case matrix. It can also add **candidate** near-record/segment-boundary epochs, but cannot independently establish actual SPK descriptor coverage.
 
@@ -54,7 +54,7 @@ The original fifteen cases remain, and ten additional cases are emitted at ET `8
 
 Use `--json` with `--reference` to emit one JSON document on stdout that
 other local validation tools can consume. Unlike the independent NAIF/Rust
-**numerical** receipt from draft #164, this JSON object reports only **E1
+**numerical** receipt from integrated #164, this JSON object reports only **E1
 test-matrix breadth** and must never be interpreted as verified scientific
 accuracy.
 
@@ -97,7 +97,7 @@ Invalid input yields an `issues` list and the explicit
 
 ## Optional cross-check with the NAIF/Rust numeric receipt (draft #164)
 
-The receipt from draft [#164](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/164) is an **unmerged, experimental** JSON record of a separate Rust comparator run. When both reference CSV and receipt are available, the E1 auditor accepts an optional `--receipt` argument:
+The receipt from integrated [#164](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/164) is an **experimental** JSON record of a separate Rust comparator run. When both reference CSV and receipt are available, the E1 auditor accepts an optional `--receipt` argument:
 
 ```bash
 python3 scripts/audit_spk_e1_matrix.py \
@@ -150,3 +150,6 @@ The included Python standard-library `unittest` suite uses **fabricated numeric 
 2026-11-13 (follow-up): corrected planetary-system identity when selecting independent test targets: planet center and system barycenter IDs now map to the same physical planet for coverage counting. Added regression tests without changing astronomical calculations.
 
 2026-11-13: Added original `scripts/audit_spk_e1_matrix.py`, synthetic regressions in `scripts/tests/test_spk_e1_matrix.py`, and safe Python tests in the existing three-platform development CI. Original source stays under the project's [CPAL-1.0 license](../LICENSE), [NOTICE](../NOTICE), and mandatory VirgoStars attribution; no third-party software, datasets, production changes, publication or release.
+
+
+**Integration update (2026-11-14):** The standalone matrix audit was reconciled after the SPK, reference generator, byte-hash verifier, one-command comparator and review-pending JSON receipt (#148, #150, #157, #159–#164). The auditor evaluates structural breadth and declared receipt consistency only, **not** actual local kernel hashes or NASA/JPL accuracy. External kernels and real reference vectors remain unbundled.
