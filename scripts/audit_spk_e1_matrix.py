@@ -7,6 +7,7 @@
 # Contributors retain applicable rights in their own contributions under the terms of this License.
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): fail closed on duplicate or nonstandard JSON receipt fields.
 
 """Audit minimum E1 reference *case breadth*, without evaluating astronomy.
 
@@ -310,6 +311,29 @@ def verify_run_receipt(
         raise ValueError("receipt Rust command arguments differ from declared evidence")
 
 
+def parse_strict_receipt_json(content: str) -> object:
+    """Read an audit receipt without ambiguous or nonstandard JSON values.
+
+    A duplicate key at *any* object depth or a Python-accepted NaN/Infinity
+    token makes evidence ambiguous, even when the current contract does not
+    use that field. Reject it before validating receipt fields.
+    """
+    def unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        fields: dict[str, object] = {}
+        for key, value in pairs:
+            if key in fields:
+                raise ValueError(f"duplicate receipt JSON key: {key}")
+            fields[key] = value
+        return fields
+
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"nonstandard receipt JSON constant: {value}")
+
+    return json.loads(
+        content, object_pairs_hook=unique_keys, parse_constant=reject_constant
+    )
+
+
 def audit_e1_matrix(rows: Rows) -> tuple[list[str], list[tuple[int, int]], list[float]]:
     """Require five pairs from five physical systems across >=3 shared TDB epochs."""
     epochs: dict[tuple[int, int], set[float]] = defaultdict(set)
@@ -404,7 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         reference_sha256 = hashlib.sha256(reference_bytes).hexdigest()
         receipt_checked = False
         if args.receipt is not None:
-            receipt_data = json.loads(args.receipt.read_text(encoding="utf-8"))
+            receipt_data = parse_strict_receipt_json(args.receipt.read_text(encoding="utf-8"))
             verify_run_receipt(
                 reference_content, reference_sha256, len(rows), receipt_data,
                 reference_path=args.reference,
