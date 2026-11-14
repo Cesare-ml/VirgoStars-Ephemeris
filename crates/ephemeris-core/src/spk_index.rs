@@ -559,16 +559,9 @@ mod tests {
                     let initial = first_word + 4 * slot as i32;
                     put_f64(&mut bytes, descriptor, -10.0, order);
                     put_f64(&mut bytes, descriptor + 8, 100.0, order);
-                    for (i, value) in [
-                        first_target + slot as i32,
-                        0,
-                        1,
-                        2,
-                        initial,
-                        initial + 3,
-                    ]
-                    .into_iter()
-                    .enumerate()
+                    for (i, value) in [first_target + slot as i32, 0, 1, 2, initial, initial + 3]
+                        .into_iter()
+                        .enumerate()
                     {
                         put_i32(&mut bytes, descriptor + 16 + 4 * i, value, order);
                     }
