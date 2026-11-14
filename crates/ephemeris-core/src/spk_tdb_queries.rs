@@ -109,7 +109,7 @@ pub fn relative_states_at_tdb_date<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::calendar::{TimeScale, CalendarError};
+    use crate::calendar::{CalendarError, TimeScale};
     use crate::spk_direct_state::SpkStateError;
     use std::io::Cursor;
 
@@ -165,12 +165,22 @@ mod tests {
         }
         let record = 4 * RECORD_BYTES;
         for (i, value) in [
-            5.0, 5.0,
-            position[0], velocity[0] * 5.0,
-            position[1], velocity[1] * 5.0,
-            0.0, 0.0,
-            0.0, 10.0, 8.0, 1.0,
-        ].into_iter().enumerate() {
+            5.0,
+            5.0,
+            position[0],
+            velocity[0] * 5.0,
+            position[1],
+            velocity[1] * 5.0,
+            0.0,
+            0.0,
+            0.0,
+            10.0,
+            8.0,
+            1.0,
+        ]
+        .into_iter()
+        .enumerate()
+        {
             put_f64(&mut bytes, record + i * 8, value, endian);
         }
         Cursor::new(bytes)
@@ -178,8 +188,26 @@ mod tests {
 
     fn two_kernels() -> SpkKernelSet<Cursor<Vec<u8>>> {
         let mut kernels = SpkKernelSet::new();
-        kernels.load(synthetic_kernel(399, 0, [100.0, 20.0], [3.0, -1.0], Endian::Little, 1)).unwrap();
-        kernels.load(synthetic_kernel(301, 399, [2.0, 4.0], [0.1, 0.2], Endian::Big, 1)).unwrap();
+        kernels
+            .load(synthetic_kernel(
+                399,
+                0,
+                [100.0, 20.0],
+                [3.0, -1.0],
+                Endian::Little,
+                1,
+            ))
+            .unwrap();
+        kernels
+            .load(synthetic_kernel(
+                301,
+                399,
+                [2.0, 4.0],
+                [0.1, 0.2],
+                Endian::Big,
+                1,
+            ))
+            .unwrap();
         kernels
     }
 
@@ -207,8 +235,14 @@ mod tests {
         let batch = relative_states_at_tdb_date(&mut kernels, &requests, date).unwrap();
         assert_eq!(batch.len(), requests.len());
         for (index, &(target, center)) in requests.iter().enumerate() {
-            assert_eq!(batch[index], kernels.relative_state(target, center, et).unwrap());
-            assert_eq!((batch[index].target_id, batch[index].center_id), (target, center));
+            assert_eq!(
+                batch[index],
+                kernels.relative_state(target, center, et).unwrap()
+            );
+            assert_eq!(
+                (batch[index].target_id, batch[index].center_id),
+                (target, center)
+            );
             assert_eq!(batch[index].tdb_seconds_past_j2000, et);
         }
         assert_eq!(batch[0], batch[4]);
@@ -221,10 +255,20 @@ mod tests {
         for scale in [TimeScale::Tt, TimeScale::Tai, TimeScale::Ut1] {
             let date = JulianDate::new(2_451_545, 0.5, scale).unwrap();
             let err = relative_state_at_tdb_date(&mut kernels, 301, 301, date).unwrap_err();
-            assert!(matches!(err, SpkDatedQueryError::Calendar(CalendarError::WrongTimeScale)));
-            assert!(err.source().unwrap().downcast_ref::<CalendarError>().is_some());
+            assert!(matches!(
+                err,
+                SpkDatedQueryError::Calendar(CalendarError::WrongTimeScale)
+            ));
+            assert!(err
+                .source()
+                .unwrap()
+                .downcast_ref::<CalendarError>()
+                .is_some());
             let batch_err = relative_states_at_tdb_date(&mut kernels, &[], date).unwrap_err();
-            assert!(matches!(batch_err, SpkDatedQueryError::Calendar(CalendarError::WrongTimeScale)));
+            assert!(matches!(
+                batch_err,
+                SpkDatedQueryError::Calendar(CalendarError::WrongTimeScale)
+            ));
         }
     }
 
@@ -233,13 +277,18 @@ mod tests {
         let mut kernels = two_kernels();
         let bad = JulianDate::new(1_i64 << 52, 0.5, TimeScale::Tdb).unwrap();
         let err = relative_states_at_tdb_date(&mut kernels, &[], bad).unwrap_err();
-        assert!(matches!(err, SpkDatedQueryError::Calendar(CalendarError::YearOutOfRange)));
+        assert!(matches!(
+            err,
+            SpkDatedQueryError::Calendar(CalendarError::YearOutOfRange)
+        ));
         assert_eq!(kernels.kernel_count(), 2);
         assert!(relative_states_at_tdb_date(
             &mut kernels,
             &[],
             JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap(),
-        ).unwrap().is_empty());
+        )
+        .unwrap()
+        .is_empty());
     }
 
     #[test]
@@ -258,20 +307,40 @@ mod tests {
             })
         ));
         assert!(err.source().unwrap().source().is_some());
-        assert_eq!(kernels.relative_state(301, 0, 0.0).unwrap().position_km, [86.5, 28.0, 0.0]);
+        assert_eq!(
+            kernels.relative_state(301, 0, 0.0).unwrap().position_km,
+            [86.5, 28.0, 0.0]
+        );
     }
 
     #[test]
     fn unsupported_overlay_fails_without_fallback_and_zero_identity_is_typed() {
         let mut kernels = two_kernels();
-        kernels.load(synthetic_kernel(301, 399, [1.0, 0.0], [0.0, 0.0], Endian::Little, 17)).unwrap();
+        kernels
+            .load(synthetic_kernel(
+                301,
+                399,
+                [1.0, 0.0],
+                [0.0, 0.0],
+                Endian::Little,
+                17,
+            ))
+            .unwrap();
         let date = JulianDate::new(2_451_545, 0.5, TimeScale::Tdb).unwrap();
         let err = relative_state_at_tdb_date(&mut kernels, 301, 399, date).unwrap_err();
-        assert!(matches!(err, SpkDatedQueryError::Relative(
-            SpkRelativeError::Segment(SpkStateError::UnsupportedFrame(17))
-        )));
+        assert!(matches!(
+            err,
+            SpkDatedQueryError::Relative(SpkRelativeError::Segment(
+                SpkStateError::UnsupportedFrame(17)
+            ))
+        ));
         assert!(err.source().is_some());
         kernels.unload_last().unwrap();
-        assert_eq!(relative_state_at_tdb_date(&mut kernels, 301, 301, date).unwrap().position_km, [0.0; 3]);
+        assert_eq!(
+            relative_state_at_tdb_date(&mut kernels, 301, 301, date)
+                .unwrap()
+                .position_km,
+            [0.0; 3]
+        );
     }
 }
