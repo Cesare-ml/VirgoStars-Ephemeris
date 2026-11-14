@@ -30,7 +30,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::chebyshev::evaluate_chebyshev;
+use crate::chebyshev::{evaluate_chebyshev, evaluate_chebyshev_value};
 use crate::error::EphemerisError;
 use crate::spk_index::{SpkByteOrder, SpkIndex, SpkSegmentDescriptor};
 
@@ -348,10 +348,15 @@ pub fn direct_spk_state<R: Read + Seek>(
         for i in 0..layout.component_coefficients {
             coeffs.push(read_f64(&bytes, (start + i) * 8, index.byte_order));
         }
-        let sample = evaluate_chebyshev(&coeffs, x)?;
-        values[component] = sample.value;
-        if component < 3 {
+        if segment.spk_type == 2 {
+            // Type 2 has positions only: its velocity is the derivative.
+            let sample = evaluate_chebyshev(&coeffs, x)?;
+            values[component] = sample.value;
             derivatives[component] = sample.derivative_dx / radius;
+        } else {
+            // Type 3 stores position and velocity independently. Never
+            // require an unused derivative to be representable.
+            values[component] = evaluate_chebyshev_value(&coeffs, x)?;
         }
     }
     let position_km = [values[0], values[1], values[2]];
@@ -484,6 +489,58 @@ mod tests {
             assert_eq!((s.target_id, s.center_id, s.frame_id), (499, 10, 1));
             assert_eq!(s.position_km, [100.0, 20.0, 30.0]);
             assert_eq!(s.velocity_km_per_second, [2.0, 0.0, 0.0]);
+            assert_eq!(s.tdb_seconds_past_j2000, 5.0);
+        }
+    }
+
+    // Modification (2026-11-14): a type-3 segment needs only the six
+    // polynomial values, never the derivative of the velocity polynomial.
+    #[test]
+    fn type3_does_not_reject_finite_state_for_unused_derivative_overflow() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            // Repack the existing synthetic Type-3 fixture as one 4-term
+            // record covering [0, 10] TDB/ET seconds.
+            let mut bytes = make_kernel(order, 3);
+            let record_words = 2 + 6 * 4;
+            let final_address = FIRST_WORD + record_words + 3;
+            let summary = 2 * RECORD_BYTES;
+            put_f64(&mut bytes, summary + 32, 10.0, order);
+            put_i32(
+                &mut bytes,
+                summary + 40 + 5 * 4,
+                final_address as i32,
+                order,
+            );
+            put_i32(&mut bytes, 84, (final_address + 1) as i32, order);
+            let record_base = (FIRST_WORD - 1) * 8;
+            let coefficients = [
+                [0.0, 0.0, 0.0, 8.0e307],
+                [20.0, 0.0, 0.0, 0.0],
+                [30.0, 0.0, 0.0, 0.0],
+                [7.0, 0.0, 0.0, 0.0],
+                [8.0, 0.0, 0.0, 0.0],
+                [-3.0, 0.0, 0.0, 0.0],
+            ];
+            for (component, row) in coefficients.iter().enumerate() {
+                for (index, &coefficient) in row.iter().enumerate() {
+                    put_f64(
+                        &mut bytes,
+                        record_base + (2 + 4 * component + index) * 8,
+                        coefficient,
+                        order,
+                    );
+                }
+            }
+            let footer = (final_address - 4) * 8;
+            for (index, value) in [0.0, 10.0, record_words as f64, 1.0]
+                .into_iter()
+                .enumerate()
+            {
+                put_f64(&mut bytes, footer + index * 8, value, order);
+            }
+            let s = evaluate(bytes, 499, 5.0).unwrap();
+            assert_eq!(s.position_km, [0.0, 20.0, 30.0]);
+            assert_eq!(s.velocity_km_per_second, [7.0, 8.0, -3.0]);
             assert_eq!(s.tdb_seconds_past_j2000, 5.0);
         }
     }
