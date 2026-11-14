@@ -2,7 +2,7 @@
 
 **Created 2026-11-13. Status: comparator implemented; no real-kernel SPK scientific comparison has been run or claimed.**
 
-This procedure is an experimental, deterministic, **offline** reference comparison using `SpkKernelSet<File>` and externally supplied NAIF/SPICE `spkezr` results. It is stacked on draft PRs [#148](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150), [#157](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157), and [#159](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/159). Review dependencies in order. The comparator does not import external SPICE code or kernels, make network requests, or claim independent astronomical results from its synthetic tests.
+This procedure is an experimental, deterministic, **offline** reference comparison using `SpkKernelSet<File>` and externally supplied NAIF/SPICE `spkezr` results. The underlying SPK modules are integrated on `dev/ephemeris` through [#148](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150), [#157](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157), and [#159](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/159); the Rust comparison harness is integrated through [#160](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/160). The comparator does not import external SPICE code or kernels, make network requests, or claim independent astronomical results from its synthetic tests.
 
 ## Reference contract
 
