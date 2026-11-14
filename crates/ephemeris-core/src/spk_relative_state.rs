@@ -608,7 +608,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod compensated_chain_tests {
     use super::*;
@@ -650,12 +649,7 @@ mod compensated_chain_tests {
         }
     }
 
-    fn link(
-        target: i32,
-        center: i32,
-        position: [f64; 3],
-        velocity: [f64; 3],
-    ) -> Link {
+    fn link(target: i32, center: i32, position: [f64; 3], velocity: [f64; 3]) -> Link {
         Link {
             target,
             center,
