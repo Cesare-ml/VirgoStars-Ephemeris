@@ -559,7 +559,10 @@ mod tests {
 
     #[test]
     fn optional_kernel_manifest_accepts_legacy_but_rejects_malformed_declarations() {
-        assert!(read_reference(BASELINE).unwrap().declared_kernel_files.is_none());
+        assert!(read_reference(BASELINE)
+            .unwrap()
+            .declared_kernel_files
+            .is_none());
         let parsed = read_reference(&with_manifest("one.bsp", "3")).unwrap();
         assert_eq!(
             parsed.declared_kernel_files,
@@ -599,7 +602,10 @@ mod tests {
     fn direct_rust_preflight_rejects_wrong_name_size_and_load_order() {
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let directory = std::env::temp_dir().join(format!(
             "virgostars-spk-manifest-{}-{unique}",
             std::process::id()
@@ -613,19 +619,15 @@ mod tests {
         verify_declared_kernel_files(&correct, &paths).unwrap();
 
         let wrong_name = read_reference(&with_manifest("second.bsp", "3")).unwrap();
-        assert!(
-            verify_declared_kernel_files(&wrong_name, &paths)
-                .unwrap_err()
-                .to_string()
-                .contains("filename/load-order mismatch")
-        );
+        assert!(verify_declared_kernel_files(&wrong_name, &paths)
+            .unwrap_err()
+            .to_string()
+            .contains("filename/load-order mismatch"));
         let wrong_size = read_reference(&with_manifest("first.bsp", "4")).unwrap();
-        assert!(
-            verify_declared_kernel_files(&wrong_size, &paths)
-                .unwrap_err()
-                .to_string()
-                .contains("byte size mismatch")
-        );
+        assert!(verify_declared_kernel_files(&wrong_size, &paths)
+            .unwrap_err()
+            .to_string()
+            .contains("byte size mismatch"));
         fs::remove_file(&file).unwrap();
         fs::remove_dir(&directory).unwrap();
     }
