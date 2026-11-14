@@ -118,7 +118,11 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
     if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
         return Err("at least one explicit local SPK file is required".into());
     }
-    Ok(Arguments { epochs, pairs, paths })
+    Ok(Arguments {
+        epochs,
+        pairs,
+        paths,
+    })
 }
 
 fn evaluate_sources<R: Read + Seek>(
@@ -363,13 +367,17 @@ mod tests {
     #[test]
     fn failed_batch_or_corrupt_kernel_never_writes_partial_csv() {
         let mut csv = Vec::new();
-        let error =
-            evaluate_and_render(two_sources(), &[(301, 0), (999, 0)], &[5.0], &mut csv).unwrap_err();
+        let error = evaluate_and_render(two_sources(), &[(301, 0), (999, 0)], &[5.0], &mut csv)
+            .unwrap_err();
         assert!(error.to_string().contains("request 1"));
         assert!(csv.is_empty());
-        let error =
-            evaluate_and_render([Cursor::new(vec![0_u8; 1024])], &[(301, 0)], &[5.0], &mut csv)
-                .unwrap_err();
+        let error = evaluate_and_render(
+            [Cursor::new(vec![0_u8; 1024])],
+            &[(301, 0)],
+            &[5.0],
+            &mut csv,
+        )
+        .unwrap_err();
         assert!(!error.to_string().is_empty());
         assert!(csv.is_empty());
     }
@@ -379,8 +387,19 @@ mod tests {
     #[test]
     fn repeated_epochs_render_epoch_major_csv_with_single_header() {
         let values = [
-            "--et", "10", "--pair", "301:0", "--et", "0", "--et", "5",
-            "--pair", "399:0", "--et", "5", "earth.bsp",
+            "--et",
+            "10",
+            "--pair",
+            "301:0",
+            "--et",
+            "0",
+            "--et",
+            "5",
+            "--pair",
+            "399:0",
+            "--et",
+            "5",
+            "earth.bsp",
         ]
         .map(str::to_string);
         let parsed = parse_arguments(&values).unwrap();
@@ -395,9 +414,7 @@ mod tests {
         assert_eq!(lines[0], HEADER);
         for (epoch_index, &et) in parsed.epochs.iter().enumerate() {
             for (pair_index, &(target, center)) in parsed.pairs.iter().enumerate() {
-                let fields: Vec<_> = lines[1 + epoch_index * 2 + pair_index]
-                    .split(',')
-                    .collect();
+                let fields: Vec<_> = lines[1 + epoch_index * 2 + pair_index].split(',').collect();
                 assert_eq!(fields.len(), 10);
                 assert_eq!(fields[0].parse::<f64>().unwrap(), et);
                 assert_eq!(fields[1], target.to_string());
@@ -433,8 +450,16 @@ mod tests {
         let mut duplicated = Vec::new();
         evaluate_and_render(two_sources(), &pairs, &[5.0], &mut single).unwrap();
         evaluate_and_render(two_sources(), &pairs, &[5.0, 5.0], &mut duplicated).unwrap();
-        let rows: Vec<_> = String::from_utf8(single).unwrap().lines().map(str::to_string).collect();
-        let doubles: Vec<_> = String::from_utf8(duplicated).unwrap().lines().map(str::to_string).collect();
+        let rows: Vec<_> = String::from_utf8(single)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let doubles: Vec<_> = String::from_utf8(duplicated)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect();
         assert_eq!(doubles[0..3], rows);
         assert_eq!(doubles[3..5], rows[1..3]);
     }
