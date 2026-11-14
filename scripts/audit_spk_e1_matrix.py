@@ -56,7 +56,7 @@ Rows = list[tuple[int, int, float]]
 # optional nonempty, arbitrarily long fractional seconds.
 UTC_PROVENANCE = re.compile(
     r"([0-9]{4})-([0-9]{2})-([0-9]{2})T"
-    r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]+)?Z\\Z"
+    r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?Z\Z"
 )
 
 
