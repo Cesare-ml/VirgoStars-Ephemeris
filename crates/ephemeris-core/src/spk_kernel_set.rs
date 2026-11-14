@@ -299,6 +299,40 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         }))
     }
 
+    /// Evaluate every declared target covered at one TDB/ET instant.
+    ///
+    /// Results are sorted by signed NAIF target ID, with one entry per
+    /// distinct target. Targets with no selected descriptor at this instant
+    /// are omitted; see `declared_target_ids` for the unfiltered inventory.
+    /// Each `SpkDirectStateProbe` retains the selected kernel and the
+    /// independent result/error of its actual Type-2/3 data evaluation.
+    ///
+    /// An invalid ET is an outer error even for an empty kernel set.
+    /// Evaluation failures stay inside individual probes: a corrupt or
+    /// unsupported high-priority segment is never replaced by older data,
+    /// and does not hide independent successes for other targets. This
+    /// performs coefficient I/O and does not guarantee a whole interval,
+    /// target-center chain connectivity, or real JPL/NAIF numerical parity.
+    /// Units: TDB seconds past J2000; geometric frame 1 state km and km/s.
+    ///
+    /// Modification (2026-11-14): compose existing canonical inventory
+    /// and single-target probes without a parallel segment-selection path.
+    pub fn probe_direct_states_at(
+        &mut self,
+        et: f64,
+    ) -> Result<Vec<(i32, SpkDirectStateProbe)>, SpkStateError> {
+        if !et.is_finite() {
+            return Err(SpkStateError::InvalidEpoch);
+        }
+        let mut results = Vec::new();
+        for target_id in self.declared_target_ids() {
+            if let Some(probe) = self.probe_direct_state(target_id, et)? {
+                results.push((target_id, probe));
+            }
+        }
+        Ok(results)
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -868,6 +902,89 @@ mod tests {
                 .unwrap(),
             set.direct_state(301, 5.0).unwrap()
         );
+    }
+
+    // Modification (2026-11-14): one evaluation failure must not hide
+    // valid states of other targets in a whole-kernel diagnostic snapshot.
+    #[test]
+    fn direct_probe_snapshot_is_sorted_and_preserves_individual_failures() {
+        let mut later_coverage = seg(777, 0, 2, [77.0, 0.0], [0.0, 0.0]);
+        later_coverage.coverage_start = 7.0;
+        let older = vec![
+            seg(301, 399, 2, [2.0, -1.0], [0.25, -0.5]),
+            seg(-82, 0, 3, [8.0, 1.0], [0.0, 0.0]),
+            later_coverage,
+        ];
+        let mut unsupported = seg(301, 4, 2, [40.0, 50.0], [0.0, 0.0]);
+        unsupported.frame = 17;
+        let newer = vec![seg(399, 0, 2, [3.0, 4.0], [0.0, 0.0]), unsupported];
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, older),
+            (SpkByteOrder::BigEndian, newer),
+        ]);
+
+        let probes = set.probe_direct_states_at(5.0).unwrap();
+        assert_eq!(
+            probes.iter().map(|(target, _)| *target).collect::<Vec<_>>(),
+            vec![-82, 301, 399]
+        );
+        assert_eq!(probes[0].1.kernel_index, 0);
+        assert_eq!(probes[0].1.descriptor.center_id, 0);
+        assert_eq!(
+            probes[0].1.evaluation.as_ref().unwrap().position_km,
+            [8.0, 1.0, 0.0]
+        );
+        assert_eq!(probes[1].1.kernel_index, 1);
+        assert_eq!(probes[1].1.descriptor.center_id, 4);
+        assert!(matches!(
+            &probes[1].1.evaluation,
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+        assert_eq!(probes[2].1.kernel_index, 1);
+        assert_eq!(
+            probes[2].1.evaluation.as_ref().unwrap(),
+            &set.direct_state(399, 5.0).unwrap()
+        );
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+
+        assert_eq!(
+            set.probe_direct_states_at(7.0)
+                .unwrap()
+                .iter()
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>(),
+            vec![-82, 301, 399, 777]
+        );
+        assert!(set.probe_direct_states_at(11.0).unwrap().is_empty());
+        for epoch in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(matches!(
+                set.probe_direct_states_at(epoch),
+                Err(SpkStateError::InvalidEpoch)
+            ));
+        }
+
+        set.unload_last().unwrap();
+        let restored = set.probe_direct_states_at(5.0).unwrap();
+        assert_eq!(
+            restored.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            vec![-82, 301]
+        );
+        assert_eq!(restored[1].1.kernel_index, 0);
+        assert_eq!(restored[1].1.descriptor.center_id, 399);
+        assert_eq!(
+            restored[1].1.evaluation.as_ref().unwrap(),
+            &set.direct_state(301, 5.0).unwrap()
+        );
+
+        let mut empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(empty.probe_direct_states_at(5.0).unwrap().is_empty());
+        assert!(matches!(
+            empty.probe_direct_states_at(f64::NAN),
+            Err(SpkStateError::InvalidEpoch)
+        ));
     }
 
     // Modification (2026-11-14): target inventory is sorted, unique, signed
