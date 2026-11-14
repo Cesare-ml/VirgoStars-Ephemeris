@@ -4,7 +4,7 @@
 
 The `spk_batch::relative_states_at` Rust API evaluates several geometric target-minus-center states for **one shared finite TDB/ET epoch** through a caller-loaded `SpkKernelSet`. This is a thin, deterministic orchestration layer over the *existing authoritative* Rust SPK solver, not a second astronomy implementation.
 
-For a chart with multiple bodies, callers can submit all body/center pairs once rather than managing multiple individual calls and collating potentially mismatched epochs themselves. This first implementation **does not cache state evaluations or assert a speedup**: it performs one canonical state resolution per requested pair. It also does not load, download or redistribute kernels.
+For a chart with multiple bodies, callers can submit all body/center pairs once rather than managing multiple individual calls and collating potentially mismatched epochs themselves. For a read-only shell interface to this API, see the [offline same-epoch batch CLI](SPK_BATCH_CLI_2026-11-14.md); its diagnostic CSV is not an independently produced NAIF/SPICE reference. This first implementation **does not cache state evaluations or assert a speedup**: it performs one canonical state resolution per requested pair. It also does not load, download or redistribute kernels.
 
 ## API and units
 

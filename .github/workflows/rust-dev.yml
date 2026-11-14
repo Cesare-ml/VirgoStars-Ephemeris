@@ -13,6 +13,7 @@
 # 
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): test offline SPK batch example on all CI platforms.
 
 name: Rust development CI
 
@@ -76,6 +77,8 @@ jobs:
         run: cargo test --workspace --example spk_boundary_probes --locked
       - name: Test explicit SPK state query on Linux
         run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on Linux
+        run: cargo test --workspace --example spk_batch_at --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -118,6 +121,8 @@ jobs:
         run: cargo test --workspace --example spk_boundary_probes --locked
       - name: Test explicit SPK state query on Windows
         run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on Windows
+        run: cargo test --workspace --example spk_batch_at --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -150,5 +155,7 @@ jobs:
         run: cargo test --workspace --example spk_boundary_probes --locked
       - name: Test explicit SPK state query on macOS
         run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on macOS
+        run: cargo test --workspace --example spk_batch_at --locked
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
