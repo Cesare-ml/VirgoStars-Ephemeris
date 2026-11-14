@@ -1664,19 +1664,12 @@ mod tests {
         assert!(set.is_empty());
     }
 
-
     #[test]
     fn atomic_replacement_rejects_invalid_input_without_losing_previous_stack() {
         for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
             let mut set = with_kernels(&[
-                (
-                    order,
-                    vec![seg(301, 399, 2, [2.0, 3.0], [0.5, -0.25])],
-                ),
-                (
-                    order,
-                    vec![seg(399, 0, 3, [100.0, 20.0], [-0.5, 0.125])],
-                ),
+                (order, vec![seg(301, 399, 2, [2.0, 3.0], [0.5, -0.25])]),
+                (order, vec![seg(399, 0, 3, [100.0, 20.0], [-0.5, 0.125])]),
             ]);
             let initial_count = set.kernel_count();
             let initial_selected = set.selected_segment(301, 5.0).unwrap();
@@ -1684,10 +1677,7 @@ mod tests {
             let initial_earth = set.direct_state(399, 5.0).unwrap();
             let initial_relative = set.relative_state(301, 0, 5.0).unwrap();
 
-            let good = Cursor::new(kernel(
-                order,
-                &[seg(301, 4, 3, [999.0, 42.0], [8.0, -7.0])],
-            ));
+            let good = Cursor::new(kernel(order, &[seg(301, 4, 3, [999.0, 42.0], [8.0, -7.0])]));
             let bad = Cursor::new(vec![0_u8; RECORD_BYTES]);
 
             for invalid_index in [0, 1] {
