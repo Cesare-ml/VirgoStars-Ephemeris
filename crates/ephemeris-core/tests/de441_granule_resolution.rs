@@ -287,7 +287,7 @@ fn wide_tdb_record_normalization_does_not_overflow_before_division() {
         for (axis, position) in state.position_km.iter().enumerate() {
             let expected = 10.0 + axis as f64 + (axis as f64 + 1.0) * normalized_x;
             assert_eq!(*position, expected, "epoch {epoch}, axis {axis}");
-            let velocity = (axis as f64 + 1.0) * (2.0 / step);
+            let velocity = (axis as f64 + 1.0) * 2.0 / step;
             assert_eq!(state.velocity_km_per_day[axis], velocity);
         }
     }
