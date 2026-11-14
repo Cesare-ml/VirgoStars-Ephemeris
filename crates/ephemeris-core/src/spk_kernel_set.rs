@@ -712,7 +712,9 @@ mod tests {
     #[test]
     fn declared_coverage_boundaries_are_sorted_unique_and_restore_after_unload() {
         let empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
-        assert!(empty.declared_coverage_boundaries_for_target(301).is_empty());
+        assert!(empty
+            .declared_coverage_boundaries_for_target(301)
+            .is_empty());
 
         let mut earliest = seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0]);
         earliest.coverage_start = -0.0;
@@ -739,7 +741,10 @@ mod tests {
             0.0_f64.to_bits(),
         );
         assert!(set.declared_coverage_boundaries_for_target(999).is_empty());
-        assert_eq!(set.declared_coverage_boundaries_for_target(399), vec![0.0, 10.0]);
+        assert_eq!(
+            set.declared_coverage_boundaries_for_target(399),
+            vec![0.0, 10.0]
+        );
 
         // Both start and end of an overlay are inclusive. The next
         // representable epoch after its end is no longer in that overlay.
