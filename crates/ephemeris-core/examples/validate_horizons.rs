@@ -224,7 +224,9 @@ fn parse_reference(source: &str) -> Result<Reference, String> {
         }
     }
     if !valid_horizons_query_url(metadata["query_url"]) {
-        return Err("metadata query_url must be an HTTPS JPL Horizons API request with a query".into());
+        return Err(
+            "metadata query_url must be an HTTPS JPL Horizons API request with a query".into(),
+        );
     }
     if !valid_retrieved_utc(metadata["retrieved_utc"]) {
         return Err("metadata retrieved_utc must be a valid Gregorian UTC Z timestamp".into());
