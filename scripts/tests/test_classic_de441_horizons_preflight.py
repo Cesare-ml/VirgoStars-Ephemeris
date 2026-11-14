@@ -177,8 +177,8 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
     def test_source_provenance_pins_git_head_and_clean_checkout(self):
         root = SCRIPT.resolve().parents[1]
         outputs = [
-            SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
-            SimpleNamespace(returncode=0, stdout="a" * 40 + "\\n"),
+            SimpleNamespace(returncode=0, stdout=str(root) + "\n"),
+            SimpleNamespace(returncode=0, stdout="a" * 40 + "\n"),
             SimpleNamespace(returncode=0, stdout=""),
         ]
         git_runner = mock.Mock(side_effect=outputs)
@@ -197,8 +197,8 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
     def test_dirty_checkout_is_rejected_even_with_valid_commit(self):
         root = SCRIPT.resolve().parents[1]
         responses = [
-            SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
-            SimpleNamespace(returncode=0, stdout="b" * 40 + "\\n"),
+            SimpleNamespace(returncode=0, stdout=str(root) + "\n"),
+            SimpleNamespace(returncode=0, stdout="b" * 40 + "\n"),
             SimpleNamespace(returncode=0, stdout="?? patched-untracked.rs\\n"),
         ]
         with self.assertRaisesRegex(ValueError, "worktree must be clean"):
@@ -207,9 +207,9 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
     def test_wrong_repo_invalid_head_and_git_failure_fail_closed(self):
         root = SCRIPT.resolve().parents[1]
         scenarios = [
-            ([SimpleNamespace(returncode=0, stdout=str(root / "wrong") + "\\n")], "repository root"),
+            ([SimpleNamespace(returncode=0, stdout=str(root / "wrong") + "\n")], "repository root"),
             ([
-                SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
+                SimpleNamespace(returncode=0, stdout=str(root) + "\n"),
                 SimpleNamespace(returncode=0, stdout="not-a-full-git-sha"),
             ], "40-hex"),
             ([SimpleNamespace(returncode=128, stdout="")], "failed"),
