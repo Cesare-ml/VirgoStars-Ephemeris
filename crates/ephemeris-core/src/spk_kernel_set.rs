@@ -836,12 +836,13 @@ mod tests {
             &[seg(301, 4, 2, [9.0, 0.0], [0.0, 0.0])],
         );
         // Preserve the valid indexed descriptor while corrupting the actual
-        // record footer: the loader checks DAF metadata, not coefficients.
+        // record footer RSIZE (third word): the loader checks DAF metadata,
+        // not coefficients.
         let record_words = 2 + 3 * 2;
         let last_address = INITIAL_WORD + record_words + 3;
         double(
             &mut corrupt,
-            (last_address - 4) * 8,
+            (last_address - 4) * 8 + 16,
             0.0,
             SpkByteOrder::BigEndian,
         );
