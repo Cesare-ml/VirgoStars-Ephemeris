@@ -29,6 +29,17 @@ const SECONDS_PER_DAY: f64 = 86_400.0;
 const C_KM_PER_DAY: f64 = SPEED_OF_LIGHT_KM_PER_SECOND * SECONDS_PER_DAY;
 const MAX_ITERATIONS: usize = 32;
 
+// Monotone key for finite binary64 values, used only to identify consecutive
+// representable epochs in a rounded fixed-point two-cycle.
+fn ordered_float_key(value: f64) -> u64 {
+    let bits = value.to_bits();
+    if bits >> 63 == 0 {
+        bits | (1_u64 << 63)
+    } else {
+        !bits
+    }
+}
+
 /// Reception light-time corrected target relative to Earth's center.
 ///
 /// The observation and emission epochs are TDB JD; axes are fixed ICRF.
@@ -117,23 +128,54 @@ where
     }
     let observer = barycentric_state(Body::Earth, observation_epoch)?;
     let mut emission = observation_epoch;
+    let mut previous = None;
     for _ in 0..MAX_ITERATIONS {
-        let body = barycentric_state(target, emission)?;
-        let position =
+        let mut body = barycentric_state(target, emission)?;
+        let mut position =
             std::array::from_fn::<_, 3, _>(|i| body.position_km[i] - observer.position_km[i]);
-        let range = position[0].hypot(position[1]).hypot(position[2]);
+        let mut range = position[0].hypot(position[1]).hypot(position[2]);
         if !range.is_finite() {
             return Err(LightTimeError::InvalidGeometry);
         }
         if range == 0.0 {
             return Err(LightTimeError::UndefinedDirection);
         }
-        let delay_seconds = range / SPEED_OF_LIGHT_KM_PER_SECOND;
+        let mut delay_seconds = range / SPEED_OF_LIGHT_KM_PER_SECOND;
         let next = observation_epoch.0 - delay_seconds / SECONDS_PER_DAY;
         if !next.is_finite() {
             return Err(LightTimeError::InvalidGeometry);
         }
-        if next == emission.0 {
+        // At a rounding boundary, the fixed-point map can alternate forever
+        // between two adjacent f64 Julian dates despite physical convergence.
+        // Accept only this exact adjacent two-cycle, and retain whichever
+        // candidate has the smaller unrounded light-time residual.
+        let adjacent_cycle = previous == Some(next)
+            && ordered_float_key(next).abs_diff(ordered_float_key(emission.0)) == 1;
+        if next == emission.0 || adjacent_cycle {
+            if adjacent_cycle {
+                let alternate = barycentric_state(target, JulianDateTdb(next))?;
+                let alt_position = std::array::from_fn::<_, 3, _>(|i| {
+                    alternate.position_km[i] - observer.position_km[i]
+                });
+                let alt_range = alt_position[0]
+                    .hypot(alt_position[1])
+                    .hypot(alt_position[2]);
+                if !alt_range.is_finite() || alt_range == 0.0 {
+                    return Err(LightTimeError::InvalidGeometry);
+                }
+                let alt_delay = alt_range / SPEED_OF_LIGHT_KM_PER_SECOND;
+                let residual =
+                    ((observation_epoch.0 - emission.0) * SECONDS_PER_DAY - delay_seconds).abs();
+                let alt_residual =
+                    ((observation_epoch.0 - next) * SECONDS_PER_DAY - alt_delay).abs();
+                if alt_residual < residual {
+                    emission = JulianDateTdb(next);
+                    body = alternate;
+                    position = alt_position;
+                    range = alt_range;
+                    delay_seconds = alt_delay;
+                }
+            }
             let direction = position.map(|x| x / range);
             let dot = |velocity: [f64; 3]| -> f64 {
                 direction.iter().zip(velocity).map(|(a, b)| a * b).sum()
@@ -161,6 +203,7 @@ where
                 velocity_km_per_day: velocity,
             });
         }
+        previous = Some(emission.0);
         emission = JulianDateTdb(next);
     }
     Err(LightTimeError::DidNotConverge)
@@ -171,6 +214,64 @@ mod tests {
     use super::*;
 
     const JD: f64 = 2_451_545.0;
+
+    #[test]
+    fn resolves_only_an_adjacent_two_cycle_at_binary64_resolution() {
+        let first = JD - 0.005;
+        let second = f64::from_bits(first.to_bits() + 1);
+        let state = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let position_km = if body == Body::Earth {
+                [0.0; 3]
+            } else {
+                // An artificial map that alternates between adjacent JDs.
+                let desired = if epoch.0 == first { second } else { first };
+                [
+                    (JD - desired) * SECONDS_PER_DAY * SPEED_OF_LIGHT_KM_PER_SECOND,
+                    0.0,
+                    0.0,
+                ]
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km,
+                velocity_km_per_day: [0.0; 3],
+            })
+        })
+        .unwrap();
+        assert!(state.emission_epoch.0 == first || state.emission_epoch.0 == second);
+        assert_eq!(
+            ordered_float_key(first).abs_diff(ordered_float_key(second)),
+            1
+        );
+    }
+
+    #[test]
+    fn rejects_a_nonadjacent_two_cycle() {
+        let first = JD - 0.005;
+        let second = f64::from_bits(first.to_bits() + 2);
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let position_km = if body == Body::Earth {
+                [0.0; 3]
+            } else {
+                let desired = if epoch.0 == first { second } else { first };
+                [
+                    (JD - desired) * SECONDS_PER_DAY * SPEED_OF_LIGHT_KM_PER_SECOND,
+                    0.0,
+                    0.0,
+                ]
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km,
+                velocity_km_per_day: [0.0; 3],
+            })
+        });
+        assert!(matches!(result, Err(LightTimeError::DidNotConverge)));
+    }
 
     fn linear(body: Body, epoch: JulianDateTdb) -> Result<StateVector, De441Error> {
         let (initial, rate) = match body {

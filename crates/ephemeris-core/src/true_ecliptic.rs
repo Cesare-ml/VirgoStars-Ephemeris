@@ -29,7 +29,8 @@ use crate::aberration_state::{
 use crate::coordinates::{project_fixed_axes, ProjectionError};
 use crate::de441::{Body, De441, JulianDateTdb, StateVector};
 use crate::earth_orientation::{
-    matrix_vector_multiply, true_ecliptic_of_date_matrix, OrientationError,
+    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, Matrix3x3,
+    OrientationError,
 };
 use crate::first_sky::{CivilTimestamp, SkyError};
 use crate::six_field_units::IAU_AU_KM;
@@ -48,6 +49,21 @@ pub struct TrueEclipticState {
     pub distance_au: f64,
     pub longitude_speed_deg_per_tdb_day: f64,
     pub latitude_speed_deg_per_tdb_day: f64,
+    pub distance_speed_au_per_tdb_day: f64,
+}
+
+/// Geocentric true-equator-of-date right ascension/declination in degrees,
+/// distance in AU and derivatives per reception TDB day.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrueEquatorialState {
+    pub target: Body,
+    pub reception_tdb: JulianDateTdb,
+    pub reception_tt_jd: f64,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub distance_au: f64,
+    pub right_ascension_speed_deg_per_tdb_day: f64,
+    pub declination_speed_deg_per_tdb_day: f64,
     pub distance_speed_au_per_tdb_day: f64,
 }
 
@@ -85,6 +101,14 @@ pub fn project_true_ecliptic(
     state: &AberratedGeocentricState,
     tt_jd: f64,
 ) -> Result<TrueEclipticState, TrueEclipticError> {
+    project_date_frame(state, tt_jd, true_ecliptic_of_date_matrix)
+}
+
+fn project_date_frame(
+    state: &AberratedGeocentricState,
+    tt_jd: f64,
+    matrix_at: fn(f64) -> Result<Matrix3x3, OrientationError>,
+) -> Result<TrueEclipticState, TrueEclipticError> {
     if !tt_jd.is_finite()
         || !state.observation_epoch.0.is_finite()
         || (tt_jd - state.observation_epoch.0).abs() > 1.0 / 86_400.0
@@ -100,11 +124,11 @@ pub fn project_true_ecliptic(
     {
         return Err(TrueEclipticError::InvalidState);
     }
-    let matrix = true_ecliptic_of_date_matrix(tt_jd).map_err(TrueEclipticError::Orientation)?;
+    let matrix = matrix_at(tt_jd).map_err(TrueEclipticError::Orientation)?;
     let before_jd = tt_jd - MATRIX_STEP_DAYS;
     let after_jd = tt_jd + MATRIX_STEP_DAYS;
-    let before = true_ecliptic_of_date_matrix(before_jd).map_err(TrueEclipticError::Orientation)?;
-    let after = true_ecliptic_of_date_matrix(after_jd).map_err(TrueEclipticError::Orientation)?;
+    let before = matrix_at(before_jd).map_err(TrueEclipticError::Orientation)?;
+    let after = matrix_at(after_jd).map_err(TrueEclipticError::Orientation)?;
     let position = matrix_vector_multiply(matrix, state.position_km);
     let velocity_rotated = matrix_vector_multiply(matrix, state.velocity_km_per_tdb_day);
     let before_position = matrix_vector_multiply(before, state.position_km);
@@ -146,6 +170,53 @@ pub fn project_true_ecliptic(
         return Err(TrueEclipticError::InvalidState);
     }
     Ok(result)
+}
+
+/// Project the same aberrated ICRF state to the moving true equator. The
+/// shared centered matrix derivative includes the date-frame motion.
+pub fn project_true_equatorial(
+    state: &AberratedGeocentricState,
+    tt_jd: f64,
+) -> Result<TrueEquatorialState, TrueEclipticError> {
+    let r = project_date_frame(state, tt_jd, true_equator_of_date_matrix)?;
+    Ok(TrueEquatorialState {
+        target: r.target,
+        reception_tdb: r.reception_tdb,
+        reception_tt_jd: r.reception_tt_jd,
+        right_ascension_deg: r.longitude_deg,
+        declination_deg: r.latitude_deg,
+        distance_au: r.distance_au,
+        right_ascension_speed_deg_per_tdb_day: r.longitude_speed_deg_per_tdb_day,
+        declination_speed_deg_per_tdb_day: r.latitude_speed_deg_per_tdb_day,
+        distance_speed_au_per_tdb_day: r.distance_speed_au_per_tdb_day,
+    })
+}
+
+/// Calculate geocentric true-equator-of-date coordinates from DE441 and
+/// explicit coherent TDB and TT reception epochs. Same correction and model
+/// limitations apply as for [`geocentric_true_ecliptic`].
+pub fn geocentric_true_equatorial<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    tdb: JulianDateTdb,
+    tt_jd: f64,
+) -> Result<TrueEquatorialState, TrueEclipticError> {
+    let state = geocentric_light_time_annual_aberration_analytic(ephemeris, target, tdb)
+        .map_err(TrueEclipticError::Aberration)?;
+    project_true_equatorial(&state, tt_jd)
+}
+
+/// Civil-time entry point with the same bounded, approximate time model as
+/// [`geocentric_true_ecliptic_from_civil`].
+pub fn geocentric_true_equatorial_from_civil<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    civil: CivilTimestamp,
+) -> Result<TrueEquatorialState, TrueEclipticError> {
+    let (tt, tdb) = civil
+        .to_tt_and_approximate_tdb()
+        .map_err(TrueEclipticError::CivilTime)?;
+    geocentric_true_equatorial(ephemeris, target, tdb, tt)
 }
 
 /// Compute an experimental true-ecliptic state from a caller-provided DE441

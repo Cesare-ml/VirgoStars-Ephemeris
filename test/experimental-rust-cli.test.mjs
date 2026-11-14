@@ -47,6 +47,14 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.ok(Math.abs(lunar.results[0].distanceAu - 0.0025695552898) < 1e-10);
   assert.ok(Math.abs(lunar.results[2].latitudeDeg + 3.9062) < 0.002);
   assert.ok(Object.isFrozen(lunar.results));
+  const equatorial = provider.calculateEquatorial('2026-11-10T00:00:00Z');
+  assert.equal(equatorial.results.length,10);
+  assert.equal(equatorial.frame,'IAU2006_2000B_TRUE_EQUATOR_OF_DATE');
+  assert.ok(Math.abs(equatorial.results[0].rightAscensionDeg-225.1366968864)<0.001);
+  assert.ok(Math.abs(equatorial.results[0].declinationDeg+17.0811490053)<0.001);
+  assert.ok(Object.isFrozen(equatorial.results[0]));
+  // This date previously exposed an adjacent-JD light-time iteration cycle.
+  assert.equal(provider.calculateEquatorial('1980-10-01T00:00:00Z').results.length,10);
   assert.throws(() => provider.calculate('bad date'), /exited with status/);
   const angles = provider.calculateHouseAngles({ut1JulianDay: 2461354.5, ttJulianDay: output.results[0].ttJulianDay, latitudeDeg: 41.9028, longitudeDegEast: 12.4964});
   assert.ok(Math.abs(angles.ascendantDeg - 157.82641479) < 0.01);

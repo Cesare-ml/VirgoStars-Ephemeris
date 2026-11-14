@@ -42,11 +42,18 @@ const jd = ephemeris.julianDay({year: 2000, month: 1, day: 1,
 const date = ephemeris.reverseJulianDay({julianDay: jd,
   calendar: 'gregorian', timeScale: 'ut1'});
 const lunar = ephemeris.calculateLunarPoints('2026-11-10T00:00:00Z');
+const equatorial = ephemeris.calculateEquatorial('2026-11-10T00:00:00Z');
 ```
 
 The synchronous adapter starts one process per ten-body batch and is intended
 for isolated experimentation. It validates the CSV contract and returns
 immutable, explicitly labelled results; it does not reimplement astronomy.
+`calculateEquatorial` provides right ascension and declination in degrees,
+distance in AU and corresponding rates per TDB day, in the IAU 2006/2000B
+true equator of date. Its light-time, aberration, time-scale and missing
+deflection/body-center limitations match the ecliptic result. The date-frame
+rotation and its centered derivative are computed by the same Rust routine;
+the output is experimental and is not established Swiss parity.
 The Julian-day methods are strict calendar arithmetic on the selected
 proleptic calendar and time-scale label. They do not convert UTC to UT1, nor
 normalize invalid dates or hours outside [0, 24). They are not ABI-compatible
@@ -63,7 +70,7 @@ The equivalent Rust functions are `house_angles::from_epochs` and
 
 This is **not** a drop-in `swe_calc_ut`: there is no solar gravitational
 deflection, complete nutation, full ephemeris of physical planet centers,
-Chiron, topocentric options, heliocentric/equatorial modes,
+Chiron, topocentric options, heliocentric mode,
 legacy flags or native Node binding. The modeled derivatives of the corrected
 position are not assumed identical to Swiss output speeds. A UT Julian date
 alone cannot be interpreted as UTC, TT or TDB without an explicit time model.
@@ -93,6 +100,24 @@ uses a different UT-to-TT policy; supplying UTC as UT1 can change results.
 
 The separate [experimental lunar-point model](LUNAR_NODES_AND_APOGEES_2026-11-10.md)
 has its own assumptions, reference checks and limitations.
+
+2026-11-14 equatorial follow-up: independent synthetic moving-frame rate
+checks and a local same-TT Swiss/DE441 comparison for six bodies at one epoch
+pass; these comparisons do not establish independent JPL validation or a
+general accuracy bound.
+
+A diagnostic same-TT comparison with local Swiss 0.5.17 and DE441 covered ten
+bodies at 28 quarterly dates across 1975–2026. Maximum absolute differences
+were 0.0000615° in right ascension, 0.0000838° in declination, 0.0000740°/day
+in right-ascension speed, and 0.0000290°/day in declination speed. The largest
+radial-speed difference was 0.0000605 AU/day. These are sample maxima, not
+global tolerances or proof that the speed definitions and models agree.
+
+The sweep exposed a light-time solver two-cycle at 1980-10-01 caused by the
+single-f64 Julian-date resolution. The solver now accepts only a cycle between
+adjacent representable epochs and chooses the candidate with the smaller
+light-time residual. Synthetic tests retain failure for nonadjacent cycles and
+near-light-speed nonconvergence. A local real-file regression covers the date.
 
 2026-11-14: reconciled the existing civil/aberration and 2000B development
 branches, added the moving-frame projection and CLI, and corrected the two
