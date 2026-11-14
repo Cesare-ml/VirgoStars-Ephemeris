@@ -11,6 +11,7 @@ chronology.
 | Instant (calendar, astronomical year numbering) | Expected conventional JD |
 | --- | ---: |
 | 2000-01-01 12:00 Gregorian (J2000 reference) | 2451545.0 |
+| 1970-01-01 00:00 Gregorian (civil fields; no UTC conversion) | 2440587.5 |
 | 1582-10-15 00:00 Gregorian | 2299160.5 |
 | 1582-10-05 00:00 Julian | 2299160.5 |
 | -4712-01-01 12:00 Julian (4713 BCE) | 0.0 |
@@ -20,7 +21,10 @@ Regressions also check that Gregorian 1582-10-04 is still a valid proleptic
 date (no hidden skipped days), that Julian 1900-02-29 is legal while Gregorian
 1900-02-29 and 2100-02-29 are not, and that year 0 is a leap year in
 both stated proleptic calendars. They exercise round-trips between the public
-calendar and split-JD APIs, including JD zero.
+calendar and split-JD APIs, including JD zero. A full **Gregorian 1600–1999**
+400-year cycle (146,097 midnights) and a **Julian -400 through -1**
+400-year cycle (146,100 midnights) additionally check every daily round-trip,
+including the astronomical year zero boundary in the latter cycle.
 
 ## Reproduce
 
