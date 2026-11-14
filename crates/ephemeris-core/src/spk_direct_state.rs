@@ -559,4 +559,47 @@ mod tests {
             assert!(evaluate(bytes, 499, 5.0).is_err());
         }
     }
+
+    #[test]
+    fn type2_and_type3_reject_record_grid_mismatch_in_both_byte_orders() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let record_words = if kind == 2 { 8 } else { 14 };
+                let valid = make_kernel(order, kind);
+                for record_index in 0..2 {
+                    let et = if record_index == 0 { 5.0 } else { 15.0 };
+                    let offset = (FIRST_WORD - 1 + record_index * record_words) * 8;
+                    for (word, wrong) in [(0, et + 1.0), (8, 4.0), (8, 6.0)] {
+                        let mut bytes = valid.clone();
+                        put_f64(&mut bytes, offset + word, wrong, order);
+                        assert!(
+                            matches!(
+                                evaluate(bytes, 499, et),
+                                Err(SpkStateError::InvalidSegment(
+                                    "SPK record midpoint/radius disagree with directory"
+                                ))
+                            ),
+                            "type {kind}, record {record_index}, field {word}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn type2_and_type3_accept_sub_ulp_scale_directory_roundoff() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let offset = (FIRST_WORD - 1) * 8;
+                put_f64(&mut bytes, offset, 5.0 + 10.0 * f64::EPSILON, order);
+                put_f64(&mut bytes, offset + 8, 5.0 + 10.0 * f64::EPSILON, order);
+                let state = evaluate(bytes, 499, 5.0).unwrap();
+                assert_eq!((state.target_id, state.center_id), (499, 10));
+                assert!(state.position_km.iter().all(|v| v.is_finite()));
+                assert!(state.velocity_km_per_second.iter().all(|v| v.is_finite()));
+            }
+        }
+    }
 }
