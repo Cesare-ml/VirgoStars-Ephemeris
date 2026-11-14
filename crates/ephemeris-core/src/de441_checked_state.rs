@@ -101,6 +101,7 @@ pub fn checked_state_at_split_tdb<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::de441_checked_batch::checked_states_at_split_tdb;
     use crate::calendar::TimeScale;
     use crate::de441::JulianDateTdb;
     use std::cell::Cell;
@@ -305,5 +306,94 @@ mod tests {
             Err(CheckedStateError::Ephemeris(De441Error::MissingSeries(_)))
         ));
         assert_eq!(reads.get(), 1);
+    }
+    #[test]
+    fn batch_uses_one_checked_epoch_and_one_cached_record_for_many_pairs() {
+        let (mut ephemeris, reads) = reader();
+        let requests = [
+            (Body::Mercury, Body::SolarSystemBarycenter),
+            (Body::Mercury, Body::Mercury),
+            (Body::Mercury, Body::SolarSystemBarycenter),
+        ];
+        let states =
+            checked_states_at_split_tdb(&mut ephemeris, &requests, exact_tdb(), 0.0).unwrap();
+        assert_eq!(states.len(), requests.len());
+        assert_eq!(reads.get(), 1, "all requests share the cached DE441 record");
+        assert_eq!(states[0].state.position_km, [100.0, 200.0, 300.0]);
+        assert_eq!(states[1].state.position_km, [0.0; 3]);
+        assert_eq!(states[1].state.velocity_km_per_day, [0.0; 3]);
+        assert_eq!(states[2].state, states[0].state);
+        for (index, &(target, center)) in requests.iter().enumerate() {
+            let (mut scalar_reader, _) = reader();
+            let scalar =
+                checked_state_at_split_tdb(&mut scalar_reader, target, center, exact_tdb(), 0.0)
+                    .unwrap();
+            assert_eq!(states[index], scalar);
+            assert_eq!(states[index].quantization_error_seconds, 0.0);
+        }
+    }
+
+    #[test]
+    fn batch_quantization_rejection_precedes_any_coefficient_io() {
+        let (mut ephemeris, reads) = reader();
+        let requests = [(Body::Mercury, Body::SolarSystemBarycenter); 3];
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &requests, fractional_tdb(), 0.000_001),
+            Err(CheckedStateError::Epoch(EpochBridgeError::PrecisionLoss { .. }))
+        ));
+        assert_eq!(reads.get(), 0);
+        let accepted =
+            checked_states_at_split_tdb(&mut ephemeris, &requests, fractional_tdb(), 0.001)
+                .unwrap();
+        assert_eq!(accepted.len(), requests.len());
+        assert_eq!(reads.get(), 1);
+        let reported = accepted[0].quantization_error_seconds;
+        assert!(reported > 0.000_001 && reported <= 0.001);
+        for result in accepted {
+            assert_eq!(result.state.position_km, [100.0, 200.0, 300.0]);
+            assert_eq!(result.quantization_error_seconds, reported);
+        }
+    }
+
+    #[test]
+    fn batch_empty_requests_still_validate_epoch_and_error_budget() {
+        let (mut ephemeris, reads) = reader();
+        assert!(checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), 0.0)
+            .unwrap()
+            .is_empty());
+        let wrong_scale = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &[], wrong_scale, 0.0),
+            Err(CheckedStateError::Epoch(EpochBridgeError::WrongTimeScale))
+        ));
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), f64::INFINITY),
+            Err(CheckedStateError::Epoch(EpochBridgeError::InvalidErrorBudget))
+        ));
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &[], fractional_tdb(), 0.0),
+            Err(CheckedStateError::Epoch(EpochBridgeError::PrecisionLoss { .. }))
+        ));
+        assert_eq!(reads.get(), 0);
+    }
+
+    #[test]
+    fn batch_propagates_missing_series_without_partial_results_or_fallback() {
+        let (mut ephemeris, reads) = reader();
+        let requests = [
+            (Body::Mercury, Body::SolarSystemBarycenter),
+            (Body::Venus, Body::SolarSystemBarycenter),
+            (Body::Mercury, Body::SolarSystemBarycenter),
+        ];
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &requests, exact_tdb(), 0.0),
+            Err(CheckedStateError::Ephemeris(De441Error::MissingSeries(_)))
+        ));
+        assert_eq!(reads.get(), 1);
+        let beyond = JulianDate::new(2_451_580, 0.5, TimeScale::Tdb).unwrap();
+        assert!(matches!(
+            checked_states_at_split_tdb(&mut ephemeris, &requests, beyond, 0.0),
+            Err(CheckedStateError::Ephemeris(De441Error::OutsideCoverage { .. }))
+        ));
     }
 }
