@@ -58,6 +58,10 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
             self.expected_kernel, self.expected_reference, "0.01", "0.0001",
         )
 
+    @staticmethod
+    def source_sha():
+        return "a" * 40
+
     def test_pinned_identical_bytes_and_explicit_positive_tolerances(self):
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
             receipt = validator.preflight(*self.inputs())
@@ -111,9 +115,9 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         ))
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
             result = validator.compare(
-                *self.inputs(), runner=runner,
-                source_checker=lambda: {
-                "source_git_commit_sha": "a" * 40,
+                *self.inputs(), self.source_sha(), runner=runner,
+                source_checker=lambda sha: {
+                "source_git_commit_sha": sha,
                 "source_tree_clean": True,
             },
             )
@@ -135,7 +139,7 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "kernel SHA-256 differs"):
                 validator.compare(
                     self.kernel, self.reference, "0" * 64, self.expected_reference,
-                    "0.01", "0.0001", runner=runner,
+                    "0.01", "0.0001", self.source_sha(), runner=runner,
                 )
         self.assertEqual(runner.call_count, 1)
 
@@ -145,9 +149,9 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         ))
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
             result = validator.compare(
-                *self.inputs(), runner=runner,
-                source_checker=lambda: {
-                "source_git_commit_sha": "a" * 40,
+                *self.inputs(), self.source_sha(), runner=runner,
+                source_checker=lambda sha: {
+                "source_git_commit_sha": sha,
                 "source_tree_clean": True,
             },
             )
@@ -165,6 +169,7 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
                 "--reference-sha256", self.expected_reference,
                 "--position-km", "0.01",
                 "--velocity-km-per-day", "0.0001",
+                "--source-sha", self.source_sha(),
                 "--receipt", str(receipt),
             ])
         self.assertEqual(rc, 1)
@@ -182,7 +187,7 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
             SimpleNamespace(returncode=0, stdout=""),
         ]
         git_runner = mock.Mock(side_effect=outputs)
-        evidence = validator.source_provenance(git_runner=git_runner)
+        evidence = validator.source_provenance(self.source_sha(), git_runner=git_runner)
         self.assertEqual(evidence["source_git_commit_sha"], "a" * 40)
         self.assertTrue(evidence["source_tree_clean"])
         self.assertEqual([call.args[0] for call in git_runner.call_args_list], [
@@ -198,11 +203,11 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         root = SCRIPT.resolve().parents[1]
         responses = [
             SimpleNamespace(returncode=0, stdout=str(root) + "\n"),
-            SimpleNamespace(returncode=0, stdout="b" * 40 + "\n"),
+            SimpleNamespace(returncode=0, stdout="a" * 40 + "\n"),
             SimpleNamespace(returncode=0, stdout="?? patched-untracked.rs\\n"),
         ]
         with self.assertRaisesRegex(ValueError, "worktree must be clean"):
-            validator.source_provenance(git_runner=mock.Mock(side_effect=responses))
+            validator.source_provenance(self.source_sha(), git_runner=mock.Mock(side_effect=responses))
 
     def test_wrong_repo_invalid_head_and_git_failure_fail_closed(self):
         root = SCRIPT.resolve().parents[1]
@@ -217,14 +222,32 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         for responses, reason in scenarios:
             with self.subTest(reason=reason):
                 with self.assertRaisesRegex(ValueError, reason):
-                    validator.source_provenance(git_runner=mock.Mock(side_effect=responses))
+                    validator.source_provenance(self.source_sha(), git_runner=mock.Mock(side_effect=responses))
+
+    def test_invalid_expected_source_sha_rejected_before_git(self):
+        for bad in ("0" * 39, "g" * 40, "", "a" * 41):
+            git_runner = mock.Mock()
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "exactly 40"):
+                validator.source_provenance(bad, git_runner=git_runner)
+            git_runner.assert_not_called()
+
+    def test_git_head_must_match_preapproved_sha(self):
+        root = SCRIPT.resolve().parents[1]
+        replies = [
+            SimpleNamespace(returncode=0, stdout=str(root) + "\n"),
+            SimpleNamespace(returncode=0, stdout="f" * 40 + "\n"),
+        ]
+        with self.assertRaisesRegex(ValueError, "does not match preapproved"):
+            validator.source_provenance(
+                self.source_sha(), git_runner=mock.Mock(side_effect=replies),
+            )
 
     def test_unverifiable_source_prevents_cargo_after_valid_hashes(self):
         runner = mock.Mock()
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
             with self.assertRaisesRegex(ValueError, "source tree dirty"):
                 validator.compare(
-                    *self.inputs(), runner=runner,
+                    *self.inputs(), self.source_sha(), runner=runner,
                     source_checker=mock.Mock(side_effect=ValueError("source tree dirty")),
                 )
         runner.assert_not_called()
@@ -241,6 +264,7 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
                         "--reference-sha256", self.expected_reference,
                         "--position-km", "0.01",
                         "--velocity-km-per-day", "0.0001",
+                        "--source-sha", self.source_sha(),
                         "--receipt", str(receipt),
                     ])
                 self.assertEqual(rc, 1)
