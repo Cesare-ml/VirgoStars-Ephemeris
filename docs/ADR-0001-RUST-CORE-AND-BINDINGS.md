@@ -73,11 +73,20 @@ Actual module names, API signatures and supported wheels will be confirmed by im
 ## Legal, operational and migration guardrails
 
 - Clean-room original implementation: no Swiss Ephemeris source, copied formulas/code, wrapper or vendored SPICE Toolkit without review. Cite scientific algorithms/specifications used.
-- NASA/JPL kernel availability is not permission to bundle or sublicense all data under our MIT code license. Document provenance and distribution rights; default to external user-provided/downloaded data where needed.
-- Rust library and bindings should remain free and open source, subject to final approved license and dependency/legal review. Credit attribution strategy is documented separately; avoid asserting that a nonbinding About/Credits entry is enforceable under stock MIT.
-- Do not change production VirgoStars/Astrolabio, migrate users, publish npm/PyPI packages or configure GitHub Actions as a side effect of this documentation decision.
-- Record tests for Windows, macOS and Linux (and WASM browser/Node) as support targets, not existing support.
+- NASA/JPL kernel availability is not permission to bundle or sublicense third-party data under the project's **CPAL-1.0** source code license. Document the separate provenance and distribution rights; default to externally supplied data where needed.
+- Original VirgoStars-Ephemeris source is licensed under **CPAL-1.0**, with completed Exhibits A and B. Preserve source notices, applicable source-availability duties and VirgoStars attribution. A Credits/About link alone may not meet CPAL Section 14's launch/session display obligation for graphical Larger Works; see [Licensing and credits](LICENSING_AND_CREDITS.md). Review future dependencies and external datasets separately.
+- Do not change production VirgoStars/Astrolabio, migrate users, or publish npm/PyPI packages as a side effect of this architectural decision. Read-only GitHub Actions for Rust formatting, linting and tests are allowed on `dev/ephemeris` under the owner's 2026-11-10 approval; privileged workflows, releases and automatic publication still require separate authorization.
+- Rust development CI currently runs checks on Linux, Windows and macOS for `dev/ephemeris`; this is code verification, **not** a scientific accuracy certification or a stable platform support guarantee. WASM/browser, Node and Python binding tests remain future work.
 
 ## Sintesi italiana
 
 Il motore astronomico di VirgoStars Ephemeris è scritto **una sola volta in Rust**. TypeScript, Python e browser utilizzeranno lo stesso motore attraverso binding (rispettivamente WASM/JS e PyO3 per Python). L'API Python sarà installabile con `pip` dove esistono wheel compatibili, senza riscrivere i calcoli astronomici. `astrological-functions` resta in TypeScript per la logica astrologica. È disponibile un lettore DE441 sperimentale; i binding sono ancora da implementare.
+
+## Documentation correction — 2026-11-14
+
+This ADR retains the 2026-11-09 architectural decision while correcting
+outdated MIT-license and GitHub Actions statements to match the existing
+[CPAL-1.0 license](../LICENSE), [NOTICE](../NOTICE), [contributor rules](../AGENTS.md)
+and read-only Rust CI. This is a documentation-only clarification: it does not
+change the license, release policy, astronomical implementation or binding
+availability.

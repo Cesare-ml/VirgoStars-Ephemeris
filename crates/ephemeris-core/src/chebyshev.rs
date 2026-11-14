@@ -28,11 +28,7 @@ pub struct ChebyshevSample {
     pub derivative_dx: f64,
 }
 
-/// Evaluate a Chebyshev series and its exact polynomial derivative.
-///
-/// Rejects out-of-domain x rather than extrapolating SPK record coefficients.
-/// Endpoints -1 and +1 are allowed.
-pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSample> {
+fn validate_chebyshev_input(coefficients: &[f64], x: f64) -> Result<()> {
     if coefficients.is_empty() {
         return Err(EphemerisError::EmptyCoefficients);
     }
@@ -49,6 +45,15 @@ pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSampl
     if !(-1.0..=1.0).contains(&x) {
         return Err(EphemerisError::OutsideRecord { normalized_time: x });
     }
+    Ok(())
+}
+
+/// Evaluate a Chebyshev series and its exact polynomial derivative.
+///
+/// Rejects out-of-domain x rather than extrapolating SPK record coefficients.
+/// Endpoints -1 and +1 are allowed.
+pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSample> {
+    validate_chebyshev_input(coefficients, x)?;
 
     // For k=n..1:
     //   b_k  = c_k + 2*x*b_(k+1) - b_(k+2)
@@ -76,6 +81,31 @@ pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSampl
         value,
         derivative_dx,
     })
+}
+
+/// Evaluate only the value of a Chebyshev series without its time derivative.
+///
+/// SPK type-3 stores independent position *and* velocity polynomials. A
+/// derivative of those velocity polynomials is neither needed nor used. At
+/// extreme finite coefficients a derivative can overflow while the required
+/// polynomial value remains finite; the full evaluator would reject such a
+/// legitimate value-only request.
+///
+/// Modification (2026-11-14): keep the same Clenshaw and input contract as
+/// `evaluate_chebyshev`, but avoid computing an irrelevant derivative.
+pub(crate) fn evaluate_chebyshev_value(coefficients: &[f64], x: f64) -> Result<f64> {
+    validate_chebyshev_input(coefficients, x)?;
+    let (mut b1, mut b2) = (0.0_f64, 0.0_f64);
+    for &coefficient in coefficients.iter().skip(1).rev() {
+        let b = coefficient + 2.0 * x * b1 - b2;
+        b2 = b1;
+        b1 = b;
+    }
+    let value = coefficients[0] + x * b1 - b2;
+    if !value.is_finite() {
+        return Err(EphemerisError::ArithmeticOverflow);
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -120,6 +150,35 @@ mod tests {
         let c = [1.0, 2.0, 3.0, 4.0];
         near(evaluate_chebyshev(&c, 1.0).unwrap().value, 10.0);
         near(evaluate_chebyshev(&c, -1.0).unwrap().value, -2.0);
+    }
+
+    #[test]
+    fn value_only_matches_full_chebyshev_at_interior_and_endpoints() {
+        let coefficients = [2.0, -3.0, 0.5, 1.0, 0.25];
+        for x in [-1.0, -0.75, 0.0, 0.125, 0.9, 1.0] {
+            let full = evaluate_chebyshev(&coefficients, x).unwrap();
+            let value_only = evaluate_chebyshev_value(&coefficients, x).unwrap();
+            assert!((value_only - full.value).abs() < 1e-12, "x={x}");
+        }
+        assert_eq!(
+            evaluate_chebyshev_value(&[], 0.0),
+            Err(EphemerisError::EmptyCoefficients)
+        );
+        assert!(evaluate_chebyshev_value(&[1.0], f64::NAN).is_err());
+        assert!(evaluate_chebyshev_value(&[f64::INFINITY], 0.0).is_err());
+        assert!(evaluate_chebyshev_value(&[1.0], 1.01).is_err());
+    }
+
+    #[test]
+    fn value_only_does_not_require_finite_unused_derivative() {
+        // T3(0)=0, so this polynomial has a finite value of zero at the
+        // midpoint; T3'(0)=-3, so its derivative exceeds binary64 range.
+        let coefficients = [0.0, 0.0, 0.0, 8.0e307];
+        assert_eq!(evaluate_chebyshev_value(&coefficients, 0.0), Ok(0.0));
+        assert_eq!(
+            evaluate_chebyshev(&coefficients, 0.0),
+            Err(EphemerisError::ArithmeticOverflow)
+        );
     }
 
     #[test]

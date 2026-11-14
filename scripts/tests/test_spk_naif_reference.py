@@ -183,6 +183,128 @@ class SpkReferenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "changed during NAIF generation"):
             self.reference(MutatingSpice())
 
+    def test_verify_command_works_without_spiceypy_and_fail_closed(self):
+        document = self.reference()
+        csv = Path(self.folder.name) / "naif.csv"
+        csv.write_text(document, encoding="utf-8")
+        command = [
+            "verify", "--reference", str(csv),
+            "--kernel", str(self.first), "--kernel", str(self.second)
+        ]
+        self.assertEqual(REFERENCE.main(command), 0)
+        self.second.unlink()
+        self.assertEqual(REFERENCE.main(command), 1)
+
+
+    def _comparison_input(self):
+        reference = Path(self.folder.name) / "comparison.csv"
+        reference.write_text(self.reference(), encoding="utf-8")
+        return reference
+
+    def test_compare_invokes_only_offline_canonical_rust_after_hash_checks(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+        invoked = []
+
+        def fake_run(argv, *, check):
+            invoked.append((argv, check))
+            return SimpleNamespace(returncode=0)
+
+        status = REFERENCE.compare_reference(
+            reference, self.paths, "0.001", "0.000001", runner=fake_run
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual(len(invoked), 1)
+        self.assertEqual(
+            invoked[0][0],
+            [
+                "cargo", "run", "--offline", "--locked",
+                "--example", "validate_spk_reference", "--",
+                str(reference), "0.001", "0.000001",
+                str(self.first), str(self.second),
+            ],
+        )
+        self.assertFalse(invoked[0][1])
+
+    def test_compare_rejects_invalid_tolerances_before_running_rust(self):
+        reference = self._comparison_input()
+
+        def should_not_run(*args, **kwargs):
+            self.fail("Rust must not execute on invalid thresholds")
+
+        for invalid in ("0", "-1", "nan", "inf", "1e309", "bad"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                REFERENCE.compare_reference(
+                    reference, self.paths, invalid, "1", runner=should_not_run
+                )
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                REFERENCE.compare_reference(
+                    reference, self.paths, "1", invalid, runner=should_not_run
+                )
+
+    def test_compare_rejects_bad_kernel_manifest_without_rust_execution(self):
+        reference = self._comparison_input()
+
+        def should_not_run(*args, **kwargs):
+            self.fail("Rust must not execute if kernel hashes do not match")
+
+        with self.assertRaisesRegex(ValueError, "filename/order mismatch"):
+            REFERENCE.compare_reference(
+                reference, list(reversed(self.paths)), "1", "1", runner=should_not_run
+            )
+
+    def test_compare_detects_kernel_tampering_during_rust_execution(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+
+        def mutating_run(argv, *, check):
+            self.second.write_bytes(self.second.read_bytes() + b"tampered")
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(ValueError, "byte size mismatch"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=mutating_run
+            )
+
+    def test_compare_detects_reference_change_during_rust_execution(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+
+        def mutating_run(argv, *, check):
+            with reference.open("a", encoding="utf-8") as writer:
+                writer.write("# postcheck tampering\\n")
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(ValueError, "reference CSV changed"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=mutating_run
+            )
+
+    def test_compare_propagates_nonzero_rust_exit_code(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+        code = REFERENCE.compare_reference(
+            reference, self.paths, "1", "1",
+            runner=lambda argv, *, check: SimpleNamespace(returncode=23),
+        )
+        self.assertEqual(code, 23)
+
+    def test_compare_missing_cargo_error_cannot_bypass_postchecks(self):
+        reference = self._comparison_input()
+
+        def missing_cargo(argv, *, check):
+            self.second.write_bytes(b"new content")
+            raise FileNotFoundError("cargo executable absent")
+
+        with self.assertRaisesRegex(ValueError, "byte size mismatch"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=missing_cargo
+            )
+
 
     def test_one_command_audit_emits_replayable_receipt_only_after_rust_pass(self):
         reference = Path(self.folder.name) / "reference.csv"
@@ -226,6 +348,7 @@ class SpkReferenceTests(unittest.TestCase):
                 FakeSpice(), runner=passing_rust,
             )
 
+
     def test_failed_rust_comparison_keeps_reference_but_never_success_receipt(self):
         reference = Path(self.folder.name) / "reference.csv"
         receipt = Path(self.folder.name) / "receipt.json"
@@ -240,6 +363,7 @@ class SpkReferenceTests(unittest.TestCase):
             )
         self.assertTrue(reference.exists())
         self.assertFalse(receipt.exists())
+
 
     def test_changed_kernel_while_rust_runs_invalidates_result(self):
         reference = Path(self.folder.name) / "reference.csv"
@@ -258,6 +382,7 @@ class SpkReferenceTests(unittest.TestCase):
             )
         self.assertFalse(receipt.exists())
 
+
     def test_modified_reference_while_rust_runs_invalidates_result(self):
         reference = Path(self.folder.name) / "reference.csv"
         receipt = Path(self.folder.name) / "receipt.json"
@@ -272,6 +397,79 @@ class SpkReferenceTests(unittest.TestCase):
                 FakeSpice(), runner=corrupt_reference,
             )
         self.assertFalse(receipt.exists())
+
+
+    def test_failed_rust_comparison_detects_kernel_tampering(self):
+        reference = Path(self.folder.name) / "failed-rust-reference.csv"
+        receipt = Path(self.folder.name) / "failed-rust-receipt.json"
+
+        def corrupt_and_fail(command, **options):
+            contents = bytearray(self.first.read_bytes())
+            contents[0] ^= 1
+            self.first.write_bytes(contents)
+            return subprocess.CompletedProcess(command, 1, "", "synthetic Rust failure")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_and_fail,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
+
+    def test_failed_rust_comparison_detects_reference_tampering(self):
+        reference = Path(self.folder.name) / "failed-rust-reference.csv"
+        receipt = Path(self.folder.name) / "failed-rust-receipt.json"
+
+        def corrupt_and_fail(command, **options):
+            reference.write_bytes(reference.read_bytes() + b"modified")
+            return subprocess.CompletedProcess(command, 1, "", "synthetic Rust failure")
+
+        with self.assertRaisesRegex(ValueError, "CSV bytes changed"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=corrupt_and_fail,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
+
+    def test_missing_cargo_still_rehashes_kernel_after_subprocess_error(self):
+        reference = Path(self.folder.name) / "missing-cargo-reference.csv"
+        receipt = Path(self.folder.name) / "missing-cargo-receipt.json"
+
+        def mutate_then_raise(command, **options):
+            # Keep byte size unchanged so this exercises SHA256, not the
+            # separate size-mismatch rejection path.
+            payload = bytearray(self.second.read_bytes())
+            payload[0] ^= 1
+            self.second.write_bytes(payload)
+            raise FileNotFoundError("synthetic missing cargo")
+
+        with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=mutate_then_raise,
+            )
+        self.assertFalse(receipt.exists())
+
+
+    def test_missing_cargo_without_mutation_preserves_original_error(self):
+        reference = Path(self.folder.name) / "missing-cargo-reference.csv"
+        receipt = Path(self.folder.name) / "missing-cargo-receipt.json"
+
+        def unavailable(command, **options):
+            raise FileNotFoundError("synthetic missing cargo")
+
+        with self.assertRaisesRegex(FileNotFoundError, "synthetic missing cargo"):
+            REFERENCE.run_validation(
+                self.paths, ["301:399:0"], reference, receipt, 0.001, 1e-7,
+                FakeSpice(), runner=unavailable,
+            )
+        self.assertTrue(reference.exists())
+        self.assertFalse(receipt.exists())
+
 
     def test_one_command_requires_explicit_finite_positive_limits_and_new_outputs(self):
         for bad in ("0", "-1", "inf", "nan", "abc"):
@@ -290,19 +488,6 @@ class SpkReferenceTests(unittest.TestCase):
                 self.paths, ["301:399:0"], reference, reference, 0.01, 1e-7,
                 FakeSpice(),
             )
-
-    def test_verify_command_works_without_spiceypy_and_fail_closed(self):
-        document = self.reference()
-        csv = Path(self.folder.name) / "naif.csv"
-        csv.write_text(document, encoding="utf-8")
-        command = [
-            "verify", "--reference", str(csv),
-            "--kernel", str(self.first), "--kernel", str(self.second)
-        ]
-        self.assertEqual(REFERENCE.main(command), 0)
-        self.second.unlink()
-        self.assertEqual(REFERENCE.main(command), 1)
-
 
 if __name__ == "__main__":
     unittest.main()
