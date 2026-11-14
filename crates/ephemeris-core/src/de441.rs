@@ -436,7 +436,9 @@ impl<R: Read + Seek> De441<R> {
                 derivative += c * d;
                 (t0, t1, d0, d1) = (t1, t, d1, d);
             }
-            let velocity = derivative * 2.0 / width;
+            // Modification 2026-11-14: divide first to avoid an intermediate
+            // overflow when the final km/day velocity is representable.
+            let velocity = (derivative / width) * 2.0;
             if !position.is_finite() || !velocity.is_finite() {
                 return Err(De441Error::InvalidFile("non-finite interpolated state"));
             }
