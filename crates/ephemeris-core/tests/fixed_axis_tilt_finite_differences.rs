@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 //
 // Modification (2026-11-14): add synthetic finite-difference checks for
-// tilted fixed-axis spherical rates and longitude branch-cut continuity.
+// tilted fixed-axis spherical rates, branch-cut continuity, and XYZ reconstruction.
 
 //! Independent centered-difference oracle for the public fixed-axis rates.
 //! This only checks synthetic linear motion in a fixed ICRF Cartesian frame;
@@ -126,6 +126,92 @@ fn tilted_longitude_rate_remains_continuous_across_zero_and_two_pi() {
             assert_near(projection.longitude_rate_rad_per_day, numeric[0], 2.0e-11);
             assert_near(projection.latitude_rate_rad_per_day, numeric[1], 2.0e-11);
             assert_near(projection.distance_rate_km_per_day, numeric[2], 5.0e-4);
+        }
+    }
+}
+
+#[test]
+fn tilted_spherical_state_reconstructs_icrf_position_and_velocity() {
+    // Invert the published spherical coordinate/rate equations, then invert
+    // the fixed passive X rotation. This checks all six output fields against
+    // independent input XYZ data, including a longitude branch cut and a
+    // nearly polar direction. These values are synthetic geometric states.
+    for (position, velocity, tilt) in [
+        (
+            [137_000_000.0, -220_000_000.0, 39_000_000.0],
+            [4_321.0, -6_543.0, 1_278.0],
+            0.409_092_8,
+        ),
+        (
+            [-380_000.0, 123_000.0, 34_000.0],
+            [100.0, -350.0, 29.0],
+            -0.27,
+        ),
+        (
+            [1_000_000.0, -0.1, 0.0],
+            [0.0, 100.0, 0.0],
+            0.409_092_8,
+        ),
+        (
+            [-500_000.0, 1.0, 210_000.0],
+            [400.0, -12.0, 91.0],
+            -0.27,
+        ),
+        (
+            [1_000.0, 1_200.0, 10_000_000.0],
+            [10.0, -11.0, 2.0],
+            0.0,
+        ),
+    ] {
+        let state = synthetic_state(position, velocity);
+        let spherical = project_fixed_axes(&state, tilt).unwrap();
+        let (sin_lon, cos_lon) = spherical.longitude_rad.sin_cos();
+        let (sin_lat, cos_lat) = spherical.latitude_rad.sin_cos();
+
+        // Derivative of (r*cos(lat)*cos(lon), r*cos(lat)*sin(lon),
+        //                r*sin(lat)) in the tilted fixed-axis frame.
+        let horizontal = spherical.distance_km * cos_lat;
+        let horizontal_rate = spherical.distance_rate_km_per_day * cos_lat
+            - spherical.distance_km * sin_lat * spherical.latitude_rate_rad_per_day;
+        let vertical_rate = spherical.distance_rate_km_per_day * sin_lat
+            + spherical.distance_km * cos_lat * spherical.latitude_rate_rad_per_day;
+        let x_prime = horizontal * cos_lon;
+        let y_prime = horizontal * sin_lon;
+        let z_prime = spherical.distance_km * sin_lat;
+        let vx_prime = horizontal_rate * cos_lon
+            - horizontal * sin_lon * spherical.longitude_rate_rad_per_day;
+        let vy_prime = horizontal_rate * sin_lon
+            + horizontal * cos_lon * spherical.longitude_rate_rad_per_day;
+
+        // Inverse of the library's fixed passive +X rotation.
+        let (sin_tilt, cos_tilt) = tilt.sin_cos();
+        let reconstructed_position = [
+            x_prime,
+            cos_tilt * y_prime - sin_tilt * z_prime,
+            sin_tilt * y_prime + cos_tilt * z_prime,
+        ];
+        let reconstructed_velocity = [
+            vx_prime,
+            cos_tilt * vy_prime - sin_tilt * vertical_rate,
+            sin_tilt * vy_prime + cos_tilt * vertical_rate,
+        ];
+        let position_scale = position
+            .iter()
+            .fold(1.0_f64, |largest, component| largest.max(component.abs()));
+        let velocity_scale = velocity
+            .iter()
+            .fold(1.0_f64, |largest, component| largest.max(component.abs()));
+        for axis in 0..3 {
+            assert_near(
+                reconstructed_position[axis],
+                position[axis],
+                position_scale * 5.0e-13,
+            );
+            assert_near(
+                reconstructed_velocity[axis],
+                velocity[axis],
+                velocity_scale * 2.0e-12,
+            );
         }
     }
 }
