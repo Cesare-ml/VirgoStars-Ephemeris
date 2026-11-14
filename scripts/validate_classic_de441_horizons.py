@@ -167,10 +167,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--velocity-km-per-day", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args(argv)
+    # Never write an error receipt on top of an input file, even when the
+    # preflight fails. Abort before opening any path for output.
+    if args.receipt.resolve() in (args.kernel.resolve(), args.reference.resolve()):
+        print("PREFLIGHT_FAILED: receipt must not overwrite an input file", file=sys.stderr)
+        return 1
     try:
-        for supplied in (args.kernel, args.reference):
-            if args.receipt.resolve() == supplied.resolve():
-                raise ValueError("receipt must not overwrite the kernel or reference file")
         report = compare(
             args.kernel, args.reference, args.kernel_sha256,
             args.reference_sha256, args.position_km,
