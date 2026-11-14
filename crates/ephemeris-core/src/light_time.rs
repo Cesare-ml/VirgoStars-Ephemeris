@@ -16,6 +16,9 @@
 //!
 //! This is one stage of an apparent-position pipeline, not an apparent
 //! position, an Earth-of-date frame, or a Swiss-compatible output.
+//!
+//! Modified 2026-11-14: reject light-time delays too small to move a
+//! single-f64 TDB emission epoch, rather than mistaking rounding for convergence.
 
 use std::error::Error;
 use std::fmt;
@@ -161,6 +164,13 @@ where
         if !next.is_finite() {
             return Err(LightTimeError::InvalidGeometry);
         }
+        // A positive light-time delay can round back to the *observation*
+        // epoch at single-f64 JD resolution. That is not an emission epoch
+        // the reader can distinguish, even though the fixed-point iteration
+        // would appear to have converged on its first step.
+        if next == observation_epoch.0 {
+            return Err(LightTimeError::DidNotConverge);
+        }
         if next == emission.0 {
             let direction = position.map(|x| x / range);
             let dot = |velocity: [f64; 3]| -> f64 {
@@ -228,6 +238,46 @@ mod tests {
         let expected_velocity = (30.0 * (1.0 - expected_rate) - 10.0) * SECONDS_PER_DAY;
         assert!((state.velocity_km_per_day[0] - expected_velocity).abs() < 1.0e-7);
         assert!(state.emission_epoch.0 < state.observation_epoch.0);
+    }
+
+    #[test]
+    fn rejects_delay_that_cannot_shift_single_f64_emission_epoch() {
+        // At J2000 an f64 JD is quantized to roughly 40 microseconds.
+        // A 1 km one-way delay is about 3.3 microseconds. Returning the
+        // observation JD as the emission JD would silently claim precision
+        // the classic reader's epoch representation does not possess.
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let x = if body == Body::Earth { 0.0 } else { 1.0 };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [x, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        });
+        assert!(matches!(result, Err(LightTimeError::DidNotConverge)));
+    }
+
+    #[test]
+    fn representable_short_delay_still_converges() {
+        // 100 km has a ~334 microsecond delay at this JD, which is
+        // distinguishable from reception at single-f64 JD precision.
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let x = if body == Body::Earth { 0.0 } else { 100.0 };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [x, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        })
+        .unwrap();
+        assert!(result.emission_epoch.0 < result.observation_epoch.0);
+        assert!((result.light_time_seconds - 100.0 / SPEED_OF_LIGHT_KM_PER_SECOND).abs() < 1e-15);
+        assert_eq!(result.position_km, [100.0, 0.0, 0.0]);
+        assert_eq!(result.velocity_km_per_day, [0.0; 3]);
     }
 
     #[test]
