@@ -791,7 +791,9 @@ mod tests {
             vec![(-10.0, -7.0), (-5.0, 0.0), (3.0, 3.0), (6.0, 9.0)]
         );
         assert_eq!(
-            set.declared_coverage_intervals_for_target(301)[1].1.to_bits(),
+            set.declared_coverage_intervals_for_target(301)[1]
+                .1
+                .to_bits(),
             0.0_f64.to_bits(),
         );
 
