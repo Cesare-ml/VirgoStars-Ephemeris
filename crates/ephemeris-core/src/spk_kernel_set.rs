@@ -1562,7 +1562,6 @@ mod tests {
         assert!(set.unload_last().is_none());
     }
 
-
     #[test]
     fn atomic_batch_does_not_publish_valid_prefix_when_later_index_fails() {
         for (first_order, overlay_order) in [
@@ -1611,7 +1610,8 @@ mod tests {
             &[seg(301, 4, 3, [4.0, 1.0], [0.25, 0.5])],
         ));
         let mut set = SpkKernelSet::new();
-        set.load_batch_atomic(Vec::<Cursor<Vec<u8>>>::new()).unwrap();
+        set.load_batch_atomic(Vec::<Cursor<Vec<u8>>>::new())
+            .unwrap();
         assert!(set.is_empty());
         set.load_batch_atomic(vec![first, second]).unwrap();
 
