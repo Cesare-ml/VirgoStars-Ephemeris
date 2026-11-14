@@ -36,6 +36,26 @@ use crate::spk_relative_state::{
     resolve_relative, SpkRelativeError, SpkRelativeState, SpkStateResolver,
 };
 
+/// One selected SPK descriptor and the outcome of evaluating it at one ET.
+///
+/// This distinguishes *declared* coverage from a genuinely evaluated direct
+/// geometric state at exactly one TDB/ET epoch. The selected descriptor is
+/// never replaced by a lower-priority candidate when its frame, type, records
+/// or data stream are invalid. A successful sample does not certify the
+/// entire coverage interval or any multi-link target/center relationship.
+///
+/// Modification (2026-11-14): retain selection provenance when evaluation
+/// fails, without suppressing the underlying SPK error.
+#[derive(Debug)]
+pub struct SpkDirectStateProbe {
+    /// Zero-based kernel load index; later loads have higher priority.
+    pub kernel_index: usize,
+    /// The actual winning DAF descriptor, including its target and center.
+    pub descriptor: SpkSegmentDescriptor,
+    /// Evaluated state in frame 1 (J2000/ICRF), km and km/s, or its error.
+    pub evaluation: Result<SpkDirectState, SpkStateError>,
+}
+
 struct LoadedSpk<R> {
     source: R,
     index: SpkIndex,
@@ -246,6 +266,39 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         merged
     }
 
+    /// Inspect and evaluate the winning direct SPK segment at one epoch.
+    ///
+    /// An invalid/nonfinite TDB/ET instant is an outer error. When no segment
+    /// covers the target it returns `Ok(None)`; when a segment is declared it
+    /// returns its load index and descriptor together with the *actual*
+    /// interpolation result (or its exact error). An unsupported or damaged
+    /// highest-priority segment is never bypassed for a lower-priority one.
+    ///
+    /// Unlike metadata-only inventory APIs, this reads coefficient records
+    /// and may encounter I/O errors. A successful direct state proves only
+    /// that this particular target-center sample was evaluated, **not**
+    /// whole-interval coverage, a resolved center chain or JPL numerical
+    /// accuracy. Units are TDB seconds past J2000, km and km/s.
+    ///
+    /// Modification (2026-11-14): pair the selected descriptor with the
+    /// same evaluation path used by `direct_state`.
+    pub fn probe_direct_state(
+        &mut self,
+        target_id: i32,
+        et: f64,
+    ) -> Result<Option<SpkDirectStateProbe>, SpkStateError> {
+        let Some((kernel_index, descriptor)) = self.selected_segment(target_id, et)? else {
+            return Ok(None);
+        };
+        let entry = &mut self.loaded[kernel_index];
+        let evaluation = direct_spk_state(&mut entry.source, &entry.index, target_id, et);
+        Ok(Some(SpkDirectStateProbe {
+            kernel_index,
+            descriptor,
+            evaluation,
+        }))
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -256,11 +309,9 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         target_id: i32,
         et: f64,
     ) -> Result<SpkDirectState, SpkStateError> {
-        let (kernel_index, _) = self
-            .selected_segment(target_id, et)?
-            .ok_or(SpkStateError::MissingSegment { target_id })?;
-        let entry = &mut self.loaded[kernel_index];
-        direct_spk_state(&mut entry.source, &entry.index, target_id, et)
+        self.probe_direct_state(target_id, et)?
+            .ok_or(SpkStateError::MissingSegment { target_id })?
+            .evaluation
     }
 
     /// Geometric state of target relative to center at one TDB/ET epoch.
@@ -718,6 +769,101 @@ mod tests {
                 2.0
             );
         }
+    }
+
+    // Modification (2026-11-14): a declared winner must remain identifiable
+    // even if its actual frame or coefficients make evaluation impossible.
+    #[test]
+    fn direct_probe_preserves_selected_source_and_evaluation_errors() {
+        let older = seg(301, 399, 2, [2.0, -1.0], [0.25, -0.5]);
+        let mut unsupported = seg(301, 4, 3, [40.0, 50.0], [0.0, 0.0]);
+        unsupported.frame = 17;
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, vec![older]),
+            (SpkByteOrder::BigEndian, vec![unsupported]),
+        ]);
+
+        let probe = set.probe_direct_state(301, 5.0).unwrap().unwrap();
+        assert_eq!(probe.kernel_index, 1);
+        assert_eq!(probe.descriptor.target_id, 301);
+        assert_eq!(probe.descriptor.center_id, 4);
+        assert_eq!(probe.descriptor.frame_id, 17);
+        assert!(matches!(
+            probe.evaluation,
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+
+        set.unload_last().unwrap();
+        let restored = set.probe_direct_state(301, 5.0).unwrap().unwrap();
+        assert_eq!(restored.kernel_index, 0);
+        assert_eq!(restored.descriptor.center_id, 399);
+        assert_eq!(restored.evaluation.unwrap(), set.direct_state(301, 5.0).unwrap());
+        assert!(set.probe_direct_state(301, 11.0).unwrap().is_none());
+        assert!(set.probe_direct_state(999, 5.0).unwrap().is_none());
+        assert!(matches!(
+            set.probe_direct_state(301, f64::NAN),
+            Err(SpkStateError::InvalidEpoch)
+        ));
+        assert!(matches!(
+            set.direct_state(301, f64::NAN),
+            Err(SpkStateError::InvalidEpoch)
+        ));
+
+        let empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        let mut empty = empty;
+        assert!(empty.probe_direct_state(301, 5.0).unwrap().is_none());
+        assert!(matches!(
+            empty.direct_state(301, 5.0),
+            Err(SpkStateError::MissingSegment { target_id: 301 })
+        ));
+    }
+
+    #[test]
+    fn direct_probe_keeps_corrupt_record_error_with_winning_descriptor() {
+        let mut set = with_kernels(&[(
+            SpkByteOrder::LittleEndian,
+            vec![seg(301, 399, 2, [2.0, 0.0], [0.0, 0.0])],
+        )]);
+        let mut corrupt = kernel(
+            SpkByteOrder::BigEndian,
+            &[seg(301, 4, 2, [9.0, 0.0], [0.0, 0.0])],
+        );
+        // Preserve the valid indexed descriptor while corrupting the actual
+        // record footer: the loader checks DAF metadata, not coefficients.
+        let record_words = 2 + 3 * 2;
+        let last_address = INITIAL_WORD + record_words + 3;
+        double(
+            &mut corrupt,
+            (last_address - 4) * 8,
+            0.0,
+            SpkByteOrder::BigEndian,
+        );
+        set.load(Cursor::new(corrupt)).unwrap();
+
+        let probe = set.probe_direct_state(301, 5.0).unwrap().unwrap();
+        assert_eq!(probe.kernel_index, 1);
+        assert_eq!(probe.descriptor.center_id, 4);
+        assert!(matches!(
+            probe.evaluation,
+            Err(SpkStateError::InvalidSegment("invalid SPK record size"))
+        ));
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::InvalidSegment("invalid SPK record size"))
+        ));
+        set.unload_last().unwrap();
+        assert_eq!(
+            set.probe_direct_state(301, 5.0)
+                .unwrap()
+                .unwrap()
+                .evaluation
+                .unwrap(),
+            set.direct_state(301, 5.0).unwrap()
+        );
     }
 
     // Modification (2026-11-14): target inventory is sorted, unique, signed
