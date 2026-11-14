@@ -265,6 +265,16 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
         ));
     }
     let words_per_record = (RECORD_BYTES / WORD_BYTES) as u64;
+    // Modification (2026-11-14): the first free DAF word must follow every
+    // allocated summary/name record, including metadata appended after data.
+    // Checking segment addresses alone misses a free pointer inside metadata.
+    if let Some(&last_metadata_record) = metadata_records.last() {
+        if last_metadata_record * words_per_record >= free as u64 {
+            return Err(SpkIndexError::InvalidFile(
+                "DAF free pointer precedes summary or name allocation",
+            ));
+        }
+    }
     for segment in &segments {
         let first_record = (segment.initial_address - 1) / words_per_record + 1;
         let last_record = (segment.final_address - 1) / words_per_record + 1;
@@ -499,6 +509,33 @@ mod tests {
                     "overlapping DAF summary or name records"
                 ))
             ));
+            assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
+        }
+    }
+
+    // Modification (2026-11-14): independently verify the declared free
+    // address against all summary/name allocation, not just segment pointers.
+    #[test]
+    fn rejects_free_pointer_inside_later_metadata_even_with_bounded_segment_addresses() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut bytes = file(order, true);
+            // Move the second segment into unused words of record 5. Both
+            // descriptors now end before word 625, so the old address-only
+            // checks accepted a corrupt FREE pointer despite summary/name
+            // records 6 and 7 being allocated at words 641..896.
+            let second = 5 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+            put_i32(&mut bytes, second + 16, 521, order);
+            put_i32(&mut bytes, second + 20, 524, order);
+            put_i32(&mut bytes, 84, 625, order);
+            assert!(matches!(
+                parse(bytes),
+                Err(SpkIndexError::InvalidFile(
+                    "DAF free pointer precedes summary or name allocation"
+                ))
+            ));
+
+            // The original fixture places FREE beyond both data and all
+            // summary/name records; it must remain accepted in either order.
             assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
         }
     }
