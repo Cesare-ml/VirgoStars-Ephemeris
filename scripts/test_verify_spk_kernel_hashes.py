@@ -8,6 +8,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): test ordered names/sizes and hash-only compatibility.
+# Modification (2026-11-14): reject zero-vector reference receipts in SHA preflight.
 
 """Synthetic byte-level regression tests; NO NASA/JPL SPK data is bundled."""
 
@@ -134,6 +135,26 @@ class SpkSha256PreflightTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "duplicate ordered_kernel_names"):
             read_declared_manifest(self.reference)
+
+    def test_hash_preflight_rejects_reference_without_vector_rows(self):
+        # Correct hashes do not make a header-only reference usable.
+        # Rust owns vector schema/physics; this guard requires nonemptiness.
+        valid = self.reference.read_text(encoding="utf-8")
+        header_only = valid.split(CSV_HEADER)[0] + CSV_HEADER + "\n"
+        for text in (header_only, header_only + "\n  \n\t\n"):
+            with self.subTest(reference_tail=repr(text[-20:])):
+                self.reference.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "no astronomical vector rows"):
+                    read_declared_manifest(self.reference)
+                with self.assertRaisesRegex(ValueError, "no astronomical vector rows"):
+                    verify(self.reference, [self.first, self.second])
+                self.assertEqual(
+                    main([str(self.reference), str(self.first), str(self.second)]),
+                    1,
+                )
+        # A genuine row restores the original hash-preflight behavior.
+        self.reference.write_text(valid, encoding="utf-8")
+        self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
 
     def test_success_preserves_load_order(self):
         self.assertEqual(len(verify(self.reference, [self.first, self.second])), 2)
