@@ -1586,7 +1586,7 @@ mod tests {
 
             assert_eq!(failure.input_index, 1);
             assert!(matches!(
-                failure.error,
+                &failure.error,
                 SpkIndexError::InvalidFile(_) | SpkIndexError::Io(_)
             ));
             assert!(std::error::Error::source(&failure).is_some());
