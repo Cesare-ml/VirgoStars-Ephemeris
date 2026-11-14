@@ -230,6 +230,94 @@ mod tests {
         assert!(state.emission_epoch.0 < state.observation_epoch.0);
     }
 
+    // Modification (2026-11-14): independent three-dimensional, finite-
+    // difference regression for geometric reception light-time kinematics.
+    // The linear Cartesian fixture is synthetic, not JPL validation.
+    fn linear_three_axis(body: Body, epoch: JulianDateTdb) -> Result<StateVector, De441Error> {
+        let (origin_km, velocity_km_per_second) = match body {
+            Body::Earth => ([20.0e6, -40.0e6, 30.0e6], [12.0, -9.0, 2.0]),
+            Body::MarsBarycenter => ([120.0e6, 32.0e6, 50.0e6], [-15.0, 22.0, -5.0]),
+            _ => return Err(De441Error::MissingSeries("test body")),
+        };
+        let elapsed_seconds = (epoch.0 - JD) * SECONDS_PER_DAY;
+        Ok(StateVector {
+            target: body,
+            center: Body::SolarSystemBarycenter,
+            epoch,
+            position_km: std::array::from_fn(|i| {
+                origin_km[i] + velocity_km_per_second[i] * elapsed_seconds
+            }),
+            velocity_km_per_day: velocity_km_per_second.map(|v| v * SECONDS_PER_DAY),
+        })
+    }
+
+    #[test]
+    fn three_axis_light_time_velocity_and_delay_rate_match_centered_differences() {
+        // Both the target and observer move on independent XYZ linear paths.
+        // Compare the solver's d(position)/d(reception TDB) and d(delay)/dt
+        // against independent samples separated by 600 seconds on each side.
+        let epoch = JulianDateTdb(JD);
+        let half_step_days = 600.0 / SECONDS_PER_DAY;
+        let before_epoch = JulianDateTdb(JD - half_step_days);
+        let after_epoch = JulianDateTdb(JD + half_step_days);
+        let actual_interval_seconds = (after_epoch.0 - before_epoch.0) * SECONDS_PER_DAY;
+
+        let current = solve(Body::MarsBarycenter, epoch, linear_three_axis).unwrap();
+        let before = solve(Body::MarsBarycenter, before_epoch, linear_three_axis).unwrap();
+        let after = solve(Body::MarsBarycenter, after_epoch, linear_three_axis).unwrap();
+        assert!(current.position_km.iter().all(|coordinate| *coordinate != 0.0));
+        assert!(current.velocity_km_per_day.iter().all(|speed| *speed != 0.0));
+        assert!(current.emission_epoch.0 < current.observation_epoch.0);
+        assert!(actual_interval_seconds > 0.0);
+
+        for axis in 0..3 {
+            let numerical_km_per_second =
+                (after.position_km[axis] - before.position_km[axis]) / actual_interval_seconds;
+            let analytic_km_per_second = current.velocity_km_per_day[axis] / SECONDS_PER_DAY;
+            assert!(
+                (analytic_km_per_second - numerical_km_per_second).abs() < 2.0e-5,
+                "light-time XYZ velocity mismatch on axis {axis}: analytic={analytic_km_per_second}, numerical={numerical_km_per_second}"
+            );
+        }
+        let numerical_delay_rate =
+            (after.light_time_seconds - before.light_time_seconds) / actual_interval_seconds;
+        assert!(
+            (current.light_time_rate - numerical_delay_rate).abs() < 1.0e-8,
+            "light-time delay-rate mismatch: analytic={}, numerical={numerical_delay_rate}",
+            current.light_time_rate
+        );
+    }
+
+    #[test]
+    fn stationary_three_axis_light_time_preserves_exact_zero_rates() {
+        // A 3:4:12 right triangle has Euclidean norm 13. Both barycentric
+        // states are stationary, giving an analytically known 260-second delay.
+        let distance_km = SPEED_OF_LIGHT_KM_PER_SECOND * 260.0;
+        let scale = distance_km / 13.0;
+        let relative = [3.0 * scale, 4.0 * scale, 12.0 * scale];
+        let current = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let position_km = match body {
+                Body::Earth => [0.0; 3],
+                Body::MarsBarycenter => relative,
+                _ => return Err(De441Error::MissingSeries("test body")),
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km,
+                velocity_km_per_day: [0.0; 3],
+            })
+        })
+        .unwrap();
+
+        assert!((current.light_time_seconds - 260.0).abs() < 1.0e-10);
+        assert_eq!(current.position_km, relative);
+        assert_eq!(current.velocity_km_per_day, [0.0; 3]);
+        assert_eq!(current.light_time_rate, 0.0);
+        assert!(current.emission_epoch.0 < current.observation_epoch.0);
+    }
+
     #[test]
     fn rejects_undefined_direction_and_invalid_epoch() {
         assert!(matches!(
