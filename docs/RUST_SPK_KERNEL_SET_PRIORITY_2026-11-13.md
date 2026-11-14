@@ -11,8 +11,30 @@ The dependency sequence is now integrated on `dev/ephemeris` in order: [#148 DAF
 - `SpkKernelSet::new()` constructs an empty set.
 - `load(source)` validates the DAF/SPK index before adding the source. **A failed load adds no entry**; a successful load makes the new kernel highest priority. This is strictly append-in-load-order, without filenames/meta-kernels.
 - `unload_last()` returns and removes the most recent source, restoring the remaining files' priority. `kernel_count()` and `is_empty()` expose the current inventory.
+- `selected_segment(target_naif_id, et)` inspects the **winning declared descriptor and zero-based load index** without reading Chebyshev coefficients; it returns `Ok(None)` for missing coverage and errors on nonfinite ET.
 - `direct_state(target_naif_id, et)` returns a primitive **target relative to the winning segment's declared center**.
 - `relative_state(target_naif_id, center_naif_id, et)` composes the necessary links from multiple files to their shared ancestor, **without duplicating Chebyshev evaluation or relative-vector composition**.
+
+### Effective-segment inspection (2026-11-14)
+
+For troubleshooting kernel-stack precedence, callers can inspect which loaded source and DAF descriptor the engine will choose **before** evaluating a state:
+
+```rust
+# use std::fs::File;
+# use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut kernels = SpkKernelSet::new();
+kernels.load(File::open("/path/to/reviewed/older.bsp")?)?;
+kernels.load(File::open("/path/to/reviewed/newer.bsp")?)?;
+if let Some((load_index, descriptor)) = kernels.selected_segment(301, 0.0)? {
+    println!("0-based load index: {load_index}, center: {}", descriptor.center_id);
+    println!("SPK type: {}, frame: {}", descriptor.spk_type, descriptor.frame_id);
+}
+# Ok(())
+# }
+```
+
+The inspect method uses exactly the same last-loaded / last-covering selection as `direct_state`, now by a shared selection path. It does **not** verify Chebyshev bytes, check frame/type support, or test center-chain connectivity. Thus even a selected descriptor with unsupported frame, unsupported type, or corrupt coefficients must still cause `direct_state` to fail rather than falling back to a lower-priority kernel. Index 0 is the oldest loaded source; unloading the newest kernel does not renumber surviving sources, but may change the winning selection. The method returns `Ok(None)` for missing target/time coverage, including an empty set, and `InvalidEpoch` for NaN/infinite TDB/ET. These are metadata-only synthetic contract checks and do not establish NASA/JPL numerical parity.
 
 ### Segment precedence
 
@@ -75,3 +97,5 @@ Run existing read-only Rust CI (`cargo fmt --all -- --check`, debug/release work
 Original source remains under [CPAL-1.0](../LICENSE) with the required VirgoStars attribution: [NOTICE](../NOTICE), [licensing guidance](LICENSING_AND_CREDITS.md). No Swiss Ephemeris/NAIF Toolkit source, kernel data, external packages, releases, deployments, or production modifications were introduced.
 
 2026-11-14 integration reconciliation: preserved existing DAF/SPK index validation, Type-2/3 record-grid coherence, and single-kernel center-chain behavior while adding only the multi-kernel module, shared resolver refactor, API export and related docs. Reconciled without rewriting branch history; independent real-kernel comparison remains outstanding.
+
+2026-11-14: Exposed read-only `selected_segment` metadata diagnostics, shared its winner selection with `direct_state`, and added three synthetic precedence/coverage/error regressions. No new data or external dependency; no real-kernel validation performed.
