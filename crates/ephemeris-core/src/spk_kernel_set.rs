@@ -469,17 +469,15 @@ mod tests {
                 vec![seg(301, 399, 2, [2.0, 0.0], [0.0, 0.0])],
             )]);
 
-            let mut corrupt = kernel(
-                order,
-                &[seg(301, 399, 2, [99.0, 0.0], [0.0, 0.0])],
-            );
+            let mut corrupt = kernel(order, &[seg(301, 399, 2, [99.0, 0.0], [0.0, 0.0])]);
             // The original data ends at word 524, with FREE=525. Append
             // summary record 6 and its name record 7 *without* advancing
             // FREE. The metadata link is otherwise consistent.
             corrupt.resize(7 * RECORD_BYTES, 0);
-            int(&mut corrupt, 80, 6, order); // Header LAST summary
-            double(&mut corrupt, 2 * RECORD_BYTES, 6.0, order); // NEXT
-            double(&mut corrupt, 5 * RECORD_BYTES + 8, 3.0, order); // PREV
+            // Link the new LAST summary from the header and first summary.
+            int(&mut corrupt, 80, 6, order);
+            double(&mut corrupt, 2 * RECORD_BYTES, 6.0, order);
+            double(&mut corrupt, 5 * RECORD_BYTES + 8, 3.0, order);
             // Last summary COUNT=0, allowed when an earlier summary has data.
             assert!(matches!(
                 set.load(Cursor::new(corrupt)),
