@@ -173,13 +173,32 @@ def compare(
         text=True,
         check=False,
     )
+    # Rust may have read the two files or built the binary after the initial
+    # check. Re-hash both inputs and re-check source AFTER Cargo finishes;
+    # retain its stdout/stderr even if this final integrity gate fails.
+    integrity_error = None
+    try:
+        post_inputs = preflight(
+            kernel, reference, kernel_sha256, reference_sha256,
+            position_tolerance, velocity_tolerance,
+        )
+        post_source = source_checker(expected_source_sha)
+        if post_inputs != inputs or post_source != source:
+            raise ValueError("source or input evidence changed during comparison")
+    except (OSError, ValueError) as exc:
+        integrity_error = str(exc)
+    if integrity_error is not None:
+        status = "POSTFLIGHT_INTEGRITY_FAILED"
+    elif completed.returncode != 0:
+        status = "COMPARISON_FAILED"
+    else:
+        status = "COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW"
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "source": source,
-        "status": (
-            "COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW"
-            if completed.returncode == 0 else "COMPARISON_FAILED"
-        ),
+        "status": status,
+        "postflight_integrity_ok": integrity_error is None,
+        "postflight_integrity_error": integrity_error,
         "scientific_validated": False,
         "scope": "classic_DE441_geometric_ICRF_TDB_JD_km_km_per_day",
         "input": inputs,
@@ -225,10 +244,13 @@ def main(argv: list[str] | None = None) -> int:
             args.reference_sha256, args.position_km,
             args.velocity_km_per_day, args.source_sha,
         )
-        exit_code = 0 if report["cargo_exit_code"] == 0 else 1
+        exit_code = (
+            0 if report["status"] == "COMPARISON_PASSED_PENDING_INDEPENDENT_PROVENANCE_REVIEW"
+            else 1
+        )
     except (ValueError, OSError) as exc:
         report = {
-            "schema_version": 2,
+            "schema_version": 3,
             "status": "PREFLIGHT_FAILED",
             "scientific_validated": False,
             "error": str(exc),
