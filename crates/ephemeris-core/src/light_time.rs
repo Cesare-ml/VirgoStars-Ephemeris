@@ -265,8 +265,14 @@ mod tests {
         let current = solve(Body::MarsBarycenter, epoch, linear_three_axis).unwrap();
         let before = solve(Body::MarsBarycenter, before_epoch, linear_three_axis).unwrap();
         let after = solve(Body::MarsBarycenter, after_epoch, linear_three_axis).unwrap();
-        assert!(current.position_km.iter().all(|coordinate| *coordinate != 0.0));
-        assert!(current.velocity_km_per_day.iter().all(|speed| *speed != 0.0));
+        assert!(current
+            .position_km
+            .iter()
+            .all(|coordinate| *coordinate != 0.0));
+        assert!(current
+            .velocity_km_per_day
+            .iter()
+            .all(|speed| *speed != 0.0));
         assert!(current.emission_epoch.0 < current.observation_epoch.0);
         assert!(actual_interval_seconds > 0.0);
 
