@@ -444,13 +444,13 @@ fn second_granule_reverse_geometry_preserves_xyz_derivatives_at_interior_epochs(
 }
 
 // Modification (2026-11-13): check one-sided derivatives at the exact
-// granule transition and inclusive coverage endpoint without sampling across
-// a deliberately discontinuous neighboring polynomial.
+// coverage start, granule transition, and inclusive coverage end without
+// sampling across deliberately discontinuous neighboring polynomials.
 #[test]
 fn second_granule_boundary_velocities_match_one_sided_position_differences() {
     let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
     let h = 1.0 / 4096.0;
-    for (jd, direction) in [(1016.0, 1.0), (1032.0, -1.0)] {
+    for (jd, direction) in [(1000.0, 1.0), (1016.0, 1.0), (1032.0, -1.0)] {
         let p0 = ephemeris
             .state(
                 Body::Mercury,
