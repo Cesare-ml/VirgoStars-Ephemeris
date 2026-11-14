@@ -917,10 +917,7 @@ mod tests {
         ];
         let mut unsupported = seg(301, 4, 2, [40.0, 50.0], [0.0, 0.0]);
         unsupported.frame = 17;
-        let newer = vec![
-            seg(399, 0, 2, [3.0, 4.0], [0.0, 0.0]),
-            unsupported,
-        ];
+        let newer = vec![seg(399, 0, 2, [3.0, 4.0], [0.0, 0.0]), unsupported];
         let mut set = with_kernels(&[
             (SpkByteOrder::LittleEndian, older),
             (SpkByteOrder::BigEndian, newer),
