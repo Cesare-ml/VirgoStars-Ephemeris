@@ -259,3 +259,36 @@ fn rounded_internal_boundaries_select_following_granules_across_tdb_scales() {
         );
     }
 }
+
+#[test]
+fn wide_tdb_record_normalization_does_not_overflow_before_division() {
+    // Modification 2026-11-14: for a one-granule record of width 1e308
+    // days, the Chebyshev x at the inclusive end is mathematically +1.
+    // Multiplying the day offset by two before dividing overflows f64;
+    // the correct polynomial value and derivative are still finite.
+    let step = 1.0e308;
+    let mut bytes = fixture(0.0, step, 1);
+    // Two coefficients per axis: constant + linear Chebyshev T1.
+    put_i32(&mut bytes, 2700, 2);
+    for axis in 0..3usize {
+        let start = RECORD_BYTES * 2 + (2 + axis * 2) * 8;
+        put_f64(&mut bytes, start, 10.0 + axis as f64);
+        put_f64(&mut bytes, start + 8, axis as f64 + 1.0);
+    }
+    let mut eph = De441::new(Cursor::new(bytes)).unwrap();
+    for (epoch, normalized_x) in [(0.0, -1.0), (step / 2.0, 0.0), (step, 1.0)] {
+        let state = eph
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(epoch),
+            )
+            .expect("mathematically finite Chebyshev coordinate and velocity");
+        for (axis, position) in state.position_km.iter().enumerate() {
+            let expected = 10.0 + axis as f64 + (axis as f64 + 1.0) * normalized_x;
+            assert_eq!(*position, expected, "epoch {epoch}, axis {axis}");
+            let velocity = (axis as f64 + 1.0) * 2.0 / step;
+            assert_eq!(state.velocity_km_per_day[axis], velocity);
+        }
+    }
+}
