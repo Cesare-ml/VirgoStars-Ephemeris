@@ -33,6 +33,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental offline SPK geometric target/center state query CLI (not independent JPL validation)](docs/SPK_OFFLINE_STATE_QUERY_2026-11-14.md)
 - [Offline SPK direct-state diagnostic CSV report at an explicit TDB epoch (synthetic only)](docs/SPK_DIRECT_PROBE_CLI_2026-11-14.md)
 - [Experimental SPK type-2/type-3 direct-segment states (not JPL-validated)](docs/RUST_SPK_TYPE2_TYPE3_DIRECT_STATE_2026-11-12.md)
+- [Experimental SPK fixed-axis spherical longitude, latitude and per-second rates](docs/SPK_FIXED_AXES_SPHERICAL_2026-11-14.md)
 - [Experimental single-kernel SPK center-chain states (not JPL-validated)](docs/RUST_SPK_CENTER_CHAINS_2026-11-12.md)
 - [Experimental loaded-kernel precedence and cross-file states (not JPL-validated)](docs/RUST_SPK_KERNEL_SET_PRIORITY_2026-11-13.md)
 - [Experimental effective SPK segment snapshot at one TDB epoch (metadata only)](docs/SPK_EFFECTIVE_SEGMENT_SNAPSHOT_2026-11-14.md)
