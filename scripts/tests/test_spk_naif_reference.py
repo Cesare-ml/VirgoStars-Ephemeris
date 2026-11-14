@@ -440,7 +440,11 @@ class SpkReferenceTests(unittest.TestCase):
         receipt = Path(self.folder.name) / "missing-cargo-receipt.json"
 
         def mutate_then_raise(command, **options):
-            self.second.write_bytes(self.second.read_bytes() + b"tampered")
+            # Keep byte size unchanged so this exercises SHA256, not the
+            # separate size-mismatch rejection path.
+            payload = bytearray(self.second.read_bytes())
+            payload[0] ^= 1
+            self.second.write_bytes(payload)
             raise FileNotFoundError("synthetic missing cargo")
 
         with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
