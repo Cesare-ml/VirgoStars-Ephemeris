@@ -485,3 +485,24 @@ fn second_granule_boundary_velocities_match_one_sided_position_differences() {
         }
     }
 }
+
+// Modification (2026-11-14): probe the nearest representable in-range
+// epochs to catch accidental exclusive bounds or granule misselection.
+#[test]
+fn adjacent_f64_epochs_inside_coverage_remain_evaluable() {
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let just_after_start = f64::from_bits(1000.0_f64.to_bits() + 1);
+    let just_before_end = f64::from_bits(1032.0_f64.to_bits() - 1);
+    for jd in [just_after_start, just_before_end] {
+        let state = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        assert!(state.position_km.iter().all(|value| value.is_finite()));
+        assert!(state.velocity_km_per_day.iter().all(|value| value.is_finite()));
+        assert_eq!(state.epoch, JulianDateTdb(jd));
+    }
+}
