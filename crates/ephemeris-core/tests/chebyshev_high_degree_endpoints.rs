@@ -182,3 +182,19 @@ fn mixed_high_order_interior_series_matches_trigonometric_oracle() {
         );
     }
 }
+
+#[test]
+fn high_order_finite_coefficients_report_arithmetic_overflow() {
+    // Finite inputs can still overflow the Clenshaw recurrence. A caller must
+    // receive an explicit error, never an Ok sample containing infinity/NaN.
+    // This is a synthetic error-path regression, not an ephemeris accuracy test.
+    let coefficients = vec![1.0e308; 100];
+    for x in [-1.0, 1.0] {
+        let error = evaluate_chebyshev(&coefficients, x).unwrap_err();
+        assert_eq!(
+            error,
+            virgostars_ephemeris_core::EphemerisError::ArithmeticOverflow,
+            "x={x}"
+        );
+    }
+}
