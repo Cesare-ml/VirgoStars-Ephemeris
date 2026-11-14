@@ -620,6 +620,60 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): exercise the full DAF ND=2/NI=6
+    // descriptor capacity: 25 summaries per 1,024-byte summary record.
+    // These are metadata-only fixtures, not NASA/JPL coefficient data.
+    #[test]
+    fn two_full_summary_records_preserve_fifty_descriptors_in_file_order() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut bytes = file(order, true);
+            // Record 3 / 6 are summaries, record 4 / 7 are names, and
+            // record 5 / 8 hold 25 independent four-word data spans.
+            for (record, first_target, first_word) in
+                [(3usize, 1_000i32, 513i32), (6usize, 2_000i32, 897i32)]
+            {
+                let summary = (record - 1) * RECORD_BYTES;
+                put_f64(&mut bytes, summary + 16, MAX_SUMMARIES as f64, order);
+                for slot in 0..MAX_SUMMARIES {
+                    let descriptor = summary + (3 + SUMMARY_WORDS * slot) * WORD_BYTES;
+                    let initial = first_word + 4 * slot as i32;
+                    put_f64(&mut bytes, descriptor, -10.0, order);
+                    put_f64(&mut bytes, descriptor + 8, 100.0, order);
+                    for (i, value) in [first_target + slot as i32, 0, 1, 2, initial, initial + 3]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        put_i32(&mut bytes, descriptor + 16 + 4 * i, value, order);
+                    }
+                }
+            }
+            // The final data span occupies DAF words 993..996 (record 8).
+            // FREE is the next word, beyond both summary/name pairs.
+            put_i32(&mut bytes, 84, 997, order);
+            let index = parse(bytes).expect("both full summary records must be accepted");
+            assert_eq!(index.byte_order, order);
+            assert_eq!(index.segments.len(), 2 * MAX_SUMMARIES);
+            for (slot, descriptor) in index.segments.iter().enumerate() {
+                let (expected_target, expected_initial) = if slot < MAX_SUMMARIES {
+                    (1_000 + slot as i32, 513 + 4 * slot as u64)
+                } else {
+                    let second = slot - MAX_SUMMARIES;
+                    (2_000 + second as i32, 897 + 4 * second as u64)
+                };
+                assert_eq!(descriptor.target_id, expected_target);
+                assert_eq!(descriptor.center_id, 0);
+                assert_eq!(descriptor.frame_id, 1);
+                assert_eq!(descriptor.spk_type, 2);
+                assert_eq!(descriptor.initial_address, expected_initial);
+                assert_eq!(descriptor.final_address, expected_initial + 3);
+                assert_eq!(
+                    (descriptor.start_tdb_seconds, descriptor.end_tdb_seconds),
+                    (-10.0, 100.0)
+                );
+            }
+        }
+    }
+
     #[test]
     fn accepts_metadata_without_claiming_to_evaluate_unsupported_types_or_frames() {
         let order = SpkByteOrder::LittleEndian;
