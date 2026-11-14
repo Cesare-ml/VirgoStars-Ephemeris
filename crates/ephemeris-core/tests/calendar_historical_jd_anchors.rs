@@ -15,7 +15,9 @@
 //! Known historical Julian-day anchors for the canonical Rust calendar.
 //!
 //! Modification (2026-11-14): add independent calendar-era, leap-year and
-//! negative-Julian-day regressions. These are calendar identities, not NASA
+//! negative-Julian-day regressions. Modification (2026-11-14): add
+//! complete 400-year reversible date-cycle checks and the civil 1970 anchor.
+//! These are calendar identities, not NASA
 //! ephemeris-vector comparisons or implicit UTC/TT/TDB conversions.
 
 use virgostars_ephemeris_core::calendar::{
@@ -157,4 +159,62 @@ fn calendar_arithmetic_never_implicitly_accepts_utc_leap_seconds_or_tdb() {
         tt.to_de441_epoch().unwrap_err(),
         CalendarError::WrongTimeScale
     );
+}
+
+#[test]
+fn civil_1970_anchor_is_calendar_arithmetic_not_utc_to_tdb_conversion() {
+    // Gregorian 1970-01-01 00:00 has conventional JD 2440587.5.
+    // The TAI label here is only a label, not an interpretation of Unix UTC.
+    let gregorian = day(1970, 1, 1, 0, TimeScale::Tai)
+        .to_julian_date(Calendar::ProlepticGregorian)
+        .unwrap();
+    assert_eq!(gregorian.parts().unwrap(), (2_440_587.5, 0.0));
+    assert_eq!(
+        gregorian.to_calendar(Calendar::ProlepticJulian).unwrap(),
+        day(1969, 12, 19, 0, TimeScale::Tai)
+    );
+    assert_eq!(
+        gregorian.to_de441_epoch().unwrap_err(),
+        CalendarError::WrongTimeScale
+    );
+}
+
+#[test]
+fn complete_four_century_cycles_round_trip_every_midnight() {
+    // Independent Gregorian/Julian 400-year lengths, including a BCE span
+    // through astronomical year zero. Each day is decoded and re-encoded.
+    // This deliberately avoids assuming the Gregorian/Julian dates coincide.
+    for (calendar, start_year, expected_days) in [
+        (Calendar::ProlepticGregorian, 1600, 146_097_i64),
+        (Calendar::ProlepticJulian, -400, 146_100_i64),
+    ] {
+        let start = day(start_year, 1, 1, 0, TimeScale::Tt)
+            .to_julian_date(calendar)
+            .unwrap();
+        let end = day(start_year + 400, 1, 1, 0, TimeScale::Tt)
+            .to_julian_date(calendar)
+            .unwrap();
+        assert_eq!(
+            end.day_number() - start.day_number(),
+            expected_days,
+            "{calendar:?} four-century cycle length"
+        );
+
+        for offset in 0..expected_days {
+            let date = JulianDate::new(start.day_number() + offset, 0.0, TimeScale::Tt)
+                .unwrap();
+            let calendar_date = date.to_calendar(calendar).unwrap();
+            assert_eq!(
+                calendar_date.to_julian_date(calendar).unwrap(),
+                date,
+                "{calendar:?} offset {offset}"
+            );
+            // An exact half-integer JD encodes midnight with no lost fraction.
+            assert_eq!(
+                JulianDate::from_f64(date.parts().unwrap().0, TimeScale::Tt).unwrap(),
+                date,
+                "{calendar:?} offset {offset}"
+            );
+        }
+    }
 }
