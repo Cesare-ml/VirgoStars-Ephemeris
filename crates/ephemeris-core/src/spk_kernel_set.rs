@@ -122,6 +122,37 @@ impl<R: Read + Seek> SpkKernelSet<R> {
             }))
     }
 
+    /// List every declared descriptor for one target in kernel load order.
+    ///
+    /// Results are ordered from oldest to newest loaded file and, within
+    /// each file, in the original DAF summary order. Duplicate/overlapping
+    /// descriptors are deliberately retained so callers can diagnose
+    /// precedence; `selected_segment` still determines the winner at ET.
+    ///
+    /// This metadata-only inventory does not filter by time coverage,
+    /// supported frame/type or readable coefficients. An entry is not proof
+    /// of a computable position or of scientific accuracy. No kernel bytes
+    /// are read after the initial `load`.
+    pub fn declared_segments_for_target(
+        &self,
+        target_id: i32,
+    ) -> Vec<(usize, SpkSegmentDescriptor)> {
+        self.loaded
+            .iter()
+            .enumerate()
+            .flat_map(|(kernel_index, entry)| {
+                entry
+                    .index
+                    .segments
+                    .iter()
+                    .copied()
+                    .filter_map(move |segment| {
+                        (segment.target_id == target_id).then_some((kernel_index, segment))
+                    })
+            })
+            .collect()
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -598,6 +629,60 @@ mod tests {
 
     // Modification (2026-11-14): selection diagnostics must report the exact
     // same winning descriptor as the actual geometric state path.
+    // Modification (2026-11-14): provide a lossless, read-only segment
+    // inventory so diagnostic tooling can explain overlapping-kernel priority.
+    #[test]
+    fn declared_inventory_retains_duplicate_targets_and_unsupported_overrides() {
+        let old = vec![
+            seg(399, 3, 2, [10.0, 0.0], [0.0, 0.0]),
+            seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0]),
+            seg(399, 0, 3, [20.0, 0.0], [0.0, 0.0]),
+        ];
+        let mut unsupported = seg(399, 4, 9, [30.0, 0.0], [0.0, 0.0]);
+        unsupported.coverage_start = 6.0;
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, old),
+            (SpkByteOrder::BigEndian, vec![unsupported]),
+        ]);
+
+        let inventory = set.declared_segments_for_target(399);
+        assert_eq!(
+            inventory
+                .iter()
+                .map(|(index, descriptor)| (
+                    *index,
+                    descriptor.center_id,
+                    descriptor.spk_type,
+                    descriptor.start_tdb_seconds,
+                    descriptor.end_tdb_seconds,
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, 3, 2, 0.0, 10.0),
+                (0, 0, 3, 0.0, 10.0),
+                (1, 4, 9, 6.0, 10.0),
+            ]
+        );
+        assert!(set.declared_segments_for_target(999).is_empty());
+        assert_eq!(set.declared_segments_for_target(301).len(), 1);
+
+        let before = set.selected_segment(399, 5.0).unwrap().unwrap();
+        assert_eq!((before.0, before.1.center_id), (0, 0));
+        let after = set.selected_segment(399, 7.0).unwrap().unwrap();
+        assert_eq!((after.0, after.1.center_id), (1, 4));
+        assert!(matches!(
+            set.direct_state(399, 7.0),
+            Err(SpkStateError::UnsupportedType(9))
+        ));
+        assert_eq!(set.declared_segments_for_target(399), inventory);
+
+        set.unload_last().unwrap();
+        assert_eq!(
+            set.declared_segments_for_target(399),
+            inventory[..2].to_vec()
+        );
+    }
+
     #[test]
     fn selected_segment_reports_latest_file_and_last_covering_descriptor() {
         let earlier = vec![seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])];
