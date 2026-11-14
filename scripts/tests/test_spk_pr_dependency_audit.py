@@ -140,5 +140,75 @@ class DependencyAuditTests(unittest.TestCase):
             self.assertEqual(code, 1)
 
 
+    def test_out_of_order_merged_parent_blocks_unmerged_descendants(self):
+        records = statuses(snapshot(merged=(150,)))
+        self.assertEqual(records[150]["status"], "ORDER_CONFLICT")
+        # Prior implementation checked only parent raw["merged"] and would
+        # incorrectly announce that #157 was ready for human review.
+        self.assertEqual(records[157]["status"], "BLOCKED")
+        self.assertEqual(records[157]["blocking_prerequisites"], [150])
+        self.assertEqual(records[157]["unmerged_prerequisites"], [])
+        self.assertEqual(records[159]["status"], "BLOCKED")
+
+    def test_bad_base_on_merged_parent_blocks_downstream_and_exits_nonzero(self):
+        bad = snapshot(
+            merged=(148, 150),
+            base_overrides={150: "main"},
+        )
+        records = statuses(bad)
+        self.assertEqual(records[150]["status"], "BASE_REVIEW")
+        self.assertEqual(records[157]["status"], "BLOCKED")
+        self.assertEqual(records[157]["blocking_prerequisites"], [150])
+        with tempfile.TemporaryDirectory() as directory:
+            filename = Path(directory) / "prs.json"
+            filename.write_text(json.dumps(bad), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = tool.main(["--snapshot", str(filename)])
+            self.assertEqual(exit_code, 1)
+
+    def test_transitively_invalid_merged_descendant_is_order_conflict(self):
+        records = statuses(snapshot(merged=(150, 157)))
+        self.assertEqual(records[150]["status"], "ORDER_CONFLICT")
+        self.assertEqual(records[157]["status"], "ORDER_CONFLICT")
+        self.assertEqual(records[159]["status"], "BLOCKED")
+
+    def test_first_review_stage_follows_actual_integrated_chain(self):
+        first = tool.next_review_stage(tool.audit(snapshot()))
+        self.assertEqual(first["number"], 148)
+        second = tool.next_review_stage(tool.audit(snapshot(merged=(148,))))
+        self.assertEqual(second["number"], 150)
+        # The four canonical Rust implementation PRs are already integrated;
+        # comparator #160 becomes the first pending stage, not #165.
+        first_validator = tool.next_review_stage(
+            tool.audit(snapshot(merged=(148, 150, 157, 159), drafts=(160,)))
+        )
+        self.assertEqual(first_validator["number"], 160)
+        self.assertEqual(first_validator["status"], "DRAFT_REVIEW")
+        all_spk = tuple(n for n in tool.PR_NUMBERS if n != 165)
+        breadth = tool.next_review_stage(tool.audit(snapshot(merged=all_spk)))
+        self.assertEqual(breadth["number"], 165)
+
+    def test_next_review_stage_none_when_all_integrated(self):
+        report = tool.audit(snapshot(merged=tool.PR_NUMBERS))
+        self.assertIsNone(tool.next_review_stage(report))
+
+    def test_json_next_stage_preserves_no_merge_permission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = Path(directory) / "prs.json"
+            filename.write_text(
+                json.dumps(snapshot(merged=(148, 150, 157, 159), drafts=(160,))),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = tool.main(["--snapshot", str(filename), "--json"])
+            self.assertEqual(exit_code, 0)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["next_review_stage"]["number"], 160)
+            self.assertEqual(report["next_review_stage"]["status"], "DRAFT_REVIEW")
+            self.assertIs(report["merge_authorized"], False)
+            self.assertIs(report["scientific_accuracy_certified"], False)
+
+
 if __name__ == "__main__":
     unittest.main()
