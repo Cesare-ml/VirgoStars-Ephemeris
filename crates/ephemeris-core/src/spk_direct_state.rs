@@ -819,6 +819,74 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): a large finite ET can have an ULP wider
+    // than an appreciable fraction of the physical record duration.
+    fn large_epoch_kernel(order: SpkByteOrder, kind: i32, interval: f64) -> Vec<u8> {
+        let start = 9_007_199_254_740_992.0_f64; // 2^53 seconds
+        let mut bytes = make_kernel(order, kind);
+        let record_words = if kind == 2 { 8 } else { 14 };
+        let final_address = FIRST_WORD + 2 * record_words + 3;
+        let summary = 2 * RECORD_BYTES;
+        put_f64(&mut bytes, summary + 24, start, order);
+        put_f64(&mut bytes, summary + 32, start + 2.0 * interval, order);
+        let directory = (final_address - 4) * 8;
+        put_f64(&mut bytes, directory, start, order);
+        put_f64(&mut bytes, directory + 8, interval, order);
+        for index in 0..2 {
+            let offset = (FIRST_WORD - 1 + index * record_words) * 8;
+            put_f64(
+                &mut bytes,
+                offset,
+                start + (index as f64 + 0.5) * interval,
+                order,
+            );
+            put_f64(&mut bytes, offset + 8, interval * 0.5, order);
+        }
+        bytes
+    }
+
+    #[test]
+    fn rejects_midpoint_shift_that_exceeds_record_fraction_but_not_old_ulp_tolerance() {
+        // INTLEN=4 seconds is resolvable at 2^53, but the former
+        // 32*EPS*ET tolerance exceeds 60 seconds. A two-second shift is
+        // an entire half-record, not harmless rounding. At start+2 the
+        // corrupted record would still produce x=-1 (a finite state).
+        let start = 9_007_199_254_740_992.0_f64;
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = large_epoch_kernel(order, kind, 4.0);
+                put_f64(&mut bytes, (FIRST_WORD - 1) * 8, start + 4.0, order);
+                assert!(matches!(
+                    evaluate(bytes, 499, start + 2.0),
+                    Err(SpkStateError::InvalidSegment(
+                        "SPK record midpoint/radius disagree with directory"
+                    ))
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_unrepresentable_record_midpoints_on_both_sides_of_grid() {
+        // INTLEN=2 advances between f64 ET boundaries at 2^53, but
+        // its half-step rounds onto the record start or end. Returning
+        // a value at x=0 would silently shift time inside the record.
+        let start = 9_007_199_254_740_992.0_f64;
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let bytes = large_epoch_kernel(order, kind, 2.0);
+                for et in [start, start + 2.0] {
+                    assert!(matches!(
+                        evaluate(bytes.clone(), 499, et),
+                        Err(SpkStateError::InvalidSegment(
+                            "SPK record midpoint unresolvable at f64 ET precision"
+                        ))
+                    ));
+                }
+            }
+        }
+    }
+
     #[test]
     fn type2_and_type3_accept_sub_ulp_scale_directory_roundoff() {
         for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
