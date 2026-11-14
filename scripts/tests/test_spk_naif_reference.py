@@ -243,5 +243,23 @@ class SpkReferenceTests(unittest.TestCase):
         self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
 
 
+    def test_atomic_publish_refuses_filesystem_without_exclusive_hardlink(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        with patch.object(REFERENCE.os, "link", side_effect=OSError("hard links unsupported")):
+            with self.assertRaisesRegex(OSError, "hard links unsupported"):
+                REFERENCE.write_reference_atomic(destination, "unsafe fallback prohibited", overwrite=False)
+        self.assertFalse(destination.exists())
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+    def test_atomic_publish_failed_explicit_replace_preserves_original(self):
+        destination = Path(self.folder.name) / "naif.csv"
+        destination.write_text("old verified reference", encoding="utf-8")
+        with patch.object(REFERENCE.os, "replace", side_effect=OSError("replace failed")):
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                REFERENCE.write_reference_atomic(destination, "new reference", overwrite=True)
+        self.assertEqual(destination.read_text(encoding="utf-8"), "old verified reference")
+        self.assertEqual(list(destination.parent.glob(".naif.csv.*.tmp")), [])
+
+
 if __name__ == "__main__":
     unittest.main()
