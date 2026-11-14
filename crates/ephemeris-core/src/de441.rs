@@ -30,6 +30,9 @@ use std::path::Path;
 
 const HEADER_SIZE: usize = 2856;
 const SERIES_COUNT: usize = 13;
+// 2026-11-14: Bound a caller-controlled record cache allocation. Real classic
+// DE441 records are far smaller; this is a defensive implementation limit.
+const MAX_CLASSIC_RECORD_BYTES: usize = 16 * 1024 * 1024;
 
 /// Julian date in Barycentric Dynamical Time. No UTC/TT conversion is performed.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -238,6 +241,13 @@ impl<R: Read + Seek> De441<R> {
         let record_size = words
             .checked_mul(8)
             .ok_or(De441Error::InvalidFile("record size overflow"))?;
+        // Reject malicious sparse/seekable inputs before allocating a record cache.
+        // Pointer fields are untrusted and can otherwise request multi-GB buffers.
+        if record_size > MAX_CLASSIC_RECORD_BYTES {
+            return Err(De441Error::InvalidFile(
+                "coefficient record exceeds supported size",
+            ));
+        }
         let count = (end - start) / step;
         if !count.is_finite()
             || count < 1.0
@@ -248,6 +258,39 @@ impl<R: Read + Seek> De441<R> {
             return Err(De441Error::InvalidFile("invalid record count or size"));
         }
         let record_count = count as usize;
+
+        // Modification 2026-11-14: every declared Chebyshev subrecord must
+        // occupy distinguishable TDB Julian dates in the f64 reader API.
+        // Test the first and last principal record, where the binary64 ULP
+        // can be largest over the declared interval. Checking each boundary
+        // (rather than only granule width) also catches adjacent collisions.
+        let last_record_start = start + (record_count - 1) as f64 * step;
+        for pointer in pointers.iter().filter(|pointer| pointer.first != 0) {
+            let width = step / pointer.granules as f64;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(De441Error::InvalidFile(
+                    "coefficient granule dates exceed f64 JD resolution",
+                ));
+            }
+            for record_start in [start, last_record_start] {
+                let mut previous = record_start;
+                for granule in 1..pointer.granules {
+                    let boundary = record_start + granule as f64 * width;
+                    if !boundary.is_finite() || boundary <= previous {
+                        return Err(De441Error::InvalidFile(
+                            "coefficient granule dates exceed f64 JD resolution",
+                        ));
+                    }
+                    previous = boundary;
+                }
+                let record_end = record_start + step;
+                if !record_end.is_finite() || record_end <= previous {
+                    return Err(De441Error::InvalidFile(
+                        "coefficient granule dates exceed f64 JD resolution",
+                    ));
+                }
+            }
+        }
         let expected = (record_count as u64)
             .checked_add(2)
             .and_then(|n| n.checked_mul(record_size as u64))
@@ -292,8 +335,22 @@ impl<R: Read + Seek> De441<R> {
         let components = if target == center {
             Components::default()
         } else {
-            let record_index =
-                (((jd - self.start) / self.step).floor() as usize).min(self.record_count - 1);
+            // Modification 2026-11-14: subtracting the epoch from a distant
+            // file start can round a value just *before* a record boundary
+            // onto that boundary. Compare the original TDB JD against the
+            // header-defined boundaries instead of dividing a rounded delta.
+            // A boundary selects the following record; the final endpoint
+            // remains in the last record.
+            let (mut low, mut high) = (0usize, self.record_count);
+            while low + 1 < high {
+                let mid = low + (high - low) / 2;
+                if jd < self.start + mid as f64 * self.step {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+            }
+            let record_index = low;
             if self.cached_record_index != Some(record_index) {
                 // Invalidate before I/O: a short read may partially overwrite
                 // the buffer, including the previously cached record.
@@ -417,7 +474,22 @@ impl<R: Read + Seek> De441<R> {
             }));
         }
         let width = self.step / p.granules as f64;
-        let granule = (((jd - record_start) / width).floor() as usize).min(p.granules - 1);
+        // Modification 2026-11-14: division/floor can round an exact
+        // representable granule boundary just below its integer index.
+        // Binary-search the same rounded boundaries validated by new().
+        // At a boundary choose the following granule; at the inclusive
+        // final coverage endpoint choose the last one.
+        let (mut low, mut high) = (0usize, p.granules);
+        while low + 1 < high {
+            let mid = low + (high - low) / 2;
+            let boundary = record_start + mid as f64 * width;
+            if jd < boundary {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        let granule = low;
         let x = 2.0 * (jd - (record_start + granule as f64 * width)) / width - 1.0;
         let mut result = Components::default();
         for axis in 0..3 {
