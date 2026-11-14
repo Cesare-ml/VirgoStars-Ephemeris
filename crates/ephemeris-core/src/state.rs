@@ -188,22 +188,15 @@ mod tests {
             let midpoint = TdbSecondsPastJ2000::new(center).unwrap();
             assert!(center - tiny == center || center + tiny == center);
             assert!(matches!(
-                ChebyshevPositionRecord::new(
-                    midpoint,
-                    tiny,
-                    [vec![1.0], vec![2.0], vec![3.0]],
-                ),
+                ChebyshevPositionRecord::new(midpoint, tiny, [vec![1.0], vec![2.0], vec![3.0]],),
                 Err(EphemerisError::InvalidRadius)
             ));
 
             // A distinctly resolvable interval remains valid and evaluates
             // finite constant coefficients at both included endpoints.
-            let record = ChebyshevPositionRecord::new(
-                midpoint,
-                2.0,
-                [vec![1.0], vec![2.0], vec![3.0]],
-            )
-            .unwrap();
+            let record =
+                ChebyshevPositionRecord::new(midpoint, 2.0, [vec![1.0], vec![2.0], vec![3.0]])
+                    .unwrap();
             for epoch in [center - 2.0, center, center + 2.0] {
                 let state = record
                     .state_at(TdbSecondsPastJ2000::new(epoch).unwrap())
