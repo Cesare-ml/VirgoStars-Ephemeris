@@ -106,12 +106,11 @@ def preflight(
     }
 
 
-def source_provenance(*, git_runner=subprocess.run) -> dict:
-    """Pin the exact clean checkout that supplies the Rust Cargo binary.
-
-    Git's recorded HEAD alone is insufficient if tracked or untracked
-    source files can influence what Cargo compiles.
-    """
+def source_provenance(expected_source_sha: str, *, git_runner=subprocess.run) -> dict:
+    """Match the preapproved Git commit and require a clean Rust source tree."""
+    if re.fullmatch(r"[0-9a-fA-F]{40}", expected_source_sha) is None:
+        raise ValueError("expected source Git SHA must be exactly 40 hexadecimal digits")
+    expected_source_sha = expected_source_sha.lower()
     root = Path(__file__).resolve().parents[1]
 
     def git(*args: str) -> str:
@@ -132,6 +131,8 @@ def source_provenance(*, git_runner=subprocess.run) -> dict:
     commit = git("rev-parse", "HEAD")
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
         raise ValueError("source Git HEAD must be a complete 40-hex commit SHA")
+    if commit != expected_source_sha:
+        raise ValueError("source Git HEAD does not match preapproved source SHA")
     if git("status", "--porcelain=v1", "--untracked-files=all"):
         raise ValueError("source Git worktree must be clean before comparison")
     return {
@@ -147,6 +148,7 @@ def compare(
     reference_sha256: str,
     position_tolerance: str,
     velocity_tolerance: str,
+    expected_source_sha: str,
     *,
     runner=subprocess.run,
     source_checker=source_provenance,
@@ -156,7 +158,7 @@ def compare(
         kernel, reference, kernel_sha256, reference_sha256,
         position_tolerance, velocity_tolerance,
     )
-    source = source_checker()
+    source = source_checker(expected_source_sha)
     command = [
         "cargo", "run", "--locked", "--quiet",
         "-p", "virgostars-ephemeris-core",
@@ -202,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference-sha256", required=True)
     parser.add_argument("--position-km", required=True)
     parser.add_argument("--velocity-km-per-day", required=True)
+    parser.add_argument("--source-sha", required=True,
+                        help="preapproved 40-hex Git commit for this checkout")
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args(argv)
     # Never write an error receipt on top of an input file, even when the
@@ -213,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         report = compare(
             args.kernel, args.reference, args.kernel_sha256,
             args.reference_sha256, args.position_km,
-            args.velocity_km_per_day,
+            args.velocity_km_per_day, args.source_sha,
         )
         exit_code = 0 if report["cargo_exit_code"] == 0 else 1
     except (ValueError, OSError) as exc:
