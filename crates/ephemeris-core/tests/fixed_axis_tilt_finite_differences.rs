@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 //
 // Modification (2026-11-14): add synthetic finite-difference checks for
-// tilted fixed-axis spherical rates, branch-cut continuity, and XYZ reconstruction.
+// tilted spherical rates, branch cuts, XYZ reconstruction, and unit scaling.
 
 //! Independent centered-difference oracle for the public fixed-axis rates.
 //! This only checks synthetic linear motion in a fixed ICRF Cartesian frame;
@@ -200,6 +200,48 @@ fn tilted_spherical_state_reconstructs_icrf_position_and_velocity() {
                 velocity[axis],
                 velocity_scale * 2.0e-12,
             );
+        }
+    }
+}
+
+#[test]
+fn position_and_velocity_scaling_respects_rate_units() {
+    // Independent scaling is a metamorphic check on the units of the output.
+    // Position scales longitude/latitude not at all, radius linearly and
+    // angular rates inversely. Velocity scales both rate types linearly.
+    // Negative and zero velocity multipliers test signed and stationary rates.
+    let position = [137_000_000.0, -220_000_000.0, 39_000_000.0];
+    let velocity = [4_321.0, -6_543.0, 1_278.0];
+    for tilt in [0.0, 0.409_092_8, -0.27] {
+        let baseline = project_fixed_axes(&synthetic_state(position, velocity), tilt).unwrap();
+        for position_scale in [1.0e-6, 1.0, 1.0e6] {
+            for velocity_scale in [-2.0, 0.0, 1.0, 3.0] {
+                let scaled_position = position.map(|component| component * position_scale);
+                let scaled_velocity = velocity.map(|component| component * velocity_scale);
+                let result =
+                    project_fixed_axes(&synthetic_state(scaled_position, scaled_velocity), tilt)
+                        .unwrap();
+
+                assert_near(result.longitude_rad, baseline.longitude_rad, 2.0e-12);
+                assert_near(result.latitude_rad, baseline.latitude_rad, 2.0e-12);
+                let expected_distance = baseline.distance_km * position_scale;
+                assert_near(result.distance_km, expected_distance, expected_distance * 2.0e-12);
+
+                let angular_multiplier = velocity_scale / position_scale;
+                for (actual, original) in [
+                    (result.longitude_rate_rad_per_day, baseline.longitude_rate_rad_per_day),
+                    (result.latitude_rate_rad_per_day, baseline.latitude_rate_rad_per_day),
+                ] {
+                    let expected = original * angular_multiplier;
+                    assert_near(actual, expected, expected.abs() * 2.0e-12 + 1.0e-12);
+                }
+                let expected_radial_rate = baseline.distance_rate_km_per_day * velocity_scale;
+                assert_near(
+                    result.distance_rate_km_per_day,
+                    expected_radial_rate,
+                    expected_radial_rate.abs() * 2.0e-12 + 1.0e-12,
+                );
+            }
         }
     }
 }
