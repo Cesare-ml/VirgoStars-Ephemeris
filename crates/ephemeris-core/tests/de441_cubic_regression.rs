@@ -531,7 +531,7 @@ fn adjacent_f64_epochs_at_granule_transition_select_correct_polynomials() {
             (10.0, 2.0, 3.0, 4.0)
         };
         let expected_position =
-            c0 + c1 * x + c2 * (2.0 * x * x - 1.0) + c3 * (4.0 * x * x * x - 3.0);
+            c0 + c1 * x + c2 * (2.0 * x * x - 1.0) + c3 * (4.0 * x * x * x - 3.0 * x);
         let expected_velocity = (c1 + 4.0 * c2 * x + c3 * (12.0 * x * x - 3.0)) / 8.0;
         let state = ephemeris
             .state(
