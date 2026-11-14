@@ -880,6 +880,60 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): geometric position and velocity composition
+    // must obey target/center transitivity across three separately loaded
+    // SPKs, including the inclusive ET coverage endpoints.
+    #[test]
+    fn mixed_kernel_center_chains_preserve_transitivity_and_reverse_sign() {
+        for (moon_kind, earth_kind, emb_kind) in [(2, 3, 2), (3, 2, 3)] {
+            let mut set = with_kernels(&[
+                (
+                    SpkByteOrder::LittleEndian,
+                    vec![seg(3, 0, emb_kind, [100.0, 20.0], [0.5, -0.25])],
+                ),
+                (
+                    SpkByteOrder::BigEndian,
+                    vec![seg(399, 3, earth_kind, [10.0, 4.0], [-0.25, 0.125])],
+                ),
+                (
+                    SpkByteOrder::LittleEndian,
+                    vec![seg(301, 399, moon_kind, [2.0, -1.0], [0.125, 0.0])],
+                ),
+            ]);
+            assert_eq!(set.kernel_count(), 3);
+
+            for et in [0.0, 5.0, 10.0] {
+                let moon_earth = set.relative_state(301, 399, et).unwrap();
+                let earth_emb = set.relative_state(399, 3, et).unwrap();
+                let emb_ssb = set.relative_state(3, 0, et).unwrap();
+                let moon_ssb = set.relative_state(301, 0, et).unwrap();
+                let ssb_moon = set.relative_state(0, 301, et).unwrap();
+                assert_eq!(moon_ssb.common_ancestor_id, 0);
+                assert_eq!(ssb_moon.common_ancestor_id, 0);
+
+                for axis in 0..3 {
+                    near(
+                        moon_ssb.position_km[axis],
+                        moon_earth.position_km[axis]
+                            + earth_emb.position_km[axis]
+                            + emb_ssb.position_km[axis],
+                    );
+                    near(
+                        moon_ssb.velocity_km_per_second[axis],
+                        moon_earth.velocity_km_per_second[axis]
+                            + earth_emb.velocity_km_per_second[axis]
+                            + emb_ssb.velocity_km_per_second[axis],
+                    );
+                    near(moon_ssb.position_km[axis], -ssb_moon.position_km[axis]);
+                    near(
+                        moon_ssb.velocity_km_per_second[axis],
+                        -ssb_moon.velocity_km_per_second[axis],
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn invalid_load_keeps_existing_set_and_empty_has_explicit_errors() {
         let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
