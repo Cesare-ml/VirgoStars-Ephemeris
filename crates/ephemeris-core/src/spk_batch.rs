@@ -268,6 +268,90 @@ mod tests {
         );
     }
 
+    // Modification (2026-11-14): fail the entire ordered batch when a later
+    // kernel becomes unreadable, without losing the original I/O cause or
+    // poisoning a subsequent retry on the same loaded sources.
+    #[test]
+    fn failed_later_kernel_read_aborts_entire_batch_and_recovers() {
+        use std::cell::Cell;
+        use std::io::{self, Read, Seek, SeekFrom};
+        use std::rc::Rc;
+
+        struct ReadSwitch {
+            inner: Cursor<Vec<u8>>,
+            denied: Rc<Cell<bool>>,
+        }
+
+        impl Read for ReadSwitch {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.denied.get() {
+                    Err(io::Error::new(
+                        io::ErrorKind::BrokenPipe,
+                        "synthetic source became unavailable",
+                    ))
+                } else {
+                    self.inner.read(buffer)
+                }
+            }
+        }
+
+        impl Seek for ReadSwitch {
+            fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+                self.inner.seek(pos)
+            }
+        }
+
+        let deny_earth = Rc::new(Cell::new(false));
+        let deny_moon = Rc::new(Cell::new(false));
+        let mut set = SpkKernelSet::new();
+        set.load(ReadSwitch {
+            inner: kernel(399, 0, [100.0, 5.0], [3.0, -1.0], Order::Little, 1),
+            denied: Rc::clone(&deny_earth),
+        })
+        .unwrap();
+        set.load(ReadSwitch {
+            inner: kernel(301, 399, [2.0, 4.0], [0.1, 0.2], Order::Big, 1),
+            denied: Rc::clone(&deny_moon),
+        })
+        .unwrap();
+
+        // The first request is valid. The second needs the newer Moon
+        // kernel, where the injected BrokenPipe must abort the whole batch.
+        let requests = [(399, 0), (301, 399), (301, 0)];
+        deny_moon.set(true);
+        let failure = relative_states_at(&mut set, &requests, 5.0).unwrap_err();
+        assert!(matches!(
+            failure,
+            SpkBatchError::Request {
+                index: 1,
+                target_id: 301,
+                center_id: 399,
+                cause: SpkRelativeError::Segment(SpkStateError::Io(ref error))
+            } if error.kind() == io::ErrorKind::BrokenPipe
+        ));
+
+        // The standard Error::source chain retains the native I/O cause.
+        let relative = failure.source().unwrap();
+        let segment = relative.source().unwrap();
+        let io_cause = segment.source().unwrap();
+        assert_eq!(
+            io_cause.downcast_ref::<io::Error>().unwrap().kind(),
+            io::ErrorKind::BrokenPipe
+        );
+        assert_eq!(set.kernel_count(), 2);
+
+        // No reindexing/reloading should be required after the fault clears.
+        deny_moon.set(false);
+        let recovered = relative_states_at(&mut set, &requests, 5.0).unwrap();
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(recovered[0].position_km, [100.0, 5.0, 0.0]);
+        assert_eq!(recovered[1].position_km, [2.0, 4.0, 0.0]);
+        assert_eq!(recovered[2].position_km, [102.0, 9.0, 0.0]);
+        assert!((recovered[2].velocity_km_per_second[0] - 3.1).abs() < 1e-12);
+        assert!((recovered[2].velocity_km_per_second[1] + 0.8).abs() < 1e-12);
+        assert_eq!(set.kernel_count(), 2);
+    }
+
     #[test]
     fn nonfinite_et_fails_even_for_empty_batch_and_empty_kernels() {
         let mut empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
