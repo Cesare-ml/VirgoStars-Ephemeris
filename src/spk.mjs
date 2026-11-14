@@ -1,3 +1,17 @@
+// The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+//
+// Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+//
+// The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+//
+// The Original Developer is the Initial Developer.
+//
+// The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+//
+// Contributors retain applicable rights in their own contributions under the terms of this License.
+//
+// [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+
 /**
  * Independent, read-only SPK/DAF Type 2 reader.
  * Specification: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/daf.html
@@ -149,9 +163,12 @@ export function stateAtTdbSeconds(buffer, target, center, et) {
     positionKm: Object.freeze([0, 0, 0]), velocityKmPerSec: Object.freeze([0, 0, 0]),
     sourceSegments: Object.freeze([]),
   });
+  // NAIF DAF/SPK priority is file order: the last covering segment for a
+  // target wins, irrespective of frame or type. Never fall back to an older
+  // J2000 segment when the highest-priority segment is unsupported.
   const active = new Map();
   for (const s of spk.segments) {
-    if (s.startEt <= et && et <= s.endEt && s.frame === 1) active.set(s.target, s);
+    if (s.startEt <= et && et <= s.endEt) active.set(s.target, s);
   }
   const pathToRoot = (body) => {
     const path = [], visited = new Set();
@@ -160,7 +177,9 @@ export function stateAtTdbSeconds(buffer, target, center, et) {
       if (visited.has(body)) invalid('INVALID_SPK', 'Segment center-chain cycle detected');
       visited.add(body);
       const s = active.get(body);
-      if (!s) invalid('MISSING_CENTER_CHAIN', `No J2000 segment for body ${body} at requested epoch`);
+      if (!s) invalid('MISSING_CENTER_CHAIN', `No covering segment for body ${body} at requested epoch`);
+      if (s.frame !== 1)
+        invalid('UNSUPPORTED_SPK_FRAME', `Highest-priority covering segment for body ${body} uses unsupported frame ${s.frame}`);
       path.push(s);
       body = s.center;
     }
