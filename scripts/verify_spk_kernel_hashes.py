@@ -107,14 +107,17 @@ def read_declared_hashes(reference: Path) -> list[str]:
     return read_declared_manifest(reference)[0]
 
 
-def _file_identity(stat: os.stat_result) -> tuple[int, int, int, int, int]:
-    """Exclude access time; reads may update atime without changing file bytes."""
+def _file_identity(stat: os.stat_result) -> tuple[int, int, int, int]:
+    """Track stable identity/content fields across pathname and open descriptor.
+
+    Exclude atime (reads update it) and ctime: Windows may expose a different
+    creation-time representation via stat(path) and fstat(fd) for the same file.
+    """
     return (
         stat.st_dev,
         stat.st_ino,
         stat.st_size,
         stat.st_mtime_ns,
-        stat.st_ctime_ns,
     )
 
 
@@ -131,10 +134,7 @@ def sha256_file(path: Path) -> str:
     with path.open("rb") as stream:
         opened = _file_identity(os.fstat(stream.fileno()))
         if opened != path_before:
-            raise ValueError(
-                f"kernel path changed before SHA-256 read: {path}; "
-                f"before={path_before!r}; opened={opened!r}"
-            )
+            raise ValueError(f"kernel path changed before SHA-256 read: {path}")
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
         if _file_identity(os.fstat(stream.fileno())) != opened:
