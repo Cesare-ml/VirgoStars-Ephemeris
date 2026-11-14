@@ -13,6 +13,12 @@ external classic DE441 file; no kernel or Swiss code is included.
   seconds, its dimensionless rate and the relative position/velocity in ICRF
   axes, kilometres and kilometres per TDB day. Mars–Pluto targets are system
   barycenters. Earth as target and zero range are undefined and rejected.
+- Before any vector subtraction, validate every sampled state against its
+  requested target, solar-system barycenter origin, and exact TDB epoch; reject
+  non-finite position or velocity components. A wrong origin or stale epoch
+  raises `InvalidGeometry` rather than returning plausible but invalid
+  light-time values. This checks the state provider contract, not ICRF
+  frame accuracy or independent DE441 numerical correctness.
 - Solve `tau = |target(t - tau) - earth(t)| / c` by fixed-point iteration,
   using the exact SI speed of light 299792.458 km/s. Convergence means the
   next emission epoch is identical at the reader's **single-f64 JD**
@@ -81,3 +87,9 @@ invalid epoch, invalid velocity, no direction, error propagation and bounded
 iteration. Optional real-data tests are ignored by default and never download
 a kernel. 2026-11-10: added the independent Rust light-time module and tests;
 all existing CPAL notices and third-party attribution remain unchanged.
+
+2026-11-14: harden synthetic state-provider validation. Two offline unit
+tests inject wrong target/center/epoch metadata and non-finite position or
+velocity on both Earth and target fetches. No kernels, dependencies, time
+scales, numeric thresholds or physical corrections changed. The added checks
+remain unverified against real NASA/JPL kernels.
