@@ -509,3 +509,44 @@ fn adjacent_f64_epochs_inside_coverage_remain_evaluable() {
         assert_eq!(state.epoch, JulianDateTdb(jd));
     }
 }
+
+// Modification (2026-11-14): exercise adjacent representable TDB epochs
+// across the granule switch, without assuming synthetic continuity.
+#[test]
+fn adjacent_f64_epochs_at_granule_transition_select_correct_polynomials() {
+    let mut ephemeris = De441::new(Cursor::new(cubic_fixture())).unwrap();
+    let boundary = 1016.0_f64;
+    let before = f64::from_bits(boundary.to_bits() - 1);
+    let after = f64::from_bits(boundary.to_bits() + 1);
+
+    for (jd, second_granule) in [(before, false), (boundary, true), (after, true)] {
+        let x = if second_granule {
+            (jd - 1024.0) / 8.0
+        } else {
+            (jd - 1008.0) / 8.0
+        };
+        let (c0, c1, c2, c3) = if second_granule {
+            (20.0, -1.0, 0.0, 2.0)
+        } else {
+            (10.0, 2.0, 3.0, 4.0)
+        };
+        let expected_position =
+            c0 + c1 * x + c2 * (2.0 * x * x - 1.0) + c3 * (4.0 * x * x * x - 3.0);
+        let expected_velocity = (c1 + 4.0 * c2 * x + c3 * (12.0 * x * x - 3.0)) / 8.0;
+        let state = ephemeris
+            .state(
+                Body::Mercury,
+                Body::SolarSystemBarycenter,
+                JulianDateTdb(jd),
+            )
+            .unwrap();
+        assert!(
+            (state.position_km[0] - expected_position).abs() < 1.0e-10,
+            "position at JD {jd}"
+        );
+        assert!(
+            (state.velocity_km_per_day[0] - expected_velocity).abs() < 1.0e-10,
+            "velocity at JD {jd}"
+        );
+    }
+}
