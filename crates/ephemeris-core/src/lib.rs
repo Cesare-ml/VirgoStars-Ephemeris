@@ -34,6 +34,7 @@ pub mod first_sky;
 pub mod light_time;
 pub mod spk_batch;
 pub mod spk_direct_state;
+pub mod spk_effective_index;
 pub mod spk_index;
 pub mod spk_kernel_set;
 pub mod spk_relative_state;
