@@ -1,0 +1,101 @@
+// The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+//
+// Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+//
+// The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+//
+// The Original Developer is the Initial Developer.
+//
+// The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+//
+// Contributors retain applicable rights in their own contributions under the terms of this License.
+//
+// [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+
+/**
+ * Thin synchronous Node adapter for the experimental Rust DE441 example.
+ * No astronomical model is implemented here. Added 2026-11-14.
+ * The executable and separately licensed kernel are supplied by the caller.
+ */
+import { spawnSync } from 'node:child_process';
+
+const HEADER = 'target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day';
+const TARGETS = Object.freeze(['Sun', 'Moon', 'Mercury', 'Venus', 'MarsBarycenter', 'JupiterBarycenter', 'SaturnBarycenter', 'UranusBarycenter', 'NeptuneBarycenter', 'PlutoBarycenter']);
+const ANGLE_HEADER = 'armc_deg,ascendant_deg,midheaven_deg,true_obliquity_deg';
+
+/**
+ * Construct an explicit offline provider. It returns experimental positions,
+ * not Swiss-compatible output; unsupported bodies and options are errors.
+ * The child is started once per batch, so this is not a high-throughput API.
+ */
+export function createExperimentalRustCli({ executablePath, kernelPath }) {
+  if (typeof executablePath !== 'string' || !executablePath.trim() ||
+      typeof kernelPath !== 'string' || !kernelPath.trim()) {
+    throw new TypeError('Explicit executablePath and kernelPath are required');
+  }
+  const execute = args => {
+    const child = spawnSync(executablePath, args, {
+      encoding: 'utf8', windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024,
+    });
+    if (child.error) throw new Error(`Ephemeris process failed: ${child.error.message}`, { cause: child.error });
+    if (child.status !== 0) throw new Error(`Ephemeris process exited with status ${child.status}: ${(child.stderr || '').trim()}`);
+    return child.stdout.trim().split(/\r?\n/);
+  };
+  return Object.freeze({
+    julianDay({year, month, day, decimalHour, calendar, timeScale}) {
+      if (![year, month, day].every(Number.isInteger) || !Number.isFinite(decimalHour) || typeof calendar !== 'string' || typeof timeScale !== 'string') throw new TypeError('Explicit numeric date, decimal hour, calendar and time scale are required');
+      const lines = execute(['julday', String(year), String(month), String(day), String(decimalHour), calendar, timeScale]);
+      if (lines.length !== 2 || lines[0] !== 'julian_day' || !lines[1].trim() || !Number.isFinite(Number(lines[1]))) throw new Error('Invalid Julian-day CSV contract');
+      return Number(lines[1]);
+    },
+    reverseJulianDay({julianDay, calendar, timeScale}) {
+      if (!Number.isFinite(julianDay) || typeof calendar !== 'string' || typeof timeScale !== 'string') throw new TypeError('Finite Julian day, calendar and time scale are required');
+      const lines = execute(['revjul', String(julianDay), calendar, timeScale]);
+      if (lines.length !== 2 || lines[0] !== 'year,month,day,decimal_hour') throw new Error('Invalid reverse Julian-day CSV contract');
+      const parts = lines[1].split(',');
+      if (parts.length !== 4 || parts.some(part => !part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid reverse Julian-day CSV row');
+      const [year, month, day, decimalHour] = parts.map(Number);
+      if (![year, month, day].every(Number.isInteger) || month < 1 || month > 12 || day < 1 || day > 31 || decimalHour < 0 || decimalHour >= 24) throw new Error('Out-of-range reverse Julian-day CSV row');
+      return Object.freeze({year, month, day, decimalHour, calendar, timeScale});
+    },
+    calculate(timestamp) {
+      if (typeof timestamp !== 'string' || !timestamp.trim()) {
+        throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');
+      }
+      const lines = execute([kernelPath, timestamp]);
+      if (lines.length !== TARGETS.length + 1 || lines[0] !== HEADER) throw new Error('Invalid ephemeris CSV contract');
+      const results = lines.slice(1).map((line, index) => {
+        const [target, ...parts] = line.split(',');
+        if (target !== TARGETS[index] || parts.length !== 8 || parts.some(part => !part.trim() || !Number.isFinite(Number(part)))) {
+          throw new Error('Invalid ephemeris CSV row');
+        }
+        const [ttJulianDay, tdbJulianDay, longitudeDeg, latitudeDeg, distanceAu,
+          longitudeSpeedDegPerTdbDay, latitudeSpeedDegPerTdbDay, distanceSpeedAuPerTdbDay] = parts.map(Number);
+        if (longitudeDeg < 0 || longitudeDeg >= 360 || Math.abs(latitudeDeg) > 90 || distanceAu <= 0) {
+          throw new Error('Out-of-range ephemeris CSV row');
+        }
+        return Object.freeze({ target, ttJulianDay, tdbJulianDay, longitudeDeg, latitudeDeg, distanceAu,
+          longitudeSpeedDegPerTdbDay, latitudeSpeedDegPerTdbDay, distanceSpeedAuPerTdbDay });
+      });
+      return Object.freeze({
+        contract: 'VIRGOSTARS_EXPERIMENTAL_DE441_TRUE_ECLIPTIC_1',
+        frame: 'IAU2006_2000B_TRUE_ECLIPTIC_OF_DATE', center: 'EARTH',
+        corrections: 'LIGHT_TIME_ANNUAL_ABERRATION', timeModel: 'BOUNDED_UTC_TRUNCATED_TDB',
+        warnings: Object.freeze(['NOT_SWISS_PARITY', 'SOLAR_DEFLECTION_OMITTED', 'PLANET_SYSTEM_BARYCENTERS']),
+        results: Object.freeze(results),
+      });
+    },
+    calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
+      const values = [ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast];
+      if (!values.every(Number.isFinite)) throw new TypeError('Finite UT1, TT, latitude and east longitude are required');
+      const lines = execute(['angles', ...values.map(String)]);
+      if (lines.length !== 2 || lines[0] !== ANGLE_HEADER) throw new Error('Invalid angle CSV contract');
+      const parts = lines[1].split(',');
+      if (parts.length !== 4 || parts.some(part => !part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid angle CSV row');
+      const [armcDeg, ascendantDeg, midheavenDeg, trueObliquityDeg] = parts.map(Number);
+      if ([armcDeg, ascendantDeg, midheavenDeg].some(value => value < 0 || value >= 360) || trueObliquityDeg <= 0 || trueObliquityDeg >= 90) throw new Error('Out-of-range angle CSV row');
+      return Object.freeze({ armcDeg, ascendantDeg, midheavenDeg, trueObliquityDeg,
+        model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME', ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast });
+    },
+  });
+}
