@@ -121,6 +121,10 @@ fn synthetic_classic_binary() -> Vec<u8> {
     write_i32(&mut bytes, 2848, 1);
     write_i32(&mut bytes, 2852, 1);
 
+    // Each coefficient record begins with its own TDB JD start/end words.
+    write_f64(&mut bytes, RECORD_START as usize, START_JD);
+    write_f64(&mut bytes, RECORD_START as usize + 8, START_JD + 32.0);
+
     for axis in 0..3 {
         let offset = RECORD_START as usize + (2 + axis * 2) * 8;
         write_f64(&mut bytes, offset, 100.0 * (axis + 1) as f64);
