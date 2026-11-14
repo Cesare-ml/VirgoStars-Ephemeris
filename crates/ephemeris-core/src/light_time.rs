@@ -101,6 +101,29 @@ pub fn geocentric_light_time<R: Read + Seek>(
     })
 }
 
+// Every input to the light-time solver must be a geometric state relative
+// to the solar-system barycenter at the exact requested TDB epoch. Checking
+// these tags prevents silently subtracting vectors for different origins or
+// observation times if a future state provider violates that contract.
+fn checked_barycentric_state(
+    state: StateVector,
+    target: Body,
+    epoch: JulianDateTdb,
+) -> Result<StateVector, LightTimeError> {
+    if state.target != target
+        || state.center != Body::SolarSystemBarycenter
+        || state.epoch != epoch
+        || state
+            .position_km
+            .iter()
+            .chain(state.velocity_km_per_day.iter())
+            .any(|component| !component.is_finite())
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    Ok(state)
+}
+
 fn solve<F>(
     target: Body,
     observation_epoch: JulianDateTdb,
@@ -115,10 +138,15 @@ where
     if !observation_epoch.0.is_finite() {
         return Err(LightTimeError::InvalidGeometry);
     }
-    let observer = barycentric_state(Body::Earth, observation_epoch)?;
+    let observer = checked_barycentric_state(
+        barycentric_state(Body::Earth, observation_epoch)?,
+        Body::Earth,
+        observation_epoch,
+    )?;
     let mut emission = observation_epoch;
     for _ in 0..MAX_ITERATIONS {
-        let body = barycentric_state(target, emission)?;
+        let body =
+            checked_barycentric_state(barycentric_state(target, emission)?, target, emission)?;
         let position =
             std::array::from_fn::<_, 3, _>(|i| body.position_km[i] - observer.position_km[i]);
         let range = position[0].hypot(position[1]).hypot(position[2]);
@@ -232,6 +260,53 @@ mod tests {
             Ok(state)
         });
         assert!(matches!(result, Err(LightTimeError::InvalidGeometry)));
+    }
+
+    #[test]
+    fn rejects_inconsistent_state_origin_body_and_epoch() {
+        for corrupted_body in [Body::Earth, Body::MarsBarycenter] {
+            for field in 0..3 {
+                let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+                    let mut state = linear(body, epoch)?;
+                    if body == corrupted_body {
+                        match field {
+                            0 => state.target = Body::Sun,
+                            1 => state.center = Body::Earth,
+                            2 => state.epoch = JulianDateTdb(epoch.0 + 1.0),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Ok(state)
+                });
+                assert!(
+                    matches!(result, Err(LightTimeError::InvalidGeometry)),
+                    "corrupted body={corrupted_body:?}, field={field}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_nonfinite_observer_or_target_state_before_subtraction() {
+        for corrupted_body in [Body::Earth, Body::MarsBarycenter] {
+            for field in 0..2 {
+                let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+                    let mut state = linear(body, epoch)?;
+                    if body == corrupted_body {
+                        if field == 0 {
+                            state.position_km[1] = f64::NAN;
+                        } else {
+                            state.velocity_km_per_day[1] = f64::INFINITY;
+                        }
+                    }
+                    Ok(state)
+                });
+                assert!(
+                    matches!(result, Err(LightTimeError::InvalidGeometry)),
+                    "corrupted body={corrupted_body:?}, field={field}"
+                );
+            }
+        }
     }
 
     #[test]
