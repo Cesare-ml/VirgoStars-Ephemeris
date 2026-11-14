@@ -65,14 +65,82 @@ fn body_from_name(name: &str) -> Option<Body> {
 // auditable official Horizons API request or UTC acquisition timestamp.
 // A well-formed URL/timestamp is NOT proof of the response's provenance.
 fn valid_horizons_query_url(url: &str) -> bool {
-    let query = url
+    let Some(query) = url
         .strip_prefix("https://ssd.jpl.nasa.gov/api/horizons.api?")
-        .or_else(|| url.strip_prefix("https://ssd-api.jpl.nasa.gov/api/horizons.api?"));
-    matches!(
-        query,
-        Some(q) if !q.is_empty()
-            && !q.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'#')
-    )
+        .or_else(|| url.strip_prefix("https://ssd-api.jpl.nasa.gov/api/horizons.api?"))
+    else {
+        return false;
+    };
+    if query.is_empty()
+        || query
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'#')
+    {
+        return false;
+    }
+
+    // Modification 2026-11-14: an official-looking URL can still request
+    // ecliptic/astrometric vectors, UTC epochs or km/s. Do not allow it to
+    // substantiate contradictory ICRF/GEOMETRIC/TDB/km-day CSV metadata.
+    // Parsing is offline, dependency-free and deliberately fail-closed.
+    let mut fields = BTreeMap::new();
+    for part in query.split('&') {
+        let Some((key, value)) = part.split_once('=') else {
+            return false;
+        };
+        if key.is_empty() || value.is_empty() || fields.insert(key, value).is_some() {
+            return false;
+        }
+    }
+
+    for (key, expected) in [
+        ("EPHEM_TYPE", "VECTORS"),
+        ("TIME_TYPE", "TDB"),
+        ("REF_SYSTEM", "ICRF"),
+        ("REF_PLANE", "FRAME"),
+        ("VEC_CORR", "NONE"),
+        ("OUT_UNITS", "KM-D"),
+        ("VEC_TABLE", "2"),
+    ] {
+        let Some(raw) = fields.get(key) else {
+            return false;
+        };
+        // The official API examples wrap values in single quotes; valid
+        // URLs may retain the quotes or encode them as %27.
+        let value = raw
+            .strip_prefix("%27")
+            .and_then(|v| v.strip_suffix("%27"))
+            .or_else(|| raw.strip_prefix('\\'').and_then(|v| v.strip_suffix('\\'')))
+            .unwrap_or(raw);
+        if !value.eq_ignore_ascii_case(expected) {
+            return false;
+        }
+    }
+    if !fields.contains_key("COMMAND") || !fields.contains_key("CENTER") {
+        return false;
+    }
+
+    if fields.contains_key("TLIST") {
+        if fields.contains_key("START_TIME")
+            || fields.contains_key("STOP_TIME")
+            || fields.contains_key("STEP_SIZE")
+        {
+            return false;
+        }
+        let Some(raw) = fields.get("TLIST_TYPE") else {
+            return false;
+        };
+        let value = raw
+            .strip_prefix("%27")
+            .and_then(|v| v.strip_suffix("%27"))
+            .or_else(|| raw.strip_prefix('\\'').and_then(|v| v.strip_suffix('\\'')))
+            .unwrap_or(raw);
+        value.eq_ignore_ascii_case("JD")
+    } else {
+        fields.contains_key("START_TIME")
+            && fields.contains_key("STOP_TIME")
+            && fields.contains_key("STEP_SIZE")
+    }
 }
 
 // Accept a Gregorian UTC 'Z' timestamp with seconds and optional 1–9
@@ -409,7 +477,7 @@ mod tests {
         "# units=KM-D\n",
         "# target=Moon\n",
         "# center=Earth\n",
-        "# query_url=https://ssd.jpl.nasa.gov/api/horizons.api?example\n",
+        "# query_url=https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27301%27&CENTER=%27500@399%27&EPHEM_TYPE=%27VECTORS%27&TIME_TYPE=%27TDB%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&VEC_CORR=%27NONE%27&VEC_TABLE=%272%27&OUT_UNITS=%27KM-D%27&TLIST_TYPE=%27JD%27&TLIST=%272451545.0%27\n",
         "# retrieved_utc=2026-11-10T00:00:00Z\n",
         "jd_tdb,x_km,y_km,z_km,vx_km_day,vy_km_day,vz_km_day\n",
         "2451545.0,1,2,3,4,5,6\n",
@@ -517,7 +585,7 @@ mod tests {
 
     #[test]
     fn rejects_unreviewable_horizons_query_urls() {
-        const GOOD: &str = "https://ssd.jpl.nasa.gov/api/horizons.api?example";
+        const GOOD: &str = "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27301%27&CENTER=%27500@399%27&EPHEM_TYPE=%27VECTORS%27&TIME_TYPE=%27TDB%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&VEC_CORR=%27NONE%27&VEC_TABLE=%272%27&OUT_UNITS=%27KM-D%27&TLIST_TYPE=%27JD%27&TLIST=%272451545.0%27";
         for bad in [
             "http://ssd.jpl.nasa.gov/api/horizons.api?example",
             "https://ssd.jpl.nasa.gov.evil.example/api/horizons.api?example",
@@ -535,9 +603,60 @@ mod tests {
             );
         }
         assert!(valid_horizons_query_url(GOOD));
-        assert!(valid_horizons_query_url(
-            "https://ssd-api.jpl.nasa.gov/api/horizons.api?format=text"
-        ));
+        let alt_host = GOOD.replacen("ssd.jpl.nasa.gov", "ssd-api.jpl.nasa.gov", 1);
+        assert!(valid_horizons_query_url(&alt_host));
+    }
+
+    #[test]
+    fn rejects_horizons_query_settings_conflicting_with_csv_science_contract() {
+        let good = VALID
+            .lines()
+            .find_map(|line| line.strip_prefix("# query_url="))
+            .unwrap();
+        assert!(valid_horizons_query_url(good));
+
+        for (expected, wrong) in [
+            ("EPHEM_TYPE=%27VECTORS%27", "EPHEM_TYPE=%27OBSERVER%27"),
+            ("TIME_TYPE=%27TDB%27", "TIME_TYPE=%27UT%27"),
+            ("REF_SYSTEM=%27ICRF%27", "REF_SYSTEM=%27B1950%27"),
+            ("REF_PLANE=%27FRAME%27", "REF_PLANE=%27ECLIPTIC%27"),
+            ("VEC_CORR=%27NONE%27", "VEC_CORR=%27LT%27"),
+            ("OUT_UNITS=%27KM-D%27", "OUT_UNITS=%27KM-S%27"),
+            ("VEC_TABLE=%272%27", "VEC_TABLE=%271%27"),
+            ("TLIST_TYPE=%27JD%27", "TLIST_TYPE=%27MJD%27"),
+        ] {
+            assert!(good.contains(expected), "{expected}");
+            let bad = good.replacen(expected, wrong, 1);
+            assert!(!valid_horizons_query_url(&bad), "{wrong}");
+            assert!(parse_reference(&malformed_reference(good, &bad)).is_err());
+        }
+        for missing in [
+            "&COMMAND=%27301%27",
+            "&CENTER=%27500@399%27",
+            "&TIME_TYPE=%27TDB%27",
+            "&VEC_TABLE=%272%27",
+            "&TLIST_TYPE=%27JD%27",
+            "&TLIST=%272451545.0%27",
+        ] {
+            assert!(good.contains(missing), "{missing}");
+            let bad = good.replacen(missing, "", 1);
+            assert!(!valid_horizons_query_url(&bad), "{missing}");
+            assert!(parse_reference(&malformed_reference(good, &bad)).is_err());
+        }
+        for bad in [
+            format!("{good}&TIME_TYPE=%27UT%27"),
+            format!("{good}&EPHEM_TYPE=%27VECTORS%27"),
+            format!("{good}&START_TIME=2026-01-01"),
+            format!("{good}&"),
+            format!("{good}&unexpected"),
+        ] {
+            assert!(!valid_horizons_query_url(&bad), "{bad}");
+            assert!(parse_reference(&malformed_reference(good, &bad)).is_err());
+        }
+        // Official Horizons examples also permit quoted or unquoted values.
+        let unquoted = good.replace("%27", "");
+        assert!(valid_horizons_query_url(&unquoted));
+        assert!(parse_reference(&malformed_reference(good, &unquoted)).is_ok());
     }
 
     #[test]
