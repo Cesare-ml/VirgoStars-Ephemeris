@@ -103,7 +103,7 @@ mod tests {
     use super::*;
     use crate::calendar::TimeScale;
     use crate::de441::JulianDateTdb;
-    use crate::de441_checked_batch::checked_states_at_split_tdb;
+    use crate::de441_checked_batch::{checked_states_at_split_tdb, CheckedBatchError};
     use std::cell::Cell;
     use std::io::{self, Cursor, SeekFrom};
     use std::rc::Rc;
@@ -339,7 +339,7 @@ mod tests {
         let requests = [(Body::Mercury, Body::SolarSystemBarycenter); 3];
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &requests, fractional_tdb(), 0.000_001),
-            Err(CheckedStateError::Epoch(
+            Err(CheckedBatchError::Epoch(
                 EpochBridgeError::PrecisionLoss { .. }
             ))
         ));
@@ -368,17 +368,17 @@ mod tests {
         let wrong_scale = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], wrong_scale, 0.0),
-            Err(CheckedStateError::Epoch(EpochBridgeError::WrongTimeScale))
+            Err(CheckedBatchError::Epoch(EpochBridgeError::WrongTimeScale))
         ));
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], exact_tdb(), f64::INFINITY),
-            Err(CheckedStateError::Epoch(
+            Err(CheckedBatchError::Epoch(
                 EpochBridgeError::InvalidErrorBudget
             ))
         ));
         assert!(matches!(
             checked_states_at_split_tdb(&mut ephemeris, &[], fractional_tdb(), 0.0),
-            Err(CheckedStateError::Epoch(
+            Err(CheckedBatchError::Epoch(
                 EpochBridgeError::PrecisionLoss { .. }
             ))
         ));
@@ -386,24 +386,50 @@ mod tests {
     }
 
     #[test]
-    fn batch_propagates_missing_series_without_partial_results_or_fallback() {
+    fn batch_identifies_failing_pair_and_preserves_typed_source_without_partial_result() {
         let (mut ephemeris, reads) = reader();
         let requests = [
             (Body::Mercury, Body::SolarSystemBarycenter),
             (Body::Venus, Body::SolarSystemBarycenter),
             (Body::Mercury, Body::SolarSystemBarycenter),
         ];
+        let failure =
+            checked_states_at_split_tdb(&mut ephemeris, &requests, exact_tdb(), 0.0).unwrap_err();
+        match &failure {
+            CheckedBatchError::Request {
+                index,
+                target,
+                center,
+                source: De441Error::MissingSeries(_),
+            } => {
+                assert_eq!(*index, 1);
+                assert_eq!(*target, Body::Venus);
+                assert_eq!(*center, Body::SolarSystemBarycenter);
+            }
+            other => panic!("unexpected batch failure: {other:?}"),
+        }
+        assert!(failure.to_string().contains("request 1"));
+        assert!(failure.to_string().contains("Venus"));
         assert!(matches!(
-            checked_states_at_split_tdb(&mut ephemeris, &requests, exact_tdb(), 0.0),
-            Err(CheckedStateError::Ephemeris(De441Error::MissingSeries(_)))
+            failure
+                .source()
+                .and_then(|cause| cause.downcast_ref::<De441Error>()),
+            Some(De441Error::MissingSeries(_))
         ));
         assert_eq!(reads.get(), 1);
+
         let beyond = JulianDate::new(2_451_580, 0.5, TimeScale::Tdb).unwrap();
+        let failure =
+            checked_states_at_split_tdb(&mut ephemeris, &requests, beyond, 0.0).unwrap_err();
         assert!(matches!(
-            checked_states_at_split_tdb(&mut ephemeris, &requests, beyond, 0.0),
-            Err(CheckedStateError::Ephemeris(
-                De441Error::OutsideCoverage { .. }
-            ))
+            failure,
+            CheckedBatchError::Request {
+                index: 0,
+                target: Body::Mercury,
+                center: Body::SolarSystemBarycenter,
+                source: De441Error::OutsideCoverage { .. }
+            }
         ));
+        assert_eq!(reads.get(), 1);
     }
 }
