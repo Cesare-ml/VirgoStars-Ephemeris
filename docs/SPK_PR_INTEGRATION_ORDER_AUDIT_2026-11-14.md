@@ -62,19 +62,48 @@ dependent changes** before integration.
 - `MERGED`: the PR is reported merged into `dev/ephemeris` and its listed
   prerequisites are also merged into that branch. This is a GitHub metadata
   check, **not** an audit of equivalence or numerical accuracy.
-- `BLOCKED`: at least one prerequisite has not been merged.
+- `BLOCKED`: at least one prerequisite is not **validly merged into
+  `dev/ephemeris`**. A GitHub-merged parent with a wrong base or an
+  earlier out-of-order merge **must not** unlock its descendants.
 - `DRAFT_REVIEW`: dependencies merged, but PR still draft.
 - `HUMAN_REVIEW_REQUIRED`: dependencies merged and PR open/non-draft.
   **Never** interpret as automatic merge permission or green CI.
 - `CLOSED_UNMERGED`: PR is closed without a merge.
 - `BASE_REVIEW`: the PR targets a branch other than `dev/ephemeris`.
-- `ORDER_CONFLICT`: a PR was marked merged while a prerequisite was not.
+- `ORDER_CONFLICT`: a PR was marked merged while its direct prerequisite
+  does not have a valid `MERGED` audit status, including transitively.
   This may require human reconciliation of a cherry-pick or previous merge.
 
 Default exit is `0` for a valid status report even with blocked/draft work,
-`1` if an order conflict exists, `2` for missing/malformed or inaccessible
-status input. With `--require-integrated`, exit `1` until **all eight**
+`1` if an out-of-order merge **or a merged PR with the wrong target branch**
+exists, `2` for missing/malformed or inaccessible status input. With `--require-integrated`, exit `1` until **all eight**
 manifest PRs report `MERGED` without conflicts or wrong-base metadata.
+
+## Next review stage (advisory only)
+
+The report now includes `next_review_stage` in JSON (or `NEXT HUMAN REVIEW`
+in console output). This selects the first chain item that is unmerged but
+has successfully audited predecessors and is either `DRAFT_REVIEW` or
+`HUMAN_REVIEW_REQUIRED`. It does **not** inspect GitHub CI, approvals,
+security, science receipts, current mergeability or branch conflicts and
+**never** authorizes a merge. `null` means no stage is currently ready
+for a human review, which may mean either complete integration or blocking
+errors; inspect the detailed statuses to tell which.
+
+`blocking_prerequisites` lists direct ancestors whose audit status is not
+`MERGED`, including ancestors nominally merged on GitHub but marked
+`BASE_REVIEW` or `ORDER_CONFLICT`. The pre-existing
+`unmerged_prerequisites` field is retained for consumers that need to
+distinguish GitHub's raw merge flag from safe dependency readiness.
+
+### Checked live snapshot — 2026-11-14
+
+The GitHub read-only inspection performed on 2026-11-14 found that
+#148, #150, #157, and #159 were merged into `dev/ephemeris`.
+The next sequential step is **draft PR #160**, with #162 and #164
+blocked behind it; #165 is an independent scientific-coverage check.
+This is a dated observation, not a continuously updated status claim.
+Rerun `--live` to verify the status before any human review.
 
 ## Scientific boundary and ownership
 
