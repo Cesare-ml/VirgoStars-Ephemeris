@@ -30,6 +30,9 @@ use std::path::Path;
 
 const HEADER_SIZE: usize = 2856;
 const SERIES_COUNT: usize = 13;
+// 2026-11-14: Bound a caller-controlled record cache allocation. Real classic
+// DE441 records are far smaller; this is a defensive implementation limit.
+const MAX_CLASSIC_RECORD_BYTES: usize = 16 * 1024 * 1024;
 
 /// Julian date in Barycentric Dynamical Time. No UTC/TT conversion is performed.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -238,6 +241,13 @@ impl<R: Read + Seek> De441<R> {
         let record_size = words
             .checked_mul(8)
             .ok_or(De441Error::InvalidFile("record size overflow"))?;
+        // Reject malicious sparse/seekable inputs before allocating a record cache.
+        // Pointer fields are untrusted and can otherwise request multi-GB buffers.
+        if record_size > MAX_CLASSIC_RECORD_BYTES {
+            return Err(De441Error::InvalidFile(
+                "coefficient record exceeds supported size",
+            ));
+        }
         let count = (end - start) / step;
         if !count.is_finite()
             || count < 1.0
