@@ -153,6 +153,30 @@ impl<R: Read + Seek> SpkKernelSet<R> {
             .collect()
     }
 
+    /// Sorted, unique TDB/ET coverage endpoints declared for one target.
+    ///
+    /// These boundaries are useful when planning discontinuity/priority
+    /// diagnostics across loaded kernels, including overlapping or masked
+    /// segments. They do **not** imply contiguous coverage or that a valid
+    /// state exists between endpoints: selected segments may be unsupported
+    /// or corrupt, and endpoints are inclusive. Use `selected_segment` at
+    /// the actual epoch to determine the winner.
+    ///
+    /// Epochs are TDB seconds past J2000, not Julian days. The DAF index
+    /// validation guarantees finite endpoints. Positive and negative zero
+    /// are normalized into a single +0.0 boundary.
+    pub fn declared_coverage_boundaries_for_target(&self, target_id: i32) -> Vec<f64> {
+        let mut boundaries = self
+            .declared_segments_for_target(target_id)
+            .into_iter()
+            .flat_map(|(_, segment)| [segment.start_tdb_seconds, segment.end_tdb_seconds])
+            .map(|epoch| if epoch == 0.0 { 0.0 } else { epoch })
+            .collect::<Vec<_>>();
+        boundaries.sort_by(f64::total_cmp);
+        boundaries.dedup();
+        boundaries
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -680,6 +704,57 @@ mod tests {
         assert_eq!(
             set.declared_segments_for_target(399),
             inventory[..2].to_vec()
+        );
+    }
+
+    // Modification (2026-11-14): preserve all declared coverage boundaries
+    // without making scientific claims about which segments are computable.
+    #[test]
+    fn declared_coverage_boundaries_are_sorted_unique_and_restore_after_unload() {
+        let empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(empty.declared_coverage_boundaries_for_target(301).is_empty());
+
+        let mut earliest = seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0]);
+        earliest.coverage_start = -0.0;
+        let mut interior = seg(301, 4, 3, [2.0, 0.0], [0.0, 0.0]);
+        interior.coverage_start = 3.0;
+        interior.coverage_end = 7.0;
+        let duplicate_span = seg(301, 3, 2, [3.0, 0.0], [0.0, 0.0]);
+        let unrelated = seg(399, 0, 2, [4.0, 0.0], [0.0, 0.0]);
+        let mut unsupported = seg(301, 0, 9, [5.0, 0.0], [0.0, 0.0]);
+        unsupported.coverage_start = 6.0;
+        unsupported.coverage_end = 8.0;
+        let mut set = with_kernels(&[
+            (
+                SpkByteOrder::LittleEndian,
+                vec![earliest, interior, duplicate_span, unrelated],
+            ),
+            (SpkByteOrder::BigEndian, vec![unsupported]),
+        ]);
+
+        let expected = vec![0.0, 3.0, 6.0, 7.0, 8.0, 10.0];
+        assert_eq!(set.declared_coverage_boundaries_for_target(301), expected);
+        assert_eq!(
+            set.declared_coverage_boundaries_for_target(301)[0].to_bits(),
+            0.0_f64.to_bits(),
+        );
+        assert!(set.declared_coverage_boundaries_for_target(999).is_empty());
+        assert_eq!(set.declared_coverage_boundaries_for_target(399), vec![0.0, 10.0]);
+
+        // Both start and end of an overlay are inclusive. The next
+        // representable epoch after its end is no longer in that overlay.
+        assert_eq!(set.selected_segment(301, 8.0).unwrap().unwrap().0, 1);
+        let after_end = f64::from_bits(8.0_f64.to_bits() + 1);
+        assert_eq!(set.selected_segment(301, after_end).unwrap().unwrap().0, 0);
+        assert!(matches!(
+            set.direct_state(301, 8.0),
+            Err(SpkStateError::UnsupportedType(9))
+        ));
+
+        set.unload_last().unwrap();
+        assert_eq!(
+            set.declared_coverage_boundaries_for_target(301),
+            vec![0.0, 3.0, 7.0, 10.0],
         );
     }
 
