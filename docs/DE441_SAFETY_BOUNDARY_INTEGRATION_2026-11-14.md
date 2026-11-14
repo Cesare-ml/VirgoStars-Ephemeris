@@ -20,11 +20,12 @@ reviewable PRs and should not itself be integrated into production.
 |---|---|---|
 | [#174](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/174) | `059d92ad0e75cfb2a5f50d7d08aef075a2a302b9` | 16 MiB max record-cache size before allocation and two tests |
 | [#182](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/182) | `417dbd3a0526bd7a093e22d5f3ce495ed9eb2d63` | Four synthetic negative, zero and distant TDB JD regressions |
-| [#187](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/187) | `9f5ca08d3398b6e3ae32a479efac18c34f2b2bb5` | Representable granule-grid guard, boundary binary search, seven tests |
+| [#187](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/187) | `ffc0af87275e379b45977e9ca8a5f3933aa4666d` | Representable granule-grid guard, boundary binary search, overflow-safe normalized coordinate, eight tests |
 | [#193](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/193) | `4f3089aafa7acfbb944941ffec1c1fbd9f482141` | Record boundary binary search using original TDB JD and three tests |
 
-The 16 test functions across four copied source test files are **synthetic
-regression oracles**; any existing workspace tests add further coverage.
+The 17 test functions across four copied source test files, plus two
+**new cross-PR regressions** in `de441_combined_boundary_guards.rs`, are
+**synthetic regression oracles**; existing workspace tests add further coverage.
 No new runtime APIs, external kernel files, dependencies or build actions.
 
 ## Combined invariant
@@ -41,7 +42,13 @@ For a supported classic little-endian DE441 kernel:
 4. Select a series granule using its binary64 boundaries (not division
    rounded to the wrong index). Exact interior boundaries belong to the
    subsequent granule, the final endpoint belongs to the last.
-5. Return geometric ICRF Cartesian positions in km, velocities in km/day,
+5. Divide the TDB offset by the granule width **before doubling** the
+   normalized Chebyshev coordinate, avoiding intermediate overflow in
+   very wide finite windows.
+6. Check the combined record-and-granule guards against a synthetic
+   four-granule/two-record fixture on both sides of signed zero, around
+   ±16 days and at archival-scale negative TDB JDs.
+7. Return geometric ICRF Cartesian positions in km, velocities in km/day,
    with explicit target relative to center. No scientific model, timescale
    conversion, light time or apparent-correction changes.
 
@@ -81,3 +88,14 @@ expected conflicts after every merge, especially overlapping hunks in
 `de441.rs`. This verification branch is ephemeral evidence and should
 remain unmerged. Do not alter `main`, publish packages, deploy consumers or
 change licensing as part of this check.
+
+## CI refresh note (2026-11-14)
+
+This revision supersedes the earlier verified combined head
+`b6f10c3b477dd84b86d1d0687453e0ad41c01282` that passed workflow
+[#43595997715](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/43595997715).
+The upstream #187 draft subsequently gained another four commits and an
+overflow-safe normalization expression plus an eighth regression. The
+current integration branch imports that **new** exact #187 head and includes
+two **additional** cross-PR tests. The prior CI cannot be cited as proof for
+the refreshed head; new exact-head CI must pass on Linux, Windows and macOS.
