@@ -741,6 +741,69 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-14): validate the existing WGS84 Cartesian
+    // observer conversion against an independent ERFA gd2gc test fixture.
+    #[test]
+    fn wgs84_observer_xyz_matches_independent_erfa_gd2gc_reference() {
+        // ERFA t_gd2gc: WGS84, geodetic longitude 3.1 radians,
+        // latitude -0.5 radians, ellipsoidal height 2500 meters.
+        // The ERFA reference is Earth-fixed XYZ in meters. In this unit
+        // fixture the supplied local rotation angle equals the longitude;
+        // production first_sky::calculate additionally includes GMST.
+        // See THIRD_PARTY_NOTICES.md for source and separate ERFA license.
+        let site = Observer {
+            latitude_deg: (-0.5_f64).to_degrees(),
+            longitude_deg_east: 3.1_f64.to_degrees(),
+            height_m: 2500.0,
+        };
+        validate_observer(site).unwrap();
+        let actual = observer_vector(site, 3.1);
+        let erfa_reference_meters = [
+            -5_599_000.557_704_995,
+            233_011.672_234_792_03,
+            -3_040_909.470_698_336_3,
+        ];
+        for axis in 0..3 {
+            near(actual[axis], erfa_reference_meters[axis] / 1000.0, 1e-9);
+        }
+    }
+
+    #[test]
+    fn wgs84_height_and_half_turn_preserve_geodetic_geometry() {
+        let latitude = -0.5_f64;
+        let angle = 3.1_f64;
+        let site = Observer {
+            latitude_deg: latitude.to_degrees(),
+            longitude_deg_east: angle.to_degrees(),
+            height_m: 2500.0,
+        };
+        let base = observer_vector(site, angle);
+        let raised = observer_vector(
+            Observer {
+                height_m: site.height_m + 1000.0,
+                ..site
+            },
+            angle,
+        );
+        // A +1000 m ellipsoidal height increment is +1 km in the
+        // geodetic normal direction, irrespective of Earth flattening.
+        let expected_height_delta = [
+            latitude.cos() * angle.cos(),
+            latitude.cos() * angle.sin(),
+            latitude.sin(),
+        ];
+        for axis in 0..3 {
+            near(raised[axis] - base[axis], expected_height_delta[axis], 1e-9);
+        }
+
+        // A 180-degree rotation of the local sidereal/longitude angle
+        // reverses both equatorial components but leaves Z unchanged.
+        let opposite = observer_vector(site, angle + PI);
+        near(opposite[0], -base[0], 1e-9);
+        near(opposite[1], -base[1], 1e-9);
+        near(opposite[2], base[2], 1e-9);
+    }
+
     #[test]
     fn gmst_and_wgs84_geometries_match_reference_and_cardinal_directions() {
         let j2000 = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
