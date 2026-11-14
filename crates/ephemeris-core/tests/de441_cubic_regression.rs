@@ -688,7 +688,6 @@ fn first_granule_xyz_coefficients_remain_independent_near_transition() {
     }
 }
 
-
 // Modification (2026-11-14): independently check all XYZ cubic coefficients
 // at interior epochs of the second synthetic granule, not only its boundary.
 #[test]
