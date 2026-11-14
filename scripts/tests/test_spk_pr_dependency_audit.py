@@ -35,10 +35,11 @@ def snapshot(merged=(), drafts=(), closed_unmerged=(), base_overrides=None):
             "number": number,
             "state": "closed" if number in merged or number in closed_unmerged else "open",
             "merged": number in merged,
+            "merged_at": f"2026-11-14T12:{ordinal:02d}:00Z" if number in merged else None,
             "draft": number in drafts,
             "base": {"ref": base_overrides.get(number, tool.INTEGRATION_BRANCH)},
         }
-        for number in tool.PR_NUMBERS
+        for ordinal, number in enumerate(tool.PR_NUMBERS)
     }
 
 
@@ -130,6 +131,54 @@ class DependencyAuditTests(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 code = tool.main(["--snapshot", str(filename)])
             self.assertEqual(code, 2)
+
+    def test_historical_inversion_fails_after_both_prs_are_merged(self):
+        values = snapshot(merged=tool.PR_NUMBERS)
+        values["150"]["merged_at"] = "2026-11-14T11:59:00Z"
+        records = statuses(values)
+        self.assertEqual(records[148]["status"], "MERGED")
+        self.assertEqual(records[150]["status"], "ORDER_CONFLICT")
+        self.assertEqual(records[157]["status"], "ORDER_CONFLICT")
+        self.assertEqual(records[157]["blocking_prerequisites"], [150])
+
+    def test_same_second_cannot_prove_merge_order(self):
+        values = snapshot(merged=(148, 150))
+        values["150"]["merged_at"] = values["148"]["merged_at"]
+        records = statuses(values)
+        self.assertEqual(records[150]["status"], "ORDER_UNVERIFIED")
+        self.assertEqual(records[157]["status"], "BLOCKED")
+
+    def test_timezone_offsets_are_normalized_for_chronology(self):
+        values = snapshot(merged=(148, 150))
+        values["150"]["merged_at"] = "2026-11-14T13:00:00+01:00"
+        self.assertEqual(statuses(values)[150]["status"], "ORDER_UNVERIFIED")
+        values["150"]["merged_at"] = "2026-11-14T13:00:01+01:00"
+        self.assertEqual(statuses(values)[150]["status"], "MERGED")
+
+    def test_merged_at_is_required_and_timezone_aware(self):
+        values = snapshot(merged=(148,))
+        for invalid in (None, 42, "not-a-date", "2026-11-14T12:00:00"):
+            values["148"]["merged_at"] = invalid
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                tool.AuditInputError, "merged_at"
+            ):
+                tool.audit(values)
+        values = snapshot()
+        values["148"]["merged_at"] = "2026-11-14T12:00:00Z"
+        with self.assertRaisesRegex(tool.AuditInputError, "unmerged PR has merged_at"):
+            tool.audit(values)
+
+    def test_tied_merge_timestamps_set_nonzero_exit(self):
+        values = snapshot(merged=(148, 150))
+        values["150"]["merged_at"] = values["148"]["merged_at"]
+        with tempfile.TemporaryDirectory() as directory:
+            filename = Path(directory) / "prs.json"
+            filename.write_text(json.dumps(values), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(tool.main(["--snapshot", str(filename)]), 1)
+                self.assertEqual(
+                    tool.main(["--snapshot", str(filename), "--require-integrated"]), 1
+                )
 
     def test_out_of_order_merge_sets_nonzero_exit_even_without_strict_flag(self):
         with tempfile.TemporaryDirectory() as directory:
