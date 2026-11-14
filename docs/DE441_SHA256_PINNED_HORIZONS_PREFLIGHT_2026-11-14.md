@@ -30,10 +30,23 @@ receipt path which would overwrite either input.
 
 The existing Rust parser remains the authority for complete header,
 coverage, body identity, reference CSV metadata, time, frame,
-corrections, units, and six-vector finite residual validation. This
-preflight does not independently verify the authenticity of a CSV
-query URL, prove that Horizons actually used the DE441 solution,
-or check the source-code worktree is clean.
+corrections, units, and six-vector finite residual validation.
+
+**Source revision gate (added 2026-11-14):** before running Cargo,
+the preflight also requires a separately preapproved **40-hex Git
+commit SHA** (`--source-sha`), checks that the script resides at the
+actual repository root, checks that `HEAD` matches the approved commit,
+and rejects any tracked or untracked changes reported by
+`git status --porcelain=v1 --untracked-files=all`.
+No uncommitted source code can be silently mixed with the validated
+kernel/reference input files. Keep the two external inputs and the
+receipt folder **outside** the source checkout. A clean Git tree and
+matching commit still require an independent code review and do
+not authenticate NASA/JPL material; ignored files and external toolchains
+are not covered by this check.
+
+The preflight does not independently verify the authenticity of a CSV
+query URL or prove that Horizons actually used the DE441 solution.
 
 ## Prepare authentic inputs
 
@@ -50,10 +63,19 @@ or check the source-code worktree is clean.
    distinct from planetary centers). Preserve the full original
    Horizons response/API query and the curated `reference.csv`.
 3. Save/approve both SHA-256 hashes **before executing** the comparison.
-   Agree on two **strictly positive component tolerances** in km and
-   km/TDB-day; the script has no defaults and does not approve them.
+   Record and approve the precise 40-hex Git commit SHA of the Rust
+   repository. Ensure `git status --porcelain=v1 --untracked-files=all`
+   reports nothing. Agree on two **strictly positive component tolerances**
+   in km and km/TDB-day; the script has no defaults and does not approve them.
 
 ## Run (Windows 11 PowerShell)
+
+Before comparing, record the reviewed commit:
+
+```powershell
+git rev-parse HEAD
+git status --porcelain=v1 --untracked-files=all
+```
 
 ```powershell
 py -3 scripts/validate_classic_de441_horizons.py `
@@ -63,6 +85,7 @@ py -3 scripts/validate_classic_de441_horizons.py `
   --reference-sha256 '<64-hex reviewed CSV fingerprint>' `
   --position-km '0.01' `
   --velocity-km-per-day '0.0001' `
+  --source-sha '<40-hex approved Git commit>' `
   --receipt 'D:\Ephemerides\evidence\de441-horizons-receipt.json'
 ```
 
@@ -78,10 +101,11 @@ The script invokes the **existing** Rust implementation only:
 cargo run --locked --quiet -p virgostars-ephemeris-core --example validate_horizons -- <kernel> <reference.csv> <max_position_component_km> <max_velocity_component_km_day>
 ```
 
-The receipt records both input hashes, kernel basename and bytes,
+The receipt (schema version **2**) records both input hashes, kernel
+basename and bytes, the exact verified Git commit and clean-tree status,
 declared component tolerances, command/exit status and full Rust
-stdout/stderr. Failures cause nonzero exit; mismatched fingerprints
-stop **before Cargo**. A receipt path that equals either input is
+stdout/stderr. Failures cause nonzero exit; mismatched fingerprints,
+unapproved commits and dirty worktrees stop **before Cargo**. A receipt path that equals either input is
 rejected without opening it for output.
 
 A zero Cargo exit produces the deliberately limited status
@@ -107,7 +131,10 @@ cargo test --workspace --example validate_horizons --locked
 
 The tests fabricate a small **fictional header** only; the test
 temporarily relaxes the size preflight *inside the mock unit process*,
-never in the production CLI. Their subprocess mock never calls Cargo
+never in the production CLI. Their subprocess mocks simulate Git
+root, commit and worktree status as well as Cargo, rejecting invalid,
+unexpected or dirty source revisions without running astronomical
+calculations. Their subprocess mock never calls Cargo
 or an authentic JPL file. Test success establishes input integrity and
 fail-closed control-flow behavior only; no actual NASA/JPL comparison
 has been executed by these tests.
