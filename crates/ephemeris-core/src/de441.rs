@@ -399,10 +399,21 @@ impl<R: Read + Seek> De441<R> {
     ) -> Result<Components, De441Error> {
         let p = self.pointers[index];
         if p.first == 0 {
+            // Report the actual missing series to keep incomplete or damaged
+            // classic kernels diagnosable; barycenters are not planet centers.
             return Err(De441Error::MissingSeries(match index {
+                0 => "Mercury",
+                1 => "Venus",
                 2 => "Earth-Moon barycenter",
+                3 => "Mars system barycenter",
+                4 => "Jupiter system barycenter",
+                5 => "Saturn system barycenter",
+                6 => "Uranus system barycenter",
+                7 => "Neptune system barycenter",
+                8 => "Pluto system barycenter",
                 9 => "geocentric Moon",
-                _ => "body",
+                10 => "Sun",
+                _ => "unknown DE441 series",
             }));
         }
         let width = self.step / p.granules as f64;
