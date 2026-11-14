@@ -21,12 +21,16 @@ SPDX-License-Identifier: CPAL-1.0
 //!
 //! Modification (2026-11-14): verify interrupted/short binary reads, EOF,
 //! and an I/O error from the selected coefficient record. No JPL data is used.
+//! Modification (2026-11-14): multi-kernel load failure and selected-source
+//! I/O errors must preserve priority, provenance and rollback guarantees.
 
 use std::error::Error;
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
 use virgostars_ephemeris_core::spk_direct_state::{direct_spk_state, SpkStateError};
 use virgostars_ephemeris_core::spk_index::{inspect_spk, SpkByteOrder, SpkIndexError};
+use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+use virgostars_ephemeris_core::spk_relative_state::SpkRelativeError;
 
 const RECORD_BYTES: usize = 1024;
 const FIRST_DATA_WORD: usize = 513;
@@ -254,6 +258,109 @@ fn failed_selected_coefficient_read_returns_error_not_a_state() {
                 cause.downcast_ref::<io::Error>().unwrap().kind(),
                 io::ErrorKind::PermissionDenied
             );
+        }
+    }
+}
+
+#[test]
+fn failed_kernel_load_from_io_keeps_existing_state_and_index() {
+    for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+        for kind in [2, 3] {
+            let mut kernels = SpkKernelSet::<InjectedReader>::new();
+            kernels
+                .load(InjectedReader::new(synthetic_spk(order, kind), 11))
+                .unwrap();
+            let baseline = kernels.relative_state(301, 399, 5.0).unwrap();
+
+            // The second file's summary cannot be read. The candidate must
+            // not enter the set and alter either the load count or priority.
+            let mut denied = InjectedReader::new(synthetic_spk(order, kind), 7);
+            denied.deny = Some((2 * RECORD_BYTES as u64, 3 * RECORD_BYTES as u64));
+            let failure = kernels.load(denied).unwrap_err();
+            assert!(matches!(
+                &failure,
+                SpkIndexError::Io(error)
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ));
+            assert_eq!(
+                failure
+                    .source()
+                    .unwrap()
+                    .downcast_ref::<io::Error>()
+                    .unwrap()
+                    .kind(),
+                io::ErrorKind::PermissionDenied
+            );
+            assert_eq!(kernels.kernel_count(), 1);
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 0);
+            assert_eq!(kernels.relative_state(301, 399, 5.0).unwrap(), baseline);
+        }
+    }
+}
+
+#[test]
+fn unreadable_high_priority_coefficient_never_falls_back_to_older_kernel() {
+    for old_order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+        for kind in [2, 3] {
+            let newer_order = match old_order {
+                SpkByteOrder::LittleEndian => SpkByteOrder::BigEndian,
+                SpkByteOrder::BigEndian => SpkByteOrder::LittleEndian,
+            };
+            let mut kernels = SpkKernelSet::<InjectedReader>::new();
+            kernels
+                .load(InjectedReader::new(synthetic_spk(old_order, kind), 31))
+                .unwrap();
+            let baseline = kernels.relative_state(301, 399, 5.0).unwrap();
+
+            // Indexing the newer mixed-endian kernel succeeds: only its
+            // selected coefficient record is unreadable. A valid older
+            // record with identical target/coverage must NOT be substituted.
+            let mut denied = InjectedReader::new(synthetic_spk(newer_order, kind), 13);
+            let start = (FIRST_DATA_WORD - 1) as u64 * 8;
+            let words = if kind == 2 { 8 } else { 14 };
+            denied.deny = Some((start, start + words * 8));
+            kernels.load(denied).unwrap();
+            assert_eq!(kernels.kernel_count(), 2);
+            assert_eq!(kernels.selected_segment(301, 5.0).unwrap().unwrap().0, 1);
+
+            let direct_failure = kernels.direct_state(301, 5.0).unwrap_err();
+            assert!(matches!(
+                &direct_failure,
+                SpkStateError::Io(error)
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ));
+            assert_eq!(
+                direct_failure
+                    .source()
+                    .unwrap()
+                    .downcast_ref::<io::Error>()
+                    .unwrap()
+                    .kind(),
+                io::ErrorKind::PermissionDenied
+            );
+            let relative_failure = kernels.relative_state(301, 399, 5.0).unwrap_err();
+            assert!(matches!(
+                &relative_failure,
+                SpkRelativeError::Segment(SpkStateError::Io(error))
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ));
+            assert_eq!(
+                relative_failure
+                    .source()
+                    .unwrap()
+                    .source()
+                    .unwrap()
+                    .downcast_ref::<io::Error>()
+                    .unwrap()
+                    .kind(),
+                io::ErrorKind::PermissionDenied
+            );
+
+            // Unloading the failed overlay is an explicit caller action.
+            // Only then should the originally valid state be restored.
+            assert!(kernels.unload_last().is_some());
+            assert_eq!(kernels.kernel_count(), 1);
+            assert_eq!(kernels.relative_state(301, 399, 5.0).unwrap(), baseline);
         }
     }
 }
