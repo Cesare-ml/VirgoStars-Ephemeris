@@ -647,12 +647,15 @@ mod tests {
                 let second = 5 * RECORD_BYTES + 3 * WORD_BYTES + 16;
                 put_i32(&mut bytes, second + 16, first, order);
                 put_i32(&mut bytes, second + 20, last, order);
-                assert!(matches!(
-                    parse(bytes),
-                    Err(SpkIndexError::InvalidFile(
-                        "overlapping DAF segment data arrays"
-                    ))
-                ), "must reject word overlap {first}..={last}, order={order:?}");
+                assert!(
+                    matches!(
+                        parse(bytes),
+                        Err(SpkIndexError::InvalidFile(
+                            "overlapping DAF segment data arrays"
+                        ))
+                    ),
+                    "must reject word overlap {first}..={last}, order={order:?}"
+                );
             }
             assert_eq!(parse(file(order, true)).unwrap().segments.len(), 2);
         }
@@ -676,8 +679,20 @@ mod tests {
             put_i32(&mut bytes, 84, 521, order);
             let index = parse(bytes).expect("adjacent DAF arrays must not alias");
             assert_eq!(index.segments.len(), 2);
-            assert_eq!((index.segments[0].initial_address, index.segments[0].final_address), (513, 516));
-            assert_eq!((index.segments[1].initial_address, index.segments[1].final_address), (517, 520));
+            assert_eq!(
+                (
+                    index.segments[0].initial_address,
+                    index.segments[0].final_address
+                ),
+                (513, 516)
+            );
+            assert_eq!(
+                (
+                    index.segments[1].initial_address,
+                    index.segments[1].final_address
+                ),
+                (517, 520)
+            );
         }
     }
 
