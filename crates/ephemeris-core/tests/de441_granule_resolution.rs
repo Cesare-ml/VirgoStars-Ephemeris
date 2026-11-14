@@ -287,8 +287,15 @@ fn wide_tdb_record_normalization_does_not_overflow_before_division() {
         for (axis, position) in state.position_km.iter().enumerate() {
             let expected = 10.0 + axis as f64 + (axis as f64 + 1.0) * normalized_x;
             assert_eq!(*position, expected, "epoch {epoch}, axis {axis}");
-            let velocity = (axis as f64 + 1.0) * 2.0 / step;
-            assert_eq!(state.velocity_km_per_day[axis], velocity);
+            let expected_velocity = (axis as f64 + 1.0) * 2.0 / step;
+            // The equally valid overflow-safe scaling in PR #178 can
+            // differ by one least-subnormal ULP from multiply-then-divide.
+            // Require the analytic velocity within that binary64 bound.
+            let error = (state.velocity_km_per_day[axis] - expected_velocity).abs();
+            assert!(
+                error <= f64::from_bits(1),
+                "epoch {epoch}, axis {axis}: velocity error {error}"
+            );
         }
     }
 }
