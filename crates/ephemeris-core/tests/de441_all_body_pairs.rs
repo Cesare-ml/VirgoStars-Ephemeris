@@ -86,9 +86,7 @@ fn put_i32(bytes: &mut [u8], offset: usize, value: i32) {
 fn polynomial_coefficients(series: usize, record: usize, axis: usize) -> (f64, f64) {
     // Different values/slopes for each public series and each coefficient
     // record reveal swapped planet indexes, axes and stale record selection.
-    let constant = 1_000.0 * (series + 1) as f64
-        + 100.0 * axis as f64
-        + 10_000.0 * record as f64;
+    let constant = 1_000.0 * (series + 1) as f64 + 100.0 * axis as f64 + 10_000.0 * record as f64;
     let linear = 4.0 * (series + 1) as f64 + 2.0 * axis as f64 + 2.0 * record as f64;
     (constant, linear)
 }
@@ -157,10 +155,13 @@ fn body_oracle(body: Body, jd: f64) -> ExpectedState {
         Body::Mercury => series_oracle(0, jd),
         Body::Venus => series_oracle(1, jd),
         Body::EarthMoonBarycenter => series_oracle(2, jd),
-        Body::Earth => series_oracle(2, jd)
-            .add_scaled(series_oracle(9, jd), -1.0 / (EARTH_MOON_RATIO + 1.0)),
-        Body::Moon => series_oracle(2, jd)
-            .add_scaled(series_oracle(9, jd), EARTH_MOON_RATIO / (EARTH_MOON_RATIO + 1.0)),
+        Body::Earth => {
+            series_oracle(2, jd).add_scaled(series_oracle(9, jd), -1.0 / (EARTH_MOON_RATIO + 1.0))
+        }
+        Body::Moon => series_oracle(2, jd).add_scaled(
+            series_oracle(9, jd),
+            EARTH_MOON_RATIO / (EARTH_MOON_RATIO + 1.0),
+        ),
         Body::MarsBarycenter => series_oracle(3, jd),
         Body::JupiterBarycenter => series_oracle(4, jd),
         Body::SaturnBarycenter => series_oracle(5, jd),
@@ -202,7 +203,12 @@ fn all_169_supported_target_center_pairs_match_independent_xyz_and_rate_oracles(
                 assert_eq!(actual.center, center);
                 assert_eq!(actual.epoch, JulianDateTdb(jd));
                 for axis in 0..3 {
-                    near(actual.position_km[axis], expected.position[axis], 1.0e-9, &label);
+                    near(
+                        actual.position_km[axis],
+                        expected.position[axis],
+                        1.0e-9,
+                        &label,
+                    );
                     near(
                         actual.velocity_km_per_day[axis],
                         expected.velocity[axis],
@@ -234,7 +240,12 @@ fn full_pair_matrix_is_antisymmetric_reflexive_and_transitive() {
             for b in 0..BODIES.len() {
                 for axis in 0..3 {
                     near(matrix[a][a].position_km[axis], 0.0, 0.0, "self position");
-                    near(matrix[a][a].velocity_km_per_day[axis], 0.0, 0.0, "self velocity");
+                    near(
+                        matrix[a][a].velocity_km_per_day[axis],
+                        0.0,
+                        0.0,
+                        "self velocity",
+                    );
                     near(
                         matrix[a][b].position_km[axis],
                         -matrix[b][a].position_km[axis],
