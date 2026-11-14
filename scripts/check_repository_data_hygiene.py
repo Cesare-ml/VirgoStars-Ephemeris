@@ -29,7 +29,9 @@ import sys
 KERNEL_EXTENSIONS = frozenset({
     ".bsp", ".eph", ".se1", ".bpc", ".tpc", ".tls", ".tf", ".tsc",
 })
-ARCHIVE_EXTENSIONS = (".gz", ".xz", ".bz2", ".zst", ".zip")
+# Modification (2026-11-14): recognize layered compression and tarball aliases
+# when screening names of tracked external-kernel files.
+ARCHIVE_EXTENSIONS = (".gz", ".xz", ".bz2", ".zst", ".zip", ".tar", ".tgz", ".tbz2", ".txz", ".tzst")
 SPK_MAGIC = b"DAF/SPK "
 CLASSIC_MAGIC = b"JPL Planetary Ephemeris DE"
 
@@ -37,9 +39,14 @@ CLASSIC_MAGIC = b"JPL Planetary Ephemeris DE"
 def is_kernel_path(relative_path: str) -> bool:
     """Reject kernel names, including case variants and common compressed forms."""
     name = PurePosixPath(relative_path).name.lower()
-    for extension in ARCHIVE_EXTENSIONS:
-        if name.endswith(extension):
-            name = name[: -len(extension)]
+    # Strip *all* known archive layers: e.g. .bsp.tar.gz, .eph.zip.xz,
+    # or .tls.tgz. The previous single-pass check missed these names.
+    while True:
+        for extension in ARCHIVE_EXTENSIONS:
+            if name.endswith(extension):
+                name = name[: -len(extension)]
+                break
+        else:
             break
     return any(name.endswith(ext) for ext in KERNEL_EXTENSIONS)
 
