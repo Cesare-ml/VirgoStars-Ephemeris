@@ -35,3 +35,35 @@ fn binary_power_scaling_preserves_value_and_normalized_derivative() {
         }
     }
 }
+
+#[test]
+fn reversing_normalized_epoch_with_odd_coefficient_signs_preserves_series() {
+    // T_n(-x) = (-1)^n T_n(x). For q_n = (-1)^n c_n,
+    // Q(-x) = P(x), while Q'(-x) = -P'(x).
+    // Check both values and derivatives without finite differences.
+    let coefficients = [0.125, -0.75, 0.5, 0.0625, -0.25, 0.03125, 0.015625];
+    let reflected: Vec<f64> = coefficients
+        .iter()
+        .enumerate()
+        .map(|(degree, &coefficient)| {
+            if degree % 2 == 0 {
+                coefficient
+            } else {
+                -coefficient
+            }
+        })
+        .collect();
+
+    for x in [-1.0, -0.875, -0.5, -0.125, 0.0, 0.25, 0.75, 1.0] {
+        let original = evaluate_chebyshev(&coefficients, x).unwrap();
+        let mirrored = evaluate_chebyshev(&reflected, -x).unwrap();
+        assert!(
+            (original.value - mirrored.value).abs() <= 1e-12,
+            "reflection value mismatch at x={x}"
+        );
+        assert!(
+            (original.derivative_dx + mirrored.derivative_dx).abs() <= 1e-12,
+            "reflection derivative mismatch at x={x}"
+        );
+    }
+}
