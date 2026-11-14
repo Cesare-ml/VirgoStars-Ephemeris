@@ -110,7 +110,13 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
             returncode=0, stdout="synthetic comparator stdout", stderr="",
         ))
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
-            result = validator.compare(*self.inputs(), runner=runner)
+            result = validator.compare(
+                *self.inputs(), runner=runner,
+                source_checker=lambda: {
+                "source_git_commit_sha": "a" * 40,
+                "source_tree_clean": True,
+            },
+            )
         runner.assert_called_once()
         args, kwargs = runner.call_args
         self.assertEqual(args[0][:8], [
@@ -138,7 +144,13 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
             returncode=101, stdout="", stderr="mocked invalid reference",
         ))
         with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
-            result = validator.compare(*self.inputs(), runner=runner)
+            result = validator.compare(
+                *self.inputs(), runner=runner,
+                source_checker=lambda: {
+                "source_git_commit_sha": "a" * 40,
+                "source_tree_clean": True,
+            },
+            )
         self.assertEqual(result["status"], "COMPARISON_FAILED")
         self.assertEqual(result["cargo_exit_code"], 101)
         self.assertFalse(result["scientific_validated"])
@@ -161,6 +173,61 @@ class ClassicDe441HorizonsPreflightTests(unittest.TestCase):
         self.assertFalse(report["scientific_validated"])
         self.assertEqual(hashlib.sha256(self.kernel.read_bytes()).hexdigest(), self.expected_kernel)
         self.assertEqual(hashlib.sha256(self.reference.read_bytes()).hexdigest(), self.expected_reference)
+
+    def test_source_provenance_pins_git_head_and_clean_checkout(self):
+        root = SCRIPT.resolve().parents[1]
+        outputs = [
+            SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
+            SimpleNamespace(returncode=0, stdout="a" * 40 + "\\n"),
+            SimpleNamespace(returncode=0, stdout=""),
+        ]
+        git_runner = mock.Mock(side_effect=outputs)
+        evidence = validator.source_provenance(git_runner=git_runner)
+        self.assertEqual(evidence["source_git_commit_sha"], "a" * 40)
+        self.assertTrue(evidence["source_tree_clean"])
+        self.assertEqual([call.args[0] for call in git_runner.call_args_list], [
+            ["git", "rev-parse", "--show-toplevel"],
+            ["git", "rev-parse", "HEAD"],
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        ])
+        for call in git_runner.call_args_list:
+            self.assertEqual(call.kwargs["cwd"], root)
+            self.assertFalse(call.kwargs["check"])
+
+    def test_dirty_checkout_is_rejected_even_with_valid_commit(self):
+        root = SCRIPT.resolve().parents[1]
+        responses = [
+            SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
+            SimpleNamespace(returncode=0, stdout="b" * 40 + "\\n"),
+            SimpleNamespace(returncode=0, stdout="?? patched-untracked.rs\\n"),
+        ]
+        with self.assertRaisesRegex(ValueError, "worktree must be clean"):
+            validator.source_provenance(git_runner=mock.Mock(side_effect=responses))
+
+    def test_wrong_repo_invalid_head_and_git_failure_fail_closed(self):
+        root = SCRIPT.resolve().parents[1]
+        scenarios = [
+            ([SimpleNamespace(returncode=0, stdout=str(root / "wrong") + "\\n")], "repository root"),
+            ([
+                SimpleNamespace(returncode=0, stdout=str(root) + "\\n"),
+                SimpleNamespace(returncode=0, stdout="not-a-full-git-sha"),
+            ], "40-hex"),
+            ([SimpleNamespace(returncode=128, stdout="")], "failed"),
+        ]
+        for responses, reason in scenarios:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(ValueError, reason):
+                    validator.source_provenance(git_runner=mock.Mock(side_effect=responses))
+
+    def test_unverifiable_source_prevents_cargo_after_valid_hashes(self):
+        runner = mock.Mock()
+        with mock.patch.object(validator, "MIN_CLASSIC_BYTES", 0):
+            with self.assertRaisesRegex(ValueError, "source tree dirty"):
+                validator.compare(
+                    *self.inputs(), runner=runner,
+                    source_checker=mock.Mock(side_effect=ValueError("source tree dirty")),
+                )
+        runner.assert_not_called()
 
     def test_receipt_must_not_overwrite_kernel_or_reference(self):
         for receipt in (self.kernel, self.reference):
