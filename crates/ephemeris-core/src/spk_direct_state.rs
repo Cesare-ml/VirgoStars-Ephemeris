@@ -273,13 +273,28 @@ pub fn direct_spk_state<R: Read + Seek>(
             "epoch outside SPK record directory",
         ));
     }
-    // On exact record boundaries choose the following record. The final
-    // inclusive endpoint remains in the final record.
-    let relative = ((et - layout.init) / layout.interval).floor();
-    if !relative.is_finite() || relative < 0.0 {
-        return Err(SpkStateError::InvalidSegment("invalid SPK record index"));
+    // On an exact boundary choose the following record, except at the final
+    // inclusive endpoint. Dividing (et - INIT) by INTLEN can round an epoch
+    // immediately *before* a boundary up to an integer and select the wrong
+    // record. Compare the original f64 ET directly against the directory's
+    // representable record starts instead; do not round the epoch first.
+    // Modification (2026-11-14): fail closed if a boundary overflows.
+    let mut record_index = 0_u64;
+    let mut upper = layout.count;
+    while upper - record_index > 1 {
+        let middle = record_index + (upper - record_index) / 2;
+        let boundary = layout.init + middle as f64 * layout.interval;
+        if !boundary.is_finite() {
+            return Err(SpkStateError::InvalidSegment(
+                "nonfinite SPK record boundary",
+            ));
+        }
+        if et < boundary {
+            upper = middle;
+        } else {
+            record_index = middle;
+        }
     }
-    let record_index = (relative as u64).min(layout.count - 1);
     let address = layout
         .first_address
         .checked_add(
@@ -495,6 +510,52 @@ mod tests {
         assert_eq!(at_boundary.position_km[0], 210.0);
         assert_eq!(at_boundary.velocity_km_per_second[0], -2.0);
         assert_eq!(evaluate(bytes, 499, 20.0).unwrap().position_km[0], 190.0);
+    }
+
+    // The smallest finite ET before zero must remain in the first record.
+    // (et - INIT) / INTLEN rounds to 1.0 at this boundary and the previous
+    // floor-based implementation silently selected record two instead.
+    // Modification (2026-11-14): exercise both SPK types/byte orders.
+    #[test]
+    fn near_zero_record_boundary_uses_original_tdb_epoch() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for kind in [2, 3] {
+                let mut bytes = make_kernel(order, kind);
+                let summary = 2 * RECORD_BYTES;
+                put_f64(&mut bytes, summary + 24, -10.0, order);
+                put_f64(&mut bytes, summary + 32, 10.0, order);
+
+                let components = if kind == 2 { 3 } else { 6 };
+                let record_words = 2 + 2 * components;
+                for record in 0..2 {
+                    let offset = (FIRST_WORD - 1 + record * record_words) * 8;
+                    put_f64(
+                        &mut bytes,
+                        offset,
+                        if record == 0 { -5.0 } else { 5.0 },
+                        order,
+                    );
+                }
+                let final_address = FIRST_WORD + 2 * record_words + 3;
+                let directory = (final_address - 4) * 8;
+                put_f64(&mut bytes, directory, -10.0, order);
+
+                let just_before = -f64::from_bits(1);
+                let just_after = f64::from_bits(1);
+                assert_eq!(
+                    ((just_before - (-10.0)) / 10.0).floor(),
+                    1.0,
+                    "fixture must reproduce f64 quotient rounding"
+                );
+
+                let before = evaluate(bytes.clone(), 499, just_before).unwrap();
+                assert_eq!(before.position_km[0], 110.0);
+                let at = evaluate(bytes.clone(), 499, 0.0).unwrap();
+                assert_eq!(at.position_km[0], 210.0);
+                let after = evaluate(bytes, 499, just_after).unwrap();
+                assert_eq!(after.position_km[0], 210.0);
+            }
+        }
     }
 
     #[test]
