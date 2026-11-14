@@ -194,5 +194,115 @@ class SpkReferenceTests(unittest.TestCase):
         self.assertEqual(REFERENCE.main(command), 1)
 
 
+    def _comparison_input(self):
+        reference = Path(self.folder.name) / "comparison.csv"
+        reference.write_text(self.reference(), encoding="utf-8")
+        return reference
+
+    def test_compare_invokes_only_offline_canonical_rust_after_hash_checks(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+        invoked = []
+
+        def fake_run(argv, *, check):
+            invoked.append((argv, check))
+            return SimpleNamespace(returncode=0)
+
+        status = REFERENCE.compare_reference(
+            reference, self.paths, "0.001", "0.000001", runner=fake_run
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual(len(invoked), 1)
+        self.assertEqual(
+            invoked[0][0],
+            [
+                "cargo", "run", "--offline", "--locked",
+                "--example", "validate_spk_reference", "--",
+                str(reference), "0.001", "0.000001",
+                str(self.first), str(self.second),
+            ],
+        )
+        self.assertFalse(invoked[0][1])
+
+    def test_compare_rejects_invalid_tolerances_before_running_rust(self):
+        reference = self._comparison_input()
+
+        def should_not_run(*args, **kwargs):
+            self.fail("Rust must not execute on invalid thresholds")
+
+        for invalid in ("0", "-1", "nan", "inf", "1e309", "bad"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                REFERENCE.compare_reference(
+                    reference, self.paths, invalid, "1", runner=should_not_run
+                )
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                REFERENCE.compare_reference(
+                    reference, self.paths, "1", invalid, runner=should_not_run
+                )
+
+    def test_compare_rejects_bad_kernel_manifest_without_rust_execution(self):
+        reference = self._comparison_input()
+
+        def should_not_run(*args, **kwargs):
+            self.fail("Rust must not execute if kernel hashes do not match")
+
+        with self.assertRaisesRegex(ValueError, "filename/order mismatch"):
+            REFERENCE.compare_reference(
+                reference, list(reversed(self.paths)), "1", "1", runner=should_not_run
+            )
+
+    def test_compare_detects_kernel_tampering_during_rust_execution(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+
+        def mutating_run(argv, *, check):
+            self.second.write_bytes(self.second.read_bytes() + b"tampered")
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(ValueError, "byte size mismatch"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=mutating_run
+            )
+
+    def test_compare_detects_reference_change_during_rust_execution(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+
+        def mutating_run(argv, *, check):
+            with reference.open("a", encoding="utf-8") as writer:
+                writer.write("# postcheck tampering\\n")
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(ValueError, "reference CSV changed"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=mutating_run
+            )
+
+    def test_compare_propagates_nonzero_rust_exit_code(self):
+        from types import SimpleNamespace
+
+        reference = self._comparison_input()
+        code = REFERENCE.compare_reference(
+            reference, self.paths, "1", "1",
+            runner=lambda argv, *, check: SimpleNamespace(returncode=23),
+        )
+        self.assertEqual(code, 23)
+
+    def test_compare_missing_cargo_error_cannot_bypass_postchecks(self):
+        reference = self._comparison_input()
+
+        def missing_cargo(argv, *, check):
+            self.second.write_bytes(b"new content")
+            raise FileNotFoundError("cargo executable absent")
+
+        with self.assertRaisesRegex(ValueError, "byte size mismatch"):
+            REFERENCE.compare_reference(
+                reference, self.paths, "1", "1", runner=missing_cargo
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

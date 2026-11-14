@@ -30,6 +30,7 @@ import hmac
 import math
 from pathlib import Path
 import re
+import subprocess
 import sys
 from typing import Any, Sequence
 
@@ -214,6 +215,52 @@ def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
     # The CSV's declared digest is not an authenticity signature.
 
 
+def positive_limit(value: str, label: str) -> str:
+    """Require caller-reviewed finite positive component tolerances."""
+    try:
+        numeric = float(value)
+    except ValueError as error:
+        raise ValueError(f"{label} must be numeric") from error
+    if not math.isfinite(numeric) or numeric <= 0:
+        raise ValueError(f"{label} must be finite and strictly positive")
+    return value
+
+
+def compare_reference(
+    reference: Path,
+    paths: Sequence[Path],
+    position_limit: str,
+    velocity_limit: str,
+    *,
+    runner: Any = subprocess.run,
+) -> int:
+    """Hash-check inputs, run canonical Rust offline, then recheck all bytes.
+
+    A successful digest preflight is NOT proof of NAIF provenance or scientific
+    accuracy; the Rust comparator owns metadata, numeric and tolerance checks.
+    """
+    position_limit = positive_limit(position_limit, "position limit (km)")
+    velocity_limit = positive_limit(velocity_limit, "velocity limit (km/s)")
+    original_csv = reference.read_bytes()
+    content = original_csv.decode("utf-8")
+    verify_reference_hashes(content, paths)
+    argv = [
+        "cargo", "run", "--offline", "--locked",
+        "--example", "validate_spk_reference", "--",
+        str(reference), position_limit, velocity_limit,
+        *(str(path) for path in paths),
+    ]
+    try:
+        result = runner(argv, check=False)
+    finally:
+        # A race-free filesystem snapshot is not available through this CLI.
+        # Detect changes made during the comparison, even if Rust exited nonzero.
+        if reference.read_bytes() != original_csv:
+            raise ValueError("reference CSV changed during Rust comparison")
+        verify_reference_hashes(content, paths)
+    return result.returncode
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate NAIF geometric SPK references or verify kernel SHA256."
@@ -227,11 +274,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     verify = subparsers.add_parser("verify")
     verify.add_argument("--reference", type=Path, required=True)
     verify.add_argument("--kernel", action="append", required=True, type=Path)
+    compare = subparsers.add_parser("compare")
+    compare.add_argument("--reference", type=Path, required=True)
+    compare.add_argument("--kernel", action="append", required=True, type=Path)
+    compare.add_argument("--position-limit-km", required=True)
+    compare.add_argument("--velocity-limit-km-s", required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == "verify":
             verify_reference_hashes(args.reference.read_text(encoding="utf-8"), args.kernel)
             print(f"Verified {len(args.kernel)} ordered kernel SHA256 hashes, names and sizes.")
+            return 0
+        if args.action == "compare":
+            result = compare_reference(
+                args.reference, args.kernel,
+                args.position_limit_km, args.velocity_limit_km,
+            )
+            if result != 0:
+                print(f"Rust SPK comparator exited with status {result}", file=sys.stderr)
+                return 1
+            print("Rust comparator passed and ordered kernel/reference bytes were rechecked.")
+            print("WARNING: independent NAIF provenance and chosen tolerances still require review.")
             return 0
         cases = parse_cases(args.case)
         if args.output.exists() and not args.overwrite:
