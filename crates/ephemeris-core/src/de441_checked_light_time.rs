@@ -177,13 +177,21 @@ mod tests {
         }
     }
 
-    fn reader() -> (De441<CountingReader>, Rc<Cell<usize>>) {
+    fn reader_with_distance(distance_km: f64) -> (De441<CountingReader>, Rc<Cell<usize>>) {
         let reads = Rc::new(Cell::new(0));
+        let mut bytes = fixture();
+        // Series word 6 in the single synthetic record is Mars X's T0.
+        // Modify the fixture rather than adding another interpolation path.
+        put_f64(&mut bytes, RECORD_SIZE * 2 + (6 - 1) * 8, distance_km);
         let input = CountingReader {
-            inner: Cursor::new(fixture()),
+            inner: Cursor::new(bytes),
             coefficient_reads: reads.clone(),
         };
         (De441::new(input).unwrap(), reads)
+    }
+
+    fn reader() -> (De441<CountingReader>, Rc<Cell<usize>>) {
+        reader_with_distance(TARGET_DISTANCE_KM)
     }
 
     fn observation() -> JulianDate {
@@ -314,6 +322,48 @@ mod tests {
                 De441Error::MissingSeries(_)
             )))
         ));
+    }
+
+    // Modification (2026-11-14): the checked public adapter must preserve
+    // the underlying solver's fail-closed emission-epoch precision guard.
+    #[test]
+    fn sub_resolution_emission_time_fails_closed_but_representable_delay_converges() {
+        let (mut tiny, tiny_reads) = reader_with_distance(1.0);
+        // A one-kilometre path is ~3.3 microseconds. Around JD 2451545,
+        // that delay rounds to zero in the classic single-f64 Julian date.
+        // Returning observation JD as emission JD would claim false precision.
+        let error = checked_geocentric_light_time_at_split_tdb(
+            &mut tiny,
+            Body::MarsBarycenter,
+            observation(),
+            0.0,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            CheckedLightTimeError::LightTime(LightTimeError::DidNotConverge)
+        ));
+        assert_eq!(tiny_reads.get(), 1, "one cached coefficient record");
+
+        let (mut resolvable, reads) = reader_with_distance(100.0);
+        // A 100 km path is ~334 microseconds, far larger than one f64
+        // JD quantum here. It must still yield a real emission epoch.
+        let checked = checked_geocentric_light_time_at_split_tdb(
+            &mut resolvable,
+            Body::MarsBarycenter,
+            observation(),
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(checked.observation_quantization_error_seconds, 0.0);
+        assert_eq!(checked.state.position_km, [100.0, 0.0, 0.0]);
+        assert_eq!(checked.state.velocity_km_per_day, [0.0; 3]);
+        assert!(checked.state.emission_epoch.0 < checked.state.observation_epoch.0);
+        assert!(
+            (checked.state.light_time_seconds - 100.0 / SPEED_OF_LIGHT_KM_PER_SECOND).abs()
+                < 1.0e-10
+        );
+        assert_eq!(reads.get(), 1, "one cached coefficient record");
     }
 
     #[test]
