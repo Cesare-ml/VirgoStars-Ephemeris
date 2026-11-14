@@ -162,7 +162,18 @@ impl fmt::Display for SkyError {
         }
     }
 }
-impl Error for SkyError {}
+// Modification (2026-11-14): preserve typed underlying causes for callers
+// using std::error::Error::source, including DE441's nested I/O failures.
+impl Error for SkyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Calendar(error) => Some(error),
+            Self::AtomicTime(error) => Some(error),
+            Self::Ephemeris(error) => Some(error),
+            Self::InvalidInput(_) | Self::UnsupportedUtc => None,
+        }
+    }
+}
 impl From<CalendarError> for SkyError {
     fn from(e: CalendarError) -> Self {
         Self::Calendar(e)
@@ -620,6 +631,50 @@ mod tests {
     }
     fn at(value: &str) -> Epochs {
         epochs(CivilTimestamp::parse(value).unwrap()).unwrap()
+    }
+
+    // Modification (2026-11-14): preserve the actual parser's calendar
+    // failure type instead of losing the cause in a top-level SkyError.
+    #[test]
+    fn invalid_civil_date_exposes_calendar_source() {
+        let error = CivilTimestamp::parse("2026-02-30T12:00:00Z").unwrap_err();
+        assert!(matches!(
+            error
+                .source()
+                .and_then(|source| source.downcast_ref::<CalendarError>()),
+            Some(CalendarError::InvalidDate)
+        ));
+    }
+
+    #[test]
+    fn sky_errors_preserve_typed_time_and_nested_de441_io_sources() {
+        let atomic = SkyError::AtomicTime(AtomicTimeError::WrongInputScale {
+            expected: TimeScale::Tai,
+            actual: TimeScale::Tt,
+        });
+        assert!(matches!(
+            atomic
+                .source()
+                .and_then(|source| source.downcast_ref::<AtomicTimeError>()),
+            Some(AtomicTimeError::WrongInputScale {
+                expected: TimeScale::Tai,
+                actual: TimeScale::Tt,
+            })
+        ));
+
+        let de441 = SkyError::Ephemeris(De441Error::Io(std::io::Error::from(
+            std::io::ErrorKind::UnexpectedEof,
+        )));
+        let first_cause = de441.source().expect("DE441 wrapper must be a cause");
+        assert!(first_cause.downcast_ref::<De441Error>().is_some());
+        let second_cause = first_cause
+            .source()
+            .and_then(|source| source.downcast_ref::<std::io::Error>())
+            .expect("underlying std::io::Error must be accessible");
+        assert_eq!(second_cause.kind(), std::io::ErrorKind::UnexpectedEof);
+
+        assert!(SkyError::InvalidInput("test").source().is_none());
+        assert!(SkyError::UnsupportedUtc.source().is_none());
     }
 
     #[test]
