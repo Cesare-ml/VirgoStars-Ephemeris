@@ -48,7 +48,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check for accidentally tracked external kernels
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+          python3 scripts/check_repository_data_hygiene.py --repo .
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -60,8 +66,8 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Check offline SPK NAIF reference parser and residuals
         run: cargo test --workspace --example validate_spk_reference --locked
-      - name: Check offline SPK NAIF reference generator and SHA256 verification
-        run: python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
+      - name: Check offline SPK kernel SHA-256 preflight (synthetic tests)
+        run: python3 -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -80,7 +86,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -90,8 +98,10 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Run SPK reference comparator regressions on Windows
         run: cargo test --workspace --example validate_spk_reference --locked
-      - name: Run offline SPK NAIF generator regressions on Windows
-        run: python -m unittest discover -s scripts/tests -p test_spk_naif_reference.py
+      - name: Check offline SPK hash verification on Windows
+        run: python -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
+      - name: Test independent SPICE reference generator (mocked) on Windows
+        run: python -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -100,7 +110,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -110,7 +122,9 @@ jobs:
         run: cargo test --workspace --example validate_horizons --locked
       - name: Run SPK reference comparator regressions on macOS
         run: cargo test --workspace --example validate_spk_reference --locked
-      - name: Run offline SPK NAIF generator regressions on macOS
+      - name: Check offline SPK hash verification on macOS
+        run: python3 -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
+      - name: Test independent SPICE reference generator (mocked) on macOS
         run: python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
