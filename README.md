@@ -36,6 +36,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental loaded-kernel precedence and cross-file states (not JPL-validated)](docs/RUST_SPK_KERNEL_SET_PRIORITY_2026-11-13.md)
 - [Experimental effective SPK segment snapshot at one TDB epoch (metadata only)](docs/SPK_EFFECTIVE_SEGMENT_SNAPSHOT_2026-11-14.md)
 - [Experimental same-TDB-epoch batch SPK target/center states (not JPL-validated)](docs/SPK_BATCH_RELATIVE_STATES_2026-11-14.md)
+- [Experimental SPK per-pair geometric diagnostic results (not JPL-validated)](docs/SPK_PER_PAIR_DIAGNOSTICS_2026-11-14.md)
 - [Offline NAIF/SPICE SPK validation comparator, SHA-256 preflight and evidence requirements (no real results yet)](docs/RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md)
 - [Independent SPICE reference generator and ordered kernel SHA256 verification](scripts/spk_naif_reference.py)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
