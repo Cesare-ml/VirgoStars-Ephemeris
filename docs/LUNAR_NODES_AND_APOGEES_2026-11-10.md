@@ -43,6 +43,16 @@ At 2026-11-10, the mean-apogee longitude differs by about 0.0011° and its
 latitude by about 0.00037° from that reference. More epochs, method-specific
 references, speed tolerances and independent scientific validation are needed.
 
+An exploratory local comparison at matched TT used the same DE441 file and
+Swiss 0.5.17 `swe_calc` with JPL and speed flags for 28 dates (January, April,
+July and October in 1975, 1980, 1990, 2000, 2010, 2020 and 2026). Maximum
+absolute longitude differences were 0.0000146° (mean node), 0.00000372°
+(true node), 0.00110° (mean apogee) and 0.0000720° (osculating apogee).
+The largest mean-apogee latitude difference was 0.000407°. Maximum absolute
+longitude-speed differences across these samples were 2.9e-8, 7.7e-7,
+9.8e-7 and 0.0000215 degrees/day, respectively. This diagnostic does not
+establish accuracy over the entire supported interval or identical models.
+
 2026-11-14: reconciled the earlier experimental branch, removed the 1 AU mean
 node placeholder and unbound-apogee fallback, projected the mean apogee onto
 an inclined orbit, distinguished TT from TDB, and added Node access. No Swiss

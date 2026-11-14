@@ -20,3 +20,13 @@ term from its apparent mean-point speed, and substitutes current lunar
 distance for an unbound osculating orbit instead of returning an error. These
 contracts require correction, independent references and boundary tests before
 exposing them as substitutes. This audit does not claim general Swiss parity.
+
+## Follow-up on the lunar integration branch
+
+The subsequent experimental lunar branch corrects the time-scale separation,
+nominal mean-node radius, osculating-node radius and unbound-orbit fallback,
+and projects the mean apogee from a fixed-inclination lunar orbit. The mean
+model is still approximate; two-epoch compatibility regressions and the
+remaining model differences are described in
+[LUNAR_NODES_AND_APOGEES_2026-11-10.md](LUNAR_NODES_AND_APOGEES_2026-11-10.md).
+The first section records the earlier branch before these corrections.

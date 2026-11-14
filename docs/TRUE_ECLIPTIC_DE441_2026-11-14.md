@@ -41,6 +41,7 @@ const jd = ephemeris.julianDay({year: 2000, month: 1, day: 1,
   decimalHour: 12, calendar: 'gregorian', timeScale: 'ut1'});
 const date = ephemeris.reverseJulianDay({julianDay: jd,
   calendar: 'gregorian', timeScale: 'ut1'});
+const lunar = ephemeris.calculateLunarPoints('2026-11-10T00:00:00Z');
 ```
 
 The synchronous adapter starts one process per ten-body batch and is intended
@@ -62,7 +63,7 @@ The equivalent Rust functions are `house_angles::from_epochs` and
 
 This is **not** a drop-in `swe_calc_ut`: there is no solar gravitational
 deflection, complete nutation, full ephemeris of physical planet centers,
-Chiron, lunar points, topocentric options, heliocentric/equatorial modes,
+Chiron, topocentric options, heliocentric/equatorial modes,
 legacy flags or native Node binding. The modeled derivatives of the corrected
 position are not assumed identical to Swiss output speeds. A UT Julian date
 alone cannot be interpreted as UTC, TT or TDB without an explicit time model.
@@ -89,6 +90,9 @@ comparison is diagnostic only: target-center models and correction sets differ,
 the reference is not independent JPL validation, and the speed discrepancies
 mean that Swiss equivalence must not be claimed. `swe_calc_ut` additionally
 uses a different UT-to-TT policy; supplying UTC as UT1 can change results.
+
+The separate [experimental lunar-point model](LUNAR_NODES_AND_APOGEES_2026-11-10.md)
+has its own assumptions, reference checks and limitations.
 
 2026-11-14: reconciled the existing civil/aberration and 2000B development
 branches, added the moving-frame projection and CLI, and corrected the two
