@@ -30,6 +30,9 @@ use std::path::Path;
 
 const HEADER_SIZE: usize = 2856;
 const SERIES_COUNT: usize = 13;
+// 2026-11-14: Bound a caller-controlled record cache allocation. Real classic
+// DE441 records are far smaller; this is a defensive implementation limit.
+const MAX_CLASSIC_RECORD_BYTES: usize = 16 * 1024 * 1024;
 
 /// Julian date in Barycentric Dynamical Time. No UTC/TT conversion is performed.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -238,6 +241,13 @@ impl<R: Read + Seek> De441<R> {
         let record_size = words
             .checked_mul(8)
             .ok_or(De441Error::InvalidFile("record size overflow"))?;
+        // Reject malicious sparse/seekable inputs before allocating a record cache.
+        // Pointer fields are untrusted and can otherwise request multi-GB buffers.
+        if record_size > MAX_CLASSIC_RECORD_BYTES {
+            return Err(De441Error::InvalidFile(
+                "coefficient record exceeds supported size",
+            ));
+        }
         let count = (end - start) / step;
         if !count.is_finite()
             || count < 1.0
@@ -399,10 +409,21 @@ impl<R: Read + Seek> De441<R> {
     ) -> Result<Components, De441Error> {
         let p = self.pointers[index];
         if p.first == 0 {
+            // Report the actual missing series to keep incomplete or damaged
+            // classic kernels diagnosable; barycenters are not planet centers.
             return Err(De441Error::MissingSeries(match index {
+                0 => "Mercury",
+                1 => "Venus",
                 2 => "Earth-Moon barycenter",
+                3 => "Mars system barycenter",
+                4 => "Jupiter system barycenter",
+                5 => "Saturn system barycenter",
+                6 => "Uranus system barycenter",
+                7 => "Neptune system barycenter",
+                8 => "Pluto system barycenter",
                 9 => "geocentric Moon",
-                _ => "body",
+                10 => "Sun",
+                _ => "unknown DE441 series",
             }));
         }
         let width = self.step / p.granules as f64;
