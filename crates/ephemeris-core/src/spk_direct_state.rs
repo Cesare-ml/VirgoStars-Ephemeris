@@ -529,12 +529,7 @@ mod tests {
                 let record_words = 2 + 2 * components;
                 for record in 0..2 {
                     let offset = (FIRST_WORD - 1 + record * record_words) * 8;
-                    put_f64(
-                        &mut bytes,
-                        offset,
-                        if record == 0 { -5.0 } else { 5.0 },
-                        order,
-                    );
+                    put_f64(&mut bytes, offset, if record == 0 { -5.0 } else { 5.0 }, order);
                 }
                 let final_address = FIRST_WORD + 2 * record_words + 3;
                 let directory = (final_address - 4) * 8;
