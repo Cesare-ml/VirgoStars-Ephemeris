@@ -17,9 +17,10 @@ Contributors retain applicable rights in their own contributions under the terms
 SPDX-License-Identifier: CPAL-1.0
 */
 
-//! Offline same-TDB-epoch SPK batch query using the canonical Rust core.
+//! Offline ordered multi-epoch SPK batch query using the canonical Rust core.
 //!
 //! Modification (2026-11-14): CLI-only adapter for caller-supplied SPK files.
+//! Modification (2026-11-14): repeatable --et and epoch-major CSV output.
 //! There are no new orbital algorithms, kernel downloads or accuracy claims.
 
 use std::env;
@@ -27,7 +28,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, Read, Seek, Write};
 
-use virgostars_ephemeris_core::spk_batch::relative_states_at;
+use virgostars_ephemeris_core::spk_batch::relative_states_for_epochs;
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
 use virgostars_ephemeris_core::spk_relative_state::SpkRelativeState;
 
@@ -36,16 +37,16 @@ x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s";
 
 fn usage() -> &'static str {
     "usage: cargo run --offline --locked --example spk_batch_at -- \
-     --et ET_TDB_SECONDS --pair TARGET_ID:CENTER_ID [--pair TARGET_ID:CENTER_ID ...] \
+     --et ET_TDB_SECONDS [--et ET_TDB_SECONDS ...] --pair TARGET_ID:CENTER_ID [--pair TARGET_ID:CENTER_ID ...] \
      <kernel1.bsp> [kernel2.bsp ...]\n\
      ET is TDB seconds past J2000. Kernels are loaded in the supplied order.\n\
-     Repeat --pair to request multiple ordered geometric J2000 states.\n\
+     Repeat --et for multiple ordered epochs, --pair for target-center pairs.\n\
      Place '--' before kernel paths that start with '-'."
 }
 
 #[derive(Debug, PartialEq)]
 struct Arguments<'a> {
-    et: f64,
+    epochs: Vec<f64>,
     pairs: Vec<(i32, i32)>,
     paths: Vec<&'a str>,
 }
@@ -69,7 +70,7 @@ fn parse_pair(raw: &str) -> Result<(i32, i32), String> {
 }
 
 fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
-    let mut et = None;
+    let mut epochs = Vec::new();
     let mut pairs = Vec::new();
     let mut paths = Vec::new();
     let mut index = 0;
@@ -85,9 +86,7 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
                 if !parsed.is_finite() {
                     return Err("--et must be finite TDB seconds past J2000".into());
                 }
-                if et.replace(parsed).is_some() {
-                    return Err("duplicate --et option".into());
-                }
+                epochs.push(parsed);
                 index += 2;
             }
             "--pair" => {
@@ -110,21 +109,27 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
             }
         }
     }
-    let et = et.ok_or_else(|| format!("missing --et; {}", usage()))?;
+    if epochs.is_empty() {
+        return Err(format!("at least one --et is required; {}", usage()));
+    }
     if pairs.is_empty() {
         return Err(format!("at least one --pair is required; {}", usage()));
     }
     if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
         return Err("at least one explicit local SPK file is required".into());
     }
-    Ok(Arguments { et, pairs, paths })
+    Ok(Arguments {
+        epochs,
+        pairs,
+        paths,
+    })
 }
 
 fn evaluate_sources<R: Read + Seek>(
     sources: impl IntoIterator<Item = R>,
     pairs: &[(i32, i32)],
-    et: f64,
-) -> Result<Vec<SpkRelativeState>, Box<dyn Error>> {
+    epochs: &[f64],
+) -> Result<Vec<Vec<SpkRelativeState>>, Box<dyn Error>> {
     let mut kernels = SpkKernelSet::new();
     let mut count = 0;
     for source in sources {
@@ -134,26 +139,28 @@ fn evaluate_sources<R: Read + Seek>(
     if count == 0 {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "no SPK files supplied").into());
     }
-    Ok(relative_states_at(&mut kernels, pairs, et)?)
+    Ok(relative_states_for_epochs(&mut kernels, pairs, epochs)?)
 }
 
-fn render<W: Write>(output: &mut W, states: &[SpkRelativeState]) -> io::Result<()> {
+fn render<W: Write>(output: &mut W, matrix: &[Vec<SpkRelativeState>]) -> io::Result<()> {
     writeln!(output, "{HEADER}")?;
-    for state in states {
-        writeln!(
-            output,
-            "{:.17e},{},{},{},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e}",
-            state.tdb_seconds_past_j2000,
-            state.target_id,
-            state.center_id,
-            state.common_ancestor_id,
-            state.position_km[0],
-            state.position_km[1],
-            state.position_km[2],
-            state.velocity_km_per_second[0],
-            state.velocity_km_per_second[1],
-            state.velocity_km_per_second[2],
-        )?;
+    for states in matrix {
+        for state in states {
+            writeln!(
+                output,
+                "{:.17e},{},{},{},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e},{:.17e}",
+                state.tdb_seconds_past_j2000,
+                state.target_id,
+                state.center_id,
+                state.common_ancestor_id,
+                state.position_km[0],
+                state.position_km[1],
+                state.position_km[2],
+                state.velocity_km_per_second[0],
+                state.velocity_km_per_second[1],
+                state.velocity_km_per_second[2],
+            )?;
+        }
     }
     Ok(())
 }
@@ -161,12 +168,13 @@ fn render<W: Write>(output: &mut W, states: &[SpkRelativeState]) -> io::Result<(
 fn evaluate_and_render<R: Read + Seek, W: Write>(
     sources: impl IntoIterator<Item = R>,
     pairs: &[(i32, i32)],
-    et: f64,
+    epochs: &[f64],
     output: &mut W,
 ) -> Result<(), Box<dyn Error>> {
-    // All states must succeed before emitting even the CSV header.
-    let states = evaluate_sources(sources, pairs, et)?;
-    render(output, &states)?;
+    // All epochs and pairs must succeed before emitting even the CSV header.
+    // No intermediate scientific rows leak from an unsuccessful epoch.
+    let matrix = evaluate_sources(sources, pairs, epochs)?;
+    render(output, &matrix)?;
     Ok(())
 }
 
@@ -178,7 +186,7 @@ fn run<W: Write>(values: &[String], output: &mut W) -> Result<(), Box<dyn Error>
         .iter()
         .map(File::open)
         .collect::<io::Result<Vec<_>>>()?;
-    evaluate_and_render(sources, &args.pairs, args.et, output)
+    evaluate_and_render(sources, &args.pairs, &args.epochs, output)
 }
 
 fn main() {
@@ -295,7 +303,7 @@ mod tests {
         assert_eq!(
             parse_arguments(&values).unwrap(),
             Arguments {
-                et: -2.5,
+                epochs: vec![-2.5],
                 pairs: vec![(301, 399), (-301, 0), (301, 399)],
                 paths: vec!["-planet.bsp"],
             }
@@ -308,7 +316,7 @@ mod tests {
             &["--pair", "301:399", "a.bsp"],
             &["--et", "0", "a.bsp"],
             &["--et", "0", "--pair", "301:399"],
-            &["--et", "0", "--et", "1", "--pair", "301:399", "a.bsp"],
+            &["--et", "0", "--et", "inf", "--pair", "301:399", "a.bsp"],
             &["--et", "NaN", "--pair", "301:399", "a.bsp"],
             &["--et", "inf", "--pair", "301:399", "a.bsp"],
             &["--et", "0", "--pair", "301:301", "a.bsp"],
@@ -333,7 +341,7 @@ mod tests {
     fn mixed_endian_cross_kernel_csv_preserves_pair_order_and_rate_units() {
         let mut csv = Vec::new();
         let pairs = [(301, 0), (399, 0), (301, 399), (301, 0)];
-        evaluate_and_render(two_sources(), &pairs, 5.0, &mut csv).unwrap();
+        evaluate_and_render(two_sources(), &pairs, &[5.0], &mut csv).unwrap();
         let text = String::from_utf8(csv).unwrap();
         let lines = text.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 5);
@@ -359,22 +367,108 @@ mod tests {
     #[test]
     fn failed_batch_or_corrupt_kernel_never_writes_partial_csv() {
         let mut csv = Vec::new();
-        let error =
-            evaluate_and_render(two_sources(), &[(301, 0), (999, 0)], 5.0, &mut csv).unwrap_err();
+        let error = evaluate_and_render(two_sources(), &[(301, 0), (999, 0)], &[5.0], &mut csv)
+            .unwrap_err();
         assert!(error.to_string().contains("request 1"));
         assert!(csv.is_empty());
-        let error =
-            evaluate_and_render([Cursor::new(vec![0_u8; 1024])], &[(301, 0)], 5.0, &mut csv)
-                .unwrap_err();
+        let error = evaluate_and_render(
+            [Cursor::new(vec![0_u8; 1024])],
+            &[(301, 0)],
+            &[5.0],
+            &mut csv,
+        )
+        .unwrap_err();
         assert!(!error.to_string().is_empty());
         assert!(csv.is_empty());
+    }
+
+    // Modification (2026-11-14): ensure the CLI preserves the full epoch and
+    // pair ordering contract without applying any implicit time conversion.
+    #[test]
+    fn repeated_epochs_render_epoch_major_csv_with_single_header() {
+        let values = [
+            "--et",
+            "10",
+            "--pair",
+            "301:0",
+            "--et",
+            "0",
+            "--et",
+            "5",
+            "--pair",
+            "399:0",
+            "--et",
+            "5",
+            "earth.bsp",
+        ]
+        .map(str::to_string);
+        let parsed = parse_arguments(&values).unwrap();
+        assert_eq!(parsed.epochs, vec![10.0, 0.0, 5.0, 5.0]);
+        assert_eq!(parsed.pairs, vec![(301, 0), (399, 0)]);
+
+        let mut csv = Vec::new();
+        evaluate_and_render(two_sources(), &parsed.pairs, &parsed.epochs, &mut csv).unwrap();
+        let csv = String::from_utf8(csv).unwrap();
+        let lines: Vec<_> = csv.lines().collect();
+        assert_eq!(lines.len(), 1 + 4 * 2);
+        assert_eq!(lines[0], HEADER);
+        for (epoch_index, &et) in parsed.epochs.iter().enumerate() {
+            for (pair_index, &(target, center)) in parsed.pairs.iter().enumerate() {
+                let fields: Vec<_> = lines[1 + epoch_index * 2 + pair_index].split(',').collect();
+                assert_eq!(fields.len(), 10);
+                assert_eq!(fields[0].parse::<f64>().unwrap(), et);
+                assert_eq!(fields[1], target.to_string());
+                assert_eq!(fields[2], center.to_string());
+                assert_eq!(fields[3], "0");
+            }
+        }
+        assert_eq!(lines[5], lines[7]);
+        assert_eq!(lines[6], lines[8]);
+        let at_ten: Vec<_> = lines[1].split(',').collect();
+        let at_zero: Vec<_> = lines[3].split(',').collect();
+        assert_eq!(at_ten[4].parse::<f64>().unwrap(), 117.5);
+        assert_eq!(at_zero[4].parse::<f64>().unwrap(), 86.5);
+    }
+
+    #[test]
+    fn late_epoch_failure_never_emits_partial_scientific_csv() {
+        let mut output = Vec::new();
+        let error = evaluate_and_render(
+            two_sources(),
+            &[(399, 0), (301, 0)],
+            &[5.0, 11.0],
+            &mut output,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("epoch 1"));
+        assert!(error.to_string().contains("request 0"));
+        assert!(output.is_empty());
+
+        // The single-epoch invocation remains byte-for-byte equivalent.
+        let pairs = [(301, 0), (399, 0)];
+        let mut single = Vec::new();
+        let mut duplicated = Vec::new();
+        evaluate_and_render(two_sources(), &pairs, &[5.0], &mut single).unwrap();
+        evaluate_and_render(two_sources(), &pairs, &[5.0, 5.0], &mut duplicated).unwrap();
+        let rows: Vec<_> = String::from_utf8(single)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let doubles: Vec<_> = String::from_utf8(duplicated)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(doubles[0..3], rows);
+        assert_eq!(doubles[3..5], rows[1..3]);
     }
 
     #[test]
     fn empty_kernel_sources_are_rejected_without_output() {
         let mut csv = Vec::new();
         let empty: Vec<Cursor<Vec<u8>>> = Vec::new();
-        let error = evaluate_and_render(empty, &[(301, 0)], 5.0, &mut csv).unwrap_err();
+        let error = evaluate_and_render(empty, &[(301, 0)], &[5.0], &mut csv).unwrap_err();
         assert!(error.to_string().contains("no SPK files supplied"));
         assert!(csv.is_empty());
     }
