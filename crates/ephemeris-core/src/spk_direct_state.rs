@@ -25,6 +25,9 @@ SPDX-License-Identifier: CPAL-1.0
 //! light-time correction, or multiple-kernel load-order resolution.
 //!
 //! Reference: <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html>
+//!
+//! Modified 2026-11-14: reject unresolvable record midpoints and cap the
+//! directory/record midpoint tolerance below one quarter of a record.
 
 use std::error::Error;
 use std::fmt;
@@ -325,12 +328,31 @@ pub fn direct_spk_state<R: Read + Seek>(
     // Allow only binary64 rounding at the scale of the encoded ET/interval.
     let expected_midpoint = layout.init + (record_index as f64 + 0.5) * layout.interval;
     let expected_radius = layout.interval * 0.5;
+    // The directory can advance by one interval even when its half-step
+    // rounds to an endpoint at this ET magnitude. Such a record has no
+    // representable interior midpoint and cannot be interpolated safely.
+    let record_start = layout.init + record_index as f64 * layout.interval;
+    let record_end = layout.init + (record_index as f64 + 1.0) * layout.interval;
+    if !expected_midpoint.is_finite()
+        || !record_start.is_finite()
+        || !record_end.is_finite()
+        || expected_midpoint <= record_start
+        || expected_midpoint >= record_end
+    {
+        return Err(SpkStateError::InvalidSegment(
+            "SPK record midpoint unresolvable at f64 ET precision",
+        ));
+    }
     let epoch_scale = layout
         .init
         .abs()
         .max(expected_midpoint.abs())
         .max(layout.interval.abs());
-    let midpoint_tolerance = 32.0 * f64::EPSILON * epoch_scale;
+    // Pure relative tolerance grows with |INIT| and can otherwise exceed
+    // the whole record width at extreme finite ET. A >25%-record midpoint
+    // shift cannot be justified as harmless binary64 rounding.
+    let midpoint_tolerance =
+        (32.0 * f64::EPSILON * epoch_scale).min(0.25 * layout.interval);
     let radius_tolerance = 32.0 * f64::EPSILON * layout.interval.abs();
     if !expected_midpoint.is_finite()
         || expected_radius <= 0.0
