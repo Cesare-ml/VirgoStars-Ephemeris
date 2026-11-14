@@ -248,6 +248,39 @@ impl<R: Read + Seek> De441<R> {
             return Err(De441Error::InvalidFile("invalid record count or size"));
         }
         let record_count = count as usize;
+
+        // Modification 2026-11-14: every declared Chebyshev subrecord must
+        // occupy distinguishable TDB Julian dates in the f64 reader API.
+        // Test the first and last principal record, where the binary64 ULP
+        // can be largest over the declared interval. Checking each boundary
+        // (rather than only granule width) also catches adjacent collisions.
+        let last_record_start = start + (record_count - 1) as f64 * step;
+        for pointer in pointers.iter().filter(|pointer| pointer.first != 0) {
+            let width = step / pointer.granules as f64;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(De441Error::InvalidFile(
+                    "coefficient granule dates exceed f64 JD resolution",
+                ));
+            }
+            for record_start in [start, last_record_start] {
+                let mut previous = record_start;
+                for granule in 1..pointer.granules {
+                    let boundary = record_start + granule as f64 * width;
+                    if !boundary.is_finite() || boundary <= previous {
+                        return Err(De441Error::InvalidFile(
+                            "coefficient granule dates exceed f64 JD resolution",
+                        ));
+                    }
+                    previous = boundary;
+                }
+                let record_end = record_start + step;
+                if !record_end.is_finite() || record_end <= previous {
+                    return Err(De441Error::InvalidFile(
+                        "coefficient granule dates exceed f64 JD resolution",
+                    ));
+                }
+            }
+        }
         let expected = (record_count as u64)
             .checked_add(2)
             .and_then(|n| n.checked_mul(record_size as u64))
