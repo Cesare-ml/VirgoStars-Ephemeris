@@ -166,13 +166,12 @@ pub fn relative_states_for_epochs<R: Read + Seek>(
 ) -> Result<Vec<Vec<SpkRelativeState>>, SpkEpochBatchError> {
     let mut matrix = Vec::with_capacity(epochs_tdb_seconds.len());
     for (epoch_index, &et) in epochs_tdb_seconds.iter().enumerate() {
-        let states = relative_states_at(kernels, requests, et).map_err(|cause| {
-            SpkEpochBatchError {
+        let states =
+            relative_states_at(kernels, requests, et).map_err(|cause| SpkEpochBatchError {
                 epoch_index,
                 et_tdb_seconds: et,
                 cause,
-            }
-        })?;
+            })?;
         matrix.push(states);
     }
     Ok(matrix)
@@ -442,8 +441,7 @@ mod tests {
     fn failed_later_epoch_reports_epoch_and_pair_without_partial_matrix() {
         let mut set = two_kernels();
         let requests = [(399, 0), (301, 0), (399, 301)];
-        let error = relative_states_for_epochs(&mut set, &requests, &[5.0, 11.0])
-            .unwrap_err();
+        let error = relative_states_for_epochs(&mut set, &requests, &[5.0, 11.0]).unwrap_err();
         assert_eq!(error.epoch_index, 1);
         assert_eq!(error.et_tdb_seconds, 11.0);
         assert!(matches!(
@@ -468,13 +466,11 @@ mod tests {
             .unwrap()
             .is_empty());
         assert_eq!(
-            relative_states_for_epochs(&mut empty, &[], &[0.0, 5.0])
-                .unwrap(),
+            relative_states_for_epochs(&mut empty, &[], &[0.0, 5.0]).unwrap(),
             vec![Vec::new(), Vec::new()]
         );
         for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let err = relative_states_for_epochs(&mut empty, &[], &[0.0, invalid])
-                .unwrap_err();
+            let err = relative_states_for_epochs(&mut empty, &[], &[0.0, invalid]).unwrap_err();
             assert_eq!(err.epoch_index, 1);
             assert!(matches!(err.cause, SpkBatchError::InvalidEpoch));
             assert!(err.source().is_some());
