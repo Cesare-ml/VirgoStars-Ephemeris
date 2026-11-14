@@ -439,7 +439,22 @@ impl<R: Read + Seek> De441<R> {
             }));
         }
         let width = self.step / p.granules as f64;
-        let granule = (((jd - record_start) / width).floor() as usize).min(p.granules - 1);
+        // Modification 2026-11-14: division/floor can round an exact
+        // representable granule boundary just below its integer index.
+        // Binary-search the same rounded boundaries validated by new().
+        // At a boundary choose the following granule; at the inclusive
+        // final coverage endpoint choose the last one.
+        let (mut low, mut high) = (0usize, p.granules);
+        while low + 1 < high {
+            let mid = low + (high - low) / 2;
+            let boundary = record_start + mid as f64 * width;
+            if jd < boundary {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        let granule = low;
         let x = 2.0 * (jd - (record_start + granule as f64 * width)) / width - 1.0;
         let mut result = Components::default();
         for axis in 0..3 {
