@@ -16,22 +16,74 @@
 //!
 //! Modified 2026-11-14: validate precision once for a group of target-center
 //! requests, then reuse the classic reader's coefficient-record cache.
+//! A batch failure now records the index and target/center pair responsible
+//! while exposing the original typed DE441 error via Error::source.
 //! This adapter does not perform time-scale conversion, apparent corrections
 //! or independent NASA/JPL validation.
 
+use std::error::Error;
+use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::calendar::JulianDate;
-use crate::de441::{Body, De441};
-use crate::de441_checked_state::{CheckedDe441State, CheckedStateError};
-use crate::de441_epoch_bridge::checked_de441_epoch;
+use crate::de441::{Body, De441, De441Error};
+use crate::de441_checked_state::CheckedDe441State;
+use crate::de441_epoch_bridge::{checked_de441_epoch, EpochBridgeError};
+
+/// A batch-level epoch precision error, or the exact request that failed.
+///
+/// Unlike the scalar checked-state error, request failures carry a zero-based
+/// index and the original target/center pair. The source remains the typed
+/// `De441Error`, accessible via `std::error::Error::source`.
+#[derive(Debug)]
+pub enum CheckedBatchError {
+    Epoch(EpochBridgeError),
+    Request {
+        index: usize,
+        target: Body,
+        center: Body,
+        source: De441Error,
+    },
+}
+
+impl fmt::Display for CheckedBatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Epoch(error) => write!(f, "DE441 batch epoch error: {error}"),
+            Self::Request {
+                index,
+                target,
+                center,
+                source,
+            } => write!(
+                f,
+                "DE441 batch request {index} ({target:?} relative to {center:?}): {source}"
+            ),
+        }
+    }
+}
+
+impl Error for CheckedBatchError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Epoch(error) => Some(error),
+            Self::Request { source, .. } => Some(source),
+        }
+    }
+}
+
+impl From<EpochBridgeError> for CheckedBatchError {
+    fn from(error: EpochBridgeError) -> Self {
+        Self::Epoch(error)
+    }
+}
 
 /// Read target-minus-center geometric states at a single already-TDB epoch.
 ///
 /// Each request is a `(target, center)` pair. All states share the same
 /// rounded TDB Julian date and carry the *same* measured input-epoch
 /// quantization error in seconds. The precision budget is checked before
-/// reading **any** coefficient record, including when requests is empty.
+/// reading **any** coefficient record, including when the request list is empty.
 ///
 /// For each pair, the returned position is in fixed ICRF km, and velocity
 /// is in fixed ICRF km per TDB day. Planetary system barycenters remain
@@ -41,7 +93,9 @@ use crate::de441_epoch_bridge::checked_de441_epoch;
 /// reader caches the last coefficient record; this batch API introduces no
 /// second cache or implicit kernel downloads. If any state fails (e.g.
 /// missing series or outside coverage), the batch returns the reader error
-/// without a partial result or an analytic fallback. Previously read
+/// without a partial result or an analytic fallback. The error records
+/// the zero-based failed request index, target and center, and retains the
+/// typed underlying DE441 error. Previously read
 /// coefficient records may remain cached, as with the scalar API.
 ///
 /// An empty request list yields an empty vector **only after** validating
@@ -55,11 +109,18 @@ pub fn checked_states_at_split_tdb<R: Read + Seek>(
     requests: &[(Body, Body)],
     epoch: JulianDate,
     max_quantization_error_seconds: f64,
-) -> Result<Vec<CheckedDe441State>, CheckedStateError> {
+) -> Result<Vec<CheckedDe441State>, CheckedBatchError> {
     let checked = checked_de441_epoch(epoch, max_quantization_error_seconds)?;
     let mut states = Vec::with_capacity(requests.len());
-    for &(target, center) in requests {
-        let state = ephemeris.state(target, center, checked.epoch)?;
+    for (index, &(target, center)) in requests.iter().enumerate() {
+        let state = ephemeris
+            .state(target, center, checked.epoch)
+            .map_err(|source| CheckedBatchError::Request {
+                index,
+                target,
+                center,
+                source,
+            })?;
         states.push(CheckedDe441State {
             state,
             quantization_error_seconds: checked.quantization_error_seconds,
