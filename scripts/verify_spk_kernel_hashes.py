@@ -8,6 +8,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): verify optional ordered SPK basenames and byte sizes.
+# Modification (2026-11-14): detect observable kernel file changes during hashing.
 
 """Offline SHA-256 preflight for the experimental Rust SPK/NAIF comparator.
 
@@ -19,6 +20,7 @@ correct. No third-party dependencies, downloads or astronomical calculations.
 import argparse
 import hashlib
 import hmac
+import os
 from pathlib import Path
 import sys
 
@@ -105,11 +107,37 @@ def read_declared_hashes(reference: Path) -> list[str]:
     return read_declared_manifest(reference)[0]
 
 
+def _file_identity(stat: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Exclude access time; reads may update atime without changing file bytes."""
+    return (
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+    )
+
+
 def sha256_file(path: Path) -> str:
+    """Hash the opened file and reject observable in-flight file replacement.
+
+    Snapshot the path before opening, the descriptor before/after streaming,
+    and the path after closing. This detects typical concurrent file edits
+    and swaps; it is *not* a race-free lock or a guarantee that a later Rust
+    comparator opens the same bytes. Modification (2026-11-14).
+    """
+    path_before = _file_identity(path.stat())
     digest = hashlib.sha256()
     with path.open("rb") as stream:
+        opened = _file_identity(os.fstat(stream.fileno()))
+        if opened != path_before:
+            raise ValueError(f"kernel path changed before SHA-256 read: {path}")
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
+        if _file_identity(os.fstat(stream.fileno())) != opened:
+            raise ValueError(f"kernel bytes or metadata changed during SHA-256 read: {path}")
+    if _file_identity(path.stat()) != opened:
+        raise ValueError(f"kernel path changed during SHA-256 read: {path}")
     return digest.hexdigest()
 
 
