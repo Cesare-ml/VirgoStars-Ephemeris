@@ -779,9 +779,7 @@ mod tests {
     fn all_historical_utc_leap_transitions_match_civil_dates_and_tt_steps() {
         assert_eq!(LEAP_SECONDS.len(), LEAP_CIVIL_REFERENCE.len());
 
-        for (index, &(year, month, day, tai_minus_utc)) in
-            LEAP_CIVIL_REFERENCE.iter().enumerate()
-        {
+        for (index, &(year, month, day, tai_minus_utc)) in LEAP_CIVIL_REFERENCE.iter().enumerate() {
             let at_midnight = CalendarDateTime {
                 year,
                 month,
@@ -825,11 +823,7 @@ mod tests {
             // The UTC leap label 23:59:60 is deliberately unsupported.
             // Its elapsed second is nevertheless reflected in TT: the
             // adjacent *supported* 23:59:59 and 00:00:00 labels span 2 SI s.
-            near(
-                (after.tt_jd - before.tt_jd) * DAY_SECONDS,
-                2.0,
-                0.0001,
-            );
+            near((after.tt_jd - before.tt_jd) * DAY_SECONDS, 2.0, 0.0001);
         }
     }
 
@@ -855,10 +849,8 @@ mod tests {
             // A +14:00 label on the effective date is still in the previous
             // UTC day, whereas -12:00 on the prior local date is already in
             // the next UTC day. The leap-second selection must use UTC.
-            let plus_fourteen =
-                epochs(timestamp_on_day(new_day, 13, 59, 59.0, 840)).unwrap();
-            let minus_twelve =
-                epochs(timestamp_on_day(previous_day, 12, 0, 0.0, -720)).unwrap();
+            let plus_fourteen = epochs(timestamp_on_day(new_day, 13, 59, 59.0, 840)).unwrap();
+            let minus_twelve = epochs(timestamp_on_day(previous_day, 12, 0, 0.0, -720)).unwrap();
 
             assert_eq!(plus_fourteen.tai_utc, tai_minus_utc - 1);
             assert_eq!(minus_twelve.tai_utc, tai_minus_utc);
