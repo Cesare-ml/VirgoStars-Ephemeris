@@ -213,6 +213,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.receipt.resolve() in (args.kernel.resolve(), args.reference.resolve()):
         print("PREFLIGHT_FAILED: receipt must not overwrite an input file", file=sys.stderr)
         return 1
+    if args.receipt.resolve().is_relative_to(Path(__file__).resolve().parents[1]):
+        print("PREFLIGHT_FAILED: receipt must be outside the Git source checkout", file=sys.stderr)
+        return 1
+    if args.receipt.is_symlink() or args.receipt.exists():
+        print("PREFLIGHT_FAILED: receipt already exists; choose a new path", file=sys.stderr)
+        return 1
     try:
         report = compare(
             args.kernel, args.reference, args.kernel_sha256,
@@ -229,7 +235,14 @@ def main(argv: list[str] | None = None) -> int:
         }
         exit_code = 1
     args.receipt.parent.mkdir(parents=True, exist_ok=True)
-    args.receipt.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    try:
+        # Exclusive create also closes the check-then-write race: existing
+        # evidence must never be silently replaced by another run.
+        with args.receipt.open("x", encoding="utf-8") as output:
+            output.write(json.dumps(report, indent=2) + "\n")
+    except FileExistsError:
+        print("PREFLIGHT_FAILED: receipt already exists; choose a new path", file=sys.stderr)
+        return 1
     print(f"{report['status']}: receipt at {args.receipt}", file=sys.stderr)
     return exit_code
 
