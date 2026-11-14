@@ -70,16 +70,9 @@ fn synthetic_type2_kernel(order: SpkByteOrder) -> Vec<u8> {
     write_f64(&mut bytes, summary + 16, 1.0, order);
     write_f64(&mut bytes, summary + 24, 0.0, order);
     write_f64(&mut bytes, summary + 32, 10.0, order);
-    for (index, value) in [
-        499,
-        10,
-        1,
-        2,
-        FIRST_DATA_WORD as i32,
-        LAST_DATA_WORD as i32,
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, value) in [499, 10, 1, 2, FIRST_DATA_WORD as i32, LAST_DATA_WORD as i32]
+        .into_iter()
+        .enumerate()
     {
         write_i32(&mut bytes, summary + 40 + 4 * index, value, order);
     }
@@ -116,9 +109,7 @@ impl Seek for FaultOnce {
     }
 }
 
-fn verify_constant_state(
-    state: virgostars_ephemeris_core::spk_direct_state::SpkDirectState,
-) {
+fn verify_constant_state(state: virgostars_ephemeris_core::spk_direct_state::SpkDirectState) {
     assert_eq!(state.target_id, 499);
     assert_eq!(state.center_id, 10);
     assert_eq!(state.frame_id, 1);
@@ -182,6 +173,9 @@ fn interrupted_read_is_retried_by_read_exact_without_state_corruption() {
         let index = inspect_spk(&mut source).expect("valid synthetic index");
         source.fault = Some(((FIRST_DATA_WORD - 1) as u64 * 8, io::ErrorKind::Interrupted));
         verify_constant_state(direct_spk_state(&mut source, &index, 499, 5.0).unwrap());
-        assert!(source.fault.is_none(), "the synthetic interruption was injected");
+        assert!(
+            source.fault.is_none(),
+            "the synthetic interruption was injected"
+        );
     }
 }
