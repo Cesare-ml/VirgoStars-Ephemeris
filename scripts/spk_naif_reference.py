@@ -19,6 +19,9 @@
 
 Production astronomy remains canonical Rust. spiceypy is imported only when
 generating actual NAIF vectors; synthetic mocked tests are not proof of parity.
+
+Modified 2026-11-14: atomically publish generated reference CSVs without
+racy existence-check-to-write overwrites or incomplete final outputs.
 """
 
 from __future__ import annotations
@@ -28,9 +31,11 @@ from datetime import datetime, timezone
 import hashlib
 import hmac
 import math
+import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 from typing import Any, Sequence
 
 COLUMNS = "et_tdb_seconds,target_id,center_id,x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s"
@@ -214,6 +219,43 @@ def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
     # The CSV's declared digest is not an authenticity signature.
 
 
+def write_reference_atomic(path: Path, content: str, *, overwrite: bool) -> None:
+    """Write a complete UTF-8 CSV before atomically publishing its final name.
+
+    With overwrite=False, use a same-directory hard link as the atomic
+    create-if-absent operation: a competing writer can never be overwritten.
+    On explicit overwrite=True, replace the destination entry atomically.
+    Fail closed if the destination filesystem lacks the required semantics.
+    """
+    staging_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as temporary:
+            staging_path = Path(temporary.name)
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        if overwrite:
+            os.replace(staging_path, path)
+        else:
+            try:
+                os.link(staging_path, path)
+            except FileExistsError as error:
+                raise ValueError(
+                    "output exists; pass --overwrite only if intentional"
+                ) from error
+    finally:
+        if staging_path is not None:
+            staging_path.unlink(missing_ok=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate NAIF geometric SPK references or verify kernel SHA256."
@@ -248,7 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.kernel, cases, spice, generated_utc=utc, generator_digest=generator_digest
         )
         verify_reference_hashes(csv, args.kernel)
-        args.output.write_text(csv, encoding="utf-8", newline="\n")
+        write_reference_atomic(args.output, csv, overwrite=args.overwrite)
         print(f"Wrote {len(cases)} NAIF reference cases to {args.output}.")
         return 0
     except (OSError, ValueError) as error:
