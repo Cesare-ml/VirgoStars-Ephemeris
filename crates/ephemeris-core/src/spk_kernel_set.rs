@@ -153,6 +153,29 @@ impl<R: Read + Seek> SpkKernelSet<R> {
             .collect()
     }
 
+    /// Sorted, distinct NAIF target IDs declared across all loaded kernels.
+    ///
+    /// This is a read-only metadata inventory: duplicates across files or
+    /// segments are removed, but targets in unsupported frames/types and
+    /// completely shadowed segments are retained. Center-only IDs are not
+    /// included unless they also occur as a segment target. Signed NAIF IDs,
+    /// including negative IDs, are preserved. An empty kernel set returns an
+    /// empty vector. This does not establish current-epoch coverage or that a
+    /// geometric state can be evaluated for any listed target.
+    ///
+    /// Modification (2026-11-14): expose target discovery for offline tools
+    /// without a separate DAF reader or a second astronomy implementation.
+    pub fn declared_target_ids(&self) -> Vec<i32> {
+        let mut targets: Vec<i32> = self
+            .loaded
+            .iter()
+            .flat_map(|entry| entry.index.segments.iter().map(|segment| segment.target_id))
+            .collect();
+        targets.sort_unstable();
+        targets.dedup();
+        targets
+    }
+
     /// Sorted, unique TDB/ET coverage endpoints declared for one target.
     ///
     /// These boundaries are useful when planning discontinuity/priority
@@ -649,6 +672,52 @@ mod tests {
                 2.0
             );
         }
+    }
+
+    // Modification (2026-11-14): target inventory is sorted, unique, signed
+    // and metadata-only even for unsupported or shadowed declarations.
+    #[test]
+    fn declared_target_ids_include_shadowed_and_unsupported_targets_without_centers() {
+        let mut set: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(set.declared_target_ids().is_empty());
+
+        set.load(Cursor::new(kernel(
+            SpkByteOrder::LittleEndian,
+            &[
+                seg(301, 72, 2, [1.0, 0.0], [0.0, 0.0]),
+                seg(-82, 72, 3, [2.0, 0.0], [0.0, 0.0]),
+                seg(301, 72, 2, [3.0, 0.0], [0.0, 0.0]),
+            ],
+        )))
+        .unwrap();
+        assert_eq!(set.declared_target_ids(), vec![-82, 301]);
+
+        let mut unsupported = seg(399, 12, 9, [5.0, 0.0], [0.0, 0.0]);
+        unsupported.frame = 17;
+        set.load(Cursor::new(kernel(
+            SpkByteOrder::BigEndian,
+            &[
+                unsupported,
+                seg(301, 0, 2, [4.0, 0.0], [0.0, 0.0]),
+            ],
+        )))
+        .unwrap();
+        assert_eq!(set.declared_target_ids(), vec![-82, 301, 399]);
+        assert!(!set.declared_target_ids().contains(&72));
+        assert!(!set.declared_target_ids().contains(&12));
+
+        // The highest-priority segment for ID 399 is unsupported, but
+        // its declared target must still be discoverable without evaluation.
+        assert!(matches!(
+            set.direct_state(399, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+        assert_eq!(set.declared_target_ids(), vec![-82, 301, 399]);
+
+        set.unload_last().unwrap();
+        assert_eq!(set.declared_target_ids(), vec![-82, 301]);
+        set.unload_last().unwrap();
+        assert!(set.declared_target_ids().is_empty());
     }
 
     // Modification (2026-11-14): selection diagnostics must report the exact
