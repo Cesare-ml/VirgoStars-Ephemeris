@@ -98,7 +98,10 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
     }
     let et = et.ok_or_else(|| format!("missing --et; {}", usage()))?;
     if paths.is_empty() || paths.iter().any(|p| p.is_empty()) {
-        return Err(format!("at least one explicit local SPK file is required; {}", usage()));
+        return Err(format!(
+            "at least one explicit local SPK file is required; {}",
+            usage()
+        ));
     }
     Ok(Arguments { et, target, paths })
 }
@@ -246,13 +249,7 @@ mod tests {
 
     // Entirely synthetic one-segment Type-2 SPK with a constant finite XYZ
     // geometric position, or an intentionally unsupported frame.
-    fn kernel(
-        order: SpkByteOrder,
-        target: i32,
-        center: i32,
-        frame: i32,
-        x: f64,
-    ) -> Vec<u8> {
+    fn kernel(order: SpkByteOrder, target: i32, center: i32, frame: i32, x: f64) -> Vec<u8> {
         let record_words = 8usize;
         let last = FIRST_WORD + record_words + 3;
         let mut bytes = vec![0u8; 5 * RECORD_BYTES];
@@ -297,12 +294,8 @@ mod tests {
         target: Option<i32>,
     ) -> Result<(String, (usize, usize)), Box<dyn Error>> {
         let mut output = Vec::new();
-        let counts = evaluate_and_render(
-            files.into_iter().map(Cursor::new),
-            et,
-            target,
-            &mut output,
-        )?;
+        let counts =
+            evaluate_and_render(files.into_iter().map(Cursor::new), et, target, &mut output)?;
         Ok((String::from_utf8(output)?, counts))
     }
 
@@ -323,8 +316,7 @@ mod tests {
             let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
             assert!(parse_arguments(&args).is_err(), "accepted {args:?}");
         }
-        let args = ["--et", "-2.5", "--target", "-82", "--", "-local.bsp"]
-            .map(str::to_owned);
+        let args = ["--et", "-2.5", "--target", "-82", "--", "-local.bsp"].map(str::to_owned);
         assert_eq!(
             parse_arguments(&args).unwrap(),
             Arguments {
@@ -367,12 +359,7 @@ mod tests {
         let mut bad = kernel(SpkByteOrder::BigEndian, 301, 4, 1, 99.0);
         let last = FIRST_WORD + 8 + 3;
         // Corrupt the RSIZE word in the segment's footer, not DAF metadata.
-        put_f64(
-            &mut bad,
-            (last - 4) * 8 + 16,
-            0.0,
-            SpkByteOrder::BigEndian,
-        );
+        put_f64(&mut bad, (last - 4) * 8 + 16, 0.0, SpkByteOrder::BigEndian);
         let (csv, counts) = evaluate(vec![good, bad], 5.0, Some(301)).unwrap();
         assert_eq!(counts, (1, 1));
         assert!(csv.contains(",301,1,4,1,2,"));
@@ -392,29 +379,25 @@ mod tests {
         assert_eq!(csv, format!("{HEADER}\n"));
 
         let mut buffer = Vec::new();
-        assert!(evaluate_and_render(
-            [Cursor::new(data)],
-            5.0,
-            Some(777),
-            &mut buffer
-        )
-        .is_err());
+        assert!(evaluate_and_render([Cursor::new(data)], 5.0, Some(777), &mut buffer).is_err());
         assert!(buffer.is_empty());
     }
 
     #[test]
     fn invalid_file_and_nonfinite_epoch_do_not_emit_csv() {
         let mut buffer = Vec::new();
-        assert!(evaluate_and_render(
-            [Cursor::new(vec![0u8; 1024])],
-            5.0,
-            None,
-            &mut buffer
-        )
-        .is_err());
+        assert!(
+            evaluate_and_render([Cursor::new(vec![0u8; 1024])], 5.0, None, &mut buffer).is_err()
+        );
         assert!(buffer.is_empty());
         assert!(evaluate_and_render(
-            [Cursor::new(kernel(SpkByteOrder::LittleEndian, 301, 0, 1, 2.0))],
+            [Cursor::new(kernel(
+                SpkByteOrder::LittleEndian,
+                301,
+                0,
+                1,
+                2.0
+            ))],
             f64::INFINITY,
             None,
             &mut buffer
@@ -428,6 +411,9 @@ mod tests {
 
     #[test]
     fn csv_error_field_quotes_commas_and_quotes() {
-        assert_eq!(quoted_csv("unsupported, \"bad\""), "\"unsupported, \"\"bad\"\"\"");
+        assert_eq!(
+            quoted_csv("unsupported, \"bad\""),
+            "\"unsupported, \"\"bad\"\"\""
+        );
     }
 }
