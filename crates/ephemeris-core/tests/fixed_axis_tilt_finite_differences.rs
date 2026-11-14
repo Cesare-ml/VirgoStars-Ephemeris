@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 //
 // Modification (2026-11-14): add synthetic finite-difference checks for
-// tilted spherical rates, branch cuts, XYZ reconstruction, and unit scaling.
+// tilted spherical rates, branch cuts, XYZ reconstruction, scaling, and analytic circular motion.
 
 //! Independent centered-difference oracle for the public fixed-axis rates.
 //! This only checks synthetic linear motion in a fixed ICRF Cartesian frame;
@@ -251,6 +251,64 @@ fn position_and_velocity_scaling_respects_rate_units() {
                     expected_radial_rate,
                     expected_radial_rate.abs() * 2.0e-12 + 1.0e-12,
                 );
+            }
+        }
+    }
+}
+
+#[test]
+fn inclined_circular_motion_matches_closed_form_angles_and_rates() {
+    // A uniform circle in the original ICRF XY plane is rotated into fixed
+    // axes. Independently differentiated closed-form angular functions are:
+    //
+    //   lambda = atan2(cos(tilt)*sin(phase), cos(phase))
+    //   beta   = asin(-sin(tilt)*sin(phase))
+    //   lambda_dot = omega*cos(tilt) /
+    //                (cos(phase)^2 + cos(tilt)^2*sin(phase)^2)
+    //   beta_dot = -omega*sin(tilt)*cos(phase) /
+    //              sqrt(1 - sin(tilt)^2*sin(phase)^2)
+    //
+    // These are fixed-axis *geometric* rates, not date-frame or apparent
+    // derivatives. The source circle has constant radius and zero radial rate.
+    const RADIUS_KM: f64 = 2_000_000.0;
+    for tilt in [0.0_f64, 0.409_092_8, -0.61] {
+        let (sin_tilt, cos_tilt) = tilt.sin_cos();
+        for phase in [0.0_f64, 0.31, 1.25, 2.73, -2.9] {
+            let (sin_phase, cos_phase) = phase.sin_cos();
+            let position = [RADIUS_KM * cos_phase, RADIUS_KM * sin_phase, 0.0];
+            let expected_longitude = (cos_tilt * sin_phase)
+                .atan2(cos_phase)
+                .rem_euclid(TAU);
+            let expected_latitude = (-sin_tilt * sin_phase).asin();
+            let planar_sq = cos_phase * cos_phase
+                + cos_tilt * cos_tilt * sin_phase * sin_phase;
+            let latitude_denominator =
+                (1.0 - sin_tilt * sin_tilt * sin_phase * sin_phase).sqrt();
+            for omega in [-0.035, 0.035] {
+                let velocity = [
+                    -RADIUS_KM * omega * sin_phase,
+                    RADIUS_KM * omega * cos_phase,
+                    0.0,
+                ];
+                let output = project_fixed_axes(&synthetic_state(position, velocity), tilt).unwrap();
+                let expected_longitude_rate = omega * cos_tilt / planar_sq;
+                let expected_latitude_rate =
+                    -omega * sin_tilt * cos_phase / latitude_denominator;
+
+                assert_near(output.longitude_rad, expected_longitude, 5.0e-15);
+                assert_near(output.latitude_rad, expected_latitude, 5.0e-15);
+                assert_near(output.distance_km, RADIUS_KM, 1.0e-8);
+                assert_near(
+                    output.longitude_rate_rad_per_day,
+                    expected_longitude_rate,
+                    5.0e-15,
+                );
+                assert_near(
+                    output.latitude_rate_rad_per_day,
+                    expected_latitude_rate,
+                    5.0e-15,
+                );
+                assert_near(output.distance_rate_km_per_day, 0.0, 1.0e-8);
             }
         }
     }
