@@ -33,6 +33,20 @@ The existing Rust parser remains the authority for complete header,
 coverage, body identity, reference CSV metadata, time, frame,
 corrections, units, and six-vector finite residual validation.
 
+**Post-Cargo integrity check (2026-11-14):** the runner now performs
+the same streaming SHA-256 verification of **both input files** and the
+same clean/reviewed Git SHA check **again after Cargo exits**. A mismatch,
+missing input, dirty source tree, or failed postflight check gives
+`POSTFLIGHT_INTEGRITY_FAILED`, forces a nonzero runner exit even if
+Cargo itself exited successfully, and retains Cargo's original stdout,
+stderr, and exit code in the evidence. The receipt is schema **3** and
+also records `postflight_integrity_ok` and
+`postflight_integrity_error`. This intentionally rereads a large
+DE441 kernel, potentially adding substantial disk I/O. It is a
+pre/post integrity gate, **not an atomic snapshot**: transient swaps
+undetected between the two checks, changes to ignored files, and
+changes to external compilers/toolchains remain outside its contract.
+
 **Source revision gate (added 2026-11-14):** before running Cargo,
 the preflight also requires a separately preapproved **40-hex Git
 commit SHA** (`--source-sha`), checks that the script resides at the
@@ -102,11 +116,13 @@ The script invokes the **existing** Rust implementation only:
 cargo run --locked --quiet -p virgostars-ephemeris-core --example validate_horizons -- <kernel> <reference.csv> <max_position_component_km> <max_velocity_component_km_day>
 ```
 
-The receipt (schema version **2**) records both input hashes, kernel
+The receipt (schema version **3**) records both input hashes, kernel
 basename and bytes, the exact verified Git commit and clean-tree status,
-declared component tolerances, command/exit status and full Rust
-stdout/stderr. Failures cause nonzero exit; mismatched fingerprints,
-unapproved commits and dirty worktrees stop **before Cargo**.
+declared component tolerances, command/exit status, postflight integrity
+result, and full Rust stdout/stderr. Failures cause nonzero exit;
+mismatched fingerprints, unapproved commits and dirty worktrees stop
+**before Cargo**; changes detected after Cargo cause a failed run
+even when Cargo's exit code is zero.
 
 **Preservation:** every receipt is created exclusively (no overwrite).
 A destination that already exists, aliases either input, or resolves
@@ -140,8 +156,10 @@ temporarily relaxes the size preflight *inside the mock unit process*,
 never in the production CLI. Their subprocess mocks simulate Git
 root, commit and worktree status as well as Cargo, rejecting invalid,
 unexpected or dirty source revisions without running astronomical
-calculations. Their subprocess mock never calls Cargo
-or an authentic JPL file. Test success establishes input integrity and
+calculations. Additional mocked Cargo mutations test the postflight
+hash and source checks, and verify that even a nominal Cargo exit 0
+cannot pass once the evidence changes. Their subprocess mocks do
+not call real Cargo or an authentic JPL file. Test success establishes input integrity and
 fail-closed control-flow behavior only; no actual NASA/JPL comparison
 has been executed by these tests.
 
