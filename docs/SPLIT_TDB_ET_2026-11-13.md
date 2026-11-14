@@ -150,3 +150,28 @@ No SPK handling, external datasets, astrophysical correction or
 independent NASA/JPL scientific comparison is added. CPAL-1.0 source
 notice and visible **Powered by VirgoStars** attribution remain applicable.
 The change was added to the draft #171 branch on 2026-11-14.
+
+## Signed sub-picosecond remainder correction (2026-11-14)
+
+The ET-to-split-JD converter now uses a signed `f64` remainder for
+negative epoch offsets and adjusts the integer-day quotient before
+normalizing the fraction. Previously, applying `rem_euclid(86400)`
+to an ET offset such as **−1 picosecond** added almost one entire day
+to the negative remainder. In binary64 that intermediate rounded to
+**86400 seconds exactly**, causing `UnrepresentableTime` even though
+the input ET was finite. The new path preserves the sign before
+normalization. A −1 ps offset is converted to the nearest representable
+split JD at noon; it is **not** claimed to retain a picosecond.
+
+The audited API still reports its measured **1 ps** roundtrip loss and
+rejects a budget tighter than that. A −3 ps offset can round to the
+adjacent split-fraction value *before* noon and is checked against the
+actual reported residual. The already tested ±1 µs and midnight
+boundary behavior is unchanged. This fixes a representation asymmetry,
+**not** the fundamental `f64` precision limit, UTC/TT/TDB modeling,
+kernel reading, scientific accuracy, or production integration.
+
+Modified 2026-11-14: `src/time_split.rs`, the signed-ET audit
+regressions, and this documentation. Existing CPAL-1.0 notices and
+`Powered by VirgoStars` attribution remain in force; no new data,
+code dependencies, kernels or external downloads were introduced.
