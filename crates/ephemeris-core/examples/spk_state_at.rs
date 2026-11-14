@@ -60,17 +60,29 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
         match values[i].as_str() {
             "--target" | "--center" => {
                 let kind = values[i].as_str();
-                let raw = values.get(i + 1).ok_or_else(|| format!("{kind} requires a signed i32 NAIF ID"))?;
-                let parsed = raw.parse::<i32>().map_err(|_| format!("invalid {kind} NAIF i32 ID"))?;
-                let slot = if kind == "--target" { &mut target } else { &mut center };
+                let raw = values
+                    .get(i + 1)
+                    .ok_or_else(|| format!("{kind} requires a signed i32 NAIF ID"))?;
+                let parsed = raw
+                    .parse::<i32>()
+                    .map_err(|_| format!("invalid {kind} NAIF i32 ID"))?;
+                let slot = if kind == "--target" {
+                    &mut target
+                } else {
+                    &mut center
+                };
                 if slot.replace(parsed).is_some() {
                     return Err(format!("duplicate {kind} option"));
                 }
                 i += 2;
             }
             "--et" => {
-                let raw = values.get(i + 1).ok_or("--et requires explicit TDB seconds past J2000")?;
-                let parsed = raw.parse::<f64>().map_err(|_| "invalid --et numeric TDB epoch")?;
+                let raw = values
+                    .get(i + 1)
+                    .ok_or("--et requires explicit TDB seconds past J2000")?;
+                let parsed = raw
+                    .parse::<f64>()
+                    .map_err(|_| "invalid --et numeric TDB epoch")?;
                 if !parsed.is_finite() {
                     return Err("--et must be finite TDB seconds past J2000".into());
                 }
@@ -83,7 +95,9 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
                 paths.extend(values[i + 1..].iter().map(String::as_str));
                 break;
             }
-            flag if flag.starts_with('-') => return Err(format!("unknown option {flag}; {}", usage())),
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown option {flag}; {}", usage()))
+            }
             path => {
                 paths.push(path);
                 i += 1;
@@ -94,7 +108,9 @@ fn parse_arguments(values: &[String]) -> Result<Arguments<'_>, String> {
     let center_id = center.ok_or_else(|| format!("missing --center; {}", usage()))?;
     let et = et.ok_or_else(|| format!("missing --et; {}", usage()))?;
     if target_id == center_id {
-        return Err("target and center must differ; same-body zeros are not a scientific check".into());
+        return Err(
+            "target and center must differ; same-body zeros are not a scientific check".into(),
+        );
     }
     if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
         return Err("at least one explicit local SPK file is required".into());
@@ -154,7 +170,12 @@ fn run<W: Write>(values: &[String], output: &mut W) -> Result<(), Box<dyn Error>
         .iter()
         .map(File::open)
         .collect::<io::Result<Vec<_>>>()?;
-    let state = evaluate_sources(files, arguments.target_id, arguments.center_id, arguments.et)?;
+    let state = evaluate_sources(
+        files,
+        arguments.target_id,
+        arguments.center_id,
+        arguments.et,
+    )?;
     render(output, state)?;
     Ok(())
 }
@@ -269,11 +290,23 @@ mod tests {
             vec!["--target", "301", "--center", "399", "a.bsp"],
             vec!["--target", "301", "--center", "399", "--et", "0"],
             vec!["--target", "301", "--center", "301", "--et", "0", "a.bsp"],
-            vec!["--target", "301", "--target", "399", "--center", "0", "--et", "0", "a.bsp"],
+            vec![
+                "--target", "301", "--target", "399", "--center", "0", "--et", "0", "a.bsp",
+            ],
             vec!["--target", "301", "--center", "0", "--et", "inf", "a.bsp"],
             vec!["--target", "301", "--center", "0", "--et", "NaN", "a.bsp"],
-            vec!["--target", "2147483648", "--center", "0", "--et", "0", "a.bsp"],
-            vec!["--target", "301", "--center", "0", "--et", "0", "--typo", "a.bsp"],
+            vec![
+                "--target",
+                "2147483648",
+                "--center",
+                "0",
+                "--et",
+                "0",
+                "a.bsp",
+            ],
+            vec![
+                "--target", "301", "--center", "0", "--et", "0", "--typo", "a.bsp",
+            ],
         ];
         for args in cases {
             let values: Vec<String> = args.iter().map(|s| s.to_string()).collect();
@@ -284,7 +317,14 @@ mod tests {
     #[test]
     fn negative_et_and_dash_prefixed_path_are_preserved() {
         let values = [
-            "--target", "301", "--center", "399", "--et", "-2.5", "--", "-test.bsp",
+            "--target",
+            "301",
+            "--center",
+            "399",
+            "--et",
+            "-2.5",
+            "--",
+            "-test.bsp",
         ]
         .map(String::from);
         assert_eq!(
