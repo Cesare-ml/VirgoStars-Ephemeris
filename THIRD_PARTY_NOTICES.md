@@ -23,3 +23,13 @@ conformance test (longitude 3.1 radians, latitude −0.5 radians, height
 not copy ERFA algorithms or bundle the library; the ERFA license at
 [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt) applies to
 these numerical references as described above.
+
+Modification (2026-11-14): `crates/ephemeris-core/src/first_sky.rs`
+also uses ERFA `t_hd2ae` conformance *numerical reference results*
+(hour angle 1.1 rad, declination 1.2 rad, latitude 0.3 rad, expected
+azimuth 5.916889243730066194 rad and altitude 0.4472186304990486228 rad)
+to check geometric equatorial-to-horizontal angles. The original Rust
+transformation remains independent; no ERFA implementation or library is
+bundled. The numerical reference is attributed under the separate
+[ERFA license](third_party/ERFA_LICENSE.txt) and original
+[conformance test](https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c).
