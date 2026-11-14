@@ -56,6 +56,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Check offline Horizons reference parser
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test classic DE441 declared-coverage inspector
+        run: cargo test --workspace --example inspect_de441_coverage --locked
       - name: Run optimized workspace regression tests
         run: cargo test --workspace --release --locked
       - name: Check Clippy warnings
@@ -82,6 +84,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Horizons comparator regressions on Windows
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test classic DE441 declared-coverage inspector
+        run: cargo test --workspace --example inspect_de441_coverage --locked
       - name: Run Clippy natively on Windows
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -98,5 +102,7 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Horizons comparator regressions on macOS
         run: cargo test --workspace --example validate_horizons --locked
+      - name: Test classic DE441 declared-coverage inspector
+        run: cargo test --workspace --example inspect_de441_coverage --locked
       - name: Run Clippy natively on macOS
         run: cargo clippy --workspace --all-targets --locked -- -D warnings

@@ -27,6 +27,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Italian overview](docs/README.it.md)
 - [Experimental DE441 reader](docs/DE441.md)
+- [Offline classic-DE441 coverage inspector (header-only, no numerical validation)](docs/CLASSIC_DE441_COVERAGE_INSPECTOR_2026-11-13.md)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
