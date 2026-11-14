@@ -215,6 +215,27 @@ fn record_layout<R: Read + Seek>(
     })
 }
 
+/// Select the last covering descriptor in one indexed kernel.
+///
+/// Centralizing this lookup ensures that direct and relative states obey
+/// identical file-order priority, even for competing centers or frames.
+pub(crate) fn select_covering_segment(
+    index: &SpkIndex,
+    target_id: i32,
+    et: f64,
+) -> Option<SpkSegmentDescriptor> {
+    index
+        .segments
+        .iter()
+        .rev()
+        .find(|segment| {
+            segment.target_id == target_id
+                && et >= segment.start_tdb_seconds
+                && et <= segment.end_tdb_seconds
+        })
+        .copied()
+}
+
 /// Evaluate the last covering segment for one target in a *single* SPK index.
 ///
 /// The selected descriptor is checked for J2000/ICRF frame ID 1 and supported
@@ -236,12 +257,7 @@ pub fn direct_spk_state<R: Read + Seek>(
     if !et.is_finite() {
         return Err(SpkStateError::InvalidEpoch);
     }
-    let segment = index
-        .segments
-        .iter()
-        .rev()
-        .find(|s| s.target_id == target_id && et >= s.start_tdb_seconds && et <= s.end_tdb_seconds)
-        .copied()
+    let segment = select_covering_segment(index, target_id, et)
         .ok_or(SpkStateError::MissingSegment { target_id })?;
 
     if segment.frame_id != 1 {
