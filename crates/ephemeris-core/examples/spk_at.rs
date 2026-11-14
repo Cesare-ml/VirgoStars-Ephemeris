@@ -71,15 +71,22 @@ fn arguments(values: &[String]) -> Result<Arguments, String> {
                 if slot.is_some() {
                     return Err(format!("duplicate {name}"));
                 }
-                let raw = values.get(i + 1).ok_or_else(|| format!("{name} requires a NAIF i32 ID"))?;
-                *slot = Some(raw.parse::<i32>().map_err(|_| format!("invalid {name} NAIF i32 ID"))?);
+                let raw = values
+                    .get(i + 1)
+                    .ok_or_else(|| format!("{name} requires a NAIF i32 ID"))?;
+                *slot = Some(
+                    raw.parse::<i32>()
+                        .map_err(|_| format!("invalid {name} NAIF i32 ID"))?,
+                );
                 i += 2;
             }
             "--at-et" => {
                 if et.is_some() {
                     return Err("duplicate --at-et".into());
                 }
-                let raw = values.get(i + 1).ok_or("--at-et requires finite TDB seconds past J2000")?;
+                let raw = values
+                    .get(i + 1)
+                    .ok_or("--at-et requires finite TDB seconds past J2000")?;
                 let parsed = raw.parse::<f64>().map_err(|_| "invalid --at-et epoch")?;
                 if !parsed.is_finite() {
                     return Err("--at-et must be finite".into());
@@ -101,7 +108,10 @@ fn arguments(values: &[String]) -> Result<Arguments, String> {
         }
     }
     if files.is_empty() || files.iter().any(String::is_empty) {
-        return Err(format!("at least one local SPK kernel path required; {}", usage()));
+        return Err(format!(
+            "at least one local SPK kernel path required; {}",
+            usage()
+        ));
     }
     Ok(Arguments {
         target_id: target_id.ok_or("missing --target")?,
@@ -173,9 +183,9 @@ mod tests {
     #[test]
     fn strict_cli_requires_explicit_target_center_et_and_kernel_paths() {
         let parsed = arguments(&args(&[
-            "--target", "301", "--center", "399", "--at-et", "-86400",
-            "old.bsp", "new.bsp",
-        ])).unwrap();
+            "--target", "301", "--center", "399", "--at-et", "-86400", "old.bsp", "new.bsp",
+        ]))
+        .unwrap();
         assert_eq!(parsed.target_id, 301);
         assert_eq!(parsed.center_id, 399);
         assert_eq!(parsed.et, -86_400.0);
@@ -187,32 +197,76 @@ mod tests {
             args(&["--target", "301", "--at-et", "0", "file.bsp"]),
             args(&["--center", "399", "--at-et", "0", "file.bsp"]),
             args(&["--target", "301", "--center", "399", "--at-et", "0"]),
-            args(&["--target", "301", "--target", "302", "--center", "399", "--at-et", "0", "file.bsp"]),
-            args(&["--target", "301", "--center", "399", "--at-et", "NaN", "file.bsp"]),
-            args(&["--target", "301", "--center", "399", "--at-et", "inf", "file.bsp"]),
-            args(&["--target", "not-an-id", "--center", "399", "--at-et", "0", "file.bsp"]),
-            args(&["--target", "301", "--center", "399", "--at-et", "0", "--unknown"]),
+            args(&[
+                "--target", "301", "--target", "302", "--center", "399", "--at-et", "0", "file.bsp",
+            ]),
+            args(&[
+                "--target", "301", "--center", "399", "--at-et", "NaN", "file.bsp",
+            ]),
+            args(&[
+                "--target", "301", "--center", "399", "--at-et", "inf", "file.bsp",
+            ]),
+            args(&[
+                "--target",
+                "not-an-id",
+                "--center",
+                "399",
+                "--at-et",
+                "0",
+                "file.bsp",
+            ]),
+            args(&[
+                "--target",
+                "301",
+                "--center",
+                "399",
+                "--at-et",
+                "0",
+                "--unknown",
+            ]),
         ] {
             assert!(arguments(&bad).is_err(), "bad arguments accepted: {bad:?}");
         }
         let escaped = arguments(&args(&[
-            "--target", "-1", "--center", "0", "--at-et", "0", "--", "-local.bsp",
-        ])).unwrap();
+            "--target",
+            "-1",
+            "--center",
+            "0",
+            "--at-et",
+            "0",
+            "--",
+            "-local.bsp",
+        ]))
+        .unwrap();
         assert_eq!(escaped.target_id, -1);
         assert_eq!(escaped.files, vec!["-local.bsp"]);
     }
 
     fn put_i32(bytes: &mut [u8], offset: usize, value: i32, big: bool) {
-        let encoded = if big { value.to_be_bytes() } else { value.to_le_bytes() };
+        let encoded = if big {
+            value.to_be_bytes()
+        } else {
+            value.to_le_bytes()
+        };
         bytes[offset..offset + 4].copy_from_slice(&encoded);
     }
 
     fn put_f64(bytes: &mut [u8], offset: usize, value: f64, big: bool) {
-        let encoded = if big { value.to_be_bytes() } else { value.to_le_bytes() };
+        let encoded = if big {
+            value.to_be_bytes()
+        } else {
+            value.to_le_bytes()
+        };
         bytes[offset..offset + 8].copy_from_slice(&encoded);
     }
 
-    fn synthetic_spk(target: i32, center: i32, position: f64, speed: f64, big: bool) -> Cursor<Vec<u8>> {
+    fn synthetic_spk(
+        target: i32,
+        center: i32,
+        position: f64,
+        speed: f64,
+        big: bool,
+    ) -> Cursor<Vec<u8>> {
         // Fully synthetic Type-2 constant+linear Chebyshev record (one axis).
         // DAF record 3 summary, record 4 names, record 5 coefficient block.
         let mut bytes = vec![0_u8; 5 * 1024];
@@ -243,11 +297,23 @@ mod tests {
     #[test]
     fn computes_cross_kernel_state_and_velocity_with_both_byte_orders() {
         let request = arguments(&args(&[
-            "--target", "301", "--center", "0", "--at-et", "5", "earlier.bsp", "later.bsp",
-        ])).unwrap();
+            "--target",
+            "301",
+            "--center",
+            "0",
+            "--at-et",
+            "5",
+            "earlier.bsp",
+            "later.bsp",
+        ]))
+        .unwrap();
         let mut kernels = SpkKernelSet::new();
-        kernels.load(synthetic_spk(399, 0, 100.0, 2.0, false)).unwrap();
-        kernels.load(synthetic_spk(301, 399, 3.0, 0.5, true)).unwrap();
+        kernels
+            .load(synthetic_spk(399, 0, 100.0, 2.0, false))
+            .unwrap();
+        kernels
+            .load(synthetic_spk(301, 399, 3.0, 0.5, true))
+            .unwrap();
 
         let result = evaluate(&mut kernels, &request).unwrap();
         assert_eq!(result.common_ancestor_id, 0);
@@ -261,7 +327,10 @@ mod tests {
         assert_eq!(rows[0], HEADER);
         let fields: Vec<_> = rows[1].split(',').collect();
         assert_eq!(fields.len(), 11);
-        assert_eq!((fields[1], fields[2], fields[3], fields[4]), ("301", "0", "0", "1"));
+        assert_eq!(
+            (fields[1], fields[2], fields[3], fields[4]),
+            ("301", "0", "0", "1")
+        );
         assert_eq!(fields[5].parse::<f64>().unwrap(), 103.0);
         assert_eq!(fields[8].parse::<f64>().unwrap(), 2.5);
     }
@@ -269,25 +338,48 @@ mod tests {
     #[test]
     fn fails_closed_for_unconnected_or_unsupported_selected_links() {
         let request = arguments(&args(&[
-            "--target", "301", "--center", "0", "--at-et", "5", "example.bsp",
-        ])).unwrap();
+            "--target",
+            "301",
+            "--center",
+            "0",
+            "--at-et",
+            "5",
+            "example.bsp",
+        ]))
+        .unwrap();
         let mut kernels = SpkKernelSet::new();
-        kernels.load(synthetic_spk(301, 399, 3.0, 0.5, false)).unwrap();
+        kernels
+            .load(synthetic_spk(301, 399, 3.0, 0.5, false))
+            .unwrap();
         assert!(matches!(
             evaluate(&mut kernels, &request),
             Err(SpkRelativeError::Disconnected { .. })
         ));
         let mut output = Vec::new();
-        assert!(run(&args(&[
-            "--target", "301", "--center", "0", "--at-et", "5", "does-not-exist.bsp",
-        ]), &mut output).is_err());
+        assert!(run(
+            &args(&[
+                "--target",
+                "301",
+                "--center",
+                "0",
+                "--at-et",
+                "5",
+                "does-not-exist.bsp",
+            ]),
+            &mut output
+        )
+        .is_err());
         assert!(output.is_empty());
     }
 
     #[test]
     fn reject_nonfinite_query_before_writing_csv() {
         let mut output = Vec::new();
-        assert!(run(&args(&["--target", "301", "--center", "0", "--at-et", "NaN", "x.bsp"]), &mut output).is_err());
+        assert!(run(
+            &args(&["--target", "301", "--center", "0", "--at-et", "NaN", "x.bsp"]),
+            &mut output
+        )
+        .is_err());
         assert!(output.is_empty());
     }
 }
