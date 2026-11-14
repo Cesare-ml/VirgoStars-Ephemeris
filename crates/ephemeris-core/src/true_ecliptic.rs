@@ -33,6 +33,7 @@ use crate::earth_orientation::{
     OrientationError,
 };
 use crate::first_sky::{CivilTimestamp, SkyError};
+use crate::light_time::{heliocentric_light_time, LightTimeError};
 use crate::six_field_units::IAU_AU_KM;
 
 const MATRIX_STEP_DAYS: f64 = 0.01;
@@ -67,6 +68,20 @@ pub struct TrueEquatorialState {
     pub distance_speed_au_per_tdb_day: f64,
 }
 
+/// Heliocentric true-ecliptic-of-date coordinates and reception-TDB-day rates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeliocentricEclipticState {
+    pub target: Body,
+    pub reception_tdb: JulianDateTdb,
+    pub reception_tt_jd: f64,
+    pub longitude_deg: f64,
+    pub latitude_deg: f64,
+    pub distance_au: f64,
+    pub longitude_speed_deg_per_tdb_day: f64,
+    pub latitude_speed_deg_per_tdb_day: f64,
+    pub distance_speed_au_per_tdb_day: f64,
+}
+
 #[derive(Debug)]
 pub enum TrueEclipticError {
     IncoherentEpoch,
@@ -75,6 +90,7 @@ pub enum TrueEclipticError {
     Projection(ProjectionError),
     Aberration(AberratedStateError),
     CivilTime(SkyError),
+    LightTime(LightTimeError),
 }
 
 impl fmt::Display for TrueEclipticError {
@@ -83,11 +99,12 @@ impl fmt::Display for TrueEclipticError {
             Self::IncoherentEpoch => {
                 write!(f, "TT and TDB must refer to the same reception instant")
             }
-            Self::InvalidState => write!(f, "invalid aberrated geocentric state"),
+            Self::InvalidState => write!(f, "invalid position or velocity state"),
             Self::Orientation(e) => write!(f, "orientation: {e}"),
             Self::Projection(e) => write!(f, "projection: {e}"),
             Self::Aberration(e) => write!(f, "aberration: {e}"),
             Self::CivilTime(e) => write!(f, "civil time: {e}"),
+            Self::LightTime(e) => write!(f, "light time: {e}"),
         }
     }
 }
@@ -124,13 +141,37 @@ fn project_date_frame(
     {
         return Err(TrueEclipticError::InvalidState);
     }
+    let vector = StateVector {
+        target: state.target,
+        center: Body::Earth,
+        epoch: state.observation_epoch,
+        position_km: state.position_km,
+        velocity_km_per_day: state.velocity_km_per_tdb_day,
+    };
+    project_vector_date_frame(&vector, tt_jd, matrix_at)
+}
+
+fn project_vector_date_frame(
+    state: &StateVector,
+    tt_jd: f64,
+    matrix_at: fn(f64) -> Result<Matrix3x3, OrientationError>,
+) -> Result<TrueEclipticState, TrueEclipticError> {
+    if !tt_jd.is_finite()
+        || !state.epoch.0.is_finite()
+        || (tt_jd - state.epoch.0).abs() > 1.0 / 86_400.0
+    {
+        return Err(TrueEclipticError::IncoherentEpoch);
+    }
+    if state.target == state.center {
+        return Err(TrueEclipticError::InvalidState);
+    }
     let matrix = matrix_at(tt_jd).map_err(TrueEclipticError::Orientation)?;
     let before_jd = tt_jd - MATRIX_STEP_DAYS;
     let after_jd = tt_jd + MATRIX_STEP_DAYS;
     let before = matrix_at(before_jd).map_err(TrueEclipticError::Orientation)?;
     let after = matrix_at(after_jd).map_err(TrueEclipticError::Orientation)?;
     let position = matrix_vector_multiply(matrix, state.position_km);
-    let velocity_rotated = matrix_vector_multiply(matrix, state.velocity_km_per_tdb_day);
+    let velocity_rotated = matrix_vector_multiply(matrix, state.velocity_km_per_day);
     let before_position = matrix_vector_multiply(before, state.position_km);
     let after_position = matrix_vector_multiply(after, state.position_km);
     let velocity = std::array::from_fn(|i| {
@@ -138,8 +179,8 @@ fn project_date_frame(
     });
     let rotated = StateVector {
         target: state.target,
-        center: Body::Earth,
-        epoch: state.observation_epoch,
+        center: state.center,
+        epoch: state.epoch,
         position_km: position,
         velocity_km_per_day: velocity,
     };
@@ -152,7 +193,7 @@ fn project_date_frame(
     };
     let result = TrueEclipticState {
         target: state.target,
-        reception_tdb: state.observation_epoch,
+        reception_tdb: state.epoch,
         reception_tt_jd: tt_jd,
         longitude_deg,
         latitude_deg: spherical.latitude_rad.to_degrees(),
@@ -217,6 +258,52 @@ pub fn geocentric_true_equatorial_from_civil<R: Read + Seek>(
         .to_tt_and_approximate_tdb()
         .map_err(TrueEclipticError::CivilTime)?;
     geocentric_true_equatorial(ephemeris, target, tdb, tt)
+}
+
+/// Compute a heliocentric, light-time-corrected ecliptic-of-date state.
+/// No annual aberration or solar gravitational deflection is applied.
+/// The Sun itself has no direction and returns an explicit error. Epochs
+/// must be coherent TT and TDB. This is not established Swiss parity.
+pub fn heliocentric_true_ecliptic<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    tdb: JulianDateTdb,
+    tt_jd: f64,
+) -> Result<HeliocentricEclipticState, TrueEclipticError> {
+    let raw =
+        heliocentric_light_time(ephemeris, target, tdb).map_err(TrueEclipticError::LightTime)?;
+    let vector = StateVector {
+        target,
+        center: Body::Sun,
+        epoch: tdb,
+        position_km: raw.position_km,
+        velocity_km_per_day: raw.velocity_km_per_day,
+    };
+    let r = project_vector_date_frame(&vector, tt_jd, true_ecliptic_of_date_matrix)?;
+    Ok(HeliocentricEclipticState {
+        target: r.target,
+        reception_tdb: r.reception_tdb,
+        reception_tt_jd: r.reception_tt_jd,
+        longitude_deg: r.longitude_deg,
+        latitude_deg: r.latitude_deg,
+        distance_au: r.distance_au,
+        longitude_speed_deg_per_tdb_day: r.longitude_speed_deg_per_tdb_day,
+        latitude_speed_deg_per_tdb_day: r.latitude_speed_deg_per_tdb_day,
+        distance_speed_au_per_tdb_day: r.distance_speed_au_per_tdb_day,
+    })
+}
+
+/// Civil-time entry point, with the same bounded, approximate TT/TDB model
+/// as the geocentric APIs.
+pub fn heliocentric_true_ecliptic_from_civil<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    civil: CivilTimestamp,
+) -> Result<HeliocentricEclipticState, TrueEclipticError> {
+    let (tt, tdb) = civil
+        .to_tt_and_approximate_tdb()
+        .map_err(TrueEclipticError::CivilTime)?;
+    heliocentric_true_ecliptic(ephemeris, target, tdb, tt)
 }
 
 /// Compute an experimental true-ecliptic state from a caller-provided DE441

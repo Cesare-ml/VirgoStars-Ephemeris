@@ -19,8 +19,8 @@ use virgostars_ephemeris_core::aberration_state::{
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::true_ecliptic::{
-    geocentric_true_ecliptic, geocentric_true_equatorial, project_true_ecliptic,
-    project_true_equatorial, TrueEclipticError,
+    geocentric_true_ecliptic, geocentric_true_equatorial, heliocentric_true_ecliptic,
+    project_true_ecliptic, project_true_equatorial, TrueEclipticError,
 };
 
 fn delta(a: f64, b: f64) -> f64 {
@@ -173,6 +173,67 @@ fn true_equatorial_matches_recorded_swiss_sample_at_same_tt() {
         assert!((state.declination_deg - dec).abs() < 0.0001, "{body:?}");
         assert!((state.distance_au - dist).abs() < 1e-7, "{body:?}");
     }
+}
+
+#[test]
+#[ignore = "requires DE441_PATH pointing to an external classic JPL DE441 binary"]
+fn heliocentric_positions_and_rates_match_recorded_sample() {
+    let mut eph = De441::open(std::env::var_os("DE441_PATH").expect("set DE441_PATH")).unwrap();
+    let tt = 2_461_354.500_800_741;
+    let tdb = JulianDateTdb(2_461_354.500_800_725);
+    // Local Swiss 0.5.17 with the same DE441 and TT, JPL|HELCENTRIC|SPEED.
+    // Loose limits cover known model and center differences; not a certification.
+    for (body, lon, lat, dist) in [
+        (
+            Body::Moon,
+            47.578743308232966,
+            -0.013379170176254684,
+            0.9878450049889652,
+        ),
+        (
+            Body::Mercury,
+            75.45203266880486,
+            3.1712444565775906,
+            0.307536326150071,
+        ),
+        (
+            Body::Venus,
+            57.736450226075206,
+            -1.116836558315735,
+            0.7219835876024315,
+        ),
+        (
+            Body::MarsBarycenter,
+            105.05833826691807,
+            1.5205107225977479,
+            1.6037914294774802,
+        ),
+        (
+            Body::JupiterBarycenter,
+            134.6866277469788,
+            0.7273944051494758,
+            5.319742550289696,
+        ),
+    ] {
+        let r = heliocentric_true_ecliptic(&mut eph, body, tdb, tt).unwrap();
+        assert!(delta(r.longitude_deg, lon).abs() < 0.001, "{body:?}: {r:?}");
+        assert!((r.latitude_deg - lat).abs() < 0.001, "{body:?}: {r:?}");
+        assert!((r.distance_au - dist).abs() < 0.00001, "{body:?}: {r:?}");
+        let h = 0.01;
+        let before =
+            heliocentric_true_ecliptic(&mut eph, body, JulianDateTdb(tdb.0 - h), tt - h).unwrap();
+        let after =
+            heliocentric_true_ecliptic(&mut eph, body, JulianDateTdb(tdb.0 + h), tt + h).unwrap();
+        let span = (tdb.0 + h) - (tdb.0 - h);
+        assert!(
+            (r.longitude_speed_deg_per_tdb_day
+                - delta(after.longitude_deg, before.longitude_deg) / span)
+                .abs()
+                < 0.001,
+            "{body:?}"
+        );
+    }
+    assert!(heliocentric_true_ecliptic(&mut eph, Body::Sun, tdb, tt).is_err());
 }
 
 #[test]

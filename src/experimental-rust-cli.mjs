@@ -114,6 +114,20 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       });
       return Object.freeze({contract:'VIRGOSTARS_EXPERIMENTAL_DE441_TRUE_EQUATORIAL_1',frame:'IAU2006_2000B_TRUE_EQUATOR_OF_DATE',center:'EARTH',corrections:'LIGHT_TIME_ANNUAL_ABERRATION',timeModel:'BOUNDED_UTC_TRUNCATED_TDB',warnings:Object.freeze(['NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','PLANET_SYSTEM_BARYCENTERS']),results:Object.freeze(results)});
     },
+    calculateHeliocentric(timestamp) {
+      if(typeof timestamp!=='string' || !timestamp.trim()) throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');
+      const lines=execute(['heliocentric',kernelPath,timestamp]);
+      if(lines.length!==TARGETS.length+1 || lines[0]!==HEADER) throw new Error('Invalid heliocentric CSV contract');
+      const results=lines.slice(1).map((line,index)=>{
+        const [target,...parts]=line.split(',');
+        if(target!==TARGETS[index] || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid heliocentric CSV row');
+        const [ttJulianDay,tdbJulianDay,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay]=parts.map(Number);
+        const directionDefined=target!=='Sun';
+        if(directionDefined ? (longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0) : [longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay].some(value=>value!==0)) throw new Error('Out-of-range heliocentric CSV row');
+        return Object.freeze({target,ttJulianDay,tdbJulianDay,directionDefined,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
+      });
+      return Object.freeze({contract:'VIRGOSTARS_EXPERIMENTAL_DE441_HELIOCENTRIC_1',frame:'IAU2006_2000B_TRUE_ECLIPTIC_OF_DATE',center:'SUN',corrections:'LIGHT_TIME_ONLY',timeModel:'BOUNDED_UTC_TRUNCATED_TDB',warnings:Object.freeze(['NOT_SWISS_PARITY','SUN_ZERO_SENTINEL','PLANET_SYSTEM_BARYCENTERS']),results:Object.freeze(results)});
+    },
     calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
       const values = [ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast];
       if (!values.every(Number.isFinite)) throw new TypeError('Finite UT1, TT, latitude and east longitude are required');

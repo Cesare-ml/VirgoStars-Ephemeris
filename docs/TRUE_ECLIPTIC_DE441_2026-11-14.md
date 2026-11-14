@@ -43,6 +43,7 @@ const date = ephemeris.reverseJulianDay({julianDay: jd,
   calendar: 'gregorian', timeScale: 'ut1'});
 const lunar = ephemeris.calculateLunarPoints('2026-11-10T00:00:00Z');
 const equatorial = ephemeris.calculateEquatorial('2026-11-10T00:00:00Z');
+const heliocentric = ephemeris.calculateHeliocentric('2026-11-10T00:00:00Z');
 ```
 
 The synchronous adapter starts one process per ten-body batch and is intended
@@ -70,7 +71,7 @@ The equivalent Rust functions are `house_angles::from_epochs` and
 
 This is **not** a drop-in `swe_calc_ut`: there is no solar gravitational
 deflection, complete nutation, full ephemeris of physical planet centers,
-Chiron, topocentric options, heliocentric mode,
+Chiron, topocentric options,
 legacy flags or native Node binding. The modeled derivatives of the corrected
 position are not assumed identical to Swiss output speeds. A UT Julian date
 alone cannot be interpreted as UTC, TT or TDB without an explicit time model.
@@ -105,6 +106,21 @@ has its own assumptions, reference checks and limitations.
 checks and a local same-TT Swiss/DE441 comparison for six bodies at one epoch
 pass; these comparisons do not establish independent JPL validation or a
 general accuracy bound.
+
+`calculateHeliocentric` provides Sun-centered, light-time-corrected ecliptic
+coordinates and rates; annual aberration and solar light deflection are not
+applied. The Sun relative to itself has no defined direction: the Node/CLI
+adapter reports an explicit all-zero sentinel with `directionDefined: false`;
+the Rust spherical API returns an error for the Sun target. Other bodies keep
+their DE441 planet-system-barycenter identities. This is experimental, not a
+general substitute for Swiss heliocentric flags.
+
+A local diagnostic at matched TT compared the nine non-Sun outputs with Swiss
+0.5.17 and the same DE441 at 28 quarterly dates across 1975–2026. Maximum
+absolute differences were 0.0001420° longitude, 0.0000122° latitude,
+0.0001572°/day longitude rate, 0.0000196°/day latitude rate and 1.88e-7
+AU/day radial rate. These samples do not establish a global accuracy bound or
+independent validation of the underlying JPL data and physical models.
 
 A diagnostic same-TT comparison with local Swiss 0.5.17 and DE441 covered ten
 bodies at 28 quarterly dates across 1975–2026. Maximum absolute differences

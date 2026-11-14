@@ -53,6 +53,13 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.ok(Math.abs(equatorial.results[0].rightAscensionDeg-225.1366968864)<0.001);
   assert.ok(Math.abs(equatorial.results[0].declinationDeg+17.0811490053)<0.001);
   assert.ok(Object.isFrozen(equatorial.results[0]));
+  const heliocentric=provider.calculateHeliocentric('2026-11-10T00:00:00Z');
+  assert.equal(heliocentric.results.length,10);
+  assert.equal(heliocentric.center,'SUN');
+  assert.equal(heliocentric.results[0].directionDefined,false);
+  assert.equal(heliocentric.results[0].distanceAu,0);
+  assert.equal(heliocentric.results[2].directionDefined,true);
+  assert.ok(Math.abs(heliocentric.results[2].longitudeDeg-75.4520326688)<0.001);
   // This date previously exposed an adjacent-JD light-time iteration cycle.
   assert.equal(provider.calculateEquatorial('1980-10-01T00:00:00Z').results.length,10);
   assert.throws(() => provider.calculate('bad date'), /exited with status/);
