@@ -153,6 +153,37 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         Ok(())
     }
 
+    /// Replace the entire ordered SPK stack only after every new index loads.
+    ///
+    /// A failed input leaves the original loaded stack, reader positions and
+    /// selection priority unchanged. Errors report the zero-based *replacement
+    /// batch* input index through `SpkKernelLoadError`; rejected input readers
+    /// are consumed even on failure.
+    ///
+    /// On success, returns the old reader sources in their original load
+    /// order, so callers may close or reuse them explicitly. A deliberately
+    /// empty replacement clears the stack and returns all old sources.
+    ///
+    /// This is an in-memory index-level transaction, NOT a filesystem
+    /// snapshot, thread-safe handover, or validation of coefficient records.
+    /// The supported geometric J2000 Type-2/3 science contract is unchanged.
+    ///
+    /// Modification (2026-11-14): safe all-or-nothing reload using the
+    /// existing canonical `load_batch_atomic` index inspection path.
+    pub fn replace_all_atomic(
+        &mut self,
+        sources: impl IntoIterator<Item = R>,
+    ) -> Result<Vec<R>, SpkKernelLoadError> {
+        let mut replacement = Self::new();
+        replacement.load_batch_atomic(sources)?;
+        std::mem::swap(self, &mut replacement);
+        Ok(replacement
+            .loaded
+            .into_iter()
+            .map(|entry| entry.source)
+            .collect())
+    }
+
     /// Unload and return the most recently loaded source.
     ///
     /// Earlier sources regain priority for their covered targets/epochs.
@@ -1631,5 +1662,81 @@ mod tests {
         assert_eq!(previous.velocity_km_per_second, [0.0; 3]);
         set.unload_last().unwrap();
         assert!(set.is_empty());
+    }
+
+    #[test]
+    fn atomic_replacement_rejects_invalid_input_without_losing_previous_stack() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut set = with_kernels(&[
+                (order, vec![seg(301, 399, 2, [2.0, 3.0], [0.5, -0.25])]),
+                (order, vec![seg(399, 0, 3, [100.0, 20.0], [-0.5, 0.125])]),
+            ]);
+            let initial_count = set.kernel_count();
+            let initial_selected = set.selected_segment(301, 5.0).unwrap();
+            let initial_moon = set.direct_state(301, 5.0).unwrap();
+            let initial_earth = set.direct_state(399, 5.0).unwrap();
+            let initial_relative = set.relative_state(301, 0, 5.0).unwrap();
+
+            let good = Cursor::new(kernel(order, &[seg(301, 4, 3, [999.0, 42.0], [8.0, -7.0])]));
+            let bad = Cursor::new(vec![0_u8; RECORD_BYTES]);
+
+            for invalid_index in [0, 1] {
+                let attempted = if invalid_index == 0 {
+                    vec![bad.clone(), good.clone()]
+                } else {
+                    vec![good.clone(), bad.clone()]
+                };
+                let error = set.replace_all_atomic(attempted).unwrap_err();
+                assert_eq!(error.input_index, invalid_index);
+                assert_eq!(set.kernel_count(), initial_count);
+                assert_eq!(set.selected_segment(301, 5.0).unwrap(), initial_selected);
+                assert_eq!(set.direct_state(301, 5.0).unwrap(), initial_moon);
+                assert_eq!(set.direct_state(399, 5.0).unwrap(), initial_earth);
+                assert_eq!(set.relative_state(301, 0, 5.0).unwrap(), initial_relative);
+            }
+        }
+    }
+
+    #[test]
+    fn atomic_replacement_returns_previous_readers_and_preserves_new_priority() {
+        let previous_bytes = kernel(
+            SpkByteOrder::LittleEndian,
+            &[seg(301, 399, 2, [1.0, 2.0], [0.0, 0.0])],
+        );
+        let mut set = SpkKernelSet::new();
+        set.load(Cursor::new(previous_bytes.clone())).unwrap();
+        let next = Cursor::new(kernel(
+            SpkByteOrder::BigEndian,
+            &[seg(301, 4, 3, [5.0, -6.0], [0.25, 0.5])],
+        ));
+        let newest = Cursor::new(kernel(
+            SpkByteOrder::LittleEndian,
+            &[seg(301, 0, 2, [50.0, 60.0], [-0.5, -0.25])],
+        ));
+
+        let retired = set.replace_all_atomic(vec![next, newest]).unwrap();
+        assert_eq!(retired.len(), 1);
+        assert_eq!(retired[0].get_ref(), &previous_bytes);
+        assert_eq!(set.kernel_count(), 2);
+        assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 1);
+        let selected = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(selected.center_id, 0);
+        assert_eq!(selected.position_km, [50.0, 60.0, 0.0]);
+        assert_eq!(selected.velocity_km_per_second, [-0.5, -0.25, 0.0]);
+
+        set.unload_last().unwrap();
+        assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 0);
+        let earlier = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(earlier.center_id, 4);
+        assert_eq!(earlier.position_km, [5.0, -6.0, 0.0]);
+
+        // Explicit empty replacement clears the active stack and transfers
+        // ownership of the last remaining old reader to the caller.
+        let emptied = set
+            .replace_all_atomic(Vec::<Cursor<Vec<u8>>>::new())
+            .unwrap();
+        assert_eq!(emptied.len(), 1);
+        assert!(set.is_empty());
+        assert_eq!(set.kernel_count(), 0);
     }
 }

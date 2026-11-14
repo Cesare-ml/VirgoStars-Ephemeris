@@ -55,3 +55,45 @@ cargo doc --workspace --no-deps --locked
 ```
 
 Read-only native Linux, macOS and Windows CI verifies implementation behavior. Synthetic fixtures are **not** evidence of parity with NAIF/SPICE/JPL, and third-party SPK kernels must be separately sourced and reviewed before use or redistribution. Original source remains **CPAL-1.0**; existing attribution, notices and project credit requirements are unchanged.
+
+## Replacing the entire stack without a partial reload
+
+**Added 2026-11-14.** `replace_all_atomic(new_sources)` is the companion to
+`load_batch_atomic`: it checks every replacement DAF index in a temporary
+`SpkKernelSet` before swapping the complete new ordered stack into place.
+
+```rust
+use std::fs::File;
+use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut kernels = SpkKernelSet::new();
+kernels.load(File::open("/local/old.bsp")?)?;
+let replacements = vec![
+    File::open("/local/new-first.bsp")?,
+    File::open("/local/new-second.bsp")?,
+];
+let retired_readers = kernels.replace_all_atomic(replacements)?;
+// The new stack is active; old reader ownership is returned in load order.
+// Explicitly drop old files when they are no longer needed.
+drop(retired_readers);
+# Ok(())
+# }
+```
+
+On **any index-inspection failure**, the old stack is unchanged, including
+the seek positions of already loaded readers. The error's `input_index`
+identifies the invalid replacement file within the new batch, starting at
+zero; all attempted replacement readers are consumed, even on error.
+On **success**, the previous readers are returned in their original load
+order, so callers can release them or inspect them separately. Unlike
+`load_batch_atomic([])`, calling `replace_all_atomic([])` **deliberately
+clears** the active stack and returns its previous readers. This explicit
+difference matters when replacing external configurations.
+
+This operation is **not thread synchronization or a filesystem transaction**,
+and it does not certify SPK coefficient records, physical accuracy or live file
+immutability. It is the in-memory index-level all-or-nothing transition only.
+Regression tests cover failures in both first and later replacement inputs,
+preservation of direct/relative queries, cross-endian precedence, old reader
+return, unload priority, and explicit empty replacement.
