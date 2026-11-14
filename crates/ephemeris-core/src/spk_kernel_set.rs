@@ -31,7 +31,7 @@ use std::io::{Read, Seek};
 use crate::spk_direct_state::{
     direct_spk_state, select_covering_segment, SpkDirectState, SpkStateError,
 };
-use crate::spk_index::{inspect_spk, SpkIndex, SpkIndexError};
+use crate::spk_index::{inspect_spk, SpkIndex, SpkIndexError, SpkSegmentDescriptor};
 use crate::spk_relative_state::{
     resolve_relative, SpkRelativeError, SpkRelativeState, SpkStateResolver,
 };
@@ -91,6 +91,33 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         self.loaded.is_empty()
     }
 
+    /// Inspect which SPK segment wins for a target at a finite TDB/ET epoch.
+    ///
+    /// Returns its **zero-based kernel load index** (0 is the oldest loaded
+    /// file) and a copy of its declared DAF descriptor. Higher-priority
+    /// files and later segments within each file win, *without* prefiltering
+    /// unsupported frames/types or inspecting coefficient bytes.
+    ///
+    /// This is metadata-only diagnostics, not proof that a state can be
+    /// evaluated or that a JPL vector is accurate. `None` means no segment
+    /// covers the target/epoch; nonfinite ET is always an error.
+    ///
+    /// Modification (2026-11-14): make the effective SPK source traceable
+    /// without evaluating any ephemeris state.
+    pub fn selected_segment(
+        &self,
+        target_id: i32,
+        et: f64,
+    ) -> Result<Option<(usize, SpkSegmentDescriptor)>, SpkStateError> {
+        if !et.is_finite() {
+            return Err(SpkStateError::InvalidEpoch);
+        }
+        Ok(self.loaded.iter().enumerate().rev().find_map(|(index, entry)| {
+            select_covering_segment(&entry.index, target_id, et)
+                .map(|segment| (index, segment))
+        }))
+    }
+
     /// Direct target-minus-selected-segment-center state, km and km/s.
     ///
     /// A higher-priority covering descriptor masks all older ones, even if
@@ -101,15 +128,10 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         target_id: i32,
         et: f64,
     ) -> Result<SpkDirectState, SpkStateError> {
-        if !et.is_finite() {
-            return Err(SpkStateError::InvalidEpoch);
-        }
-        let entry = self
-            .loaded
-            .iter_mut()
-            .rev()
-            .find(|entry| select_covering_segment(&entry.index, target_id, et).is_some())
+        let (kernel_index, _) = self
+            .selected_segment(target_id, et)?
             .ok_or(SpkStateError::MissingSegment { target_id })?;
+        let entry = &mut self.loaded[kernel_index];
         direct_spk_state(&mut entry.source, &entry.index, target_id, et)
     }
 
@@ -532,6 +554,79 @@ mod tests {
         assert_eq!(earlier.center_id, 399);
         assert_eq!(earlier.position_km, [1.0, 2.0, 0.0]);
         assert_eq!(earlier.velocity_km_per_second, [0.1, 0.2, 0.0]);
+    }
+
+    // Modification (2026-11-14): selection diagnostics must report the exact
+    // same winning descriptor as the actual geometric state path.
+    #[test]
+    fn selected_segment_reports_latest_file_and_last_covering_descriptor() {
+        let earlier = vec![seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])];
+        let later = vec![
+            seg(301, 399, 2, [2.0, 0.0], [0.0, 0.0]),
+            seg(301, 4, 3, [3.0, 0.0], [0.5, 0.0]),
+        ];
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, earlier),
+            (SpkByteOrder::BigEndian, later),
+        ]);
+        let (kernel_index, segment) = set.selected_segment(301, 5.0).unwrap().unwrap();
+        assert_eq!(kernel_index, 1);
+        assert_eq!((segment.target_id, segment.center_id), (301, 4));
+        assert_eq!((segment.frame_id, segment.spk_type), (1, 3));
+        assert_eq!((segment.start_tdb_seconds, segment.end_tdb_seconds), (0.0, 10.0));
+        let state = set.direct_state(301, 5.0).unwrap();
+        assert_eq!(state.center_id, segment.center_id);
+        assert_eq!(state.position_km, [3.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn selected_segment_respects_coverage_boundary_and_unload() {
+        let old = vec![seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])];
+        let mut newer = seg(301, 4, 3, [2.0, 0.0], [0.0, 0.0]);
+        newer.coverage_start = 6.0;
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, old),
+            (SpkByteOrder::BigEndian, vec![newer]),
+        ]);
+        assert_eq!(set.selected_segment(301, 5.0).unwrap().unwrap().0, 0);
+        assert_eq!(set.selected_segment(301, 6.0).unwrap().unwrap().0, 1);
+        assert_eq!(set.selected_segment(301, 10.0).unwrap().unwrap().0, 1);
+        assert!(set.selected_segment(301, 11.0).unwrap().is_none());
+        assert!(set.selected_segment(999, 5.0).unwrap().is_none());
+        assert!(set.unload_last().is_some());
+        let (index, descriptor) = set.selected_segment(301, 6.0).unwrap().unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(descriptor.center_id, 399);
+    }
+
+    #[test]
+    fn selected_segment_preserves_unsupported_overlay_and_invalid_epoch_errors() {
+        let older = seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0]);
+        let mut unsupported = seg(301, 4, 2, [3.0, 0.0], [0.0, 0.0]);
+        unsupported.frame = 17;
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, vec![older]),
+            (SpkByteOrder::BigEndian, vec![unsupported]),
+        ]);
+        let (index, descriptor) = set.selected_segment(301, 5.0).unwrap().unwrap();
+        assert_eq!(index, 1);
+        assert_eq!(descriptor.frame_id, 17);
+        assert!(matches!(
+            set.direct_state(301, 5.0),
+            Err(SpkStateError::UnsupportedFrame(17))
+        ));
+        for epoch in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(matches!(
+                set.selected_segment(301, epoch),
+                Err(SpkStateError::InvalidEpoch)
+            ));
+            assert!(matches!(
+                set.direct_state(301, epoch),
+                Err(SpkStateError::InvalidEpoch)
+            ));
+        }
+        let empty: SpkKernelSet<Cursor<Vec<u8>>> = SpkKernelSet::new();
+        assert!(empty.selected_segment(301, 0.0).unwrap().is_none());
     }
 
     #[test]
