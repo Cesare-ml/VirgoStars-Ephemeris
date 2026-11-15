@@ -18,6 +18,7 @@ import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_SPEED=256;
 export const SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus']);
+const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
   if(flag===SE_GREG_CAL)return 'gregorian';
   if(flag===SE_JUL_CAL)return 'julian';
@@ -55,10 +56,26 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
+  let houseConfig=null;
+  if(houseSupport!==undefined){
+    if(!houseSupport || typeof houseSupport!=='object')throw new TypeError('Explicit house configuration required');
+    const {calculateHouseSet,convertUt1ToUtc,engineVersion,kernelSetId,timeModel,calculatePlacidusHousePosition,positionContext}=houseSupport;
+    const text=value=>typeof value==='string' && value.length>0 && value===value.trim();
+    if(typeof calculateHouseSet!=='function' || typeof convertUt1ToUtc!=='function' || ![engineVersion,kernelSetId,timeModel].every(text))throw new TypeError('House provider, UT1-to-UTC converter and source identifiers are required');
+    if(calculatePlacidusHousePosition!==undefined && typeof calculatePlacidusHousePosition!=='function')throw new TypeError('Placidus position provider must be a function');
+    let pointContext=null;
+    if(positionContext!==undefined){
+      if(!positionContext || typeof positionContext!=='object')throw new TypeError('Explicit house-position context required');
+      const {datetimeUtc,corrections,observerLongitudeDegEast}=positionContext;
+      if(!text(datetimeUtc) || !text(corrections) || !Number.isFinite(observerLongitudeDegEast) || Math.abs(observerLongitudeDegEast)>180)throw new TypeError('House-position UTC, corrections and observer longitude are required');
+      pointContext=Object.freeze({datetimeUtc,corrections,observerLongitudeDegEast});
+    }
+    houseConfig=Object.freeze({calculateHouseSet,convertUt1ToUtc,engineVersion,kernelSetId,timeModel,calculatePlacidusHousePosition,positionContext:pointContext});
+  }
   const getEpochs=ut1=>{
     if(!Number.isFinite(ut1))throw new TypeError('A finite UT1 Julian day is required');
     const epochs=convertUt1ToTtTdb(ut1);
@@ -78,6 +95,43 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     swe_revjul(julianDay,calendarFlag){
       const value=provider.reverseJulianDay({julianDay,calendar:calendar(calendarFlag),timeScale:'ut1'});
       return Object.freeze({year:value.year,month:value.month,day:value.day,hour:value.decimalHour});
+    },
+    swe_houses(julianDay,latitudeDeg,longitudeDegEast,system,callback){
+      if(!houseConfig)throw new Error('Explicit house support is required');
+      callbackType(callback);
+      if(typeof system!=='string' || !Object.hasOwn(HOUSE_SYSTEMS,system))throw new RangeError('Only V, P, K, R and O house systems are supported');
+      if(!Number.isFinite(latitudeDeg) || Math.abs(latitudeDeg)>=90 || !Number.isFinite(longitudeDegEast) || Math.abs(longitudeDegEast)>180)throw new RangeError('Valid nonpolar latitude and east longitude are required');
+      const {ttJulianDay}=getEpochs(julianDay);
+      const datetimeUtc=houseConfig.convertUt1ToUtc(julianDay);
+      const match=typeof datetimeUtc==='string'?/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(datetimeUtc):null;
+      const ms=match?Date.parse(datetimeUtc):NaN;
+      const canonical=match?`${match[1]}.${(match[2]??'').padEnd(3,'0')}Z`:'';
+      if(!Number.isFinite(ms) || new Date(ms).toISOString()!==canonical || ms<Date.UTC(1972,0,1) || Math.abs(julianDay-(ms/86400000+2440587.5))*86400>2)throw new RangeError('Converter must provide coherent modern UTC with seconds');
+      const angleInput={ut1JulianDay:julianDay,ttJulianDay,latitudeDeg,longitudeDegEast};
+      const angles=provider.calculateHouseAngles(angleInput);
+      const result=houseConfig.calculateHouseSet({datetimeUtc:canonical,birthTimeKnown:true,...angleInput,engineVersion:houseConfig.engineVersion,kernelSetId:houseConfig.kernelSetId,timeModel:houseConfig.timeModel},{calculateHouseAngles:()=>angles});
+      if(!result || typeof result!=='object')throw new Error('Invalid experimental house-set contract');
+      const {contract,houses,validation}=result;
+      if(contract!=='ExperimentalHouseSet' || validation!=='CALLER_ASSERTED_INPUTS_NOT_INDEPENDENTLY_VERIFIED' || !houses || typeof houses!=='object')throw new Error('Invalid experimental house-set contract');
+      const chosen=houses[HOUSE_SYSTEMS[system]];
+      if(!chosen || typeof chosen!=='object')throw new Error('Invalid house cusp contract');
+      const {houseSystem,cuspsDeg}=chosen;
+      if(houseSystem!==HOUSE_SYSTEMS[system].toUpperCase() || !Array.isArray(cuspsDeg) || cuspsDeg.length!==12)throw new Error('Invalid house cusp contract');
+      const cusps=[];for(let i=0;i<12;i++){if(!Object.hasOwn(cuspsDeg,i))throw new Error('Invalid house cusp row');const v=cuspsDeg[i];if(!Number.isFinite(v) || v<0 || v>=360)throw new Error('Invalid house cusp row');cusps.push(v);}
+      const value=Object.freeze({house:Object.freeze(cusps),ascendant:angles.ascendantDeg,mc:angles.midheavenDeg,armc:angles.armcDeg,trueObliquity:angles.trueObliquityDeg,model:'EXPERIMENTAL_IAU2006_2000B_HOUSES',warnings:Object.freeze(['NOT_SWISS_PARITY','AUXILIARY_ANGLES_OMITTED','NO_SOUTHERN_INVERSION','ALL_FIVE_SYSTEMS_REQUIRED'])});
+      if(callback!==undefined)callback(value);return value;
+    },
+    swe_houses_pos(armcDeg,latitudeDeg,trueObliquityDeg,system,eclipticLongitudeDeg,eclipticLatitudeDeg,callback){
+      if(!houseConfig || !houseConfig.positionContext || !houseConfig.calculatePlacidusHousePosition)throw new Error('Explicit Placidus position provider and context are required');
+      callbackType(callback);if(system!=='P')throw new RangeError('Only Placidus P positions are supported');
+      const {datetimeUtc,corrections,observerLongitudeDegEast}=houseConfig.positionContext;
+      const source={engineVersion:houseConfig.engineVersion,kernelSetId:houseConfig.kernelSetId,timeModel:houseConfig.timeModel,corrections,center:'EARTH',observerLongitudeDegEast};
+      const result=houseConfig.calculatePlacidusHousePosition({armcDeg,latitudeDeg,trueObliquityDeg,eclipticLongitudeDeg,eclipticLatitudeDeg,frame:'ECLIPTIC_OF_DATE',zodiac:'TROPICAL',birthTimeKnown:true,datetimeUtc,source});
+      if(!result || typeof result!=='object')throw new Error('Invalid Placidus position contract');
+      const {contract,housePosition}=result;
+      if(contract!=='PlacidusHousePosition' || !Number.isFinite(housePosition) || housePosition<1 || housePosition>=13)throw new Error('Invalid Placidus position contract');
+      const value=Object.freeze({housePosition,model:'EXPERIMENTAL_PLACIDUS_POSITION',warnings:Object.freeze(['NOT_SWISS_PARITY','NO_CIRCUMPOLAR_FALLBACK','NO_SOUTHERN_INVERSION','CALLER_ASSERTED_EPOCH'])});
+      if(callback!==undefined)callback(value);return value;
     },
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
