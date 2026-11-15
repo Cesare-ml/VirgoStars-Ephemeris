@@ -130,11 +130,14 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
   return {catalog,audit};
 }
 
-export function importHipparcos2007(args) {
-  const options = Object.fromEntries(args.filter(x=>x.includes('=')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i),x.slice(i+1)];}));
-  const required = ['--hip2','--supplements','--hip2-sha256','--supplements-sha256','--out','--audit'];
-  for (const key of required) if (!options[key]) throw new Error(`Required argument: ${key}=VALUE`);
-  if (options['--out'] === options['--audit']) throw new Error('Catalog output and audit must differ');
+
+/** Write a source-pinned catalog together with its provenance audit.
+ * This pair is not an atomic filesystem transaction, but any synchronous
+ * failure writing the audit rolls back only the output created by this call.
+ * Never overwrite an existing file or persist third-party data in the repo.
+ */
+export function writeHipparcosOutputPair(catalogOutputPath,auditOutputPath,catalog,audit){
+  const options={'--out':catalogOutputPath,'--audit':auditOutputPath};
   // Keep downloaded/derived third-party data outside the Git source tree.
   const catalogPath=resolve(options['--out']), auditPath=resolve(options['--audit']);
   const repositoryRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -145,10 +148,6 @@ export function importHipparcos2007(args) {
   }
   if (catalogPath===auditPath) throw new Error('Catalog output and audit resolve to the same file');
   if (existsSync(catalogPath) || existsSync(auditPath)) throw new Error('Catalog or audit output already exists; no overwrite');
-  const {catalog,audit} = buildHipparcosCatalog(readFileSync(resolve(options['--hip2'])),readFileSync(resolve(options['--supplements'])),{
-    hip2Sha256:options['--hip2-sha256'],supplementsSha256:options['--supplements-sha256'],
-    allowComplexSolutions:options['--allow-complex-solutions']==='true',
-    minParallaxSignalToNoise:options['--min-parallax-snr']===undefined?5:numeric(options['--min-parallax-snr'],'minimum parallax SNR')});
   // Best-effort rollback: never leave a newly created catalog without its audit.
   // 'wx' remains authoritative against a concurrent writer; never delete
   // an existing audit or an output we did not successfully create ourselves.
@@ -161,6 +160,19 @@ export function importHipparcos2007(args) {
     if(catalogWritten)try {unlinkSync(catalogPath);}catch {}
     throw error;
   }
+  return {catalogPath,auditPath};
+}
+
+export function importHipparcos2007(args) {
+  const options = Object.fromEntries(args.filter(x=>x.includes('=')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i),x.slice(i+1)];}));
+  const required = ['--hip2','--supplements','--hip2-sha256','--supplements-sha256','--out','--audit'];
+  for (const key of required) if (!options[key]) throw new Error(`Required argument: ${key}=VALUE`);
+  if (options['--out'] === options['--audit']) throw new Error('Catalog output and audit must differ');
+  const {catalog,audit} = buildHipparcosCatalog(readFileSync(resolve(options['--hip2'])),readFileSync(resolve(options['--supplements'])),{
+    hip2Sha256:options['--hip2-sha256'],supplementsSha256:options['--supplements-sha256'],
+    allowComplexSolutions:options['--allow-complex-solutions']==='true',
+    minParallaxSignalToNoise:options['--min-parallax-snr']===undefined?5:numeric(options['--min-parallax-snr'],'minimum parallax SNR')});
+  writeHipparcosOutputPair(options['--out'],options['--audit'],catalog,audit);
   return {count:catalog.records.length,catalogId:catalog.id};
 }
 
