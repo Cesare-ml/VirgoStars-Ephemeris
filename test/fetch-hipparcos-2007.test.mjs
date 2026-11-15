@@ -8,13 +8,21 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
-import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,decodeHipparcos2007Archive,runHipparcosDownload} from '../scripts/fetch-hipparcos-2007.mjs';
+import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,decodeHipparcos2007Archive,readBoundedArchiveResponse,runHipparcosDownload} from '../scripts/fetch-hipparcos-2007.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const row=(id)=>String(id).padStart(6)+Array(270).fill(' ').join('');
-const mockArchive=(bytes)=>({
-  ok:true,status:200,headers:new Headers({'content-length':String(bytes.length)}),
-  async arrayBuffer(){return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);}
+const mockArchive=(bytes,{reportedLength=bytes.length,chunkSize=7}={})=>({
+  ok:true,status:200,
+  headers:new Headers(reportedLength===null?{}:{'content-length':String(reportedLength)}),
+  body:new ReadableStream({
+    start(controller){
+      for(let i=0;i<bytes.length;i+=chunkSize)
+        controller.enqueue(Uint8Array.from(bytes.subarray(i,i+chunkSize)));
+      controller.close();
+    },
+  }),
+  async arrayBuffer(){throw Error('unbounded arrayBuffer must never be called');}
 });
 test('explicit source acquisition verifies gzip, SHA, full-width data and provenance without real network',async()=>{
   const raw=Buffer.from(row(17)+'\n'+row(18)+'\n');
@@ -71,4 +79,58 @@ test('offline CLI reads a real local gzip file, rejects incomplete data and does
   await assert.rejects(()=>runHipparcosDownload(['--archive='+archive,'--out='+out]),/expected 117955 rows/);
   assert.equal(existsSync(out),false);
   assert.equal(existsSync(out+'.source.json'),false);
+});
+
+test('download caps streaming bytes even if Content-Length is omitted or forged',async()=>{
+  const extra=Buffer.alloc(27,0x47);
+  await assert.rejects(
+    ()=>readBoundedArchiveResponse(mockArchive(extra,{reportedLength:null,chunkSize:4}),{maxBytes:16}),
+    /compressed archive exceeds/,
+  );
+  await assert.rejects(
+    ()=>readBoundedArchiveResponse(mockArchive(extra,{reportedLength:14,chunkSize:5}),{maxBytes:16}),
+    /compressed archive exceeds/,
+  );
+  await assert.rejects(
+    ()=>readBoundedArchiveResponse(mockArchive(extra,{reportedLength:300}),{maxBytes:16}),
+    /compressed archive exceeds/,
+  );
+});
+
+test('stream reader cancels on overflow rather than accepting further archive chunks',async()=>{
+  let canceled=false,readCount=0;
+  const body=new ReadableStream({
+    pull(controller){
+      readCount++;
+      controller.enqueue(new Uint8Array(6));
+    },
+    cancel(){canceled=true;}
+  },{highWaterMark:0});
+  await assert.rejects(
+    ()=>readBoundedArchiveResponse({headers:new Headers(),body},{maxBytes:8}),
+    /compressed archive exceeds/,
+  );
+  assert.equal(canceled,true);
+  assert.ok(readCount<=3);
+});
+
+test('stream content length must be well formed and match the received archive bytes',async()=>{
+  const bytes=Buffer.from('0123456789');
+  await assert.rejects(()=>readBoundedArchiveResponse(mockArchive(bytes,{reportedLength:9})),/Content-Length does not match/);
+  await assert.rejects(()=>readBoundedArchiveResponse(mockArchive(bytes,{reportedLength:'x'})),/Invalid Hipparcos Content-Length/);
+  await assert.rejects(()=>readBoundedArchiveResponse({headers:new Headers(),body:null}),/streaming body/);
+  await assert.rejects(()=>readBoundedArchiveResponse(mockArchive(Buffer.from('x'))),/empty or truncated/);
+});
+
+test('bounded streamed archive preserves byte order when Content-Length is absent',async()=>{
+  const raw=Buffer.from(row(17)+'\n');
+  const archive=gzipSync(raw);
+  const out=await readBoundedArchiveResponse(mockArchive(archive,{reportedLength:null,chunkSize:1}));
+  assert.deepEqual(out,archive);
+  const got=await acquireHipparcos2007({
+    requireFullCatalog:false,
+    fetchImpl:async()=>mockArchive(archive,{reportedLength:null,chunkSize:3}),
+  });
+  assert.equal(got.provenance.rows,1);
+  assert.equal(got.provenance.sourceArchiveSha256,sha(archive));
 });
