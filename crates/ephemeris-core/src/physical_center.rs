@@ -15,12 +15,17 @@
 //! Experimental physical planetary centers using explicitly supplied SPK offsets.
 //! Added 2026-11-15. No kernel fallback, solar deflection or Swiss parity.
 
-use crate::aberration_state::{aberrate_light_time_state, AberratedStateError};
+use crate::aberration_state::{
+    aberrate_light_time_state, AberratedGeocentricState, AberratedStateError,
+};
 use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
+use crate::earth_orientation::true_ecliptic_of_date_matrix;
 use crate::light_time::{solve_from_observer_custom, LightTimeError};
 use crate::spk_kernel_set::SpkKernelSet;
 use crate::spk_relative_state::{SpkRelativeError, SpkRelativeState};
-use crate::true_ecliptic::{project_true_ecliptic, TrueEclipticError};
+use crate::true_ecliptic::{
+    project_true_ecliptic, project_true_equatorial, project_vector_date_frame, TrueEclipticError,
+};
 use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
@@ -54,6 +59,30 @@ pub struct PhysicalCenterPosition {
     pub planet: PhysicalPlanet,
     pub tt_jd: f64,
     pub tdb: JulianDateTdb,
+    pub longitude_deg: f64,
+    pub latitude_deg: f64,
+    pub distance_au: f64,
+    pub longitude_speed_deg_per_tdb_day: f64,
+    pub latitude_speed_deg_per_tdb_day: f64,
+    pub distance_speed_au_per_tdb_day: f64,
+}
+
+/// Earth-centered physical center, in the true equator of date.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PhysicalCenterEquatorial {
+    pub planet: PhysicalPlanet,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub distance_au: f64,
+    pub right_ascension_speed_deg_per_tdb_day: f64,
+    pub declination_speed_deg_per_tdb_day: f64,
+    pub distance_speed_au_per_tdb_day: f64,
+}
+
+/// Sun-centered physical center in the true ecliptic of date.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PhysicalCenterHeliocentric {
+    pub planet: PhysicalPlanet,
     pub longitude_deg: f64,
     pub latitude_deg: f64,
     pub distance_au: f64,
@@ -138,6 +167,29 @@ pub fn geocentric_physical_center<R: Read + Seek, S: Read + Seek>(
     tdb: JulianDateTdb,
     tt_jd: f64,
 ) -> Result<PhysicalCenterPosition, PhysicalCenterError> {
+    let aberrated = geocentric_aberrated(ephemeris, kernels, planet, tdb, tt_jd)?;
+    let state =
+        project_true_ecliptic(&aberrated, tt_jd).map_err(PhysicalCenterError::Projection)?;
+    Ok(PhysicalCenterPosition {
+        planet,
+        tt_jd,
+        tdb,
+        longitude_deg: state.longitude_deg,
+        latitude_deg: state.latitude_deg,
+        distance_au: state.distance_au,
+        longitude_speed_deg_per_tdb_day: state.longitude_speed_deg_per_tdb_day,
+        latitude_speed_deg_per_tdb_day: state.latitude_speed_deg_per_tdb_day,
+        distance_speed_au_per_tdb_day: state.distance_speed_au_per_tdb_day,
+    })
+}
+
+fn geocentric_aberrated<R: Read + Seek, S: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    kernels: &mut SpkKernelSet<S>,
+    planet: PhysicalPlanet,
+    tdb: JulianDateTdb,
+    tt_jd: f64,
+) -> Result<AberratedGeocentricState, PhysicalCenterError> {
     if !tt_jd.is_finite() || !tdb.0.is_finite() || (tt_jd - tdb.0).abs() > 1.0 / 86_400.0 {
         return Err(PhysicalCenterError::InvalidEpoch);
     }
@@ -163,18 +215,74 @@ pub fn geocentric_physical_center<R: Read + Seek, S: Read + Seek>(
         add_offset(state, &offset).map_err(|_| LightTimeError::InvalidGeometry)
     })
     .map_err(PhysicalCenterError::LightTime)?;
-    let aberrated = aberrate_light_time_state(
+    aberrate_light_time_state(
         &light,
         earth.velocity_km_per_day,
         earth.acceleration_km_per_day2,
     )
-    .map_err(PhysicalCenterError::Aberration)?;
+    .map_err(PhysicalCenterError::Aberration)
+}
+
+/// Earth-centered apparent equatorial state; the same physical-center and
+/// annual-aberration model and limitations as the ecliptic entry point.
+pub fn geocentric_physical_equatorial<R: Read + Seek, S: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    kernels: &mut SpkKernelSet<S>,
+    planet: PhysicalPlanet,
+    tdb: JulianDateTdb,
+    tt_jd: f64,
+) -> Result<PhysicalCenterEquatorial, PhysicalCenterError> {
+    let aberrated = geocentric_aberrated(ephemeris, kernels, planet, tdb, tt_jd)?;
     let state =
-        project_true_ecliptic(&aberrated, tt_jd).map_err(PhysicalCenterError::Projection)?;
-    Ok(PhysicalCenterPosition {
+        project_true_equatorial(&aberrated, tt_jd).map_err(PhysicalCenterError::Projection)?;
+    Ok(PhysicalCenterEquatorial {
         planet,
-        tt_jd,
-        tdb,
+        right_ascension_deg: state.right_ascension_deg,
+        declination_deg: state.declination_deg,
+        distance_au: state.distance_au,
+        right_ascension_speed_deg_per_tdb_day: state.right_ascension_speed_deg_per_tdb_day,
+        declination_speed_deg_per_tdb_day: state.declination_speed_deg_per_tdb_day,
+        distance_speed_au_per_tdb_day: state.distance_speed_au_per_tdb_day,
+    })
+}
+
+/// Sun-centered reception light-time state, with no annual aberration or
+/// solar deflection. Physical-center offsets are sampled at emission time.
+pub fn heliocentric_physical_center<R: Read + Seek, S: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    kernels: &mut SpkKernelSet<S>,
+    planet: PhysicalPlanet,
+    tdb: JulianDateTdb,
+    tt_jd: f64,
+) -> Result<PhysicalCenterHeliocentric, PhysicalCenterError> {
+    if !tt_jd.is_finite() || !tdb.0.is_finite() || (tt_jd - tdb.0).abs() > 1.0 / 86_400.0 {
+        return Err(PhysicalCenterError::InvalidEpoch);
+    }
+    let (bary, target, center) = planet.identifiers();
+    let light = solve_from_observer_custom(bary, Body::Sun, tdb, |body, epoch| {
+        let state = ephemeris
+            .state(body, Body::SolarSystemBarycenter, epoch)
+            .map_err(LightTimeError::Ephemeris)?;
+        if body == Body::Sun {
+            return Ok(state);
+        }
+        let offset = kernels
+            .relative_state(target, center, (epoch.0 - 2_451_545.0) * 86_400.0)
+            .map_err(LightTimeError::SupplementalSpk)?;
+        add_offset(state, &offset).map_err(|_| LightTimeError::InvalidGeometry)
+    })
+    .map_err(PhysicalCenterError::LightTime)?;
+    let vector = StateVector {
+        target: bary,
+        center: Body::Sun,
+        epoch: tdb,
+        position_km: light.position_km,
+        velocity_km_per_day: light.velocity_km_per_day,
+    };
+    let state = project_vector_date_frame(&vector, tt_jd, true_ecliptic_of_date_matrix)
+        .map_err(PhysicalCenterError::Projection)?;
+    Ok(PhysicalCenterHeliocentric {
+        planet,
         longitude_deg: state.longitude_deg,
         latitude_deg: state.latitude_deg,
         distance_au: state.distance_au,

@@ -15,7 +15,7 @@
 /** Opt-in API-shape experiment. Not a replacement for the Swiss binding. */
 import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
-export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_SPEED=256;
+export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_HELCTR=8,SEFLG_SPEED=256,SEFLG_EQUATORIAL=2048;
 export const SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
@@ -26,6 +26,9 @@ const calendar=flag=>{
 };
 const warnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 const centerWarnings=Object.freeze([...warnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
+const helioWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','NO_ANNUAL_ABERRATION','SOLAR_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
+const helioCenterWarnings=Object.freeze([...helioWarnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
+const helioSunWarnings=Object.freeze([...helioWarnings,'SUN_CENTER_ZERO_SENTINEL_NO_DIRECTION']);
 const starWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','STELLAR_LIGHT_TIME_OMITTED','RECTILINEAR_STELLAR_MOTION','STAR_RATES_NUMERICAL_PRECISION_LIMITED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 
 function snapshotCatalog(catalog){
@@ -98,7 +101,7 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   const callbackType=callback=>{if(callback!==undefined && typeof callback!=='function')throw new TypeError('Callback must be a function');};
   const star=name=>{if(!stars)throw new Error('An explicit star catalog is required');return stars.lookup(name);};
   const api={
-    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_SPEED,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
     swe_julday(year,month,day,hour,calendarFlag){
       return provider.julianDay({year,month,day,decimalHour:hour,calendar:calendar(calendarFlag),timeScale:'ut1'});
     },
@@ -146,15 +149,21 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
       if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
-      validFlags(flags);callbackType(callback);
+      if(!Number.isInteger(flags) || flags<0 || flags>(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL) || (flags&SEFLG_JPLEPH)===0 || (flags&~(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL))!==0 || ((flags&SEFLG_HELCTR)!==0 && (flags&SEFLG_EQUATORIAL)!==0))throw new RangeError('Only explicit JPL, optional speed, and one supported coordinate flag are allowed in flags');
+      callbackType(callback);
       const target=PHYSICAL_TARGETS[body];
       if(body>=4 && !Object.hasOwn(centers,target))throw new RangeError('Explicit physical-center SPK is required for '+target);
       const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
-      const state=body<4?provider.calculateAtEpoch({target,ttJulianDay,tdbJulianDay}):provider.calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
+      const equatorial=(flags&SEFLG_EQUATORIAL)!==0, heliocentric=(flags&SEFLG_HELCTR)!==0;
+      let state;
+      if(heliocentric && body===SE_SUN)state={longitudeDeg:0,latitudeDeg:0,distanceAu:0,longitudeSpeedDegPerTdbDay:0,latitudeSpeedDegPerTdbDay:0,distanceSpeedAuPerTdbDay:0};
+      else if(equatorial || heliocentric)state=provider.calculateCoordinateAtEpoch({mode:equatorial?'equatorial':'heliocentric',target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
+      else state=body<4?provider.calculateAtEpoch({target,ttJulianDay,tdbJulianDay}):provider.calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
       const speed=(flags&SEFLG_SPEED)!==0;
-      const value=Object.freeze({longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,
-        longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
-        rflag:flags,model:'EXPERIMENTAL_DE441_IAU2006_2000B',warnings:body<4?warnings:centerWarnings});
+      const coordinates=equatorial?{rectAscension:state.longitudeDeg,declination:state.latitudeDeg,rectAscensionSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,declinationSpeed:speed?state.latitudeSpeedDegPerTdbDay:0}:{longitude:state.longitudeDeg,latitude:state.latitudeDeg,longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0};
+      const chosenWarnings=heliocentric?(body===SE_SUN?helioSunWarnings:body<4?helioWarnings:helioCenterWarnings):body<4?warnings:centerWarnings;
+      const value=Object.freeze({...coordinates,distance:state.distanceAu,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
+        rflag:flags,model:'EXPERIMENTAL_DE441_IAU2006_2000B',warnings:chosenWarnings});
       if(callback!==undefined)callback(value);
       return value;
     },

@@ -1,7 +1,9 @@
 import {createExperimentalSwissSubset,SE_GREG_CAL,SE_SUN,SEFLG_JPLEPH,SEFLG_SPEED} from 'virgostars-ephemeris/experimental-swiss-subset';
 const api=createExperimentalSwissSubset({executablePath:'example',kernelPath:'example',physicalCenterKernels:{Mars:'mars.bsp'},convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
 const jd:number=api.swe_julday(2000,1,1,12,SE_GREG_CAL);
-const longitude:number=api.swe_calc_ut(jd,SE_SUN,SEFLG_JPLEPH|SEFLG_SPEED).longitude;
+const coords=api.swe_calc_ut(jd,SE_SUN,SEFLG_JPLEPH|SEFLG_SPEED);
+if(!('longitude' in coords))throw new Error('expected ecliptic coordinates');
+const longitude:number=coords.longitude;
 void longitude;
 const magnitude:number=api.swe_fixstar_mag('example').magnitude;
 const starLongitude:number=api.swe_fixstar_ut('example',jd,SEFLG_JPLEPH).longitude;

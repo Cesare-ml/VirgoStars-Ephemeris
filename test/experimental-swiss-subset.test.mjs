@@ -37,8 +37,47 @@ test('rejects absent converters, unsupported bodies, flags and incoherent epochs
   assert.throws(()=>api.swe_calc_ut(2461354.5,99,api.SEFLG_JPLEPH),/physical centers/);
   assert.throws(()=>create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({}),physicalCenterKernels:{Mars:''}}),/SPK/);
   assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,api.SEFLG_SWIEPH),/flags/);
+  assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,api.SEFLG_JPLEPH|api.SEFLG_HELCTR|api.SEFLG_EQUATORIAL),/flags/);
+  assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,4294967297),/flags/);
   assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,api.SEFLG_JPLEPH),/same instant/);
   assert.throws(()=>api.swe_julday(2000,1,1,12),/calendar/);
+});
+
+test('equatorial and heliocentric physical centers have correct field shapes and rate behavior',{
+  skip:['VIRGOSTARS_EPHEMERIS_CLI','DE441_PATH','MARS_SPK_PATH','JUPITER_SPK_PATH','SATURN_SPK_PATH','URANUS_SPK_PATH','NEPTUNE_SPK_PATH','PLUTO_SPK_PATH'].some(name=>!process.env[name]),
+},()=>{
+  const names=['Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'];
+  const paths=Object.fromEntries(names.map(name=>[name,process.env[name.toUpperCase()+'_SPK_PATH']]));
+  const api=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,physicalCenterKernels:paths,
+    convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.000800741,tdbJulianDay:ut1+0.000800725})});
+  // Same-TT Swiss 2.09.03 with DE441: a diagnostic, not independent validation.
+  const equatorial=[[225.1366968864,-17.0811490053],[231.9812637222,-24.0082251849],[214.4496015447,-12.3726845775],[200.4698050438,-11.4456221642],[145.9643862234,15.5406805717],[147.8400280809,13.7604197460],[9.1024595198,1.0296467921],[62.3850639777,20.8607267356],[2.3142381902,-0.5343167890],[306.5881003611,-23.5846782762]];
+  const heliocentric=[[0,0],[47.5787433082,-0.0133791702],[75.4520326688,3.1712444566],[57.7364502261,-1.1168365583],[105.0583382669,1.5205107226],[134.6866277470,0.7273944051],[12.5470988923,-2.4373068776],[63.4869588981,-0.1429575118],[3.2669696121,-1.3774154524],[304.7638489489,-4.2940054554]];
+  for(let body=0;body<10;body++){
+    let callback;
+    const eq=api.swe_calc_ut(2461354.5,body,api.SEFLG_JPLEPH|api.SEFLG_EQUATORIAL|api.SEFLG_SPEED,v=>{callback=v;});
+    assert.equal(eq,callback);assert.equal('longitude' in eq,false);
+    assert.ok(Math.abs(eq.rectAscension-equatorial[body][0])<0.0001);
+    assert.ok(Math.abs(eq.declination-equatorial[body][1])<0.0001);
+    const hel=api.swe_calc_ut(2461354.5,body,api.SEFLG_JPLEPH|api.SEFLG_HELCTR|api.SEFLG_SPEED);
+    assert.ok(Math.abs(hel.longitude-heliocentric[body][0])<0.00025);
+    assert.ok(Math.abs(hel.latitude-heliocentric[body][1])<0.0001);
+    assert.ok(hel.warnings.includes('NO_ANNUAL_ABERRATION'));
+    if(body===0){assert.equal(hel.distance,0);assert.ok(hel.warnings.includes('SUN_CENTER_ZERO_SENTINEL_NO_DIRECTION'));}
+    else assert.ok(hel.distance>0);
+    const eqNoSpeed=api.swe_calc_ut(2461354.5,body,api.SEFLG_JPLEPH|api.SEFLG_EQUATORIAL);
+    assert.deepEqual([eqNoSpeed.rectAscensionSpeed,eqNoSpeed.declinationSpeed,eqNoSpeed.distanceSpeed],[0,0,0]);
+  }
+  for(const body of [api.SE_MERCURY,api.SE_JUPITER,api.SE_PLUTO])for(const [flag,angle,angleSpeed,latitude,latitudeSpeed] of [[api.SEFLG_EQUATORIAL,'rectAscension','rectAscensionSpeed','declination','declinationSpeed'],[api.SEFLG_HELCTR,'longitude','longitudeSpeed','latitude','latitudeSpeed']]){
+    const flags=api.SEFLG_JPLEPH|api.SEFLG_SPEED|flag, t=2461354.5, dt=0.001;
+    const before=api.swe_calc_ut(t-dt,body,flags),now=api.swe_calc_ut(t,body,flags),after=api.swe_calc_ut(t+dt,body,flags);
+    const elapsed=(t+dt)-(t-dt);
+    const delta=((after[angle]-before[angle]+540)%360)-180;
+    assert.ok(Math.abs(now[angleSpeed]-delta/elapsed)<0.0001,`${body} ${angle} speed`);
+    assert.ok(Math.abs(now[latitudeSpeed]-(after[latitude]-before[latitude])/elapsed)<0.0001,`${body} ${latitude} speed`);
+    assert.ok(Math.abs(now.distanceSpeed-(after.distance-before.distance)/elapsed)<0.00001,`${body} distance speed`);
+  }
+  for(const flag of [api.SEFLG_EQUATORIAL,api.SEFLG_HELCTR])assert.throws(()=>api.swe_calc_ut(2451545,api.SE_MARS,api.SEFLG_JPLEPH|flag),/SupplementalSpk/);
 });
 
 test('real physical centers require supplemental kernels and expose speeds',{
