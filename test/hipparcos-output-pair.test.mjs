@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Cesare-ml (VirgoStars project). All Rights Reserved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync,statSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -55,4 +55,16 @@ test('normalized alias paths and repository-local outputs fail closed',t=>{
   const insideRepo=fileURLToPath(new URL('../test/should-not-be-committed.json',import.meta.url));
   assert.throws(()=>writeHipparcosOutputPair(insideRepo,join(dir,'audit.json'),catalog,audit),/outside the Git repository/);
   assert.equal(existsSync(insideRepo),false);
+});
+
+test('repository output cannot be smuggled through an external symlink',{
+  skip:process.platform==='win32'?'Directory symlinks may require elevated privileges on Windows CI':false,
+},t=>{
+  const dir=temp(t),link=join(dir,'indirect-repository');
+  const root=fileURLToPath(new URL('..',import.meta.url));
+  symlinkSync(root,link,'dir');
+  const {catalog,audit}=fixture();
+  const target=join(link,'should-never-appear.json');
+  assert.throws(()=>writeHipparcosOutputPair(target,join(dir,'audit.json'),catalog,audit),/outside the Git repository/);
+  assert.equal(existsSync(target),false);
 });
