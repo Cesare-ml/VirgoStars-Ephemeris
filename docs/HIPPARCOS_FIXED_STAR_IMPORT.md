@@ -115,3 +115,22 @@ This requires normal HTTPS access from the machine executing the command only wh
 
 The downloaded `hip2.dat` can be passed to `scripts/audit-hipparcos-2007.mjs` with its `rawSha256` from the manifest. The complete, genuine CDS integration check remains opt-in and excluded from network-free CI. The importer and auditor now share `scripts/hipparcos-source-rows.mjs` for exact fixed-width integrity checks.
 
+
+## Backend fixed-star coverage audit (read-only, no app runtime dependency)
+
+The **backend's actual usage**, not the Astrodienst wiki or the original Swiss data file, sets the MVP coverage target. A read-only review of `Cesare-ml/virgo-stars` at [`backend/helpers/stars.helper.js`](https://github.com/Cesare-ml/virgo-stars/blob/1248260317ddf78546c458fc8fa80152897f541b/backend/helpers/stars.helper.js) (blob SHA `e14f9bf4258297e786311ab8f7e2f5e5a379dda3`) observed:
+
+- **106** names declared in `STARS_ASTRODIENST`, of which **96** have IDs in `STARS_ASTRODIENST_TO_COW_ID` and are considered by current `getStelleTema()`.
+- **10** legacy list names have no mapping and are not currently used by that mapped-star path: Ahadi, Birdun, Girtab, Kakkab, Koo She, Manus, Muhlifain, Peregrini, Regor and Wei.
+- The experimental curated HIP target list currently identifies **10 of those 96** mapped names; **86** mapped names still need original-source astronomical identities, photometry, and (where available/required) radial velocities.
+- **Zero** stars are independently certified for production calculation by these inventories. A name/ID match is not a scientific numerical validation.
+
+The backend `getStella()` call site also uses `swe_fixstar_ut`, `swe_fixstar_mag`, `swe_azalt`, mutates the returned `latlng` object and applies an azimuth orientation/ southern-hemisphere longitude transformation. The app-specific behavior belongs to integration compatibility tests, not the standalone astronomical library.
+
+`scripts/audit-fixed-star-coverage.mjs` can reproduce the mapping audit from a **locally supplied backend helper file** and this repo's target manifest. It parses only the simple literal list and ID mapping (no `require`, `eval`, database access, or app data copying into the ephemeris runtime), and fails if the helper syntax changes. Example, using absolute paths to already checked-out repositories:
+
+```powershell
+node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-stars\\backend\\helpers\\stars.helper.js" "--candidates=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-stars-target-crossmatches.json"
+```
+
+The result reports mapped/unmapped names, identified candidates and remaining names, **not** the positions or release readiness of stars. The comparison script is an operator-only audit and does not introduce a runtime dependency on VirgoStars or Astrolabio. **Do not copy** the older `database/effemeridi/astrodienst/sefstars.txt` into this source or importer.
