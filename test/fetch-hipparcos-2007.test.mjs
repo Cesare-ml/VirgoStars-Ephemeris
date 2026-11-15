@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
 import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,runHipparcosDownload} from '../scripts/fetch-hipparcos-2007.mjs';
 
@@ -41,7 +42,7 @@ test('acquisition rejects malformed 276-column records even with a valid gzip ha
 
 test('CLI forbids raw third-party catalog output inside the source repository before network access',async()=>{
   await assert.rejects(
-    ()=>runHipparcosDownload(['--out='+new URL('../data-local-hip2.dat',import.meta.url).pathname]),
+    ()=>runHipparcosDownload(['--out='+fileURLToPath(new URL('../data-local-hip2.dat',import.meta.url))]),
     /outside the Git repository/,
   );
 });
