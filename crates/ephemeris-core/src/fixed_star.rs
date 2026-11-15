@@ -66,6 +66,15 @@ pub struct ExperimentalStarPosition {
     pub distance_speed_au_per_tdb_day: f64,
 }
 
+/// Classical barycentric ICRS direction, without stellar light-time or relativity.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GeometricBarycentricStar {
+    pub tdb: JulianDateTdb,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub distance_au: f64,
+}
+
 #[derive(Debug)]
 pub enum FixedStarError {
     InvalidCatalog,
@@ -190,6 +199,29 @@ pub fn geometric_star_vector(
     Ok(position)
 }
 
+/// Propagate the catalog's rectilinear geometric model relative to the solar
+/// system barycenter. This is an approximation to astrometric catalog motion:
+/// no Roemer/light-time correction, relativity, aberration, parallax of an
+/// observer away from the barycenter, or gravitational deflection is applied.
+pub fn geometric_barycentric_star(
+    entry: FixedStarCatalogEntry,
+    tdb: JulianDateTdb,
+) -> Result<GeometricBarycentricStar, FixedStarError> {
+    let vector = geometric_star_vector(entry, tdb, [0.0; 3])?;
+    let planar = vector[0].hypot(vector[1]);
+    let distance = planar.hypot(vector[2]);
+    if planar <= distance * 32.0 * f64::EPSILON {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    let ra = vector[1].atan2(vector[0]).to_degrees().rem_euclid(360.0);
+    Ok(GeometricBarycentricStar {
+        tdb,
+        right_ascension_deg: if ra >= 360.0 { 0.0 } else { ra },
+        declination_deg: vector[2].atan2(planar).to_degrees(),
+        distance_au: distance,
+    })
+}
+
 fn sample<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     entry: FixedStarCatalogEntry,
@@ -295,6 +327,40 @@ pub fn calculate_star_with_solar_deflection<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn barycentric_geometric_motion_is_close_to_synthetic_erfa_pmsafe_example() {
+        // pyerfa 2.0.1.5 pmsafe, synthetic catalog; ERFA includes terms omitted
+        // here, so this is a model comparison with a deliberately loose bound.
+        let entry = FixedStarCatalogEntry {
+            epoch_tdb: JulianDateTdb(2_448_349.062_5),
+            right_ascension_deg: 123.0,
+            declination_deg: 60.0,
+            proper_motion_ra_cos_dec_mas_per_year: 10.0,
+            proper_motion_dec_mas_per_year: -20.0,
+            parallax_mas: 10.0,
+            radial_velocity_km_per_second: 20.0,
+        };
+        for (epoch, ra, dec) in [
+            (2_448_349.062_5, 123.0, 60.0),
+            (2_451_545.0, 123.000_048_610_952_66, 59.999_951_388_966_956),
+            (2_469_807.5, 123.000_326_381_746_6, 59.999_673_614_630_574),
+        ] {
+            let value = geometric_barycentric_star(entry, JulianDateTdb(epoch)).unwrap();
+            assert!((value.right_ascension_deg - ra).abs() < 1e-6);
+            assert!((value.declination_deg - dec).abs() < 1e-6);
+        }
+        assert!(matches!(
+            geometric_barycentric_star(
+                FixedStarCatalogEntry {
+                    parallax_mas: 0.0,
+                    ..entry
+                },
+                entry.epoch_tdb
+            ),
+            Err(FixedStarError::InvalidCatalog)
+        ));
+    }
     fn example() -> FixedStarCatalogEntry {
         FixedStarCatalogEntry {
             epoch_tdb: JulianDateTdb(2_451_545.0),
