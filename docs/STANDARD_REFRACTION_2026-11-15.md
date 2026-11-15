@@ -39,3 +39,23 @@ apparent altitudes of 0.484586° at 0° geometric and 1.363564° at 1°;
 the present approximation gives 0.481944° and 1.363367° respectively.
 Actual near-horizon refraction is variable; neither comparison establishes
 an accuracy bound for a particular sky or meteorological condition.
+
+## Conventional solar events
+
+For the separate task of estimating sunrise and sunset, Rust exposes
+`find_standard_solar_event` and Node exposes `findStandardSolarEvent`. These
+use the [USNO conventional definition](https://aa.usno.navy.mil/faq/RST_defs)
+of the geometric solar center 50 arcminutes below a level horizon; the fixed
+value combines average atmospheric refraction and mean solar semidiameter.
+The method searches the geocentric solar direction and takes explicit UT1,
+TT, TDB, latitude, east longitude, sampling step and search window. It does
+not use `noaa_standard_refraction` or take local weather and height parameters.
+It inherits the event search's two-day limit and its possibility of missing
+grazing or multiple crossings. Its returned numerical bracket is not an
+estimate of observed accuracy. The result is not Swiss `swe_rise_trans` parity.
+
+For a diagnostic at Rome on 2026-11-10 (UTC assumed equal to UT1), the results
+were approximately 16 s later for sunrise and 16 s earlier for sunset than
+Swiss 2.09.03 default solar events, using the same DE441. These two comparisons
+are not a general error bound; actual weather and obstructions can change
+observed events substantially.

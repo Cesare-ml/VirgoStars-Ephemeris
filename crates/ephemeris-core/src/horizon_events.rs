@@ -53,6 +53,49 @@ pub struct HorizonEventSearch {
     pub step_minutes: f64,
 }
 
+/// Inputs for the USNO-style conventional solar rise/set approximation.
+/// Explicit UT1, TT and TDB epochs must represent the same initial instant.
+#[derive(Clone, Copy, Debug)]
+pub struct StandardSolarEventSearch {
+    pub kind: HorizonEventKind,
+    pub start_ut1_jd: f64,
+    pub start_tt_jd: f64,
+    pub start_tdb: JulianDateTdb,
+    pub latitude_deg: f64,
+    pub longitude_deg_east: f64,
+    pub window_days: f64,
+    pub step_minutes: f64,
+}
+
+/// Conventional unobstructed-horizon solar rise/set using a fixed 50 arcminute
+/// depression of the geocentric solar center. This models average refraction
+/// and mean solar semidiameter as a combined constant, not observed weather or
+/// a physical solar disk. See <https://aa.usno.navy.mil/faq/RST_defs>.
+/// This is approximate and does not reproduce Swiss rise/set semantics.
+pub fn find_standard_solar_event<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    input: StandardSolarEventSearch,
+) -> Result<HorizonEvent, HorizonEventError> {
+    if !matches!(input.kind, HorizonEventKind::Rise | HorizonEventKind::Set) {
+        return Err(HorizonEventError::InvalidInput);
+    }
+    find_geometric_event(
+        ephemeris,
+        HorizonEventSearch {
+            target: Body::Sun,
+            kind: input.kind,
+            start_ut1_jd: input.start_ut1_jd,
+            start_tt_jd: input.start_tt_jd,
+            start_tdb: input.start_tdb,
+            latitude_deg: input.latitude_deg,
+            longitude_deg_east: input.longitude_deg_east,
+            threshold_altitude_deg: -50.0 / 60.0,
+            window_days: input.window_days,
+            step_minutes: input.step_minutes,
+        },
+    )
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HorizonEvent {
     pub kind: HorizonEventKind,

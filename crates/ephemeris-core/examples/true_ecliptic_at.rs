@@ -24,8 +24,9 @@ use virgostars_ephemeris_core::equatorial_horizontal::{
 };
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::horizon_events::{
-    find_geometric_event, find_topocentric_geometric_event, topocentric_equatorial_direction,
-    HorizonEventKind, HorizonEventSearch,
+    find_geometric_event, find_standard_solar_event, find_topocentric_geometric_event,
+    topocentric_equatorial_direction, HorizonEventKind, HorizonEventSearch,
+    StandardSolarEventSearch,
 };
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
@@ -72,6 +73,36 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 11 && args[1] == "standard_solar_event" {
+        let kind = match arg(3)? {
+            "rise" => HorizonEventKind::Rise,
+            "set" => HorizonEventKind::Set,
+            _ => return Err("solar event kind must be rise or set".into()),
+        };
+        let input = StandardSolarEventSearch {
+            kind,
+            start_ut1_jd: arg(4)?.parse()?,
+            start_tt_jd: arg(5)?.parse()?,
+            start_tdb: JulianDateTdb(arg(6)?.parse()?),
+            latitude_deg: arg(7)?.parse()?,
+            longitude_deg_east: arg(8)?.parse()?,
+            window_days: arg(9)?.parse()?,
+            step_minutes: arg(10)?.parse()?,
+        };
+        let mut eph = De441::open(&args[2])?;
+        let event =
+            find_standard_solar_event(&mut eph, input).map_err(|error| error.to_string())?;
+        println!("event,target,ut1_jd,tt_jd,tdb_jd,bracket_seconds");
+        println!(
+            "{},Sun,{:.17},{:.17},{:.17},{:.12}",
+            arg(3)?,
+            event.ut1_jd,
+            event.tt_jd,
+            event.tdb.0,
+            event.bracket_seconds
+        );
+        return Ok(());
+    }
     if args.len() == 3 && args[1] == "noaa_refraction" {
         let r = noaa_standard_refraction(arg(2)?.parse()?).map_err(|error| error.to_string())?;
         println!(
