@@ -65,7 +65,7 @@ export async function readBoundedArchiveResponse(response,{maxBytes=MAX_GZIP_BYT
   const rawHeader=response?.headers?.get?.('content-length');
   let declaredSize=null;
   if(rawHeader!==null && rawHeader!==undefined){
-    if(!/^\\d+$/.test(rawHeader)) throw new Error('Invalid Hipparcos Content-Length header');
+    if(!/^\d+$/.test(rawHeader)) throw new Error('Invalid Hipparcos Content-Length header');
     declaredSize=Number(rawHeader);
     if(!Number.isSafeInteger(declaredSize) || declaredSize>maxBytes)
       throw new Error('Hipparcos compressed archive exceeds the configured 20 MiB cap');
