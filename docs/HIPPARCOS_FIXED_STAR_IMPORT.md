@@ -186,3 +186,24 @@ node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-st
 The audit reports `candidatesIdentified=81`, `nonstellarIdentified=5`, `pendingIdentityReview=10`, `unclassifiedCount=0` against the reviewed VirgoStars helper version. Its `missingCandidates=10` count remains **nonzero by design**: pending review is never counted as a successfully resolved HIP star. The opt-in test requires `VIRGOSTARS_BACKEND_STARS_HELPER` pointing to the local helper. Normal CI tests only synthetic files/manifests, not the authentic Hipparcos catalog.
 
 Release gates unchanged: authentic I/311 input, external V-band photometry, separately documented barycentric RV (or independently validated proper fallback), data rights, epoch-by-epoch astrometric reference checks and backend behavior parity.
+
+## Reproducible IAU name-to-HIP audit (does not download or calculate positions)
+
+`scripts/audit-iau-name-hip.mjs` can compare the 81 proposed backend name/HIP pairs with an external locally supplied IAU naming CSV, without importing the CSV into this repository. It uses the **explicit historical alias → official IAU name** field for the five legacy names: El Nath/Elnath, Adara/Adhara, Agena/Hadar, Etamin/Eltanin, Hasseleh/Hassaleh.
+
+A read-only comparison on 2026-11-15 between the candidate JSON and [this IAU-CSN-derived snapshot](https://github.com/cyschneck/iau-star-names/blob/main/data/1_iau_stars.csv), Git blob SHA `c3d9289db7dbf585bf5fcb51980c008cb4f3d38d`, found **76 exact names with matching HIP IDs plus five documented historical aliases pointing to matching IAU/HIP IDs, and zero mismatches**. This comparison is an **identity mapping check only**. The CSV is a third-party derived index: confirm with the [IAU catalog](https://exopla.net/star-names/modern-iau-star-names/) and object records in SIMBAD, especially for multiple components, before scientific release.
+
+An opt-in test can reproduce this check with the verified local version:
+
+```powershell
+$env:VIRGOSTARS_IAU_NAMES_CSV = (Resolve-Path "C:\\VirgoStarsData\\1_iau_stars.csv").Path
+node --test test/audit-iau-name-hip.test.mjs
+```
+
+Or call the CLI directly:
+
+```powershell
+node scripts/audit-iau-name-hip.mjs "--iau-csv=C:\\VirgoStarsData\\1_iau_stars.csv" "--stars=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-stars-target-crossmatches.json"
+```
+
+The script checks the Git blob SHA-1 of the external source file by default, fails closed on mismatched IDs and deliberately reports `scientificallyValidated=0`. The named CSV is NOT Hipparcos I/311/hip2 and is not suitable for numeric position propagation or substitute photometry. If the source snapshot is updated, review the new catalog, explicitly revise the expected digest and compare changes before trusting it. No network access occurs in ordinary tests or runtime.
