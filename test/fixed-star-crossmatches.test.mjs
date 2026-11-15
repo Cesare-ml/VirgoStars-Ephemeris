@@ -41,5 +41,5 @@ test('fixed-star target crossmatches are distinct sourced HIP IDs, never simulat
   assert.equal(manifest.stars.find(x=>x.name==='Nashira')?.hip,106985);
   assert.equal(manifest.stars.find(x=>x.name==='Wezen')?.hip,34444);
   const aliases=manifest.stars.filter(x=>x.legacyNameReviewStatus==='SPELLING_OR_HISTORICAL_ALIAS_NEEDS_CONFIRMATION');
-  assert.deepEqual(aliases.map(x=>x.name).sort(),['Adara','Agena','Etamin','Hasseleh'].sort());
+  assert.deepEqual(aliases.map(x=>x.name).sort(),['Adara','Agena','El Nath','Etamin','Hasseleh'].sort());
 });
