@@ -312,7 +312,10 @@
       "astrometryStatus": "NOT_YET_REVIEWED",
       "visualMagnitude": null,
       "barycentricRadialVelocityKmPerSecond": null,
-      "review": "Backend spelling maps to official Elnath name; review source and alias separately"
+      "review": "Backend legacy El Nath name maps to IAU Elnath, HIP 25428. Preserve legacy name and explicitly verify alias/component before runtime use. V/RV astrometry still unreviewed.",
+      "iauApprovedName": "Elnath",
+      "legacyNameReviewStatus": "SPELLING_OR_HISTORICAL_ALIAS_NEEDS_CONFIRMATION",
+      "iauCatalogReferenceUrl": "https://exopla.net/star-names/modern-iau-star-names/"
     },
     {
       "name": "Mizar",
