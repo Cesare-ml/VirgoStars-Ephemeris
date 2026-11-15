@@ -8,7 +8,7 @@ const manifest=JSON.parse(readFileSync(new URL('../docs/data/fixed-stars-target-
 
 test('fixed-star target crossmatches are distinct sourced HIP IDs, never simulated measurements',()=>{
   assert.equal(manifest.schemaVersion,1);
-  assert.equal(manifest.stars.length,30);
+  assert.equal(manifest.stars.length,59);
   const ids=new Set(),names=new Set();
   for(const item of manifest.stars){
     assert.ok(Number.isSafeInteger(item.hip)&&item.hip>0);
@@ -34,4 +34,9 @@ test('fixed-star target crossmatches are distinct sourced HIP IDs, never simulat
   assert.equal(manifest.stars.find(x=>x.name==='Alpheratz')?.hip,677);
   assert.equal(manifest.stars.find(x=>x.name==='El Nath')?.hip,25428);
   assert.equal(manifest.stars.find(x=>x.name==='Mizar')?.hip,65378);
+  assert.equal(manifest.stars.find(x=>x.name==='Acrux')?.hip,60718);
+  assert.equal(manifest.stars.find(x=>x.name==='Alnair')?.hip,109268);
+  assert.equal(manifest.stars.find(x=>x.name==='Mira')?.hip,10826);
+  const aliases=manifest.stars.filter(x=>x.legacyNameReviewStatus==='SPELLING_OR_HISTORICAL_ALIAS_NEEDS_CONFIRMATION');
+  assert.deepEqual(aliases.map(x=>x.name).sort(),['Adara','Agena','Etamin','Hasseleh'].sort());
 });
