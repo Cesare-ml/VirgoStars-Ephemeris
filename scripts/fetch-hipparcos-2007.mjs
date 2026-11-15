@@ -3,7 +3,7 @@
 // 2026-11-15: explicitly invoked, offline-output-only Hipparcos archive acquisition.
 // No imports/calculations fetch external data; this CLI runs only when requested.
 import {createHash} from 'node:crypto';
-import {existsSync,readFileSync,writeFileSync,unlinkSync} from 'node:fs';
+import {existsSync,readFileSync,writeFileSync,unlinkSync,statSync} from 'node:fs';
 import {isAbsolute,resolve,relative,dirname,sep} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL,fileURLToPath} from 'node:url';
@@ -130,9 +130,19 @@ export async function runHipparcosDownload(argv) {
     throw new Error('Output file already exists; no overwrite allowed');
   if(args['--archive']!==undefined && (!args['--archive'] || !isAbsolute(args['--archive'])))
     throw new Error('--archive must be an absolute path to an existing gzip file');
+  // Bound local archive reads before allocating an entire caller-supplied file.
+  // This is not a trust/authenticity check: the independent hash remains optional.
+  let localArchive;
+  if(args['--archive']!==undefined){
+    const localArchivePath=resolve(args['--archive']);
+    const stats=statSync(localArchivePath);
+    if(!stats.isFile() || stats.size<2 || stats.size>MAX_GZIP_BYTES)
+      throw new Error('Local Hipparcos archive must be a regular gzip file of at most 20 MiB');
+    localArchive=readFileSync(localArchivePath);
+  }
   const {raw,provenance}=args['--archive']===undefined
     ?await acquireHipparcos2007({expectedArchiveSha256:args['--archive-sha256']})
-    :decodeHipparcos2007Archive(readFileSync(resolve(args['--archive'])),{
+    :decodeHipparcos2007Archive(localArchive,{
       expectedArchiveSha256:args['--archive-sha256'],
     });
   let wroteRaw=false;
