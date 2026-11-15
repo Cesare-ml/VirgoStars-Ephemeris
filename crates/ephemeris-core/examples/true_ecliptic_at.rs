@@ -31,11 +31,15 @@ use virgostars_ephemeris_core::horizon_events::{
 };
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
-use virgostars_ephemeris_core::physical_center::{geocentric_physical_center, PhysicalPlanet};
+use virgostars_ephemeris_core::physical_center::{
+    geocentric_physical_center, geocentric_physical_equatorial, heliocentric_physical_center,
+    PhysicalPlanet,
+};
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
 use virgostars_ephemeris_core::true_ecliptic::{
-    geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil,
-    geocentric_true_equatorial_from_civil, heliocentric_true_ecliptic_from_civil,
+    geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil, geocentric_true_equatorial,
+    geocentric_true_equatorial_from_civil, heliocentric_true_ecliptic,
+    heliocentric_true_ecliptic_from_civil,
 };
 
 const BODIES: [Body; 10] = [
@@ -76,6 +80,90 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 8 && args[1] == "coordinate_epoch" {
+        let mode = arg(2)?;
+        let name = arg(5)?;
+        let tt: f64 = arg(6)?.parse()?;
+        let tdb = JulianDateTdb(arg(7)?.parse()?);
+        let mut eph = De441::open(&args[3])?;
+        let physical = match name {
+            "Mars" => Some(PhysicalPlanet::Mars),
+            "Jupiter" => Some(PhysicalPlanet::Jupiter),
+            "Saturn" => Some(PhysicalPlanet::Saturn),
+            "Uranus" => Some(PhysicalPlanet::Uranus),
+            "Neptune" => Some(PhysicalPlanet::Neptune),
+            "Pluto" => Some(PhysicalPlanet::Pluto),
+            _ => None,
+        };
+        let values = if let Some(planet) = physical {
+            let mut kernels = SpkKernelSet::new();
+            kernels.load(std::fs::File::open(&args[4])?)?;
+            match mode {
+                "equatorial" => {
+                    let s =
+                        geocentric_physical_equatorial(&mut eph, &mut kernels, planet, tdb, tt)?;
+                    [
+                        s.right_ascension_deg,
+                        s.declination_deg,
+                        s.distance_au,
+                        s.right_ascension_speed_deg_per_tdb_day,
+                        s.declination_speed_deg_per_tdb_day,
+                        s.distance_speed_au_per_tdb_day,
+                    ]
+                }
+                "heliocentric" => {
+                    let s = heliocentric_physical_center(&mut eph, &mut kernels, planet, tdb, tt)?;
+                    [
+                        s.longitude_deg,
+                        s.latitude_deg,
+                        s.distance_au,
+                        s.longitude_speed_deg_per_tdb_day,
+                        s.latitude_speed_deg_per_tdb_day,
+                        s.distance_speed_au_per_tdb_day,
+                    ]
+                }
+                _ => return Err("unsupported coordinate mode".into()),
+            }
+        } else {
+            let target = BODIES
+                .into_iter()
+                .take(4)
+                .find(|body| format!("{body:?}") == name)
+                .ok_or("unsupported physical target")?;
+            match mode {
+                "equatorial" => {
+                    let s = geocentric_true_equatorial(&mut eph, target, tdb, tt)?;
+                    [
+                        s.right_ascension_deg,
+                        s.declination_deg,
+                        s.distance_au,
+                        s.right_ascension_speed_deg_per_tdb_day,
+                        s.declination_speed_deg_per_tdb_day,
+                        s.distance_speed_au_per_tdb_day,
+                    ]
+                }
+                "heliocentric" => {
+                    let s = heliocentric_true_ecliptic(&mut eph, target, tdb, tt)?;
+                    [
+                        s.longitude_deg,
+                        s.latitude_deg,
+                        s.distance_au,
+                        s.longitude_speed_deg_per_tdb_day,
+                        s.latitude_speed_deg_per_tdb_day,
+                        s.distance_speed_au_per_tdb_day,
+                    ]
+                }
+                _ => return Err("unsupported coordinate mode".into()),
+            }
+        };
+        // CSV coordinate columns are generic: equatorial mode uses RA/Dec.
+        println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        println!(
+            "{},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            name, tt, tdb.0, values[0], values[1], values[2], values[3], values[4], values[5]
+        );
+        return Ok(());
+    }
     if args.len() == 7 && args[1] == "physical_epoch" {
         let planet = match arg(4)? {
             "Mars" => PhysicalPlanet::Mars,

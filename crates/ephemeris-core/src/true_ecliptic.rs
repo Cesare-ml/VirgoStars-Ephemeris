@@ -151,7 +151,7 @@ fn project_date_frame(
     project_vector_date_frame(&vector, tt_jd, matrix_at)
 }
 
-fn project_vector_date_frame(
+pub(crate) fn project_vector_date_frame(
     state: &StateVector,
     tt_jd: f64,
     matrix_at: fn(f64) -> Result<Matrix3x3, OrientationError>,
