@@ -23,6 +23,7 @@ const HEADER = 'target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longi
 const TARGETS = Object.freeze(['Sun', 'Moon', 'Mercury', 'Venus', 'MarsBarycenter', 'JupiterBarycenter', 'SaturnBarycenter', 'UranusBarycenter', 'NeptuneBarycenter', 'PlutoBarycenter']);
 const ANGLE_HEADER = 'armc_deg,ascendant_deg,midheaven_deg,true_obliquity_deg';
 const LUNAR_HEADER = 'point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day';
+const LUNAR_EQUATORIAL_HEADER = 'point,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tt_day,declination_deg_per_tt_day,distance_au_per_tt_day';
 const LUNAR_POINTS = Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 const EQUATORIAL_HEADER = 'target,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tdb_day,declination_deg_per_tdb_day,distance_au_per_tdb_day';
 const HORIZONTAL_HEADER = 'true_altitude_deg,azimuth_north_east_deg,azimuth_south_west_deg';
@@ -142,10 +143,10 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
         results: Object.freeze(results),
       });
     },
-    calculateLunarPointAtEpoch({point,ttJulianDay,tdbJulianDay}) {
-      if(!LUNAR_POINTS.includes(point) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay))throw new TypeError('Lunar point and explicit finite TT and TDB are required');
-      const lines=execute(['lunar_epoch',kernelPath,point,String(ttJulianDay),String(tdbJulianDay)]);
-      if(lines.length!==2 || lines[0]!==LUNAR_HEADER)throw new Error('Invalid lunar-point epoch CSV contract');
+    calculateLunarPointAtEpoch({point,ttJulianDay,tdbJulianDay,frame='ECLIPTIC'}) {
+      if(!LUNAR_POINTS.includes(point) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || !['ECLIPTIC','EQUATORIAL'].includes(frame))throw new TypeError('Lunar point, supported frame and explicit finite TT and TDB are required');
+      const lines=execute([frame==='EQUATORIAL'?'lunar_equatorial_epoch':'lunar_epoch',kernelPath,point,String(ttJulianDay),String(tdbJulianDay)]);
+      if(lines.length!==2 || lines[0]!== (frame==='EQUATORIAL'?LUNAR_EQUATORIAL_HEADER:LUNAR_HEADER))throw new Error('Invalid lunar-point epoch CSV contract');
       const [returnedPoint,...parts]=lines[1].split(',');
       if(returnedPoint!==point || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid lunar-point epoch CSV row');
       const [tt,tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay]=parts.map(Number);

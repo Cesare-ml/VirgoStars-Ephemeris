@@ -8,5 +8,6 @@ async function example():Promise<void>{
   const point=api.swe_calc_ut(jd,api.SE_MEAN_NODE,1);
   if(point.model==='EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT'){const longitude:number=point.longitude;void longitude;}
   if(point.model==='EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL'){const distance:number=point.distance;void distance;}
+  if(point.model==='EXPERIMENTAL_EQUATORIAL_LUNAR_POINT'){const ra:number=point.rectAscension;void ra;}
 }
 void example;

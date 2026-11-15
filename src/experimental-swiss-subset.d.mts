@@ -15,6 +15,7 @@ export interface ExperimentalEquatorialResult {
 }
 export interface ExperimentalLunarPointResult extends Omit<ExperimentalSwissResult,'model'> {readonly model:'EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT';}
 export interface ExperimentalLunarHeliocentricSentinel extends Omit<ExperimentalSwissResult,'model'> {readonly model:'EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL';}
+export interface ExperimentalLunarEquatorialResult extends Omit<ExperimentalEquatorialResult,'model'> {readonly model:'EXPERIMENTAL_EQUATORIAL_LUNAR_POINT';}
 /** Six Swiss-shaped fields encode obliquities and nutations, not positions or speeds. */
 export interface ExperimentalEclipticNutation extends Omit<ExperimentalSwissResult,'model'|'rflag'> {
   readonly model:'EXPERIMENTAL_IAU2006_2000B_NUTATION';readonly rflag:0;
@@ -54,7 +55,7 @@ export interface ExperimentalSwissSubset {
   swe_julday(year:number,month:number,day:number,hour:number,calendarFlag:0|1):number;
   swe_revjul(julianDay:number,calendarFlag:0|1):Readonly<{year:number;month:number;day:number;hour:number}>;
   swe_calc_ut(julianDay:number,body:-1,flags:0,callback?:(result:ExperimentalEclipticNutation)=>void):Readonly<ExperimentalEclipticNutation>;
-  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel>;
+  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel|ExperimentalLunarEquatorialResult)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel|ExperimentalLunarEquatorialResult>;
   swe_fixstar_ut(name:string,julianDay:number,flags:number,callback?:(result:ExperimentalStarResult)=>void):Readonly<ExperimentalStarResult>;
   swe_fixstar_mag(name:string,callback?:(result:Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>)=>void):Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>;
   swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalHouses)=>void):Readonly<ExperimentalHouses>;

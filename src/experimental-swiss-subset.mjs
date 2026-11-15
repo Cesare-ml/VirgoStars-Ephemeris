@@ -24,6 +24,7 @@ const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jup
 const LUNAR_POINTS=Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 const LUNAR_NAMES=Object.freeze(['mean Node','true Node','mean Apogee','osc. Apogee']);
 const lunarWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','GEOCENTRIC_MATHEMATICAL_POINT','MEAN_POINTS_ANALYTIC_NOT_JPL','MEAN_MODEL_AND_DISTANCES_APPROXIMATE','OSCULATION_FROM_GEOMETRIC_DE441','OSCULATION_RATES_NUMERICAL','NUTATION_IAU_2000B_APPROXIMATE','TT_DAY_RATES_NOT_EXACT_UT_RATES']);
+const lunarEquatorialWarnings=Object.freeze([...lunarWarnings,'OBLIQUITY_RATE_NUMERICAL']);
 const lunarHelioWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','HELIOCENTRIC_ZERO_SENTINEL_NO_PHYSICAL_POSITION','RFLAG_OMITS_SWISS_IMPLICIT_FLAGS']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
@@ -230,18 +231,19 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       if(body===SE_ECL_NUT){callbackType(callback);if(flags!==0)throw new RangeError('Ecliptic nutation accepts only flags 0');return nutation(getEpochs(julianDay).ttJulianDay,flags,callback);}
       if(Number.isInteger(body) && body>=SE_MEAN_NODE && body<=SE_OSCU_APOG){
         if(lunarPointPolicy!=='EXPERIMENTAL_GEOCENTRIC')throw new RangeError('Experimental lunar points require explicit opt-in');
-        if(Number.isInteger(flags) && (flags&SEFLG_EQUATORIAL)!==0)throw new RangeError('Lunar point equatorial coordinates are not supported');
         if([SEFLG_JPLEPH|SEFLG_HELCTR,SEFLG_JPLEPH|SEFLG_HELCTR|SEFLG_SPEED].includes(flags)){
           if(lunarHeliocentricPolicy!=='ZERO_SENTINEL')throw new RangeError('Lunar heliocentric zero sentinel requires explicit opt-in');
           callbackType(callback);getEpochs(julianDay);
           const value=Object.freeze({longitude:0,latitude:0,distance:0,longitudeSpeed:0,latitudeSpeed:0,distanceSpeed:0,rflag:flags,model:'EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL',warnings:lunarHelioWarnings});
           if(callback!==undefined)callback(value);return value;
         }
-        if(!Number.isInteger(flags) || ![SEFLG_JPLEPH,SEFLG_JPLEPH|SEFLG_SPEED].includes(flags))throw new RangeError('Lunar points support only geocentric ecliptic JPL with optional speed');
+        if(!Number.isInteger(flags) || ![SEFLG_JPLEPH,SEFLG_JPLEPH|SEFLG_SPEED,SEFLG_JPLEPH|SEFLG_EQUATORIAL,SEFLG_JPLEPH|SEFLG_EQUATORIAL|SEFLG_SPEED].includes(flags))throw new RangeError('Lunar points support only geocentric ecliptic or equatorial JPL with optional speed');
         callbackType(callback);const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
-        const state=provider.calculateLunarPointAtEpoch({point:LUNAR_POINTS[body-SE_MEAN_NODE],ttJulianDay,tdbJulianDay});
+        const equatorial=(flags&SEFLG_EQUATORIAL)!==0;
+        const state=provider.calculateLunarPointAtEpoch({point:LUNAR_POINTS[body-SE_MEAN_NODE],ttJulianDay,tdbJulianDay,frame:equatorial?'EQUATORIAL':'ECLIPTIC'});
         const speed=(flags&SEFLG_SPEED)!==0;
-        const value=Object.freeze({longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,longitudeSpeed:speed?state.longitudeSpeedDegPerTtDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTtDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTtDay:0,rflag:flags,model:'EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT',warnings:lunarWarnings});
+        const fields=equatorial?{rectAscension:state.longitudeDeg,declination:state.latitudeDeg,rectAscensionSpeed:speed?state.longitudeSpeedDegPerTtDay:0,declinationSpeed:speed?state.latitudeSpeedDegPerTtDay:0}:{longitude:state.longitudeDeg,latitude:state.latitudeDeg,longitudeSpeed:speed?state.longitudeSpeedDegPerTtDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTtDay:0};
+        const value=Object.freeze({...fields,distance:state.distanceAu,distanceSpeed:speed?state.distanceSpeedAuPerTtDay:0,rflag:flags,model:equatorial?'EXPERIMENTAL_EQUATORIAL_LUNAR_POINT':'EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT',warnings:equatorial?lunarEquatorialWarnings:lunarWarnings});
         if(callback!==undefined)callback(value);return value;
       }
       if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
