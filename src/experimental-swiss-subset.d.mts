@@ -14,6 +14,7 @@ export interface ExperimentalEquatorialResult {
   readonly rflag:number;readonly model:'EXPERIMENTAL_DE441_IAU2006_2000B';readonly warnings:readonly string[];
 }
 export interface ExperimentalLunarPointResult extends Omit<ExperimentalSwissResult,'model'> {readonly model:'EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT';}
+export interface ExperimentalLunarHeliocentricSentinel extends Omit<ExperimentalSwissResult,'model'> {readonly model:'EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL';}
 /** Six Swiss-shaped fields encode obliquities and nutations, not positions or speeds. */
 export interface ExperimentalEclipticNutation extends Omit<ExperimentalSwissResult,'model'|'rflag'> {
   readonly model:'EXPERIMENTAL_IAU2006_2000B_NUTATION';readonly rflag:0;
@@ -53,13 +54,13 @@ export interface ExperimentalSwissSubset {
   swe_julday(year:number,month:number,day:number,hour:number,calendarFlag:0|1):number;
   swe_revjul(julianDay:number,calendarFlag:0|1):Readonly<{year:number;month:number;day:number;hour:number}>;
   swe_calc_ut(julianDay:number,body:-1,flags:0,callback?:(result:ExperimentalEclipticNutation)=>void):Readonly<ExperimentalEclipticNutation>;
-  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult>;
+  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation|ExperimentalLunarPointResult|ExperimentalLunarHeliocentricSentinel>;
   swe_fixstar_ut(name:string,julianDay:number,flags:number,callback?:(result:ExperimentalStarResult)=>void):Readonly<ExperimentalStarResult>;
   swe_fixstar_mag(name:string,callback?:(result:Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>)=>void):Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>;
   swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalHouses)=>void):Readonly<ExperimentalHouses>;
   swe_houses_pos(armcDeg:number,latitudeDeg:number,trueObliquityDeg:number,system:'P',longitudeDeg:number,latitudeEclipticDeg:number,callback?:(result:ExperimentalHousePosition)=>void):Readonly<ExperimentalHousePosition>;
 }
-export interface ExperimentalSwissOptions {executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;horizontalSupport?:Readonly<{refraction:'GEOMETRIC'|'NOAA_STANDARD'}>;solarEventSupport?:Readonly<{windowDays:number;stepMinutes:number;timeOffsets:'CONSTANT_IN_SEARCH'}>;starSolarDeflection?:'OMIT'|'POINT_MASS';planetSolarDeflection?:'OMIT'|'POINT_MASS';lunarPointPolicy?:'DISABLED'|'EXPERIMENTAL_GEOCENTRIC';physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>;}
+export interface ExperimentalSwissOptions {executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;horizontalSupport?:Readonly<{refraction:'GEOMETRIC'|'NOAA_STANDARD'}>;solarEventSupport?:Readonly<{windowDays:number;stepMinutes:number;timeOffsets:'CONSTANT_IN_SEARCH'}>;starSolarDeflection?:'OMIT'|'POINT_MASS';planetSolarDeflection?:'OMIT'|'POINT_MASS';lunarPointPolicy?:'DISABLED'|'EXPERIMENTAL_GEOCENTRIC';lunarHeliocentricPolicy?:'REJECT'|'ZERO_SENTINEL';physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>;}
 export interface ExperimentalMutableHouses {house:number[];ascendant:number;mc:number;armc:number;readonly trueObliquity:number;readonly model:'EXPERIMENTAL_IAU2006_2000B_HOUSES';readonly warnings:readonly string[];}
 export type ExperimentalMutableStar=Omit<{ -readonly [K in keyof ExperimentalStarResult]: ExperimentalStarResult[K] },'name'|'model'|'warnings'|'catalogId'> & Pick<ExperimentalStarResult,'model'|'warnings'|'catalogId'> & {name?:string};
 export interface ExperimentalMutableSubset extends Omit<ExperimentalSwissSubset,'swe_houses'|'swe_fixstar_ut'> {

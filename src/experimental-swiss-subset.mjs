@@ -24,6 +24,7 @@ const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jup
 const LUNAR_POINTS=Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 const LUNAR_NAMES=Object.freeze(['mean Node','true Node','mean Apogee','osc. Apogee']);
 const lunarWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','GEOCENTRIC_MATHEMATICAL_POINT','MEAN_POINTS_ANALYTIC_NOT_JPL','MEAN_MODEL_AND_DISTANCES_APPROXIMATE','OSCULATION_FROM_GEOMETRIC_DE441','OSCULATION_RATES_NUMERICAL','NUTATION_IAU_2000B_APPROXIMATE','TT_DAY_RATES_NOT_EXACT_UT_RATES']);
+const lunarHelioWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','HELIOCENTRIC_ZERO_SENTINEL_NO_PHYSICAL_POSITION','RFLAG_OMITS_SWISS_IMPLICIT_FLAGS']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
   if(flag===SE_GREG_CAL)return 'gregorian';
@@ -73,12 +74,14 @@ export function validateExperimentalStarCatalog(catalog){snapshotCatalog(catalog
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT',planetSolarDeflection='OMIT',lunarPointPolicy='DISABLED'}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT',planetSolarDeflection='OMIT',lunarPointPolicy='DISABLED',lunarHeliocentricPolicy='REJECT'}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
   if(!['OMIT','POINT_MASS'].includes(starSolarDeflection))throw new RangeError('Unsupported stellar solar deflection model');
   if(!['OMIT','POINT_MASS'].includes(planetSolarDeflection))throw new RangeError('Unsupported planetary solar deflection model');
   if(!['DISABLED','EXPERIMENTAL_GEOCENTRIC'].includes(lunarPointPolicy))throw new RangeError('Unsupported lunar point policy');
+  if(!['REJECT','ZERO_SENTINEL'].includes(lunarHeliocentricPolicy))throw new RangeError('Unsupported lunar heliocentric policy');
+  if(lunarHeliocentricPolicy==='ZERO_SENTINEL' && lunarPointPolicy!=='EXPERIMENTAL_GEOCENTRIC')throw new RangeError('Lunar sentinel also requires experimental lunar point opt-in');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
   let solarEvents=null;
@@ -227,6 +230,13 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       if(body===SE_ECL_NUT){callbackType(callback);if(flags!==0)throw new RangeError('Ecliptic nutation accepts only flags 0');return nutation(getEpochs(julianDay).ttJulianDay,flags,callback);}
       if(Number.isInteger(body) && body>=SE_MEAN_NODE && body<=SE_OSCU_APOG){
         if(lunarPointPolicy!=='EXPERIMENTAL_GEOCENTRIC')throw new RangeError('Experimental lunar points require explicit opt-in');
+        if(Number.isInteger(flags) && (flags&SEFLG_EQUATORIAL)!==0)throw new RangeError('Lunar point equatorial coordinates are not supported');
+        if([SEFLG_JPLEPH|SEFLG_HELCTR,SEFLG_JPLEPH|SEFLG_HELCTR|SEFLG_SPEED].includes(flags)){
+          if(lunarHeliocentricPolicy!=='ZERO_SENTINEL')throw new RangeError('Lunar heliocentric zero sentinel requires explicit opt-in');
+          callbackType(callback);getEpochs(julianDay);
+          const value=Object.freeze({longitude:0,latitude:0,distance:0,longitudeSpeed:0,latitudeSpeed:0,distanceSpeed:0,rflag:flags,model:'EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL',warnings:lunarHelioWarnings});
+          if(callback!==undefined)callback(value);return value;
+        }
         if(!Number.isInteger(flags) || ![SEFLG_JPLEPH,SEFLG_JPLEPH|SEFLG_SPEED].includes(flags))throw new RangeError('Lunar points support only geocentric ecliptic JPL with optional speed');
         callbackType(callback);const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
         const state=provider.calculateLunarPointAtEpoch({point:LUNAR_POINTS[body-SE_MEAN_NODE],ttJulianDay,tdbJulianDay});
