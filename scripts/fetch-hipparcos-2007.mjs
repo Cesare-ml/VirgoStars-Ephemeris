@@ -4,9 +4,9 @@
 // No imports/calculations fetch external data; this CLI runs only when requested.
 import {createHash} from 'node:crypto';
 import {existsSync,writeFileSync,unlinkSync} from 'node:fs';
-import {isAbsolute,resolve} from 'node:path';
+import {isAbsolute,resolve,relative,dirname,sep} from 'node:path';
 import {gunzipSync} from 'node:zlib';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {readHip2Rows,HIP2_MAX_BYTES} from './hipparcos-source-rows.mjs';
 
 export const OFFICIAL_HIP2_GZIP_URL='https://vizier.cfa.harvard.edu/ftp/cats/I/311/hip2.dat.gz';
@@ -68,6 +68,10 @@ export async function runHipparcosDownload(argv) {
   const out=args['--out'];
   if(typeof out!=='string' || !isAbsolute(out)) throw new Error('--out must be an absolute file path outside the repository');
   const path=resolve(out),manifestPath=path+'.source.json';
+  const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+  const relativeToRepository=relative(root,path);
+  if(relativeToRepository==='' || (relativeToRepository!=='..' && !relativeToRepository.startsWith('..'+sep) && !isAbsolute(relativeToRepository)))
+    throw new Error('Hipparcos data output must be outside the Git repository');
   if(existsSync(path) || existsSync(manifestPath))
     throw new Error('Output file already exists; no overwrite allowed');
   const {raw,provenance}=await acquireHipparcos2007({expectedArchiveSha256:args['--archive-sha256']});
