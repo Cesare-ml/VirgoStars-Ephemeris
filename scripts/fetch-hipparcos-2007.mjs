@@ -3,7 +3,7 @@
 // 2026-11-15: explicitly invoked, offline-output-only Hipparcos archive acquisition.
 // No imports/calculations fetch external data; this CLI runs only when requested.
 import {createHash} from 'node:crypto';
-import {existsSync,writeFileSync,unlinkSync} from 'node:fs';
+import {existsSync,readFileSync,writeFileSync,unlinkSync} from 'node:fs';
 import {isAbsolute,resolve,relative,dirname,sep} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL,fileURLToPath} from 'node:url';
@@ -14,6 +14,45 @@ const MAX_GZIP_BYTES=20*1024*1024;
 const SHA_PATTERN=/^[a-f0-9]{64}$/;
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 
+/**
+ * Decodes only explicitly supplied gzip bytes. Provenance labels distinguish
+ * an archive fetched from a known URL from an arbitrary user-supplied file.
+ * Neither mode establishes that its contents have passed scientific review.
+ */
+export function decodeHipparcos2007Archive(archive,{
+  expectedArchiveSha256,
+  requireFullCatalog=true,
+  acquiredFromOfficialMirror=false,
+}={}) {
+  if(expectedArchiveSha256!==undefined && !SHA_PATTERN.test(expectedArchiveSha256))
+    throw new Error('Expected archive SHA-256 must be 64 lowercase hex characters');
+  if(!Buffer.isBuffer(archive) || archive.length<2 || archive.length>MAX_GZIP_BYTES || archive[0]!==0x1f || archive[1]!==0x8b)
+    throw new Error('Source did not return a valid size-bounded gzip archive');
+  const archiveSha256=sha(archive);
+  if(expectedArchiveSha256!==undefined && archiveSha256!==expectedArchiveSha256)
+    throw new Error('Archive SHA-256 does not match independently pinned input');
+  let raw;
+  try {raw=gunzipSync(archive,{maxOutputLength:HIP2_MAX_BYTES});}
+  catch {throw new Error('Hipparcos gzip decompression or output-size verification failed');}
+  const lines=readHip2Rows(raw,{requireFullCatalog});
+  return {
+    raw,
+    provenance:{
+      sourceUrl:acquiredFromOfficialMirror?OFFICIAL_HIP2_GZIP_URL:null,
+      acquisitionMode:acquiredFromOfficialMirror?'EXPLICIT_HTTPS_DOWNLOAD':'OPERATOR_SUPPLIED_LOCAL_ARCHIVE',
+      catalog:'CDS I/311/hip2 candidate; van Leeuwen 2007; corrected release dated 16 September 2008',
+      sourceArchiveSha256:archiveSha256,
+      sourceArchiveSha256IndependentPin:expectedArchiveSha256!==undefined,
+      rawSha256:sha(raw),
+      rows:lines.length,
+      rowLength:276,
+      provenanceStatus:'SOURCE_AND_LOCAL_BYTES_RECORDED_NOT_DATA_AUTHENTICITY_OR_SCIENCE_CERTIFIED',
+      sourceReadMeUrl:'https://vizier.cfa.harvard.edu/ftp/cats/I/311/ReadMe',
+      warning:'A checksum pins exact bytes but does not authenticate an untrusted source. Review data authenticity, attribution and redistribution rights; do not commit the raw catalog to Git.',
+    },
+  };
+}
+
 export async function acquireHipparcos2007({
   fetchImpl=fetch,
   expectedArchiveSha256,
@@ -22,7 +61,7 @@ export async function acquireHipparcos2007({
   if(typeof fetchImpl!=='function') throw new TypeError('A fetch implementation is required');
   if(expectedArchiveSha256!==undefined && !SHA_PATTERN.test(expectedArchiveSha256))
     throw new Error('Expected archive SHA-256 must be 64 lowercase hex characters');
-  // An explicit CLI action, never an import side effect or a runtime calculation.
+  // An explicit operator action, never an import side effect or a runtime calculation.
   const response=await fetchImpl(OFFICIAL_HIP2_GZIP_URL,{
     method:'GET',redirect:'error',headers:{'accept-encoding':'identity'},
     signal:AbortSignal.timeout(120000),
@@ -32,38 +71,14 @@ export async function acquireHipparcos2007({
   if(Number.isFinite(declaredSize) && declaredSize>MAX_GZIP_BYTES)
     throw new Error('Hipparcos compressed archive exceeds the configured 20 MiB cap');
   const archive=Buffer.from(await response.arrayBuffer());
-  if(archive.length<2 || archive.length>MAX_GZIP_BYTES || archive[0]!==0x1f || archive[1]!==0x8b)
-    throw new Error('Source did not return a valid size-bounded gzip archive');
-  const archiveSha256=sha(archive);
-  if(expectedArchiveSha256!==undefined && archiveSha256!==expectedArchiveSha256)
-    throw new Error('Archive SHA-256 does not match independently pinned input');
-  let raw;
-  try {raw=gunzipSync(archive,{maxOutputLength:HIP2_MAX_BYTES});}
-  catch {throw new Error('Hipparcos gzip decompression or output-size verification failed');}
-  const lines=readHip2Rows(raw,{requireFullCatalog});
-  const rawSha256=sha(raw);
-  return {
-    raw,
-    provenance:{
-      sourceUrl:OFFICIAL_HIP2_GZIP_URL,
-      catalog:'CDS I/311/hip2; van Leeuwen 2007; corrected source release 16 September 2008',
-      sourceArchiveSha256:archiveSha256,
-      sourceArchiveSha256IndependentPin:expectedArchiveSha256!==undefined,
-      rawSha256,
-      rows:lines.length,
-      rowLength:276,
-      provenanceStatus:'SOURCE_URL_AND_LOCAL_BYTES_LOGGED_NOT_RIGHTS_OR_SCIENCE_CERTIFIED',
-      sourceReadMeUrl:'https://vizier.cfa.harvard.edu/ftp/cats/I/311/ReadMe',
-      warning:'This is a local third-party data copy. Review source attribution and redistribution rights before publishing; do not commit it to Git.',
-    },
-  };
+  return decodeHipparcos2007Archive(archive,{expectedArchiveSha256,requireFullCatalog,acquiredFromOfficialMirror:true});
 }
 
 export async function runHipparcosDownload(argv) {
   const args=Object.fromEntries(argv.filter(x=>x.startsWith('--')&&x.includes('=')).map(s=>{
     const i=s.indexOf('=');return [s.slice(0,i),s.slice(i+1)];
   }));
-  for(const key of Object.keys(args)) if(!['--out','--archive-sha256'].includes(key))
+  for(const key of Object.keys(args)) if(!['--out','--archive-sha256','--archive'].includes(key))
     throw new Error(`Unknown option ${key}`);
   const out=args['--out'];
   if(typeof out!=='string' || !isAbsolute(out)) throw new Error('--out must be an absolute file path outside the repository');
@@ -74,7 +89,13 @@ export async function runHipparcosDownload(argv) {
     throw new Error('Hipparcos data output must be outside the Git repository');
   if(existsSync(path) || existsSync(manifestPath))
     throw new Error('Output file already exists; no overwrite allowed');
-  const {raw,provenance}=await acquireHipparcos2007({expectedArchiveSha256:args['--archive-sha256']});
+  if(args['--archive']!==undefined && (!args['--archive'] || !isAbsolute(args['--archive'])))
+    throw new Error('--archive must be an absolute path to an existing gzip file');
+  const {raw,provenance}=args['--archive']===undefined
+    ?await acquireHipparcos2007({expectedArchiveSha256:args['--archive-sha256']})
+    :decodeHipparcos2007Archive(readFileSync(resolve(args['--archive'])),{
+      expectedArchiveSha256:args['--archive-sha256'],
+    });
   let wroteRaw=false;
   try{
     writeFileSync(path,raw,{flag:'wx',mode:0o600});wroteRaw=true;
