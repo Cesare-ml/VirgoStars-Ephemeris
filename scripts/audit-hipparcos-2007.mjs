@@ -38,7 +38,8 @@ export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
     const snr=uncertainties.parallaxMas!==null && uncertainties.parallaxMas>0 && obs.parallaxMas>0
       ? obs.parallaxMas/uncertainties.parallaxMas : null;
     const missingOtherFormalErrors=Object.entries(uncertainties).some(([label,value])=>label!=='parallaxMas' && value===null);
-    const status=!isSimple ? 'COMPLEX_ASTROMETRY_REVIEW'
+    const status=obs.solutionCode===0 ? 'UNDOCUMENTED_ZERO_SOLUTION_REVIEW'
+      : !isSimple ? 'COMPLEX_ASTROMETRY_REVIEW'
       : obs.parallaxMas<=0 ? 'NONPOSITIVE_PARALLAX'
       : snr===null ? 'PARALLAX_UNCERTAINTY_UNAVAILABLE'
       : missingOtherFormalErrors ? 'OTHER_FORMAL_UNCERTAINTIES_UNAVAILABLE'
@@ -52,7 +53,7 @@ export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
       properMotionRaCosDecMasPerYear:obs.pmRa,properMotionDecMasPerYear:obs.pmDec,
       uncertainties,parallaxSignalToNoise:snr,status,
       catalogReady:false,
-      blockers:['No independently vetted Johnson V magnitude attached','No independently vetted barycentric radial velocity attached','No epoch-by-epoch independent position calculation validation'],
+      blockers:[...(obs.solutionCode===0?['Zero solution type requires authoritative scientific review']:[]),'No independently vetted Johnson V magnitude attached','No independently vetted barycentric radial velocity attached','No epoch-by-epoch independent position calculation validation'],
     });
   }
   const stars=targets.stars.map(star=>results.get(star.hip) ?? {

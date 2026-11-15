@@ -58,6 +58,14 @@ test('complex Hipparcos astrometry is excluded unless explicitly opted in and ma
  assert.equal(audit.stars[0].components,2);
  assert.equal(audit.stars[0].astrometryReviewStatus,'EXPERIMENTAL_COMPLEX_SOLUTION_NOT_CERTIFIED');
 });
+test('zero solution is auditable but never imported under the complex override',()=>{
+ const row=line(123,'1.3','0.5','10','2','3',0,1);
+ assert.equal(parseHip2Line(row).solutionCode,0);
+ const [h,s,opts]=input(row);
+ assert.throws(()=>buildHipparcosCatalog(h,s,opts),/zero solution type/);
+ assert.throws(()=>buildHipparcosCatalog(h,s,{...opts,allowComplexSolutions:true}),/zero solution type/);
+ assert.throws(()=>parseHip2Line(line(123,'1.3','0.5','10','2','3',2,1)),/Invalid Hipparcos/);
+});
 test('heliocentric radial velocities cannot be silently treated as barycentric',()=>{
  const row=line(123,'1.3','0.5','10','2','3');
  const supplement=`${header}\n123\tTestStar\tOther Name\t2.45\thttps://example.org/mag\t12.5\thttps://example.org/rv\tHELIOCENTRIC\thttps://example.org/names\n`;

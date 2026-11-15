@@ -43,7 +43,7 @@ Run `node --test test/import-hipparcos-2007.test.mjs` and `node --test test/fixe
 
 ## Formal-uncertainty export gate (2026-11-15)
 
-The CDS I/311 official [Hipparcos 2007 ReadMe](https://vizier.cfa.harvard.edu/ftp/cats/I/311/ReadMe) was reviewed against the importer. Its fixed-width columns `HIP` (1–6), `Sn` (8–10), `Nc` (14), `RArad` (16–28), `DErad` (30–42), `Plx` (44–50), `pmRA` (52–59), `pmDE` (61–68), and the five *formal astrometric uncertainties* (70–103) match the currently implemented byte offsets. The actual original 117,955-row gzip cannot currently be downloaded from this agent's environment due to outbound network/DNS restrictions; verification of a real file's individual values **has not been performed**.
+The CDS I/311 official [Hipparcos 2007 ReadMe](https://vizier.cfa.harvard.edu/ftp/cats/I/311/ReadMe) was reviewed against the importer. Its fixed-width columns `HIP` (1–6), `Sn` (8–10), `Nc` (14), `RArad` (16–28), `DErad` (30–42), `Plx` (44–50), `pmRA` (52–59), `pmDE` (61–68), and the five *formal astrometric uncertainties* (70–103) match the currently implemented byte offsets. On 2026-11-15 a local HTTPS download from the documented Harvard CDS mirror passed the full structural check (117,955 rows, 276 characters and unique HIP identifiers); its uncompressed SHA-256 was `c45d6325bd59dd691764af173a9702e543804a2b6c1d9fea59210e8332e50a4a`. The digest records these bytes but was not checked against an independent authoritative digest. The file remains outside the repository; licensing, measurement quality and numeric position validation remain separate gates.
 
 **New importer safety rule:** An accepted stellar row must have all five published formal uncertainties (`e_RArad`, `e_DErad`, `e_Plx`, `e_pmRA`, `e_pmDE`); `e_Plx` must be strictly positive. In addition to a positive parallax, the signal-to-noise ratio `Plx/e_Plx` must be at least **5 by default**. This `5` threshold is a VirgoStars selection policy, not an official Hipparcos catalogue rule and **not a scientific certification**. Do not infer missing errors as zero or claim that high SNR excludes orbital motion, astrometric systematic errors, spurious associations or variability.
 
@@ -70,7 +70,17 @@ The optional `scripts/audit-hipparcos-2007.mjs` performs a *read-only analysis* 
 | 91–96, 98–103 | mas/year | Proper-motion formal errors |
 | 8–10, 14 | codes | Solution type `Sn` and component count `Nc` |
 
-The quality check classifies each of the 81 HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
+The quality check classifies each of the 81 HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `OTHER_FORMAL_UNCERTAINTIES_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, `UNDOCUMENTED_ZERO_SOLUTION_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
+
+On the locally downloaded file, the 81 target identities yielded 43 standard
+prechecks, 36 complex solutions, one low-parallax-SNR case and one zero-solution
+case, with no target missing. Five records in the complete file have `Sn=0`;
+the target with this value is Sirius. The ReadMe specifies the field range as
+including zero but does not explain a zero solution in its solution-type note.
+The parser preserves this code for audit, marks it `UNDOCUMENTED_ZERO_SOLUTION_REVIEW`
+and refuses import even with the complex-solution override; it must not be
+silently treated as a normal five-parameter solution. The audit is a structural
+and quality precheck only; no star has been certified as ready for use.
 
 ### Genuine dataset source
 
