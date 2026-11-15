@@ -6,6 +6,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {HIP2_ROWS,parseHip2Line} from './import-hipparcos-2007.mjs';
+import {readHip2Rows} from './hipparcos-source-rows.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const optionalNonnegative = (line,start,end,label) => {
@@ -42,19 +43,11 @@ export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
     byHip.set(star.hip,star);
     byName.add(star.name.toLowerCase());
   }
-  const raw=hip2Bytes.toString('utf8');
-  const lines=raw.split(/\r?\n/);
-  if (lines.at(-1)==='') lines.pop();
-  if (requireFullCatalog && lines.length!==HIP2_ROWS) throw new Error(`Expected ${HIP2_ROWS} raw Hipparcos rows, got ${lines.length}`);
-  const seenHip=new Set(),results=new Map();
+  const lines=readHip2Rows(hip2Bytes,{requireFullCatalog});
+  const results=new Map();
   for (let i=0;i<lines.length;i++) {
     const line=lines[i];
-    if (line.length!==276) throw new Error(`hip2.dat line ${i+1}: expected 276 characters, got ${line.length}`);
-    const hipText=line.slice(0,6).trim();
-    if (!/^\d+$/.test(hipText)) throw new Error(`Invalid HIP in source line ${i+1}`);
-    const hip=Number(hipText);
-    if (seenHip.has(hip)) throw new Error(`Repeated source HIP ${hip}`);
-    seenHip.add(hip);
+    const hip=Number(line.slice(0,6).trim());
     const target=byHip.get(hip);
     if (!target) continue;
     const obs=parseHip2Line(line);
