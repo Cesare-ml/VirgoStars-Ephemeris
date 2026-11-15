@@ -8,7 +8,7 @@ const manifest=JSON.parse(readFileSync(new URL('../docs/data/fixed-stars-target-
 
 test('fixed-star target crossmatches are distinct sourced HIP IDs, never simulated measurements',()=>{
   assert.equal(manifest.schemaVersion,1);
-  assert.ok(manifest.stars.length>=10);
+  assert.ok(manifest.stars.length>=20);
   const ids=new Set(),names=new Set();
   for(const item of manifest.stars){
     assert.ok(Number.isSafeInteger(item.hip)&&item.hip>0);
@@ -27,4 +27,7 @@ test('fixed-star target crossmatches are distinct sourced HIP IDs, never simulat
   assert.equal(manifest.stars.find(x=>x.name==='Sirius')?.hip,32349);
   assert.equal(manifest.stars.find(x=>x.name==='Spica')?.hip,65474);
   assert.equal(manifest.stars.find(x=>x.name==='Regulus')?.hip,49669);
+  assert.equal(manifest.stars.find(x=>x.name==='Altair')?.hip,97649);
+  assert.equal(manifest.stars.find(x=>x.name==='Deneb')?.hip,102098);
+  assert.equal(manifest.stars.find(x=>x.name==='Castor')?.hip,36850);
 });
