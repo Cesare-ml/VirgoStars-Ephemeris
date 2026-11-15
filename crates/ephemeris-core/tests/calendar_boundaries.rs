@@ -152,11 +152,15 @@ fn invalid_calendar_fields_and_fractional_julian_dates_are_rejected() {
     }
 }
 
-
 #[test]
 fn every_exact_minute_tick_round_trips_canonically_for_both_calendars_and_all_scales() {
     for calendar in [Calendar::ProlepticGregorian, Calendar::ProlepticJulian] {
-        for scale in [TimeScale::Tai, TimeScale::Tt, TimeScale::Tdb, TimeScale::Ut1] {
+        for scale in [
+            TimeScale::Tai,
+            TimeScale::Tt,
+            TimeScale::Tdb,
+            TimeScale::Ut1,
+        ] {
             for minute_of_day in 0..(24 * 60) {
                 let original = CalendarDateTime {
                     year: 2026,
@@ -200,7 +204,10 @@ fn just_before_minute_is_not_rounded_forward_to_the_next_minute() {
                 .to_calendar(calendar)
                 .unwrap();
             assert_eq!(recovered.hour, 0, "calendar={calendar:?}, scale={scale:?}");
-            assert_eq!(recovered.minute, 12, "calendar={calendar:?}, scale={scale:?}");
+            assert_eq!(
+                recovered.minute, 12,
+                "calendar={calendar:?}, scale={scale:?}"
+            );
             assert!(
                 recovered.second >= 59.999_998 && recovered.second < 60.0,
                 "calendar={calendar:?}, scale={scale:?}, got {}",
