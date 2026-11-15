@@ -16,6 +16,7 @@
 //!
 //! This is calendar arithmetic on a specified time scale, not a conversion
 //! between time scales. UTC and leap seconds are deliberately not supported.
+// Modification (2026-11-15): preserve canonical civil minute labels across split-JD round-trips.
 
 use std::error::Error;
 use std::fmt;
