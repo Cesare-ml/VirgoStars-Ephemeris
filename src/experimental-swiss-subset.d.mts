@@ -1,5 +1,5 @@
 export declare const SE_JUL_CAL:0,SE_GREG_CAL:1,SEFLG_JPLEPH:1,SEFLG_SWIEPH:2,SEFLG_HELCTR:8,SEFLG_SPEED:256,SEFLG_EQUATORIAL:2048;
-export declare const SE_SUN:0,SE_MOON:1,SE_MERCURY:2,SE_VENUS:3,SE_MARS:4,SE_JUPITER:5,SE_SATURN:6,SE_URANUS:7,SE_NEPTUNE:8,SE_PLUTO:9;
+export declare const SE_ECL_NUT:-1,SE_SUN:0,SE_MOON:1,SE_MERCURY:2,SE_VENUS:3,SE_MARS:4,SE_JUPITER:5,SE_SATURN:6,SE_URANUS:7,SE_NEPTUNE:8,SE_PLUTO:9;
 export interface ExperimentalSwissResult {
   readonly longitude:number; readonly latitude:number; readonly distance:number;
   readonly longitudeSpeed:number; readonly latitudeSpeed:number; readonly distanceSpeed:number;
@@ -9,6 +9,10 @@ export interface ExperimentalEquatorialResult {
   readonly rectAscension:number;readonly declination:number;readonly distance:number;
   readonly rectAscensionSpeed:number;readonly declinationSpeed:number;readonly distanceSpeed:number;
   readonly rflag:number;readonly model:'EXPERIMENTAL_DE441_IAU2006_2000B';readonly warnings:readonly string[];
+}
+/** Six Swiss-shaped fields encode obliquities and nutations, not positions or speeds. */
+export interface ExperimentalEclipticNutation extends Omit<ExperimentalSwissResult,'model'|'rflag'> {
+  readonly model:'EXPERIMENTAL_IAU2006_2000B_NUTATION';readonly rflag:0;
 }
 export interface ExperimentalStarRecord {
   readonly name:string;readonly aliases:readonly string[];readonly epochTdbJulianDay:number;
@@ -33,10 +37,13 @@ export interface ExperimentalHouses {readonly house:readonly number[];readonly a
 export interface ExperimentalHousePosition {readonly housePosition:number;readonly model:'EXPERIMENTAL_PLACIDUS_POSITION';readonly warnings:readonly string[];}
 export interface ExperimentalSwissSubset {
   readonly SE_JUL_CAL:0;readonly SE_GREG_CAL:1;readonly SEFLG_JPLEPH:1;readonly SEFLG_SWIEPH:2;readonly SEFLG_HELCTR:8;readonly SEFLG_EQUATORIAL:2048;readonly SEFLG_SPEED:256;
-  readonly SE_SUN:0;readonly SE_MOON:1;readonly SE_MERCURY:2;readonly SE_VENUS:3;readonly SE_MARS:4;readonly SE_JUPITER:5;readonly SE_SATURN:6;readonly SE_URANUS:7;readonly SE_NEPTUNE:8;readonly SE_PLUTO:9;
+  readonly SE_ECL_NUT:-1;readonly SE_SUN:0;readonly SE_MOON:1;readonly SE_MERCURY:2;readonly SE_VENUS:3;readonly SE_MARS:4;readonly SE_JUPITER:5;readonly SE_SATURN:6;readonly SE_URANUS:7;readonly SE_NEPTUNE:8;readonly SE_PLUTO:9;
+  swe_get_planet_name(body:number,callback?:(result:Readonly<{name:string}>)=>void):Readonly<{name:string}>;
+  swe_calc(julianDayTt:number,body:-1,flags:0,callback?:(result:ExperimentalEclipticNutation)=>void):Readonly<ExperimentalEclipticNutation>;
   swe_julday(year:number,month:number,day:number,hour:number,calendarFlag:0|1):number;
   swe_revjul(julianDay:number,calendarFlag:0|1):Readonly<{year:number;month:number;day:number;hour:number}>;
-  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult>;
+  swe_calc_ut(julianDay:number,body:-1,flags:0,callback?:(result:ExperimentalEclipticNutation)=>void):Readonly<ExperimentalEclipticNutation>;
+  swe_calc_ut(julianDay:number,body:number,flags:number,callback?:(result:ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation)=>void):Readonly<ExperimentalSwissResult|ExperimentalEquatorialResult|ExperimentalEclipticNutation>;
   swe_fixstar_ut(name:string,julianDay:number,flags:number,callback?:(result:ExperimentalStarResult)=>void):Readonly<ExperimentalStarResult>;
   swe_fixstar_mag(name:string,callback?:(result:Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>)=>void):Readonly<{name:string;magnitude:number;catalogId:string;model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'}>;
   swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalHouses)=>void):Readonly<ExperimentalHouses>;

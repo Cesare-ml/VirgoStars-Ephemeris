@@ -19,6 +19,7 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
     julday_f64, revjul_f64, DecimalHourDateTime,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::equatorial_horizontal::{
     noaa_standard_refraction, true_equatorial_to_horizontal,
 };
@@ -80,6 +81,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 3 && args[1] == "ecl_nut" {
+        let values = ecliptic_nutation(arg(2)?.parse()?)?.to_swiss_ecl_nut();
+        println!("true_obliquity_deg,mean_obliquity_deg,nutation_longitude_deg,nutation_obliquity_deg,reserved_4,reserved_5");
+        println!(
+            "{:.15},{:.15},{:.15},{:.15},{:.15},{:.15}",
+            values[0], values[1], values[2], values[3], values[4], values[5]
+        );
+        return Ok(());
+    }
     if args.len() == 8 && args[1] == "coordinate_epoch" {
         let mode = arg(2)?;
         let name = arg(5)?;
