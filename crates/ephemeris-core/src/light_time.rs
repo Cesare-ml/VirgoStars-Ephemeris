@@ -73,6 +73,7 @@ pub struct HeliocentricLightTimeState {
 #[derive(Debug)]
 pub enum LightTimeError {
     Ephemeris(De441Error),
+    SupplementalSpk(crate::spk_relative_state::SpkRelativeError),
     /// No direction exists for the observer itself or a zero-range target.
     UndefinedDirection,
     /// Non-finite geometry or an invalid light-time derivative denominator.
@@ -85,6 +86,7 @@ impl fmt::Display for LightTimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Ephemeris(error) => write!(f, "light-time ephemeris error: {error}"),
+            Self::SupplementalSpk(error) => write!(f, "light-time supplemental SPK error: {error}"),
             Self::UndefinedDirection => write!(f, "light-time direction is undefined"),
             Self::InvalidGeometry => write!(f, "invalid light-time geometry or velocity"),
             Self::DidNotConverge => write!(f, "light-time iteration did not converge"),
@@ -96,6 +98,7 @@ impl Error for LightTimeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Ephemeris(error) => Some(error),
+            Self::SupplementalSpk(error) => Some(error),
             _ => None,
         }
     }
@@ -165,6 +168,22 @@ fn solve_from_observer<F>(
 ) -> Result<GeocentricLightTimeState, LightTimeError>
 where
     F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from_observer_custom(target, center, observation_epoch, |body, epoch| {
+        barycentric_state(body, epoch).map_err(LightTimeError::Ephemeris)
+    })
+}
+
+// Preserve the existing iteration and derivative for explicitly composed
+// sources, with supplemental I/O failures propagated without fallback.
+pub(crate) fn solve_from_observer_custom<F>(
+    target: Body,
+    center: Body,
+    observation_epoch: JulianDateTdb,
+    mut barycentric_state: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, LightTimeError>,
 {
     if target == center {
         return Err(LightTimeError::UndefinedDirection);

@@ -31,6 +31,8 @@ use virgostars_ephemeris_core::horizon_events::{
 };
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
+use virgostars_ephemeris_core::physical_center::{geocentric_physical_center, PhysicalPlanet};
+use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
 use virgostars_ephemeris_core::true_ecliptic::{
     geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil,
     geocentric_true_equatorial_from_civil, heliocentric_true_ecliptic_from_civil,
@@ -74,6 +76,34 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 7 && args[1] == "physical_epoch" {
+        let planet = match arg(4)? {
+            "Mars" => PhysicalPlanet::Mars,
+            "Jupiter" => PhysicalPlanet::Jupiter,
+            "Saturn" => PhysicalPlanet::Saturn,
+            _ => return Err("unsupported physical planet".into()),
+        };
+        let tt = arg(5)?.parse()?;
+        let tdb = JulianDateTdb(arg(6)?.parse()?);
+        let mut eph = De441::open(&args[2])?;
+        let mut kernels = SpkKernelSet::new();
+        kernels.load(std::fs::File::open(&args[3])?)?;
+        let state = geocentric_physical_center(&mut eph, &mut kernels, planet, tdb, tt)?;
+        println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        println!(
+            "{:?},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            state.planet,
+            state.tt_jd,
+            state.tdb.0,
+            state.longitude_deg,
+            state.latitude_deg,
+            state.distance_au,
+            state.longitude_speed_deg_per_tdb_day,
+            state.latitude_speed_deg_per_tdb_day,
+            state.distance_speed_au_per_tdb_day
+        );
+        return Ok(());
+    }
     if args.len() == 12 && args[1] == "star_epoch" {
         let tt = arg(3)?.parse()?;
         let tdb = JulianDateTdb(arg(4)?.parse()?);

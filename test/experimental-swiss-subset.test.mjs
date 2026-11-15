@@ -32,10 +32,32 @@ test('catalog aliases and magnitudes are explicit immutable input snapshots',()=
 test('rejects absent converters, unsupported bodies, flags and incoherent epochs without fallback',()=>{
   assert.throws(()=>create({executablePath:'x',kernelPath:'y'}),TypeError);
   const api=create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})});
-  assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_MARS,api.SEFLG_JPLEPH),/physical centers/);
+  assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_MARS,api.SEFLG_JPLEPH),/physical-center SPK/);
+  assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_URANUS,api.SEFLG_JPLEPH),/physical centers/);
+  assert.throws(()=>create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({}),physicalCenterKernels:{Mars:''}}),/SPK/);
   assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,api.SEFLG_SWIEPH),/flags/);
   assert.throws(()=>api.swe_calc_ut(2461354.5,api.SE_SUN,api.SEFLG_JPLEPH),/same instant/);
   assert.throws(()=>api.swe_julday(2000,1,1,12),/calendar/);
+});
+
+test('real physical centers require supplemental kernels and expose speeds',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH || !process.env.MARS_SPK_PATH || !process.env.JUPITER_SPK_PATH || !process.env.SATURN_SPK_PATH,
+},()=>{
+  const paths={Mars:process.env.MARS_SPK_PATH,Jupiter:process.env.JUPITER_SPK_PATH,Saturn:process.env.SATURN_SPK_PATH};
+  const api=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,physicalCenterKernels:paths,
+    convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.000800741,tdbJulianDay:ut1+0.000800725})});
+  paths.Mars='changed-after-construction';
+  for(const body of [api.SE_MARS,api.SE_JUPITER,api.SE_SATURN]){
+    let callback;
+    const result=api.swe_calc_ut(2461354.5,body,api.SEFLG_JPLEPH|api.SEFLG_SPEED,value=>{callback=value;});
+    assert.equal(callback,result);
+    assert.ok(result.longitude>=0 && result.longitude<360 && result.distance>0);
+    assert.ok(Number.isFinite(result.longitudeSpeed) && result.longitudeSpeed!==0);
+    assert.ok(result.warnings.includes('PHYSICAL_CENTER_SPK_EXPLICIT'));
+    const noSpeed=api.swe_calc_ut(2461354.5,body,api.SEFLG_JPLEPH);
+    assert.deepEqual([noSpeed.longitudeSpeed,noSpeed.latitudeSpeed,noSpeed.distanceSpeed],[0,0,0]);
+  }
+  assert.throws(()=>api.swe_calc_ut(2451545,api.SE_MARS,api.SEFLG_JPLEPH),/SupplementalSpk/);
 });
 
 test('real DE441 subset supports calendar, physical targets and sync callbacks',{
