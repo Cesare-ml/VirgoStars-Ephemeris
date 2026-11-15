@@ -142,16 +142,29 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       return Object.freeze({ armcDeg, ascendantDeg, midheavenDeg, trueObliquityDeg,
         model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME', ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast });
     },
-    findGeometricEvent({target,kind,ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,thresholdAltitudeDeg,windowDays,stepMinutes}) {
+    findGeometricEvent({target,kind,ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,thresholdAltitudeDeg,windowDays,stepMinutes,observerHeightM}) {
       const values=[ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,thresholdAltitudeDeg,windowDays,stepMinutes];
       if(!TARGETS.includes(target) || !['rise','set','upper_transit','lower_transit'].includes(kind) || !values.every(Number.isFinite)) throw new TypeError('A supported target, event kind and all finite search parameters are required');
-      const lines=execute(['event',kernelPath,target,kind,...values.map(String)]);
+      const topocentric=observerHeightM!==undefined;
+      if(topocentric && !Number.isFinite(observerHeightM)) throw new TypeError('Observer height must be finite');
+      const lines=execute([topocentric?'topocentric_event':'event',kernelPath,target,kind,...values.map(String),...(topocentric?[String(observerHeightM)]:[])]);
       if(lines.length!==2 || lines[0]!==EVENT_HEADER) throw new Error('Invalid event CSV contract');
       const [eventKind,eventTarget,...parts]=lines[1].split(',');
       if(eventKind!==kind || eventTarget!==target || parts.length!==4 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid event CSV row');
       const [eventUt1JulianDay,eventTtJulianDay,eventTdbJulianDay,bracketSeconds]=parts.map(Number);
       if(eventUt1JulianDay<ut1JulianDay || eventUt1JulianDay>ut1JulianDay+windowDays || bracketSeconds<0 || bracketSeconds>0.25) throw new Error('Out-of-range event CSV row');
-      return Object.freeze({target,kind,ut1JulianDay:eventUt1JulianDay,ttJulianDay:eventTtJulianDay,tdbJulianDay:eventTdbJulianDay,bracketSeconds,model:'EXPERIMENTAL_GEOCENTRIC_GEOMETRIC',warnings:Object.freeze(['NOT_SWISS_PARITY','NO_PARALLAX','NO_REFRACTION','NO_LIMB','NO_UT1_INTERPOLATION','SAMPLING_MAY_MISS_CROSSINGS'])});
+      return Object.freeze({target,kind,ut1JulianDay:eventUt1JulianDay,ttJulianDay:eventTtJulianDay,tdbJulianDay:eventTdbJulianDay,bracketSeconds,model:topocentric?'EXPERIMENTAL_TOPOCENTRIC_GEOMETRIC':'EXPERIMENTAL_GEOCENTRIC_GEOMETRIC',warnings:Object.freeze(['NOT_SWISS_PARITY',...(topocentric?['NO_DIURNAL_ABERRATION','NO_OBSERVER_LIGHT_TIME']:['NO_PARALLAX']),'NO_REFRACTION','NO_LIMB','NO_UT1_INTERPOLATION','SAMPLING_MAY_MISS_CROSSINGS'])});
+    },
+    calculateTopocentricDirection({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,observerHeightM,rightAscensionDeg,declinationDeg,distanceAu}) {
+      const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,observerHeightM,rightAscensionDeg,declinationDeg,distanceAu];
+      if(!values.every(Number.isFinite)) throw new TypeError('Finite epochs, observer and geocentric direction are required');
+      const lines=execute(['topocentric',...values.map(String)]);
+      if(lines.length!==2 || lines[0]!=='ra_deg,declination_deg') throw new Error('Invalid topocentric CSV contract');
+      const parts=lines[1].split(',');
+      if(parts.length!==2 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid topocentric CSV row');
+      const [rightAscensionDegResult,declinationDegResult]=parts.map(Number);
+      if(rightAscensionDegResult<0 || rightAscensionDegResult>=360 || Math.abs(declinationDegResult)>90) throw new Error('Out-of-range topocentric direction');
+      return Object.freeze({rightAscensionDeg:rightAscensionDegResult,declinationDeg:declinationDegResult,model:'EXPERIMENTAL_WGS84_PARALLAX',warnings:Object.freeze(['NO_DIURNAL_ABERRATION','NO_OBSERVER_LIGHT_TIME','NO_POLAR_MOTION'])});
     },
     calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
       const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];

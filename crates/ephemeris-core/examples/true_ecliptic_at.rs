@@ -20,9 +20,10 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::equatorial_horizontal::true_equatorial_to_horizontal;
-use virgostars_ephemeris_core::first_sky::CivilTimestamp;
+use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::horizon_events::{
-    find_geometric_event, HorizonEventKind, HorizonEventSearch,
+    find_geometric_event, find_topocentric_geometric_event, topocentric_equatorial_direction,
+    HorizonEventKind, HorizonEventSearch,
 };
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
@@ -69,7 +70,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
-    if args.len() == 13 && args[1] == "event" {
+    if args.len() == 10 && args[1] == "topocentric" {
+        let site = Observer {
+            latitude_deg: arg(4)?.parse()?,
+            longitude_deg_east: arg(5)?.parse()?,
+            height_m: arg(6)?.parse()?,
+        };
+        let (ra, dec) = topocentric_equatorial_direction(
+            arg(2)?.parse()?,
+            arg(3)?.parse()?,
+            site,
+            arg(7)?.parse()?,
+            arg(8)?.parse()?,
+            arg(9)?.parse()?,
+        )
+        .map_err(|error| error.to_string())?;
+        println!("ra_deg,declination_deg\n{ra:.12},{dec:.12}");
+        return Ok(());
+    }
+    if (args.len() == 13 && args[1] == "event")
+        || (args.len() == 14 && args[1] == "topocentric_event")
+    {
         let target = BODIES
             .into_iter()
             .find(|body| format!("{body:?}") == arg(3).unwrap_or(""))
@@ -94,7 +115,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             step_minutes: arg(12)?.parse()?,
         };
         let mut eph = De441::open(&args[2])?;
-        let event = find_geometric_event(&mut eph, input).map_err(|error| error.to_string())?;
+        let event = if args[1] == "event" {
+            find_geometric_event(&mut eph, input)
+        } else {
+            find_topocentric_geometric_event(&mut eph, input, arg(13)?.parse()?)
+        }
+        .map_err(|error| error.to_string())?;
         println!("event,target,ut1_jd,tt_jd,tdb_jd,bracket_seconds");
         println!(
             "{},{:?},{:.17},{:.17},{:.17},{:.12}",
