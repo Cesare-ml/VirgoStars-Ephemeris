@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Experimental JS regression/reference modules for the canonical Rust engine",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": "./src/index.mjs",
+    "./experimental-rust-cli": "./src/experimental-rust-cli.mjs"
   },
   "engines": {
     "node": ">=20"

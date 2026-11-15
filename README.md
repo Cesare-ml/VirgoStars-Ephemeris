@@ -44,6 +44,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - Requirements and phased architecture being documented.
 - Experimental classic JPL DE441 binary reader in `src/jpl-de441.mjs` with isolated synthetic tests in `test/jpl-de441.test.mjs`.
 - Experimental Rust workspace in `Cargo.toml` and `crates/ephemeris-core/`, with a classic JPL DE441 binary reader and synthetic/integration tests. **This Rust reader is not an SPK `.bsp` reader** and is not scientifically validated; see [DE441 docs](docs/DE441.md).
+- Experimental [true-ecliptic-of-date positions and rates](docs/TRUE_ECLIPTIC_DE441_2026-11-14.md), using a separately supplied classic DE441 file. This is not yet a Swiss Ephemeris replacement or production integration.
 - No production-ready engine, cross-language bindings, published package, numerical-parity claim, or production migration yet.
 - GitHub Actions CI for Node.js regression tests and Rust format/lint/test checks when a Cargo workspace exists on the checked-out branch; no automatic releases or deployment.
 

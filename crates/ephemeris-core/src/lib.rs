@@ -14,22 +14,34 @@
 
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
-//! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
-//! validated real-world astronomical positions are provided at this stage.
+//! Experimental pre-release crate. The classic DE441 reader, bounded civil
+//! time conversion, light-time, aberration and date-frame projection do not
+//! yet constitute a fully validated astronomical or Swiss-compatible engine.
+//! The Rust core does not parse SPK files or silently fall back to lite data.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
 
 #![forbid(unsafe_code)]
 
+pub mod aberrated_spherical;
+pub mod aberration;
+pub mod aberration_state;
 pub mod calendar;
+pub mod calendar_decimal_hours;
 pub mod chebyshev;
+pub mod civil_aberrated;
 pub mod coordinates;
 pub mod de441;
+pub mod earth_orientation;
 pub mod error;
+pub mod first_sky;
+pub mod house_angles;
+pub mod light_time;
+pub mod six_field_units;
 pub mod state;
 pub mod time;
+pub mod true_ecliptic;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
