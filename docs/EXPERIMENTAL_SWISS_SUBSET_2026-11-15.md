@@ -159,6 +159,10 @@ separately enables the finite-source correction for geocentric planets, with
 numerical rates and a solar-occultation error; heliocentric output is unaffected.
 See [finite-source notes](FINITE_SOLAR_DEFLECTION_2026-11-15.md).
 
+An optional [explicit legacy bridge](EXPERIMENTAL_LEGACY_BRIDGE_2026-11-15.md)
+can translate legacy source requests to the configured JPL source with an
+explicit policy and warnings. It does not make this module a drop-in binding.
+
 The coordinate-flag test uses a local DE441, six supplemental SPKs and all ten
 targets, with same-TT Swiss 2.09.03 values as limited diagnostics. On that
 single date the largest heliocentric longitude difference is about 0.000187°

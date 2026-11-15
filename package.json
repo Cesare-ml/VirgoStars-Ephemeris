@@ -11,6 +11,10 @@
       "types": "./src/experimental-utc-instant.d.mts",
       "import": "./src/experimental-utc-instant.mjs"
     },
+    "./experimental-legacy-bridge": {
+      "types": "./src/experimental-legacy-bridge.d.mts",
+      "import": "./src/experimental-legacy-bridge.mjs"
+    },
     "./experimental-swiss-subset": {
       "types": "./src/experimental-swiss-subset.d.mts",
       "import": "./src/experimental-swiss-subset.mjs"
