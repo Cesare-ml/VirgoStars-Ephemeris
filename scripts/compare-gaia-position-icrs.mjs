@@ -35,9 +35,21 @@ export function parseGaiaPositionTsv(text,expectedId){
 
 /** Input sources and the epoch approximation remain caller assertions. */
 export function compareGaiaPosition({star,hip,sourceId,gaia,executablePath,epochPolicy}){
-  if(epochPolicy!=='TCB_JD_AS_TDB_JD_APPROXIMATION')throw new Error('Explicit TCB-to-TDB approximation policy is required');
+  if(!['TCB_JD_AS_TDB_JD_APPROXIMATION','IAU2006_B3_TCB_TO_TDB'].includes(epochPolicy))throw new Error('Explicit TCB-to-TDB policy is required');
   if(!star || typeof star.name!=='string' || !Number.isSafeInteger(hip) || hip<1 || typeof sourceId!=='string' || !/^[1-9]\d{0,18}$/.test(sourceId) || !gaia || typeof executablePath!=='string' || !isAbsolute(executablePath))throw new TypeError('Catalog star, HIP, exact Gaia source, position and executable required');
-  const values=[star.epochTdbJulianDay,star.rightAscensionDeg,star.declinationDeg,star.properMotionRaCosDecMasPerYear,star.properMotionDecMasPerYear,star.parallaxMas,star.radialVelocityKmPerSecond,GAIA_EPOCH_TCB_JD];
+  let epochTdb=GAIA_EPOCH_TCB_JD,offsetSeconds=null;
+  if(epochPolicy==='IAU2006_B3_TCB_TO_TDB'){
+    const convert=spawnSync(executablePath,['tcb_to_tdb',String(GAIA_EPOCH_TCB_JD),'0'],{encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:65536});
+    if(convert.error)throw new Error(`TCB conversion process failed: ${convert.error.message}`,{cause:convert.error});
+    if(convert.status!==0)throw new Error(`TCB conversion process exited with status ${convert.status}: ${(convert.stderr||'').trim()}`);
+    const lines=convert.stdout.trim().split(/\r?\n/);
+    if(lines.length!==2 || lines[0]!=='tdb_part1,tdb_part2')throw new Error('Invalid TCB conversion output');
+    const parts=lines[1].split(',');if(parts.length!==2 || parts.some(x=>!x.trim() || !Number.isFinite(Number(x))))throw new Error('Invalid TCB conversion row');
+    const [a,b]=parts.map(Number);offsetSeconds=((a-GAIA_EPOCH_TCB_JD)+b)*86400;
+    if(a!==GAIA_EPOCH_TCB_JD || Math.abs(offsetSeconds)>60)throw new Error('Incoherent TCB conversion row');
+    epochTdb=a+b; // existing star CLI accepts one binary64 JD (~40 µs granularity).
+  }
+  const values=[star.epochTdbJulianDay,star.rightAscensionDeg,star.declinationDeg,star.properMotionRaCosDecMasPerYear,star.properMotionDecMasPerYear,star.parallaxMas,star.radialVelocityKmPerSecond,epochTdb];
   if(!values.every(Number.isFinite))throw new TypeError('Finite catalog astrometry required');
   const child=spawnSync(executablePath,['star_icrs',...values.map(String)],{encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:65536});
   if(child.error)throw new Error(`ICRS process failed: ${child.error.message}`,{cause:child.error});
@@ -46,9 +58,9 @@ export function compareGaiaPosition({star,hip,sourceId,gaia,executablePath,epoch
   if(lines.length!==2 || lines[0]!=='tdb_jd,ra_deg,declination_deg,distance_au')throw new Error('Invalid ICRS candidate output');
   const parts=lines[1].split(',');if(parts.length!==4 || parts.some(x=>!x.trim() || !Number.isFinite(Number(x))))throw new Error('Invalid ICRS candidate row');
   const [epoch,ra,dec,distance]=parts.map(Number);
-  if(epoch!==GAIA_EPOCH_TCB_JD || distance<=0)throw new Error('Mismatched ICRS epoch or distance');
+  if(epoch!==epochTdb || distance<=0)throw new Error('Mismatched ICRS epoch or distance');
   const separationArcsec=angularSeparationArcsec(ra,dec,gaia.rightAscensionDeg,gaia.declinationDeg);
-  return {schemaVersion:1,status:'OBSERVED_POSITION_DIAGNOSTIC_NOT_CERTIFIED',hip,name:star.name,gaiaSourceId:sourceId,coordinateFrame:'ICRS',gaiaEpoch:'J2016.0 TCB',candidateEpochTdbJulianDay:epoch,epochPolicy,separationArcsec,gaiaFormalErrorsMas:{ra:gaia.raErrorMas,dec:gaia.decErrorMas},gaiaRuwe:gaia.ruwe,scientificallyValidated:false,limitations:['Source bytes and identity associations are caller assertions, not independently authenticated','Formal errors are not an uncertainty budget; catalog correlations and systematics are not assessed','Gaia J2016 TCB is approximated as the same numeric TDB JD','Hipparcos input epoch is interpreted as TDB; stellar light-time and relativistic motion are omitted','Single source and epoch do not certify stellar astrometry, apparent ecliptic positions or Swiss parity']};
+  return {schemaVersion:1,status:'OBSERVED_POSITION_DIAGNOSTIC_NOT_CERTIFIED',hip,name:star.name,gaiaSourceId:sourceId,coordinateFrame:'ICRS',gaiaEpoch:'J2016.0 TCB',candidateEpochTdbJulianDay:epoch,epochPolicy,tdbMinusTcbSeconds:offsetSeconds,separationArcsec,gaiaFormalErrorsMas:{ra:gaia.raErrorMas,dec:gaia.decErrorMas},gaiaRuwe:gaia.ruwe,scientificallyValidated:false,limitations:['Source bytes and identity associations are caller assertions, not independently authenticated','Formal errors are not an uncertainty budget; catalog correlations and systematics are not assessed',epochPolicy==='IAU2006_B3_TCB_TO_TDB'?'TCB→TDB uses IAU 2006 B3; star CLI consumes a single binary64 JD':'Gaia J2016 TCB is approximated as the same numeric TDB JD','Hipparcos input epoch is interpreted as TDB; stellar light-time and relativistic motion are omitted','Single source and epoch do not certify stellar astrometry, apparent ecliptic positions or Swiss parity']};
 }
 
 export function runGaiaPositionComparison(argv){

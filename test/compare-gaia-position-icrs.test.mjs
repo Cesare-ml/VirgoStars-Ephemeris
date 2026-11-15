@@ -24,7 +24,7 @@ test('Gaia ICRS epoch, exact string identifier and coordinate quality are enforc
   assert.throws(()=>parseGaiaPositionTsv(gaia.toString(),Number(gaiaId)),/source ID/);
   assert.throws(()=>parseGaiaPositionTsv(gaia.toString(),'123'),/exactly one/);
   assert.throws(()=>parseGaiaPositionTsv(gaia.toString().replace('H_2016.000','H_2015.000'),gaiaId),/schema/);
-  assert.throws(()=>compareGaiaPosition({epochPolicy:'automatic'}),/approximation policy/);
+  assert.throws(()=>compareGaiaPosition({epochPolicy:'automatic'}),/TCB-to-TDB policy/);
 });
 
 test('pinned synthetic catalog and observed source flow through the Rust candidate',{
@@ -41,6 +41,12 @@ test('pinned synthetic catalog and observed source flow through the Rust candida
   const report=JSON.parse(readFileSync(join(dir,'out.json'),'utf8'));
   assert.equal(report.gaiaSourceId,gaiaId);assert.equal(report.status,'OBSERVED_POSITION_DIAGNOSTIC_NOT_CERTIFIED');
   assert.equal(report.inputHashes.gaiaObserved,digest(gaia));
+  assert.equal(report.tdbMinusTcbSeconds,null);
+  const iauArgs=args.map(arg=>arg.startsWith('--epoch-policy=')?'--epoch-policy=IAU2006_B3_TCB_TO_TDB':arg.startsWith('--out=')?`--out=${join(dir,'iau.json')}`:arg);
+  const iau=runGaiaPositionComparison(iauArgs);assert.ok(iau.separationArcsec<1e-8);
+  const iauReport=JSON.parse(readFileSync(join(dir,'iau.json'),'utf8'));
+  assert.ok(Math.abs(iauReport.tdbMinusTcbSeconds+19.082696314659184)<1e-9);
+  assert.ok(iauReport.candidateEpochTdbJulianDay<2457389.0);
   assert.throws(()=>runGaiaPositionComparison(args),/EEXIST/);
   writeFileSync(paths[3],Buffer.concat([gaia,Buffer.from(' ')]));
   assert.throws(()=>runGaiaPositionComparison(args),/SHA-256 mismatch/);
