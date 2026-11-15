@@ -103,7 +103,15 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 node scripts/fetch-hipparcos-2007.mjs "--out=$(Join-Path $dataDir 'hip2.dat')"
 ```
 
-This requires normal HTTPS access from the machine executing the command. Source archive SHA-256 may optionally be independently pinned via `--archive-sha256=<64-lowercase-hex>`, obtained from a **trusted external reference**; it is **not** known/pinned by this repository. Without it, the local hashes record byte identity, **not verified publisher authenticity**. Never paste an invented digest. Do not assume possession of the scientific data grants commercial redistribution rights.
+If the HTTPS mirror is blocked but you already obtained the archive through another approved channel, use the **fully offline** mode; no network request is attempted:
+
+```powershell
+node scripts/fetch-hipparcos-2007.mjs "--archive=$(Join-Path $dataDir 'hip2.dat.gz')" "--out=$(Join-Path $dataDir 'hip2.dat')"
+```
+
+The local archive must be an absolute path and must contain the authentic, uncompressed-equivalent 117,955×276-character table. The generated `.source.json` labels `acquisitionMode: OPERATOR_SUPPLIED_LOCAL_ARCHIVE` and leaves `sourceUrl` null: it deliberately does **not** assert that arbitrary local bytes came from the CDS mirror. An independently verified expected archive SHA-256 may be added as `--archive-sha256=<digest>`. The command rejects an existing output; place source and output in a dedicated user data folder, **outside Git**.
+
+This requires normal HTTPS access from the machine executing the command only when no `--archive` argument is supplied. Source archive SHA-256 may optionally be independently pinned via `--archive-sha256=<64-lowercase-hex>`, obtained from a **trusted external reference**; it is **not** known/pinned by this repository. Without it, the local hashes record byte identity, **not verified publisher authenticity**. Never paste an invented digest. Do not assume possession of the scientific data grants commercial redistribution rights.
 
 The downloaded `hip2.dat` can be passed to `scripts/audit-hipparcos-2007.mjs` with its `rawSha256` from the manifest. The complete, genuine CDS integration check remains opt-in and excluded from network-free CI. The importer and auditor now share `scripts/hipparcos-source-rows.mjs` for exact fixed-width integrity checks.
 
