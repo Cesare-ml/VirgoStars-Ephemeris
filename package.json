@@ -6,7 +6,11 @@
   "description": "Experimental JS regression/reference modules for the canonical Rust engine",
   "exports": {
     ".": "./src/index.mjs",
-    "./experimental-rust-cli": "./src/experimental-rust-cli.mjs"
+    "./experimental-rust-cli": "./src/experimental-rust-cli.mjs",
+    "./experimental-swiss-subset": {
+      "types": "./src/experimental-swiss-subset.d.mts",
+      "import": "./src/experimental-swiss-subset.mjs"
+    }
   },
   "engines": {
     "node": ">=20"

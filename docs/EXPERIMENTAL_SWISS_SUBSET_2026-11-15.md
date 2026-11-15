@@ -1,0 +1,54 @@
+# Experimental Swiss-shaped Node subset
+
+`virgostars-ephemeris/experimental-swiss-subset` exports an opt-in factory
+with restricted `swe_julday`, `swe_revjul` and `swe_calc_ut`-shaped calls. It
+uses the compiled Rust example and a separately supplied classic DE441 kernel;
+it does not import Swiss, download data, publish a package or modify the app.
+This is a **partial experimental interface, not a drop-in replacement**.
+
+```js
+import {createExperimentalSwissSubset} from 'virgostars-ephemeris/experimental-swiss-subset';
+
+const swe = createExperimentalSwissSubset({
+  executablePath, kernelPath,
+  // Caller provides a documented time model for the same instant.
+  convertUt1ToTtTdb: ut1JulianDay => getCoherentTtAndTdb(ut1JulianDay),
+});
+const jd = swe.swe_julday(2026,11,10,0,swe.SE_GREG_CAL);
+const sun = swe.swe_calc_ut(jd,swe.SE_SUN,swe.SEFLG_JPLEPH|swe.SEFLG_SPEED);
+```
+
+The converter must synchronously return `{ttJulianDay, tdbJulianDay}` for the
+same instant as the supplied UT1. The sanity checks on their differences do
+not calculate ΔT, UT1−UTC or TDB−TT. Calendar flags are mandatory; dates are
+validated with proleptic Gregorian or Julian arithmetic, and hours must be in
+[0,24). This intentionally differs from Swiss permissive normalization and
+binding-specific defaults. Neither function performs timezone, UTC or leap
+second conversion.
+
+Only Sun, Moon, Mercury and Venus physical centers are accepted by
+`swe_calc_ut`. Other numeric body constants are provided to make rejection
+explicit; Mars and outer system barycenters are **not** silently presented as
+physical planets. Supported flags are exactly `SEFLG_JPLEPH` and
+`SEFLG_JPLEPH | SEFLG_SPEED`: Swiss data, other flags and implicit defaults
+are rejected. An optional callback is invoked synchronously once on success,
+and the same frozen result is returned. Failures throw; callback error behavior
+and the complete Swiss callback API are not implemented. Without the speed
+flag, speed fields are zero. `rflag` reports only the accepted requested JPL
+and speed bits; it does not certify Swiss numerical or physical parity.
+
+The six fields follow the DE441 prototype's Earth-centered light-time plus
+annual-aberration, IAU 2006/2000B true-ecliptic-of-date model. Speeds are per
+reception **TDB day**, not exactly UT1 day. Solar deflection, full nutation,
+complete physical planet-center coverage, all Swiss flag semantics, fixed
+stars, a native Node binary loader and production use remain missing. Model and
+warning fields make the incomplete correction set explicit; consumers must not
+strip or ignore them when interpreting accuracy. Each call starts a process;
+no throughput or concurrency guarantees are made.
+
+The tests use Gregorian and Julian calendar anchors, error and callback cases,
+and four same-TT samples recorded from Swiss 2.09.03 with the same DE441.
+The latter are compatibility diagnostics for this limited sample, not an
+independent validation of the complete model. A real kernel and compiled CLI
+are required for the integration test; set `DE441_PATH` and
+`VIRGOSTARS_EPHEMERIS_CLI`. Tests do not invoke Swiss or redistribute its data.
