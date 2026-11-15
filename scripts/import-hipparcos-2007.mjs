@@ -34,7 +34,9 @@ export function parseHip2Line(line) {
   const hip = numeric(line.slice(0,6), 'HIP');
   const solutionCode = numeric(line.slice(7,10), 'Sn');
   const components = numeric(line.slice(13,14), 'Nc');
-  if (!Number.isSafeInteger(solutionCode) || solutionCode < 0 || solutionCode > 159 || ![1,3,5,7,9].includes(solutionCode % 10) || !Number.isSafeInteger(components) || components < 1) throw new Error('Invalid Hipparcos solution or components');
+  // The official range includes 0; its solution meaning is not specified in
+  // the ReadMe. Preserve it for audit, but never treat it as a known solution.
+  if (!Number.isSafeInteger(solutionCode) || solutionCode < 0 || solutionCode > 159 || (solutionCode!==0 && ![1,3,5,7,9].includes(solutionCode % 10)) || !Number.isSafeInteger(components) || components < 1) throw new Error('Invalid Hipparcos solution or components');
   const ra = numeric(line.slice(15,28), 'RArad');
   const dec = numeric(line.slice(29,42), 'DErad');
   const parallaxMas = numeric(line.slice(43,50), 'Plx');
@@ -92,6 +94,7 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
     if (found.has(hip)) throw new Error(`Duplicate Hipparcos HIP ${hip}`);
     found.add(hip);
     const ast = parseHip2Line(line), extra = supplement.get(hip);
+    if (ast.solutionCode===0) throw new Error(`HIP ${hip}: zero solution type is undocumented; scientific review required before import`);
     const isStandard = ast.solutionCode === 5 && ast.components === 1;
     if (!isStandard && !allowComplexSolutions) throw new Error(`HIP ${hip}: non-standard/multiple/variable astrometric solution (${ast.solutionCode}, ${ast.components} components); explicit scientific review required`);
     if (!(ast.parallaxMas >= 0.001 && ast.parallaxMas <= 10000)) throw new Error(`HIP ${hip}: missing/nonpositive/out-of-range parallax; no invented distance`);

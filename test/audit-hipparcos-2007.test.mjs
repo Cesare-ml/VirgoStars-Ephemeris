@@ -40,6 +40,10 @@ test('weak, missing or negative parallax and complex astrometry are transparentl
  assert.equal(audit(line(123,{plx:10,plxError:null})+'\n').stars[0].status,'PARALLAX_UNCERTAINTY_UNAVAILABLE');
  assert.equal(audit(line(123,{plx:-2,plxError:3})+'\n').stars[0].status,'NONPOSITIVE_PARALLAX');
  assert.equal(audit(line(123,{sn:15,nc:2})+'\n').stars[0].status,'COMPLEX_ASTROMETRY_REVIEW');
+ const zero=audit(line(123,{sn:0,nc:1})+'\n').stars[0];
+ assert.equal(zero.status,'UNDOCUMENTED_ZERO_SOLUTION_REVIEW');
+ assert.equal(zero.catalogReady,false);
+ assert.ok(zero.blockers.some(item=>item.includes('Zero solution type')));
 });
 test('audit flags missing non-parallax formal uncertainties consistently with catalog export',()=>{
  const full=line(123,{plx:10,plxError:1});
@@ -73,4 +77,9 @@ test('optional manual audit against authentic external I/311 hip2.dat', {
  assert.equal(report.source.rawRows,117955);
  assert.equal(report.stars.length,81);
  assert.ok(report.stars.every(s=>s.status!=='HIP_NOT_FOUND'));
+ if(realDigest==='c45d6325bd59dd691764af173a9702e543804a2b6c1d9fea59210e8332e50a4a'){
+   const sirius=report.stars.find(s=>s.hip===32349);
+   assert.equal(sirius.status,'UNDOCUMENTED_ZERO_SOLUTION_REVIEW');
+   assert.equal(sirius.catalogReady,false);
+ }
 });
