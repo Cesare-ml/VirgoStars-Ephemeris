@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {gzipSync} from 'node:zlib';
-import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007} from '../scripts/fetch-hipparcos-2007.mjs';
+import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,runHipparcosDownload} from '../scripts/fetch-hipparcos-2007.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const row=(id)=>String(id).padStart(6)+Array(270).fill(' ').join('');
@@ -37,4 +37,11 @@ test('offline acquisition refuses bad digest, unexpected content and short sourc
 test('acquisition rejects malformed 276-column records even with a valid gzip hash',async()=>{
   const archive=gzipSync(Buffer.from(row(17)+'\ninvalid\n'));
   await assert.rejects(()=>acquireHipparcos2007({requireFullCatalog:false,fetchImpl:async()=>mockArchive(archive)}),/expected 276 characters/);
+});
+
+test('CLI forbids raw third-party catalog output inside the source repository before network access',async()=>{
+  await assert.rejects(
+    ()=>runHipparcosDownload(['--out='+new URL('../data-local-hip2.dat',import.meta.url).pathname]),
+    /outside the Git repository/,
+  );
 });
