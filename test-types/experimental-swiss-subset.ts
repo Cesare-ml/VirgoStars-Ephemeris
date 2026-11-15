@@ -1,5 +1,6 @@
 import {createExperimentalSwissSubset,SE_GREG_CAL,SE_SUN,SEFLG_JPLEPH,SEFLG_SPEED} from 'virgostars-ephemeris/experimental-swiss-subset';
 import {createExplicitUtcInstant} from 'virgostars-ephemeris/experimental-utc-instant';
+import {createExperimentalLegacyBridge} from 'virgostars-ephemeris/experimental-legacy-bridge';
 const api=createExperimentalSwissSubset({executablePath:'example',kernelPath:'example',physicalCenterKernels:{Mars:'mars.bsp'},convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
 const jd:number=api.swe_julday(2000,1,1,12,SE_GREG_CAL);
 const coords=api.swe_calc_ut(jd,SE_SUN,SEFLG_JPLEPH|SEFLG_SPEED);
@@ -24,6 +25,8 @@ const transitUt1:number=rise.transitTime;void transitUt1;
 const mutable=createExperimentalSwissSubset({executablePath:'example',kernelPath:'example',legacyMutableResults:true,starSolarDeflection:'POINT_MASS',planetSolarDeflection:'POINT_MASS',convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
 const mutableHouse=mutable.swe_houses(jd,-41,12,'P');mutableHouse.house[0]=12;mutableHouse.ascendant=10;
 const mutableStar=mutable.swe_fixstar_ut('A',jd,SEFLG_JPLEPH);delete mutableStar.name;mutableStar.longitude=10;
+const legacy=createExperimentalLegacyBridge({executablePath:'example',kernelPath:'example',ephemerisDirectory:'example',flagPolicy:'MAP_SWISS_AND_DEFAULT_TO_JPL',defaultCalendar:'GREGORIAN',mutableResults:'LEGACY',convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
+const legacyJd:number=legacy.swe_julday(2000,1,1,12);legacy.swe_set_ephe_path('example');void legacyJd;
 // @ts-expect-error only P positions are supported
 api.swe_houses_pos(0,41.9,23.4,'V',20,0);
 // @ts-expect-error the calendar flag must be explicit
