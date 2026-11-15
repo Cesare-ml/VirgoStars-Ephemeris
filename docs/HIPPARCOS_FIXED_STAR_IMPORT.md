@@ -1,6 +1,6 @@
 # Fixed-star catalog: independent Hipparcos 2007 import (experimental)
 
-**Status (2026-11-15): importer, synthetic parser tests and thirty named HIP crossmatch targets only. NO vetted real star dataset is committed, no observed-star validation has passed, no Swiss parity and no production migration.**
+**Status (2026-11-15): importer, synthetic parser tests and 59 named HIP crossmatch targets only. NO vetted real star dataset is committed, no observed-star validation has passed, no Swiss parity and no production migration.**
 
 ## Scientific data boundary
 
@@ -13,7 +13,7 @@
 
 Obtain `hip2.dat` separately from the CDS I/311 archive. Review its licensing and redistribution terms before using or publishing transformed catalog data. The importer **does not download files** and commits **no third-party catalog**.
 
-A first curated target list of **thirty named-star / Hipparcos crossmatches** is in [docs/data/fixed-stars-target-crossmatches.json](data/fixed-stars-target-crossmatches.json). These are **identifications, not scientific position fixtures**: no usable V magnitude or barycentric radial velocity measurement is included there. A source citation for an object's identity does not certify its distance or velocity. This target list does not reproduce Astrodienst data.
+A first curated target list of **59 named-star / Hipparcos crossmatches** is in [docs/data/fixed-stars-target-crossmatches.json](data/fixed-stars-target-crossmatches.json). These are **identifications, not scientific position fixtures**: no usable V magnitude or barycentric radial velocity measurement is included there. A source citation for an object's identity does not certify its distance or velocity. This target list does not reproduce Astrodienst data.
 
 Prepare a local UTF-8 **TSV** with this exact header (tabs between fields):
 
@@ -60,7 +60,7 @@ The optional `scripts/audit-hipparcos-2007.mjs` performs a *read-only analysis* 
 | 91–96, 98–103 | mas/year | Proper-motion formal errors |
 | 8–10, 14 | codes | Solution type `Sn` and component count `Nc` |
 
-The quality check classifies each of the thirty HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
+The quality check classifies each of the 59 HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
 
 ### Genuine dataset source
 
@@ -122,7 +122,7 @@ The **backend's actual usage**, not the Astrodienst wiki or the original Swiss d
 
 - **106** names declared in `STARS_ASTRODIENST`, of which **96** have IDs in `STARS_ASTRODIENST_TO_COW_ID` and are considered by current `getStelleTema()`.
 - **10** legacy list names have no mapping and are not currently used by that mapped-star path: Ahadi, Birdun, Girtab, Kakkab, Koo She, Manus, Muhlifain, Peregrini, Regor and Wei.
-- The experimental curated HIP target list currently identifies **30 of those 96** mapped names; **66** mapped names still need original-source astronomical identities, photometry, and (where available/required) radial velocities.
+- The experimental curated HIP target list currently identifies **59 of those 96** mapped names; **37** mapped names still need original-source astronomical identities, photometry, and (where available/required) radial velocities.
 - **Zero** stars are independently certified for production calculation by these inventories. A name/ID match is not a scientific numerical validation.
 
 The backend `getStella()` call site also uses `swe_fixstar_ut`, `swe_fixstar_mag`, `swe_azalt`, mutates the returned `latlng` object and applies an azimuth orientation/ southern-hemisphere longitude transformation. The app-specific behavior belongs to integration compatibility tests, not the standalone astronomical library.
