@@ -4,7 +4,7 @@
   "purpose": "Curated target selection only, not a calculable catalog or redistributable astrometric measurements",
   "catalogSource": "https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/I/311?format=html&tex=true",
   "crossmatchSource": "SIMBAD (CDS)",
-  "selectionSource": "Common bright fixed stars of astrological interest; not an Astrodienst dataset reproduction",
+  "selectionSource": "Named stars used in VirgoStars backend, independently cross-identified with SIMBAD; no Astrodienst data copied",
   "stars": [
     {
       "name": "Sirius",
@@ -115,6 +115,116 @@
       "visualMagnitude": null,
       "barycentricRadialVelocityKmPerSecond": null,
       "review": "Multiple system, variable; confirm specific component"
+    },
+    {
+      "name": "Altair",
+      "hip": 97649,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Altair",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Fast rotator; independently review RV and astrometric systematics"
+    },
+    {
+      "name": "Deneb",
+      "hip": 102098,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Deneb",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Luminous variable supergiant; astrometric uncertainty and V photometry require review"
+    },
+    {
+      "name": "Procyon",
+      "hip": 37279,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Procyon",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Resolved binary: verify primary component identity, orbital motion and RV"
+    },
+    {
+      "name": "Rigel",
+      "hip": 24436,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=RIGEL",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Bright blue supergiant and multiple system; inspect astrometric solution"
+    },
+    {
+      "name": "Capella",
+      "hip": 24608,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Capella",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Multiple spectroscopic binary; HIP solution and system RV require special review"
+    },
+    {
+      "name": "Canopus",
+      "hip": 30438,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Canopus",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Review original Johnson V and barycentric radial velocity provenance"
+    },
+    {
+      "name": "Pollux",
+      "hip": 37826,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Pollux",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Review measured RV and long-epoch motion"
+    },
+    {
+      "name": "Denebola",
+      "hip": 57632,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=DENEBOLA",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Review Hipparcos parallax and external V-band/RV sources"
+    },
+    {
+      "name": "Castor",
+      "hip": 36850,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Castor",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "SIMBAD HIP identifier refers to Castor AB; orbital/multiple system, not a single simple star"
+    },
+    {
+      "name": "Bellatrix",
+      "hip": 25336,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Bellatrix",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Check selected HIP component, formal errors and photometric variability"
     }
   ]
 }
