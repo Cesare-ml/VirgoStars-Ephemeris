@@ -6,10 +6,10 @@ import {closeSync,existsSync,fstatSync,openSync,readSync,realpathSync,unlinkSync
 import {basename,dirname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
-const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+export const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const hashValid=s=>typeof s==='string' && /^[0-9a-f]{64}$/.test(s);
 const MAX_BYTES=5*1024*1024;
-function readBounded(path){
+export function readBounded(path){
   const fd=openSync(path,'r');
   try{
     const stat=fstatSync(fd);
@@ -50,7 +50,7 @@ export function parseGaiaRvTsv(text,expectedSourceId){
   return {rvKmPerSecond,rvErrorKmPerSecond,ruwe,status:rvKmPerSecond===null?'RV_MISSING':'RV_PRESENT_REVIEW_REQUIRED'};
 }
 
-function outsideGit(path){
+export function outsideGit(path){
   const out=resolve(path),root=realpathSync(resolve(dirname(fileURLToPath(import.meta.url)),'..'));
   const parent=realpathSync(dirname(out));
   for(const dest of [out,resolve(parent,basename(out))]){
