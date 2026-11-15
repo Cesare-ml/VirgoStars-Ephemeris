@@ -145,3 +145,21 @@ node --test test/audit-fixed-star-coverage.test.mjs
 ```
 
 The test requires the current known source contract: 106 listed names, 96 mapped backend stars, 30 SIMBAD-linked candidate identities and 66 names still missing. It intentionally skips in isolated CI when the backend path is absent. These are naming/cross-identification counts, **not** verified positions, brightness measurements, production readiness or a substitute for `swe_fixstar_ut` numerical parity.
+
+## 59 HIP identities and five extended objects (2026-11-15)
+
+An additional 29 **backend-active** star names have been cross-identified to HIP IDs using the IAU Catalog of Star Names (including the [IAU historical catalog](https://iauarchive.eso.org/public/themes/naming_stars/)) and specific SIMBAD lookups. Each entry retains its HIP number and a SIMBAD query link, while its source type explicitly indicates that no observed Hipparcos astrometry has been imported or certified. The 59 entries are **identity candidates, not certified positions**.
+
+Four legacy VirgoStars spellings need explicit name-alias review before integration: `Adara` → official `Adhara` (HIP 33579), `Agena` → `Hadar` (HIP 68702), `Etamin` → `Eltanin` (HIP 87833) and `Hasseleh` → `Hassaleh` (HIP 23015). These mappings must not silently change public display names or duplicate lookup aliases. A large number of selected targets are visual, spectroscopic or eclipsing binaries, or variable/supergiant stars requiring additional scientific treatment.
+
+**Five additional active backend labels are not individual Hipparcos stars:** `Aculeus` → M6 / NGC 6405 (open cluster), `Acumen` → M7 / NGC 6475 (open cluster), `Facies` → M22 / NGC 6656 (globular cluster), `Praesepe` → M44 / NGC 2632 (open cluster), and `Spiculum` → a historically associated *nebular region* near M8 / NGC 6523 (not an unambiguous unique astronomical point). Their source-backed classifications live in [`docs/data/extended-fixed-star-targets.json`](data/extended-fixed-star-targets.json). NASA's [M7](https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-7/), [M22](https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-22/), [M44](https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-44/) and [M8](https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-8/) entries independently corroborate those object classes.
+
+**Do not generate a fake HIP ID or six-dimensional stellar state for any of the five.** Extended objects require a distinct catalog, explicit adopted center and epoch, and an application-level policy for point-vs-extended geometry and angular extent. Even a measured cluster proper motion is not an individual stellar proper motion.
+
+For the **96 currently mapped VirgoStars names**, the actionable classification is therefore **59 HIP-based star identities + 5 extended-object/region identifications + 32 still-unclassified names**. Scientific acceptance remains **0**. Both star and extended-object manifests are inputs to the read-only naming audit:
+
+```powershell
+node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-stars\\backend\\helpers\\stars.helper.js" "--candidates=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-stars-target-crossmatches.json" "--extended=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\extended-fixed-star-targets.json"
+```
+
+Catalog data remains caller-supplied and separately rights-reviewed; the PR does not import third-party datasets into the shipping engine.
