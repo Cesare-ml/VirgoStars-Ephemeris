@@ -103,11 +103,11 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if(tt!==ttJulianDay || tdb!==tdbJulianDay || longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0)throw new Error('Out-of-range physical epoch CSV row');
       return Object.freeze({target,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
     },
-    calculateCoordinateAtEpoch({mode,target,ttJulianDay,tdbJulianDay,centerKernelPath}) {
+    calculateCoordinateAtEpoch({mode,target,ttJulianDay,tdbJulianDay,centerKernelPath,solarDeflection='OMIT'}) {
       const targets=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'];
       const index=targets.indexOf(target);
-      if(!['equatorial','heliocentric'].includes(mode) || index<0 || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || (index>=4 && (typeof centerKernelPath!=='string' || !centerKernelPath.trim())))throw new TypeError('Supported coordinate mode, target, epochs and required center SPK must be explicit');
-      const lines=execute(['coordinate_epoch',mode,kernelPath,index>=4?centerKernelPath:'-',target,String(ttJulianDay),String(tdbJulianDay)]);
+      if(!['equatorial','heliocentric','ecliptic'].includes(mode) || !['OMIT','POINT_MASS'].includes(solarDeflection) || (solarDeflection==='OMIT' && mode==='ecliptic') || (solarDeflection==='POINT_MASS' && mode==='heliocentric') || index<0 || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || (index>=4 && (typeof centerKernelPath!=='string' || !centerKernelPath.trim())))throw new TypeError('Supported coordinate mode, target, epochs and required center SPK must be explicit');
+      const lines=execute([solarDeflection==='POINT_MASS'?'planet_deflected_epoch':'coordinate_epoch',mode,kernelPath,index>=4?centerKernelPath:'-',target,String(ttJulianDay),String(tdbJulianDay)]);
       if(lines.length!==2 || lines[0]!==HEADER)throw new Error('Invalid coordinate epoch CSV contract');
       const [returnedTarget,...parts]=lines[1].split(',');
       if(returnedTarget!==target || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid coordinate epoch CSV row');

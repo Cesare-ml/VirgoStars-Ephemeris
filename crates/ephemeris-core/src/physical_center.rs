@@ -40,7 +40,7 @@ pub enum PhysicalPlanet {
     Pluto,
 }
 impl PhysicalPlanet {
-    fn identifiers(self) -> (Body, i32, i32) {
+    pub(crate) fn identifiers(self) -> (Body, i32, i32) {
         match self {
             Self::Mars => (Body::MarsBarycenter, 499, 4),
             Self::Jupiter => (Body::JupiterBarycenter, 599, 5),
@@ -136,7 +136,7 @@ pub fn center_offset<R: Read + Seek>(
         .map_err(PhysicalCenterError::Spk)
 }
 
-fn add_offset(
+pub(crate) fn add_offset(
     mut bary: StateVector,
     offset: &SpkRelativeState,
 ) -> Result<StateVector, PhysicalCenterError> {

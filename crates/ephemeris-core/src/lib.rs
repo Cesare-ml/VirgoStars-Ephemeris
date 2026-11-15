@@ -44,6 +44,7 @@ pub mod house_angles;
 pub mod light_time;
 pub mod lunar_points;
 pub mod physical_center;
+pub mod planetary_solar_deflection;
 pub mod six_field_units;
 pub mod solar_deflection;
 pub mod spk_direct_state;

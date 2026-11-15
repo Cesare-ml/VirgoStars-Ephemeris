@@ -154,8 +154,10 @@ Fixed-star methods accept a caller-supplied catalog, and house methods require
 injected providers; see the corresponding star and house documentation. The
 optional `starSolarDeflection: 'POINT_MASS'` enables first-order solar
 deflection for fixed stars and rejects rays occulted by the Sun; the default
-`'OMIT'` preserves the earlier behavior. Planetary calculations still omit
-solar deflection.
+`'OMIT'` preserves the earlier behavior. `planetSolarDeflection: 'POINT_MASS'`
+separately enables the finite-source correction for geocentric planets, with
+numerical rates and a solar-occultation error; heliocentric output is unaffected.
+See [finite-source notes](FINITE_SOLAR_DEFLECTION_2026-11-15.md).
 
 The coordinate-flag test uses a local DE441, six supplemental SPKs and all ten
 targets, with same-TT Swiss 2.09.03 values as limited diagnostics. On that

@@ -39,6 +39,9 @@ use virgostars_ephemeris_core::physical_center::{
     geocentric_physical_center, geocentric_physical_equatorial, heliocentric_physical_center,
     PhysicalPlanet,
 };
+use virgostars_ephemeris_core::planetary_solar_deflection::{
+    calculate_deflected_planet, PlanetFrame, PlanetTarget,
+};
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
 use virgostars_ephemeris_core::true_ecliptic::{
     geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil, geocentric_true_equatorial,
@@ -90,6 +93,50 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!(
             "{:.15},{:.15},{:.15},{:.15},{:.15},{:.15}",
             values[0], values[1], values[2], values[3], values[4], values[5]
+        );
+        return Ok(());
+    }
+    if args.len() == 8 && args[1] == "planet_deflected_epoch" {
+        let frame = match arg(2)? {
+            "ecliptic" => PlanetFrame::TrueEcliptic,
+            "equatorial" => PlanetFrame::TrueEquatorial,
+            _ => return Err("unsupported deflection frame".into()),
+        };
+        let name = arg(5)?;
+        let target = match name {
+            "Sun" => PlanetTarget::Sun,
+            "Moon" => PlanetTarget::Moon,
+            "Mercury" => PlanetTarget::Mercury,
+            "Venus" => PlanetTarget::Venus,
+            "Mars" => PlanetTarget::Physical(PhysicalPlanet::Mars),
+            "Jupiter" => PlanetTarget::Physical(PhysicalPlanet::Jupiter),
+            "Saturn" => PlanetTarget::Physical(PhysicalPlanet::Saturn),
+            "Uranus" => PlanetTarget::Physical(PhysicalPlanet::Uranus),
+            "Neptune" => PlanetTarget::Physical(PhysicalPlanet::Neptune),
+            "Pluto" => PlanetTarget::Physical(PhysicalPlanet::Pluto),
+            _ => return Err("unsupported physical target".into()),
+        };
+        let mut eph = De441::open(&args[3])?;
+        let mut kernels = SpkKernelSet::new();
+        if matches!(target, PlanetTarget::Physical(_)) {
+            kernels.load(std::fs::File::open(&args[4])?)?;
+        }
+        let tt = arg(6)?.parse()?;
+        let tdb = JulianDateTdb(arg(7)?.parse()?);
+        let state =
+            calculate_deflected_planet(&mut eph, Some(&mut kernels), target, tdb, tt, frame)?;
+        println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        println!(
+            "{},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            name,
+            tt,
+            tdb.0,
+            state.first_angle_deg,
+            state.second_angle_deg,
+            state.distance_au,
+            state.first_angle_speed_deg_per_tdb_day,
+            state.second_angle_speed_deg_per_tdb_day,
+            state.distance_speed_au_per_tdb_day
         );
         return Ok(());
     }
