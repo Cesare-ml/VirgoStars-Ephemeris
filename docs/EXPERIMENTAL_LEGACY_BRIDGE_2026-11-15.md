@@ -20,6 +20,26 @@ into code that uses it. This does not modify the backend, add missing APIs,
 provide time data or remove the need for a reviewed integration and validation.
 The loader was exercised locally with Node 22.18.0; Node 20 was not tested here.
 
+The bridge exposes `SE_PLUTO_PICKERING = 54` because legacy callers may use it
+as an inclusive loop bound. This is only an identifier, not support for that
+body or for the other IDs between Pluto and 54. Attempting to calculate an
+unsupported body still fails explicitly. Without the bound, JavaScript loops
+can silently skip every planet when comparing against `undefined`.
+
+A local, non-production diagnostic intercepted the backend's `swisseph`
+module in a separate process and exercised its chart function with the bridge,
+local DE441 and six planetary SPKs, the main house providers, and synthetic
+constant time offsets. At one date it produced all ten supported planets and
+the requested five house systems, and exercised southern inversion. Its default
+request failed explicitly on an unsupported body. This was a shape/composition
+probe, not a numerical comparison, production migration, or reproducible CI
+test; it did not include a real star catalog. The backend currently feeds a
+civil UTC-derived Julian date to UT1-facing calls and passes that value to
+`swe_calc`, whose contract is TT. A production integration must handle those
+time-scale differences explicitly rather than relying on the diagnostic's
+zero-DUT1 assumption. The existing Placidus position context is also tied to
+the caller-supplied epoch and must be configured appropriately for each chart.
+
 ## ESM initialization
 
 `virgostars-ephemeris/experimental-legacy-bridge` exports an opt-in ESM

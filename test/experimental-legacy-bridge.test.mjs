@@ -28,6 +28,11 @@ test('legacy bridge requires explicit policies and refuses source or path ambigu
   assert.throws(()=>create({...base,defaultCalendar:undefined}),/calendar/);
   assert.throws(()=>create({...base,mutableResults:undefined}),/mutability/);
   const api=create(base);
+  assert.equal(api.SE_PLUTO_PICKERING,54);
+  // The legacy loop must be able to reach the supported bodies, but the
+  // boundary ID itself is not a supported physical planet.
+  assert.ok(api.SE_PLUTO_PICKERING>=api.SE_PLUTO);
+  assert.throws(()=>api.swe_calc_ut(2451545,api.SE_PLUTO_PICKERING,api.SEFLG_JPLEPH),/Only Sun through Pluto/);
   assert.equal(api.swe_set_ephe_path(root),realpathSync(root));
   assert.throws(()=>api.swe_set_ephe_path(parse(root).root),/differs/);
   assert.throws(()=>api.swe_calc_ut(2451545,api.SE_SUN,3),/source flags/);
