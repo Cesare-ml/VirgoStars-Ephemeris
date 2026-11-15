@@ -53,6 +53,21 @@ class AuditInputError(ValueError):
     """The input is incomplete, malformed, or not a trustworthy PR status."""
 
 
+def _reject_duplicate_json_object_keys(pairs: list[tuple[str, object]]) -> dict:
+    """Build one JSON object while rejecting duplicate decoded property names.
+
+    object_pairs_hook runs for every object, including nested ones, and keys
+    have already had JSON escapes decoded. Thus "name" and "\\u006eame"
+    are treated as the same property instead of silently using the last value.
+    """
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise AuditInputError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
 def validate_snapshot(snapshot: object) -> dict[int, dict]:
     """Validate actual GitHub pull metadata; reject missing/partial state."""
     if not isinstance(snapshot, dict):
@@ -185,7 +200,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        snapshot = fetch_live_snapshot() if args.live else json.loads(args.snapshot.read_text())
+        snapshot = (
+            fetch_live_snapshot()
+            if args.live
+            else json.loads(
+                args.snapshot.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_json_object_keys,
+            )
+        )
         report = audit(snapshot)
     except (AuditInputError, OSError, ValueError) as error:
         print(f"PR dependency audit input error: {error}", file=sys.stderr)
