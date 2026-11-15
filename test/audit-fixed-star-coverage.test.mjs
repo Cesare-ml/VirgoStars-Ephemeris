@@ -61,11 +61,33 @@ test('optional exact current backend naming coverage against local checked-out v
 },()=>{
   const helper=readFileSync(backendHelperPath,'utf8');
   const candidates=JSON.parse(readFileSync(new URL('../docs/data/fixed-stars-target-crossmatches.json',import.meta.url),'utf8'));
-  const report=checkFixedStarCoverage(helper,candidates);
+  const extended=JSON.parse(readFileSync(new URL('../docs/data/extended-fixed-star-targets.json',import.meta.url),'utf8'));
+  const report=checkFixedStarCoverage(helper,candidates,extended);
   assert.equal(report.legacyDeclared,106);
   assert.equal(report.legacyUsed,96);
-  assert.equal(report.candidatesIdentified,30);
-  assert.equal(report.missingCandidates,66);
+  assert.equal(report.candidatesIdentified,59);
+  assert.equal(report.nonstellarIdentified,5);
+  assert.equal(report.totalRoutedTargets,64);
+  assert.equal(report.missingCandidates,32);
   assert.equal(report.candidateNamesNotUsed.length,0);
   assert.equal(report.scientificallyValidated,0);
+});
+
+test('distinct extended objects are never silently represented by HIP stars',()=>{
+  const ext=JSON.parse(readFileSync(new URL('../docs/data/extended-fixed-star-targets.json',import.meta.url),'utf8'));
+  const manifest={schemaVersion:1,stars:[{name:'Spica',hip:65474}]};
+  const helper=`const STARS_ASTRODIENST_TO_COW_ID = {"Spica":737,"Praesepe":96,"Aculeus":631};
+var STARS_ASTRODIENST = [
+'Spica',
+'Praesepe',
+'Aculeus',
+];`;
+  const report=checkFixedStarCoverage(helper,manifest,ext);
+  assert.equal(report.candidatesIdentified,1);
+  assert.equal(report.nonstellarIdentified,2);
+  assert.equal(report.missingCandidates,0);
+  assert.deepEqual(report.nonstellarNames,['Praesepe','Aculeus']);
+  assert.equal(report.scientificallyValidated,0);
+  assert.throws(()=>checkFixedStarCoverage(helper,{schemaVersion:1,stars:[{name:'Praesepe',hip:123}]},ext),/overlapping/);
+  assert.ok(ext.objects.every(x=>!Object.hasOwn(x,'hip')&&!Object.hasOwn(x,'rightAscensionDeg')));
 });
