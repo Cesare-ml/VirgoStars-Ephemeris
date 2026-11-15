@@ -32,6 +32,7 @@ const helioWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','NO_ANNUAL_AB
 const helioCenterWarnings=Object.freeze([...helioWarnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
 const helioSunWarnings=Object.freeze([...helioWarnings,'SUN_CENTER_ZERO_SENTINEL_NO_DIRECTION']);
 const starWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','STELLAR_LIGHT_TIME_OMITTED','RECTILINEAR_STELLAR_MOTION','STAR_RATES_NUMERICAL_PRECISION_LIMITED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
+const deflectedStarWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_POINT_MASS_APPLIED','PLANETARY_DEFLECTION_OMITTED','STELLAR_LIGHT_TIME_OMITTED','RECTILINEAR_STELLAR_MOTION','STAR_RATES_NUMERICAL_PRECISION_LIMITED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 
 function snapshotCatalog(catalog){
   if(catalog===undefined)return null;
@@ -62,9 +63,10 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT'}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
+  if(!['OMIT','POINT_MASS'].includes(starSolarDeflection))throw new RangeError('Unsupported stellar solar deflection model');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
   let solarEvents=null;
@@ -233,15 +235,16 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     swe_fixstar_ut(name,julianDay,flags,callback){
       validFlags(flags);callbackType(callback);const entry=star(name);
       const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
-      const state=provider.calculateStarAtEpoch({...entry,ttJulianDay,tdbJulianDay});
+      const state=provider.calculateStarAtEpoch({...entry,ttJulianDay,tdbJulianDay,solarDeflection:starSolarDeflection});
       const speed=(flags&SEFLG_SPEED)!==0;
       const fields={name:entry.name,longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,
         longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
         rflag:flags};
       let value;
+      const selectedWarnings=starSolarDeflection==='POINT_MASS'?deflectedStarWarnings:starWarnings;
       if(legacyMutableResults){
-        value=fields;Object.defineProperties(value,{model:{value:'EXPERIMENTAL_ICRS_LINEAR_STAR'},catalogId:{value:stars.id},warnings:{value:starWarnings}});
-      } else value=Object.freeze({...fields,model:'EXPERIMENTAL_ICRS_LINEAR_STAR',catalogId:stars.id,warnings:starWarnings});
+        value=fields;Object.defineProperties(value,{model:{value:'EXPERIMENTAL_ICRS_LINEAR_STAR'},catalogId:{value:stars.id},warnings:{value:selectedWarnings}});
+      } else value=Object.freeze({...fields,model:'EXPERIMENTAL_ICRS_LINEAR_STAR',catalogId:stars.id,warnings:selectedWarnings});
       if(callback!==undefined)callback(value);return value;
     },
     swe_fixstar_mag(name,callback){

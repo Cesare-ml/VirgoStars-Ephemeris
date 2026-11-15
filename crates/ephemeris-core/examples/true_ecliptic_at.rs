@@ -24,7 +24,10 @@ use virgostars_ephemeris_core::equatorial_horizontal::{
     noaa_standard_refraction, true_ecliptic_to_horizontal, true_equatorial_to_horizontal,
 };
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
-use virgostars_ephemeris_core::fixed_star::{calculate_star, FixedStarCatalogEntry};
+use virgostars_ephemeris_core::fixed_star::{
+    calculate_star, calculate_star_with_solar_deflection, FixedStarCatalogEntry,
+    StellarSolarDeflection,
+};
 use virgostars_ephemeris_core::horizon_events::{
     find_geometric_event, find_standard_solar_event, find_topocentric_geometric_event,
     topocentric_equatorial_direction, HorizonEventKind, HorizonEventSearch,
@@ -205,7 +208,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         return Ok(());
     }
-    if args.len() == 12 && args[1] == "star_epoch" {
+    if args.len() == 12 && (args[1] == "star_epoch" || args[1] == "star_epoch_solar") {
         let tt = arg(3)?.parse()?;
         let tdb = JulianDateTdb(arg(4)?.parse()?);
         let entry = FixedStarCatalogEntry {
@@ -218,7 +221,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             radial_velocity_km_per_second: arg(11)?.parse()?,
         };
         let mut eph = De441::open(&args[2])?;
-        let star = calculate_star(&mut eph, entry, tt, tdb).map_err(|error| error.to_string())?;
+        let star = if args[1] == "star_epoch" {
+            calculate_star(&mut eph, entry, tt, tdb)
+        } else {
+            calculate_star_with_solar_deflection(
+                &mut eph,
+                entry,
+                tt,
+                tdb,
+                StellarSolarDeflection::PointMass,
+            )
+        }
+        .map_err(|error| error.to_string())?;
         println!("tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
         println!(
             "{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",

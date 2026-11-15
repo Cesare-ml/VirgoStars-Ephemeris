@@ -151,7 +151,11 @@ requirements need their own compatibility contracts and validation; merely
 renaming a flag or claiming a Swiss source would misrepresent the model.
 
 Fixed-star methods accept a caller-supplied catalog, and house methods require
-injected providers; see the corresponding star and house documentation.
+injected providers; see the corresponding star and house documentation. The
+optional `starSolarDeflection: 'POINT_MASS'` enables first-order solar
+deflection for fixed stars and rejects rays occulted by the Sun; the default
+`'OMIT'` preserves the earlier behavior. Planetary calculations still omit
+solar deflection.
 
 The coordinate-flag test uses a local DE441, six supplemental SPKs and all ten
 targets, with same-TT Swiss 2.09.03 values as limited diagnostics. On that

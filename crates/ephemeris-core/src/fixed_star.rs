@@ -13,7 +13,8 @@
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
 //! Experimental catalog-star propagation; no bundled catalog. Added 2026-11-15.
-//! Constant rectilinear motion, Earth parallax and annual aberration only.
+//! Constant rectilinear motion, Earth parallax, annual aberration and an
+//! explicitly selected optional point-mass solar light deflection.
 //! Not a complete apparent place or Swiss fixed-star replacement.
 
 use crate::aberration::{annual_aberration_icrf, AberrationError};
@@ -29,6 +30,16 @@ use std::io::{Read, Seek};
 const DAYS_PER_YEAR: f64 = 365.25;
 const RAD_PER_MAS: f64 = std::f64::consts::PI / (180.0 * 3600.0 * 1000.0);
 const STEP_DAYS: f64 = 0.01;
+// IAU nominal solar mass parameter, km^3/s^2; optical solar radius, km.
+const NOMINAL_SOLAR_GM_KM3_S2: f64 = 132_712_440_000.0;
+const SOLAR_RADIUS_KM: f64 = 695_700.0;
+const SPEED_OF_LIGHT_KM_S: f64 = 299_792.458;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StellarSolarDeflection {
+    Omit,
+    PointMass,
+}
 
 /// Barycentric ICRS catalog values at an explicit TDB epoch. Proper motion in
 /// RA is μ_α* = dα/dt cos(dec), not raw dα/dt. No values are inferred.
@@ -60,6 +71,7 @@ pub enum FixedStarError {
     InvalidCatalog,
     IncoherentEpoch,
     InvalidGeometry,
+    OccultedBySun,
     Ephemeris(De441Error),
     Orientation(OrientationError),
     Aberration(AberrationError),
@@ -70,6 +82,7 @@ impl fmt::Display for FixedStarError {
             Self::InvalidCatalog => write!(f, "invalid or unsupported star catalog values"),
             Self::IncoherentEpoch => write!(f, "TT and TDB must describe the same instant"),
             Self::InvalidGeometry => write!(f, "invalid or singular star geometry"),
+            Self::OccultedBySun => write!(f, "stellar ray intersects the adopted solar disk"),
             Self::Ephemeris(e) => write!(f, "ephemeris: {e}"),
             Self::Orientation(e) => write!(f, "orientation: {e}"),
             Self::Aberration(e) => write!(f, "aberration: {e}"),
@@ -77,6 +90,51 @@ impl fmt::Display for FixedStarError {
     }
 }
 impl Error for FixedStarError {}
+
+/// First-order point-mass solar deflection for a distant source. Both inputs
+/// are ICRS vectors: observer-to-source and Sun-to-observer, in AU. The
+/// source must be at least 1000 times the Sun-observer distance and outside
+/// the adopted solar disk; an occulted ray is an error. No planetary
+/// deflection or higher-order solar terms are included.
+/// The vector expression follows the distant-source limit of equation (1)
+/// in Kaplan, USNO Circular 179 (1998), https://aa.usno.navy.mil/downloads/reports/Kaplan1998.pdf.
+pub fn solar_deflect_distant_star(
+    observer_to_source_au: [f64; 3],
+    sun_to_observer_au: [f64; 3],
+) -> Result<[f64; 3], FixedStarError> {
+    if observer_to_source_au
+        .iter()
+        .chain(sun_to_observer_au.iter())
+        .any(|v| !v.is_finite())
+    {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    let norm = |v: [f64; 3]| v[0].hypot(v[1]).hypot(v[2]);
+    let source_distance = norm(observer_to_source_au);
+    let solar_distance = norm(sun_to_observer_au);
+    if !source_distance.is_finite()
+        || !solar_distance.is_finite()
+        || solar_distance * IAU_AU_KM <= SOLAR_RADIUS_KM
+        || source_distance < 1000.0 * solar_distance
+    {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    let p = observer_to_source_au.map(|v| v / source_distance);
+    let e = sun_to_observer_au.map(|v| v / solar_distance);
+    let dot = (0..3).map(|i| p[i] * e[i]).sum::<f64>().clamp(-1.0, 1.0);
+    let angular_radius_sin = SOLAR_RADIUS_KM / (solar_distance * IAU_AU_KM);
+    if dot <= -(1.0 - angular_radius_sin * angular_radius_sin).sqrt() {
+        return Err(FixedStarError::OccultedBySun);
+    }
+    let scale = 2.0 * NOMINAL_SOLAR_GM_KM3_S2
+        / (SPEED_OF_LIGHT_KM_S.powi(2) * solar_distance * IAU_AU_KM * (1.0 + dot));
+    let vector: [f64; 3] = std::array::from_fn(|i| p[i] + scale * (e[i] - dot * p[i]));
+    let magnitude = norm(vector);
+    if !magnitude.is_finite() || magnitude <= 0.0 {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    Ok(vector.map(|v| v / magnitude))
+}
 
 /// Geometric observer-to-star ICRS vector in AU. The observer is supplied as
 /// a barycentric position in AU, at reception. Rectilinear propagation uses
@@ -137,6 +195,7 @@ fn sample<R: Read + Seek>(
     entry: FixedStarCatalogEntry,
     tt: f64,
     tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
 ) -> Result<(f64, f64, f64), FixedStarError> {
     if !tt.is_finite() || !tdb.0.is_finite() || (tt - tdb.0).abs() > 1.0 / 86_400.0 {
         return Err(FixedStarError::IncoherentEpoch);
@@ -146,8 +205,19 @@ fn sample<R: Read + Seek>(
         .map_err(FixedStarError::Ephemeris)?;
     let relative = geometric_star_vector(entry, tdb, earth.position_km.map(|v| v / IAU_AU_KM))?;
     let distance = relative[0].hypot(relative[1]).hypot(relative[2]);
+    let incoming = match solar_deflection {
+        StellarSolarDeflection::Omit => relative,
+        StellarSolarDeflection::PointMass => {
+            let sun = ephemeris
+                .state(Body::Sun, Body::SolarSystemBarycenter, tdb)
+                .map_err(FixedStarError::Ephemeris)?;
+            let earth_from_sun =
+                std::array::from_fn(|i| (earth.position_km[i] - sun.position_km[i]) / IAU_AU_KM);
+            solar_deflect_distant_star(relative, earth_from_sun)?.map(|v| v * distance)
+        }
+    };
     let direction = annual_aberration_icrf(
-        relative.map(|value| value * IAU_AU_KM),
+        incoming.map(|value| value * IAU_AU_KM),
         earth.velocity_km_per_day,
     )
     .map_err(FixedStarError::Aberration)?;
@@ -175,18 +245,32 @@ pub fn calculate_star<R: Read + Seek>(
     tt: f64,
     tdb: JulianDateTdb,
 ) -> Result<ExperimentalStarPosition, FixedStarError> {
-    let now = sample(ephemeris, entry, tt, tdb)?;
+    calculate_star_with_solar_deflection(ephemeris, entry, tt, tdb, StellarSolarDeflection::Omit)
+}
+
+/// Calculate with an explicit choice of stellar solar-deflection model.
+/// Rates are centered differences of the complete selected pipeline.
+pub fn calculate_star_with_solar_deflection<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+) -> Result<ExperimentalStarPosition, FixedStarError> {
+    let now = sample(ephemeris, entry, tt, tdb, solar_deflection)?;
     let before = sample(
         ephemeris,
         entry,
         tt - STEP_DAYS,
         JulianDateTdb(tdb.0 - STEP_DAYS),
+        solar_deflection,
     )?;
     let after = sample(
         ephemeris,
         entry,
         tt + STEP_DAYS,
         JulianDateTdb(tdb.0 + STEP_DAYS),
+        solar_deflection,
     )?;
     let mut delta = after.0 - before.0;
     if delta >= 180.0 {
@@ -261,6 +345,39 @@ mod tests {
         }
     }
     #[test]
+    fn solar_point_mass_matches_erfa_and_rejects_occulted_rays() {
+        // ERFA 2.0.1.5 ldsun reference at the independent near-Sun fixture.
+        let p = [
+            -0.894_627_630_753_756_1,
+            0.411_883_651_612_139_97,
+            0.173_185_622_459_170_88,
+        ];
+        let earth = [
+            0.903_358_544_130_430_2,
+            -0.415_395_237_027_994_9,
+            -0.180_084_014_143_265_77,
+        ];
+        let expected = [
+            -0.894_628_540_209_116_8,
+            0.411_884_815_971_075_5,
+            0.173_178_155_301_756_68,
+        ];
+        let actual = solar_deflect_distant_star(p.map(|v| v * 2_000_000.0), earth).unwrap();
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-10);
+        }
+        let quadrant = solar_deflect_distant_star([0.0, 100_000.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
+        assert!(quadrant[0] > 1.9e-8 && quadrant[0] < 2.1e-8);
+        assert!(matches!(
+            solar_deflect_distant_star([-100_000.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+            Err(FixedStarError::OccultedBySun)
+        ));
+        assert!(matches!(
+            solar_deflect_distant_star([1.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+            Err(FixedStarError::InvalidGeometry)
+        ));
+    }
+    #[test]
     #[ignore = "requires DE441_PATH for an independent ERFA pipeline comparison"]
     fn erfa_pipeline_exposes_near_sun_deflection_omission() {
         // ERFA t_atci13 synthetic ICRS catalog and TT date. ERFA input pr is
@@ -310,6 +427,27 @@ mod tests {
             0.172_937_136_721_953_9,
         );
         assert!((1_000.0..2_000.0).contains(&full), "{full} mas");
+        let corrected = calculate_star_with_solar_deflection(
+            &mut eph,
+            entry,
+            tt,
+            JulianDateTdb(tt),
+            StellarSolarDeflection::PointMass,
+        )
+        .unwrap();
+        let (sl, cl) = corrected.longitude_deg.to_radians().sin_cos();
+        let (sb, cb) = corrected.latitude_deg.to_radians().sin_cos();
+        let x = cb * cl;
+        let y = cb * sl * ce - sb * se;
+        let z = cb * sl * se + sb * ce;
+        let ra = y.atan2(x).rem_euclid(std::f64::consts::TAU);
+        let dec = z.atan2(x.hypot(y));
+        let reference_ra = 2.710_121_572_968_697 + 0.002_900_618_712_657_376;
+        let reference_dec: f64 = 0.172_937_136_721_953_9;
+        let corrected_difference =
+            ((ra - reference_ra) * reference_dec.cos()).hypot(dec - reference_dec) * mas_per_rad;
+        assert!(corrected_difference < 10.0, "{corrected_difference} mas");
+        assert!(corrected.longitude_speed_deg_per_tdb_day.is_finite());
     }
     #[test]
     fn invalid_parallax_and_poles_are_explicit_errors() {

@@ -40,13 +40,28 @@ model's geometric AU range; numerical distance rates can lose precision at
 stellar distances. Reported magnitude is the unchanged catalog value, not a
 computed apparent brightness or corrected photometric measurement.
 
-The calculation omits gravitational light deflection, the stellar Roemer and
+By default the calculation omits gravitational light deflection, the stellar Roemer and
 other light-time/relativistic catalog effects, nonlinear stellar motion,
 topocentric corrections and complete nutation. It is not a certified apparent
 place and not Swiss parity; near the Sun, for long propagation intervals or
 uncertain radial velocities the error can be materially larger. Approximation
 labels and warnings are returned. See the [USNO NOVAS guide](https://aa.usno.navy.mil/downloads/novas/NOVAS_C3.1_Guide.pdf)
 for the scope of a full apparent stellar place and catalog epoch conventions.
+
+For an explicit improved solar model, set `starSolarDeflection: 'POINT_MASS'`
+on the factory. This applies the first-order distant-source solar point-mass
+deflection **before** aberration, using the DE441 Sun and Earth positions at
+each sample epoch. The geometric distance remains unchanged; the centered
+speed samples include the selected correction. The implementation follows
+the distant-source limit of equation (1) in [Kaplan (1998), USNO](https://aa.usno.navy.mil/downloads/reports/Kaplan1998.pdf),
+using the IAU nominal solar GM 132712440000 km³/s², 695700 km solar radius,
+and exact SI speed of light. It rejects a ray intersecting that adopted solar
+disk and rejects inputs closer than 1000 times the Sun-observer distance.
+Because speeds evaluate neighboring epochs, a star occulted in any of the
+three samples is rejected. The `OMIT` default preserves the earlier behavior.
+Both modes identify their corrections in warnings. Planetary gravitational
+deflection, solar multipoles, higher-order light bending and stellar Roemer
+effects remain omitted; this option is not a complete apparent-place model.
 
 Tests include analytic motion/parallax cases, a comparison of the geometric
 direction with a published ERFA `pmpx` fixture to 1 nanoradian (with the
@@ -68,7 +83,7 @@ fixture only, TDB is approximated as TT; no general time conversion is implied.
 The full published ERFA CIRS output, converted to equinox-based RA by
 subtracting its equation of origins, includes solar gravitational deflection.
 The fixture happens to be very close to the Sun: this implementation's output
-differs from the complete ERFA reference by approximately **1.57 arcseconds**.
+with deflection omitted differs from the complete ERFA reference by approximately **1.57 arcseconds**.
 That is a concrete example of why omitted deflection matters; it is not an
 error bound or observed-star comparison. To isolate that omission, an
 independent no-solar-deflection reference was generated with pyerfa 2.0.1.5:
@@ -81,6 +96,11 @@ the regression tolerance is 10 milliarcseconds to allow the differing Earth
 ephemeris, nutation, aberration and time approximations. ERFA's annual
 aberration includes a small solar-potential term not included in our model.
 This isolated numerical agreement is not full apparent-place validation.
+With `POINT_MASS` selected, the same DE441 result differs from the full ERFA
+fixture by approximately 0.36 milliarcseconds (10 milliarcsecond regression
+tolerance). A standalone near-limb vector also agrees with an independently
+generated ERFA `ldsun` vector, and occulted rays are rejected. This is one
+synthetic case, not a general uncertainty bound or observed-star validation.
 
 Run `cargo test --lib erfa_pipeline_exposes --locked -- --include-ignored`
 with `DE441_PATH` set to a separately obtained classic DE441 file. ERFA is
