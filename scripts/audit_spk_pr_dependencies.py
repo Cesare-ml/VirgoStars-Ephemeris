@@ -19,6 +19,7 @@
 Modification 2026-11-14: fail-closed dependency review independent of
 synthetic CI success, including transitive prerequisites and wrong-base
 ancestors. Never merges, approves or downloads ephemeris kernels.
+Modification 2026-11-15: reject duplicate keys in offline JSON snapshots.
 """
 from __future__ import annotations
 
