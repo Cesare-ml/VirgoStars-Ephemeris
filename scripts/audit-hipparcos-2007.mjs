@@ -37,9 +37,11 @@ export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
     const isSimple=obs.solutionCode===5 && obs.components===1;
     const snr=uncertainties.parallaxMas!==null && uncertainties.parallaxMas>0 && obs.parallaxMas>0
       ? obs.parallaxMas/uncertainties.parallaxMas : null;
+    const missingOtherFormalErrors=Object.entries(uncertainties).some(([label,value])=>label!=='parallaxMas' && value===null);
     const status=!isSimple ? 'COMPLEX_ASTROMETRY_REVIEW'
       : obs.parallaxMas<=0 ? 'NONPOSITIVE_PARALLAX'
       : snr===null ? 'PARALLAX_UNCERTAINTY_UNAVAILABLE'
+      : missingOtherFormalErrors ? 'OTHER_FORMAL_UNCERTAINTIES_UNAVAILABLE'
       : snr<minParallaxSignalToNoise ? 'LOW_PARALLAX_SIGNAL_TO_NOISE'
       : 'ASTROMETRY_PRECHECK_PASSED';
     results.set(hip,{
@@ -64,7 +66,7 @@ export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
     source:{catalog:'CDS I/311/hip2',mirror:'https://vizier.cfa.harvard.edu/ftp/cats/I/311/',
       sha256:hip2Sha256,rawRows:lines.length,expectedRows:HIP2_ROWS},
     manifestSha256:sha256(targetsManifestBytes),
-    policy:{minParallaxSignalToNoise,requirements:'Sn=5, Nc=1; positive parallax and measured e_Plx'},
+    policy:{minParallaxSignalToNoise,requirements:'Sn=5, Nc=1; positive parallax and all five formal uncertainties including strictly positive e_Plx'},
     counts:statusCounts,stars,
     note:'Observed astrometric values belong to the external Hipparcos catalog; no V/RV are inferred, no apparent stellar positions are calculated and this is not Swiss compatibility validation.',
   };
