@@ -261,6 +261,57 @@ mod tests {
         }
     }
     #[test]
+    #[ignore = "requires DE441_PATH for an independent ERFA pipeline comparison"]
+    fn erfa_pipeline_exposes_near_sun_deflection_omission() {
+        // ERFA t_atci13 synthetic ICRS catalog and TT date. ERFA input pr is
+        // raw dRA/dt, whereas our API takes dRA/dt * cos(dec). The comparison
+        // fixture with solar deflection intentionally disabled was generated
+        // independently using ERFA 2.0.1.5 apci13 -> pmpx -> ab -> pnm06a.
+        // ERFA epv00 and DE441 do not use exactly the same Earth solution.
+        let tt = 2_456_165.901_182_685;
+        let mas_per_rad = 1.0 / RAD_PER_MAS;
+        let entry = FixedStarCatalogEntry {
+            epoch_tdb: JulianDateTdb(2_451_545.0),
+            right_ascension_deg: 2.71_f64.to_degrees(),
+            declination_deg: 0.174_f64.to_degrees(),
+            proper_motion_ra_cos_dec_mas_per_year: 1e-5 * 0.174_f64.cos() * mas_per_rad,
+            proper_motion_dec_mas_per_year: 5e-6 * mas_per_rad,
+            parallax_mas: 100.0,
+            radial_velocity_km_per_second: 55.0,
+        };
+        let mut eph = De441::open(std::env::var_os("DE441_PATH").expect("DE441_PATH")).unwrap();
+        // Treat TT and TDB as equal for this fixture only; their actual offset
+        // is under two milliseconds and is not derived by this test.
+        let result = calculate_star(&mut eph, entry, tt, JulianDateTdb(tt)).unwrap();
+        let eps = crate::earth_orientation::ecliptic_nutation(tt)
+            .unwrap()
+            .true_obliquity_rad;
+        let (sl, cl) = result.longitude_deg.to_radians().sin_cos();
+        let (sb, cb) = result.latitude_deg.to_radians().sin_cos();
+        let (se, ce) = eps.sin_cos();
+        let x = cb * cl;
+        let y = cb * sl * ce - sb * se;
+        let z = cb * sl * se + sb * ce;
+        let ra = y.atan2(x).rem_euclid(std::f64::consts::TAU);
+        let dec = z.atan2(x.hypot(y));
+        let sep_mas = |ref_ra: f64, ref_dec: f64| {
+            ((ra - ref_ra) * ref_dec.cos()).hypot(dec - ref_dec) * mas_per_rad
+        };
+        let without_solar_deflection = sep_mas(2.713_022_883_083_276_8, 0.172_944_718_098_265_34);
+        assert!(
+            without_solar_deflection < 10.0,
+            "{without_solar_deflection} mas"
+        );
+        // ERFA's published full t_atci13 result is CIRS; subtract its equation
+        // of origins to obtain equinox-based RA before comparison. This
+        // deliberately near-Sun fixture includes solar gravitational bending.
+        let full = sep_mas(
+            2.710_121_572_968_697 + 0.002_900_618_712_657_376,
+            0.172_937_136_721_953_9,
+        );
+        assert!((1_000.0..2_000.0).contains(&full), "{full} mas");
+    }
+    #[test]
     fn invalid_parallax_and_poles_are_explicit_errors() {
         let mut e = example();
         e.parallax_mas = 0.0;
