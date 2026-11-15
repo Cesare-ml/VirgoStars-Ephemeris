@@ -134,3 +134,14 @@ node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-st
 ```
 
 The result reports mapped/unmapped names, identified candidates and remaining names, **not** the positions or release readiness of stars. The comparison script is an operator-only audit and does not introduce a runtime dependency on VirgoStars or Astrolabio. **Do not copy** the older `database/effemeridi/astrodienst/sefstars.txt` into this source or importer.
+
+### Optional two-repository regression
+
+With both repositories cloned locally, check that the inventory and the curated names remain aligned:
+
+```powershell
+$env:VIRGOSTARS_BACKEND_STARS_HELPER = "C:\\repos\\virgo-stars\\backend\\helpers\\stars.helper.js"
+node --test test/audit-fixed-star-coverage.test.mjs
+```
+
+The test requires the current known source contract: 106 listed names, 96 mapped backend stars, 30 SIMBAD-linked candidate identities and 66 names still missing. It intentionally skips in isolated CI when the backend path is absent. These are naming/cross-identification counts, **not** verified positions, brightness measurements, production readiness or a substitute for `swe_fixstar_ut` numerical parity.
