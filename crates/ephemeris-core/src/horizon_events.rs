@@ -18,6 +18,8 @@
 use crate::de441::{Body, De441, JulianDateTdb};
 use crate::earth_orientation::{gast_iau2006, OrientationError};
 use crate::equatorial_horizontal::{true_equatorial_to_horizontal, HorizontalConversionError};
+use crate::first_sky::{observer_vector, Observer};
+use crate::six_field_units::IAU_AU_KM;
 use crate::true_ecliptic::{geocentric_true_equatorial, TrueEclipticError};
 use std::error::Error;
 use std::fmt;
@@ -147,6 +149,79 @@ pub fn find_geometric_event<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     input: HorizonEventSearch,
 ) -> Result<HorizonEvent, HorizonEventError> {
+    find_event(ephemeris, input, None)
+}
+
+/// Like `find_geometric_event`, but subtracts a WGS84 observer vector from
+/// the geocentric direction. Height is geodetic metres; no observer light-time
+/// or diurnal aberration is applied. Refraction and body limbs remain omitted.
+pub fn find_topocentric_geometric_event<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    input: HorizonEventSearch,
+    height_m: f64,
+) -> Result<HorizonEvent, HorizonEventError> {
+    if !height_m.is_finite() || !(-12_000.0..=100_000.0).contains(&height_m) {
+        return Err(HorizonEventError::InvalidInput);
+    }
+    find_event(ephemeris, input, Some(height_m))
+}
+
+/// Subtract the WGS84 observer position in true-equator-of-date axes. This
+/// is a geometric parallax correction of an already corrected direction,
+/// not a complete topocentric apparent place calculation.
+pub fn topocentric_equatorial_direction(
+    ut1_jd: f64,
+    tt_jd: f64,
+    site: Observer,
+    ra_deg: f64,
+    dec_deg: f64,
+    distance_au: f64,
+) -> Result<(f64, f64), HorizonEventError> {
+    if !ut1_jd.is_finite() || !tt_jd.is_finite() || (ut1_jd - tt_jd).abs() > 0.1 {
+        return Err(HorizonEventError::IncoherentEpoch);
+    }
+    if !site.latitude_deg.is_finite()
+        || site.latitude_deg.abs() > 90.0
+        || !site.longitude_deg_east.is_finite()
+        || site.longitude_deg_east.abs() > 180.0
+        || !site.height_m.is_finite()
+        || !(-12_000.0..=100_000.0).contains(&site.height_m)
+        || !ra_deg.is_finite()
+        || !(0.0..360.0).contains(&ra_deg)
+        || !dec_deg.is_finite()
+        || dec_deg.abs() > 90.0
+        || !distance_au.is_finite()
+        || distance_au <= 0.0
+    {
+        return Err(HorizonEventError::InvalidInput);
+    }
+    let gast = gast_iau2006(ut1_jd, tt_jd).map_err(HorizonEventError::Orientation)?;
+    let observer = observer_vector(site, gast + site.longitude_deg_east.to_radians());
+    let (sin_ra, cos_ra) = ra_deg.to_radians().sin_cos();
+    let (sin_dec, cos_dec) = dec_deg.to_radians().sin_cos();
+    let distance_km = distance_au * IAU_AU_KM;
+    let xyz = [
+        distance_km * cos_dec * cos_ra - observer[0],
+        distance_km * cos_dec * sin_ra - observer[1],
+        distance_km * sin_dec - observer[2],
+    ];
+    let xy = xyz[0].hypot(xyz[1]);
+    let radius = xy.hypot(xyz[2]);
+    if !radius.is_finite() || radius <= 0.0 || xy <= f64::EPSILON * radius {
+        return Err(HorizonEventError::InvalidSample);
+    }
+    let ra = xyz[1].atan2(xyz[0]).to_degrees().rem_euclid(360.0);
+    Ok((
+        if ra >= 360.0 { 0.0 } else { ra },
+        xyz[2].atan2(xy).to_degrees(),
+    ))
+}
+
+fn find_event<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    input: HorizonEventSearch,
+    height_m: Option<f64>,
+) -> Result<HorizonEvent, HorizonEventError> {
     if !input.start_ut1_jd.is_finite()
         || !input.start_tt_jd.is_finite()
         || !input.start_tdb.0.is_finite()
@@ -174,39 +249,52 @@ pub fn find_geometric_event<R: Read + Seek>(
         input.kind,
         HorizonEventKind::Rise | HorizonEventKind::UpperTransit
     );
-    let (elapsed, bracket_seconds) =
-        search_crossing(
-            input.window_days,
-            input.step_minutes / 1440.0,
-            increasing,
-            |delta| {
-                let ut1 = input.start_ut1_jd + delta;
-                let tt = input.start_tt_jd + delta;
-                let tdb = JulianDateTdb(input.start_tdb.0 + delta);
-                let state = geocentric_true_equatorial(ephemeris, input.target, tdb, tt)
-                    .map_err(HorizonEventError::Ephemeris)?;
-                match input.kind {
-                    HorizonEventKind::Rise | HorizonEventKind::Set => {
-                        let horizontal = true_equatorial_to_horizontal(
-                            ut1,
-                            tt,
-                            input.latitude_deg,
-                            input.longitude_deg_east,
-                            state.right_ascension_deg,
-                            state.declination_deg,
-                        )
-                        .map_err(HorizonEventError::Horizontal)?;
-                        Ok(horizontal.true_altitude_deg - input.threshold_altitude_deg)
-                    }
-                    HorizonEventKind::UpperTransit | HorizonEventKind::LowerTransit => {
-                        let gast = gast_iau2006(ut1, tt).map_err(HorizonEventError::Orientation)?;
-                        Ok((gast
-                            + (input.longitude_deg_east - state.right_ascension_deg).to_radians())
-                        .sin())
-                    }
+    let (elapsed, bracket_seconds) = search_crossing(
+        input.window_days,
+        input.step_minutes / 1440.0,
+        increasing,
+        |delta| {
+            let ut1 = input.start_ut1_jd + delta;
+            let tt = input.start_tt_jd + delta;
+            let tdb = JulianDateTdb(input.start_tdb.0 + delta);
+            let state = geocentric_true_equatorial(ephemeris, input.target, tdb, tt)
+                .map_err(HorizonEventError::Ephemeris)?;
+            let (ra, dec) = if let Some(height_m) = height_m {
+                topocentric_equatorial_direction(
+                    ut1,
+                    tt,
+                    Observer {
+                        latitude_deg: input.latitude_deg,
+                        longitude_deg_east: input.longitude_deg_east,
+                        height_m,
+                    },
+                    state.right_ascension_deg,
+                    state.declination_deg,
+                    state.distance_au,
+                )?
+            } else {
+                (state.right_ascension_deg, state.declination_deg)
+            };
+            match input.kind {
+                HorizonEventKind::Rise | HorizonEventKind::Set => {
+                    let horizontal = true_equatorial_to_horizontal(
+                        ut1,
+                        tt,
+                        input.latitude_deg,
+                        input.longitude_deg_east,
+                        ra,
+                        dec,
+                    )
+                    .map_err(HorizonEventError::Horizontal)?;
+                    Ok(horizontal.true_altitude_deg - input.threshold_altitude_deg)
                 }
-            },
-        )?;
+                HorizonEventKind::UpperTransit | HorizonEventKind::LowerTransit => {
+                    let gast = gast_iau2006(ut1, tt).map_err(HorizonEventError::Orientation)?;
+                    Ok((gast + (input.longitude_deg_east - ra).to_radians()).sin())
+                }
+            }
+        },
+    )?;
     Ok(HorizonEvent {
         kind: input.kind,
         target: input.target,
@@ -220,6 +308,46 @@ pub fn find_geometric_event<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wgs84_parallax_has_expected_analytic_and_reference_behavior() {
+        let ut1 = 2_451_545.0;
+        let tt = 2_451_545.0;
+        let angle = gast_iau2006(ut1, tt).unwrap();
+        let ra = (angle.to_degrees() + 90.0).rem_euclid(360.0);
+        let site = Observer {
+            latitude_deg: 0.0,
+            longitude_deg_east: 0.0,
+            height_m: 0.0,
+        };
+        let (topo_ra, topo_dec) =
+            topocentric_equatorial_direction(ut1, tt, site, ra, 0.0, 384_400.0 / IAU_AU_KM)
+                .unwrap();
+        let shift = (topo_ra - ra).rem_euclid(360.0);
+        assert!((shift - (6378.137_f64 / 384_400.0).atan().to_degrees()).abs() < 1e-10);
+        assert!(topo_dec.abs() < 1e-12);
+        assert!(matches!(
+            topocentric_equatorial_direction(ut1, tt, site, ra, 0.0, 0.0),
+            Err(HorizonEventError::InvalidInput)
+        ));
+        // Independent Swiss 2.09.03 output, same DE441 and geocentric input, Rome
+        // 2026-11-10 00 UT; includes diurnal aberration and other model differences.
+        let rome = Observer {
+            latitude_deg: 41.9028,
+            longitude_deg_east: 12.4964,
+            height_m: 20.0,
+        };
+        let (ra, dec) = topocentric_equatorial_direction(
+            2_461_354.5,
+            2_461_354.500_800_741,
+            rome,
+            231.981_750_755_068_53,
+            -24.008_338_358_732_306,
+            0.002_672_331_115_769_936_6,
+        )
+        .unwrap();
+        assert!((ra - 232.105_567_496_268_7).abs() < 0.00015);
+        assert!((dec + 24.285_660_002_690_335).abs() < 0.00015);
+    }
     #[test]
     fn directional_crossings_and_no_crossing_are_explicit() {
         let wave = |d: f64| Ok((d * std::f64::consts::TAU).sin());
@@ -277,5 +405,35 @@ mod tests {
                 && event.ut1_jd < input.start_ut1_jd + input.window_days
         );
         assert!(event.bracket_seconds <= 0.25);
+    }
+
+    #[test]
+    #[ignore = "requires a separately supplied DE441_PATH"]
+    fn lunar_center_events_are_near_recorded_swiss_geometric_reference() {
+        let path = std::env::var_os("DE441_PATH").expect("DE441_PATH required");
+        let mut eph = De441::open(path).unwrap();
+        // Swiss 2.09.03, DE441 JPL flag, center/no-refraction, Rome, 20 m,
+        // 2026-11-10 00:00 UT; UT1=UTC is an explicit test approximation.
+        let mut input = HorizonEventSearch {
+            target: Body::Moon,
+            kind: HorizonEventKind::Rise,
+            start_ut1_jd: 2_461_354.5,
+            start_tt_jd: 2_461_354.500_800_741,
+            start_tdb: JulianDateTdb(2_461_354.500_800_725),
+            latitude_deg: 41.9028,
+            longitude_deg_east: 12.4964,
+            threshold_altitude_deg: 0.0,
+            window_days: 2.0,
+            step_minutes: 10.0,
+        };
+        let rise = find_topocentric_geometric_event(&mut eph, input, 20.0).unwrap();
+        assert!((rise.ut1_jd - 2_461_354.805_781_344).abs() * 86_400.0 < 3.0);
+        input.kind = HorizonEventKind::Set;
+        let set = find_topocentric_geometric_event(&mut eph, input, 20.0).unwrap();
+        assert!((set.ut1_jd - 2_461_355.170_165_578_4).abs() * 86_400.0 < 3.0);
+        assert!(matches!(
+            find_topocentric_geometric_event(&mut eph, input, f64::NAN),
+            Err(HorizonEventError::InvalidInput)
+        ));
     }
 }

@@ -544,7 +544,7 @@ fn validate_observer(site: Observer) -> Result<(), SkyError> {
     Ok(())
 }
 
-fn observer_vector(site: Observer, local_angle: f64) -> [f64; 3] {
+pub(crate) fn observer_vector(site: Observer, local_angle: f64) -> [f64; 3] {
     let (sin_lat, cos_lat) = site.latitude_deg.to_radians().sin_cos();
     let (sin_ang, cos_ang) = local_angle.sin_cos();
     let e2 = WGS84_FLATTENING * (2.0 - WGS84_FLATTENING);

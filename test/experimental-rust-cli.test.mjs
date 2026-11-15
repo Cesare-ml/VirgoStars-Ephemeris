@@ -79,6 +79,16 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.ok(Object.isFrozen(rise));
   assert.throws(()=>provider.findGeometricEvent({...search,thresholdAltitudeDeg:80}), /no requested crossing/);
   assert.throws(()=>provider.findGeometricEvent({...search,target:'Chiron'}), TypeError);
+  const moonSearch={...search,target:'Moon',windowDays:2};
+  const geoMoon=provider.findGeometricEvent(moonSearch);
+  const topoMoon=provider.findGeometricEvent({...moonSearch,observerHeightM:20});
+  assert.equal(topoMoon.model,'EXPERIMENTAL_TOPOCENTRIC_GEOMETRIC');
+  assert.ok(topoMoon.ut1JulianDay>geoMoon.ut1JulianDay);
+  assert.ok((topoMoon.ut1JulianDay-geoMoon.ut1JulianDay)*86400>60);
+  assert.throws(()=>provider.findGeometricEvent({...moonSearch,observerHeightM:100001}), /invalid event-search/);
+  const topo=provider.calculateTopocentricDirection({ut1JulianDay:2461354.5,ttJulianDay:2461354.500800741,latitudeDeg:41.9028,longitudeDegEast:12.4964,observerHeightM:20,rightAscensionDeg:231.98175075506853,declinationDeg:-24.008338358732306,distanceAu:0.0026723311157699366});
+  assert.ok(Math.abs(topo.rightAscensionDeg-232.1055674962687)<0.00015);
+  assert.ok(Math.abs(topo.declinationDeg+24.285660002690335)<0.00015);
   const polar=provider.calculateHorizontal({ut1JulianDay:2451545,ttJulianDay:2451545,latitudeDeg:90,longitudeDegEast:0,rightAscensionDeg:0,declinationDeg:0});
   assert.equal(polar.azimuthNorthEastDeg,null);
   assert.equal(polar.azimuthSouthWestDeg,null);
