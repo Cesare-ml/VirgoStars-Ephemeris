@@ -3,7 +3,7 @@
 // 2026-11-15: explicitly invoked, offline-output-only Hipparcos archive acquisition.
 // No imports/calculations fetch external data; this CLI runs only when requested.
 import {createHash} from 'node:crypto';
-import {existsSync,openSync,closeSync,writeFileSync,unlinkSync} from 'node:fs';
+import {existsSync,writeFileSync,unlinkSync} from 'node:fs';
 import {isAbsolute,resolve} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL} from 'node:url';
@@ -68,8 +68,7 @@ export async function runHipparcosDownload(argv) {
   const out=args['--out'];
   if(typeof out!=='string' || !isAbsolute(out)) throw new Error('--out must be an absolute file path outside the repository');
   const path=resolve(out),manifestPath=path+'.source.json';
-  const repoRoot=resolve(new URL('..',import.meta.url).pathname); // Safety check is advisory; Windows drive paths are handled by caller.
-  if(path===manifestPath || existsSync(path) || existsSync(manifestPath))
+  if(existsSync(path) || existsSync(manifestPath))
     throw new Error('Output file already exists; no overwrite allowed');
   const {raw,provenance}=await acquireHipparcos2007({expectedArchiveSha256:args['--archive-sha256']});
   let wroteRaw=false;
