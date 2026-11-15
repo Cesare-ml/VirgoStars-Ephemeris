@@ -62,6 +62,9 @@ function snapshotCatalog(catalog){
   return Object.freeze({id,lookup(name){if(typeof name!=='string' || !name.trim() || name!==name.trim())throw new TypeError('Explicit trimmed star name required');const entry=byName.get(name.toLowerCase());if(!entry)throw new RangeError('Star is not in the explicitly supplied catalog');return entry;}});
 }
 
+// Internal shared validation for the optional local-file loader.
+export function validateExperimentalStarCatalog(catalog){snapshotCatalog(catalog);}
+
 /** Caller supplies the classic JPL kernel, compiled Rust executable and a
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
