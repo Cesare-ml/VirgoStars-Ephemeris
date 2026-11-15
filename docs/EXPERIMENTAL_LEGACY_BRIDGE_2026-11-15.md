@@ -1,5 +1,27 @@
 # Explicit experimental legacy bridge
 
+## CommonJS initialization
+
+Node CommonJS code can asynchronously initialize the same ESM bridge:
+
+```js
+const {loadExperimentalLegacyBridge} = require('virgostars-ephemeris/experimental-legacy-bridge');
+async function start(options) {
+  const swe = await loadExperimentalLegacyBridge(options);
+  // After initialization, bridge methods themselves remain synchronous.
+  return swe.swe_julday(2000, 1, 1, 12);
+}
+```
+
+All explicit configuration and scientific limitations described below still
+apply. `require()` returns a loader object, not a `swisseph` replacement: the
+application must await initialization before injecting the resulting instance
+into code that uses it. This does not modify the backend, add missing APIs,
+provide time data or remove the need for a reviewed integration and validation.
+The loader was exercised locally with Node 22.18.0; Node 20 was not tested here.
+
+## ESM initialization
+
 `virgostars-ephemeris/experimental-legacy-bridge` exports an opt-in ESM
 factory that wraps the experimental Rust-backed Node subset with a small
 portion of the calling shapes used by VirgoStars. It is not a native binding,

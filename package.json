@@ -16,8 +16,14 @@
       "import": "./src/experimental-star-catalog-file.mjs"
     },
     "./experimental-legacy-bridge": {
-      "types": "./src/experimental-legacy-bridge.d.mts",
-      "import": "./src/experimental-legacy-bridge.mjs"
+      "import": {
+        "types": "./src/experimental-legacy-bridge.d.mts",
+        "default": "./src/experimental-legacy-bridge.mjs"
+      },
+      "require": {
+        "types": "./src/experimental-legacy-bridge.d.cts",
+        "default": "./src/experimental-legacy-bridge.cjs"
+      }
     },
     "./experimental-swiss-subset": {
       "types": "./src/experimental-swiss-subset.d.mts",
