@@ -15,6 +15,7 @@
 //! Calendar boundary regression tests with externally published Julian-day anchors.
 //!
 //! Calendar arithmetic only; no UTC/leap-second or dynamical-time conversion.
+// Modification (2026-11-15): cover canonical minute ticks and just-before-minute boundaries.
 
 use virgostars_ephemeris_core::calendar::{
     Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale,
