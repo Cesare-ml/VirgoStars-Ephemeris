@@ -43,7 +43,7 @@ export function readLegacyStarNames(helperSource){
   return {declared:names.length,mapped,unmapped,orphanIds};
 }
 
-export function checkFixedStarCoverage(helperSource, candidateManifest, extendedManifest){
+export function checkFixedStarCoverage(helperSource, candidateManifest, extendedManifest, identityReviewManifest){
   const legacy=readLegacyStarNames(helperSource);
   if(!candidateManifest || candidateManifest.schemaVersion!==1 || !Array.isArray(candidateManifest.stars))
     throw new TypeError('Expected versioned candidate star manifest');
@@ -69,9 +69,34 @@ export function checkFixedStarCoverage(helperSource, candidateManifest, extended
         throw new Error('Extended-object target must remain explicitly unvalidated');
     }
   }
+  const reviewNames=new Set();
+  if(identityReviewManifest!==undefined){
+    if(!identityReviewManifest || identityReviewManifest.schemaVersion!==1 ||
+       identityReviewManifest.reviewStatus!=='NO_AUTOMATIC_RESOLUTION' ||
+       !Array.isArray(identityReviewManifest.names))
+      throw new TypeError('Expected explicit manual-review identity manifest');
+    for(const entry of identityReviewManifest.names){
+      if(!entry || typeof entry!=='object' || entry.status!=='REQUIRES_LEGACY_SEMANTICS_REVIEW' ||
+         entry.catalogReady!==false || typeof entry.reason!=='string' || entry.reason.length<20 ||
+         !Array.isArray(entry.options) || !entry.options.length)
+        throw new TypeError('Identity review entries must be non-ready and explain unresolved aliases');
+      const name=normalize(entry.name);
+      if(reviewNames.has(name) || candidateNames.has(name) || extendedNames.has(name))
+        throw new Error('Duplicate or overlapping manual-review target');
+      reviewNames.add(name);
+      for(const option of entry.options){
+        if(!option || typeof option.designation!=='string' || !option.designation ||
+           (option.hip!==null && (!Number.isSafeInteger(option.hip) || option.hip<=0)) ||
+           typeof option.sourceUrl!=='string' || !option.sourceUrl.startsWith('https://'))
+          throw new TypeError('Review option needs an optional HIP and explicit source URL');
+      }
+    }
+  }
   const identified=legacy.mapped.filter(name=>candidateNames.has(normalize(name)));
   const routedExtended=legacy.mapped.filter(name=>extendedNames.has(normalize(name)));
   const missing=legacy.mapped.filter(name=>!candidateNames.has(normalize(name))&&!extendedNames.has(normalize(name)));
+  const reviewed=missing.filter(name=>reviewNames.has(normalize(name)));
+  const unclassified=missing.filter(name=>!reviewNames.has(normalize(name)));
   const candidateNotUsed=candidateManifest.stars.map(s=>s.name).filter(name=>!legacy.mapped.some(n=>normalize(n)===normalize(name)));
   return {
     schemaVersion:1,
@@ -86,11 +111,16 @@ export function checkFixedStarCoverage(helperSource, candidateManifest, extended
     nonstellarNames:routedExtended,
     extendedNamesNotUsed:[...extendedNames].filter(name=>!legacy.mapped.some(n=>normalize(n)===name)),
     totalRoutedTargets:identified.length+routedExtended.length,
+    pendingIdentityReview:reviewed.length,
+    pendingIdentityReviewNames:reviewed,
+    reviewNamesNotUsed:[...reviewNames].filter(name=>!legacy.mapped.some(n=>normalize(n)===name)),
+    unclassifiedCount:unclassified.length,
+    unclassifiedNames:unclassified,
     missingCandidates:missing.length,
     missingNames:missing,
     candidateNamesNotUsed: candidateNotUsed,
     scientificallyValidated:0,
-    note:'Stellar targets carry HIP IDs; extended objects have independent astronomical identifiers and need a different coordinate policy. No target is scientifically validated for production.',
+    note:'Stellar targets carry HIP IDs, extended objects use separate science, and pending-review labels are NOT accepted as resolved HIP stars. No target has production scientific validation.',
   };
 }
 
@@ -99,7 +129,7 @@ export function runFixedStarCoverageAudit(argv){
     const i=x.indexOf('=');return [x.slice(0,i),x.slice(i+1)];
   }));
   for(const key of Object.keys(options))
-    if(!['--backend-helper','--candidates','--extended','--out'].includes(key))throw new Error(`Unknown argument: ${key}`);
+    if(!['--backend-helper','--candidates','--extended','--review','--out'].includes(key))throw new Error(`Unknown argument: ${key}`);
   for(const key of ['--backend-helper','--candidates'])
     if(typeof options[key]!=='string' || !isAbsolute(options[key]))throw new Error(`${key} requires an absolute local path`);
   const manifest=JSON.parse(readFileSync(resolve(options['--candidates']),'utf8'));
@@ -107,7 +137,11 @@ export function runFixedStarCoverageAudit(argv){
     throw new Error('--extended requires an absolute local path');
   const extended=options['--extended']===undefined?undefined:
     JSON.parse(readFileSync(resolve(options['--extended']),'utf8'));
-  const report=checkFixedStarCoverage(readFileSync(resolve(options['--backend-helper']),'utf8'),manifest,extended);
+  if(options['--review']!==undefined && !isAbsolute(options['--review']))
+    throw new Error('--review requires an absolute local path');
+  const review=options['--review']===undefined?undefined:
+    JSON.parse(readFileSync(resolve(options['--review']),'utf8'));
+  const report=checkFixedStarCoverage(readFileSync(resolve(options['--backend-helper']),'utf8'),manifest,extended,review);
   if(options['--out']!==undefined){
     if(!isAbsolute(options['--out']))throw new Error('--out must be an absolute local path');
     writeFileSync(resolve(options['--out']),JSON.stringify(report,null,2)+'\n',{flag:'wx'});
