@@ -188,7 +188,12 @@ fn every_exact_minute_tick_round_trips_canonically_for_both_calendars_and_all_sc
 #[test]
 fn just_before_minute_is_not_rounded_forward_to_the_next_minute() {
     for calendar in [Calendar::ProlepticGregorian, Calendar::ProlepticJulian] {
-        for scale in [TimeScale::Tai, TimeScale::Tt, TimeScale::Tdb, TimeScale::Ut1] {
+        for scale in [
+            TimeScale::Tai,
+            TimeScale::Tt,
+            TimeScale::Tdb,
+            TimeScale::Ut1,
+        ] {
             let just_before = CalendarDateTime {
                 year: 2026,
                 month: 11,
