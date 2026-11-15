@@ -45,7 +45,7 @@ The snippet illustrates a clickable entry, **not** a legal compliance certificat
 
 ## Original code versus external data
 
-This repository currently contains a small, experimental JavaScript reader for the classic DE441 ephemeris format and synthetic unit tests. It **does not** redistribute any NASA/JPL ephemeris files, Swiss Ephemeris software or Astrodienst datasets.
+This repository contains an **experimental Rust astronomical core** with a classic DE441 binary reader and an experimental NAIF DAF/SPK type-2/type-3 geometric-state implementation, alongside historical JavaScript research prototypes and synthetic tests. The Rust SPK path is not independently validated against authentic NASA/JPL vectors; neither the prototypes nor the Rust code are production-ready by virtue of being present. See [README](../README.md), [DE441 format limits](DE441.md), and [numerical validation requirements](VALIDATION.md). It **does not** redistribute NASA/JPL ephemeris files, Swiss Ephemeris software or Astrodienst datasets.
 
 - Any JPL DE441 `.eph` file is obtained separately under its supplier's conditions; CPAL-1.0 **does not grant rights** in that external file.
 - NASA/JPL/NAIF public downloads, NAIF SPICE Toolkit code and Astrodienst distributions have their own provenance and applicable conditions. Assess them separately before bundling or mirroring.
