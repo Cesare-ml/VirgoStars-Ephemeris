@@ -16,6 +16,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createExperimentalSwissSubset as create} from '../src/experimental-swiss-subset.mjs';
 
+const fixtureStar={name:'Synthetic A',aliases:['A'],epochTdbJulianDay:2451545,rightAscensionDeg:20,declinationDeg:-30,properMotionRaCosDecMasPerYear:120,properMotionDecMasPerYear:-40,parallaxMas:50,radialVelocityKmPerSecond:20,visualMagnitude:1.23};
+test('catalog aliases and magnitudes are explicit immutable input snapshots',()=>{
+  const record={...fixtureStar,aliases:[...fixtureStar.aliases]};
+  const catalog={id:'synthetic-fixture',records:[record]};
+  const options={executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0}),catalog};
+  const api=create(options);record.visualMagnitude=99;record.aliases[0]='changed';
+  assert.deepEqual(api.swe_fixstar_mag('a'),{name:'Synthetic A',magnitude:1.23,catalogId:'synthetic-fixture',model:'CALLER_SUPPLIED_CATALOG_MAGNITUDE'});
+  assert.throws(()=>api.swe_fixstar_mag('changed'),/not in/);
+  assert.throws(()=>create({...options,catalog:{id:'x',records:[fixtureStar,{...fixtureStar,name:'other'}]}}),/Duplicate/);
+  assert.throws(()=>create({...options,catalog:{id:'x',records:[{...fixtureStar,parallaxMas:0}]}}),/Invalid/);
+  assert.throws(()=>create({...options,catalog:undefined}).swe_fixstar_mag('A'),/catalog/);
+});
+
 test('rejects absent converters, unsupported bodies, flags and incoherent epochs without fallback',()=>{
   assert.throws(()=>create({executablePath:'x',kernelPath:'y'}),TypeError);
   const api=create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})});
@@ -53,4 +66,20 @@ test('real DE441 subset supports calendar, physical targets and sync callbacks',
   const noSpeed=api.swe_calc_ut(2461354.5,api.SE_MOON,api.SEFLG_JPLEPH);
   assert.deepEqual([noSpeed.longitudeSpeed,noSpeed.latitudeSpeed,noSpeed.distanceSpeed],[0,0,0]);
   assert.equal(conversions,5);
+});
+
+test('real DE441 star calculation exposes the supplied astrometry and signed rates',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH,
+},()=>{
+  const api=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,
+    convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+69.184/86400,tdbJulianDay:ut1+69.184/86400}),
+    catalog:{id:'synthetic-fixture',records:[fixtureStar]}});
+  let callbackValue;const result=api.swe_fixstar_ut('a',2461354.5,api.SEFLG_JPLEPH|api.SEFLG_SPEED,x=>{callbackValue=x;});
+  assert.equal(result,callbackValue);assert.equal(result.name,'Synthetic A');assert.equal(result.catalogId,'synthetic-fixture');
+  assert.ok(Number.isFinite(result.longitude) && Number.isFinite(result.longitudeSpeed) && result.distance>0);
+  assert.ok(result.warnings.includes('STELLAR_LIGHT_TIME_OMITTED'));
+  const before=api.swe_fixstar_ut('A',2461354.25,api.SEFLG_JPLEPH),after=api.swe_fixstar_ut('A',2461354.75,api.SEFLG_JPLEPH);
+  const numerical=(((after.longitude-before.longitude+540)%360)-180)/0.5;
+  assert.ok(Math.abs(numerical-result.longitudeSpeed)<0.00005);
+  assert.equal(before.longitudeSpeed,0);
 });

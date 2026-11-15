@@ -3,5 +3,8 @@ const api=createExperimentalSwissSubset({executablePath:'example',kernelPath:'ex
 const jd:number=api.swe_julday(2000,1,1,12,SE_GREG_CAL);
 const longitude:number=api.swe_calc_ut(jd,SE_SUN,SEFLG_JPLEPH|SEFLG_SPEED).longitude;
 void longitude;
+const magnitude:number=api.swe_fixstar_mag('example').magnitude;
+const starLongitude:number=api.swe_fixstar_ut('example',jd,SEFLG_JPLEPH).longitude;
+void magnitude;void starLongitude;
 // @ts-expect-error the calendar flag must be explicit
 api.swe_julday(2000,1,1,12);

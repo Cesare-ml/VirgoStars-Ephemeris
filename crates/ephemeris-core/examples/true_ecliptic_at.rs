@@ -23,6 +23,7 @@ use virgostars_ephemeris_core::equatorial_horizontal::{
     noaa_standard_refraction, true_equatorial_to_horizontal,
 };
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
+use virgostars_ephemeris_core::fixed_star::{calculate_star, FixedStarCatalogEntry};
 use virgostars_ephemeris_core::horizon_events::{
     find_geometric_event, find_standard_solar_event, find_topocentric_geometric_event,
     topocentric_equatorial_direction, HorizonEventKind, HorizonEventSearch,
@@ -73,6 +74,34 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 12 && args[1] == "star_epoch" {
+        let tt = arg(3)?.parse()?;
+        let tdb = JulianDateTdb(arg(4)?.parse()?);
+        let entry = FixedStarCatalogEntry {
+            epoch_tdb: JulianDateTdb(arg(5)?.parse()?),
+            right_ascension_deg: arg(6)?.parse()?,
+            declination_deg: arg(7)?.parse()?,
+            proper_motion_ra_cos_dec_mas_per_year: arg(8)?.parse()?,
+            proper_motion_dec_mas_per_year: arg(9)?.parse()?,
+            parallax_mas: arg(10)?.parse()?,
+            radial_velocity_km_per_second: arg(11)?.parse()?,
+        };
+        let mut eph = De441::open(&args[2])?;
+        let star = calculate_star(&mut eph, entry, tt, tdb).map_err(|error| error.to_string())?;
+        println!("tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        println!(
+            "{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            star.tt_jd,
+            star.tdb.0,
+            star.longitude_deg,
+            star.latitude_deg,
+            star.distance_au,
+            star.longitude_speed_deg_per_tdb_day,
+            star.latitude_speed_deg_per_tdb_day,
+            star.distance_speed_au_per_tdb_day
+        );
+        return Ok(());
+    }
     if args.len() == 6 && args[1] == "calc_epoch" {
         let target = BODIES
             .into_iter()
