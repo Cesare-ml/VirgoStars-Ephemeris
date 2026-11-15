@@ -41,6 +41,16 @@ Use fully specified arguments `--key=value`. The importer checks both digests, t
 
 Run `node --test test/import-hipparcos-2007.test.mjs` and `node --test test/fixed-star-crossmatches.test.mjs` for synthetic parser and crossmatch-manifest regression; neither test validates observed stellar positions. Once the #429 loader is integrated, use it with the JSON, pinned output SHA-256, explicit source and verified rights labels. Keep the generated raw/derived files out of Git until data-rights approval. No runtime network calls, new third-party library, or changes to astronomical Rust algorithms are introduced here.
 
+## Formal-uncertainty export gate (2026-11-15)
+
+The CDS I/311 official [Hipparcos 2007 ReadMe](https://vizier.cfa.harvard.edu/ftp/cats/I/311/ReadMe) was reviewed against the importer. Its fixed-width columns `HIP` (1–6), `Sn` (8–10), `Nc` (14), `RArad` (16–28), `DErad` (30–42), `Plx` (44–50), `pmRA` (52–59), `pmDE` (61–68), and the five *formal astrometric uncertainties* (70–103) match the currently implemented byte offsets. The actual original 117,955-row gzip cannot currently be downloaded from this agent's environment due to outbound network/DNS restrictions; verification of a real file's individual values **has not been performed**.
+
+**New importer safety rule:** An accepted stellar row must have all five published formal uncertainties (`e_RArad`, `e_DErad`, `e_Plx`, `e_pmRA`, `e_pmDE`); `e_Plx` must be strictly positive. In addition to a positive parallax, the signal-to-noise ratio `Plx/e_Plx` must be at least **5 by default**. This `5` threshold is a VirgoStars selection policy, not an official Hipparcos catalogue rule and **not a scientific certification**. Do not infer missing errors as zero or claim that high SNR excludes orbital motion, astrometric systematic errors, spurious associations or variability.
+
+For experiments only, the operator can supply `--min-parallax-snr=NUMBER` to the importer, with a finite positive value at most 1000. The separate audit records that threshold, each star's actual five formal errors and its parallax SNR. Reducing the threshold may admit more sources, but it is **not a substitute for independent numerical comparison**. The observational audit uses the same shared CDS uncertainty parser and now marks stars with missing RA, Dec or proper-motion errors `OTHER_FORMAL_UNCERTAINTIES_UNAVAILABLE`.
+
+Tests: `test/import-hipparcos-2007.test.mjs` (missing/zero/low-SNR rejection), `test/audit-hipparcos-2007.test.mjs` (quality flags), and `test/hipparcos-catalog-loader-integration.test.mjs` (quality-checked synthetic import → loader). All are synthetic and network-free; genuine-source execution is still a separate release gate.
+
 ## Open scientific/release gates
 
 1. Independently check real HIP cross-identification, V magnitude, radial velocity **and uncertainty** for representative stars such as Sirius, Regulus, Spica, Aldebaran, and Antares. Bright binaries and variable stars need special care: HIP component identity, variability, RV epoch/method, and proper-motion solution class matter.
