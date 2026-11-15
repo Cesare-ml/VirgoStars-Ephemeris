@@ -45,6 +45,7 @@ pub mod light_time;
 pub mod lunar_points;
 pub mod physical_center;
 pub mod six_field_units;
+pub mod solar_deflection;
 pub mod spk_direct_state;
 pub mod spk_index;
 pub mod spk_kernel_set;
