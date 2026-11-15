@@ -1,4 +1,5 @@
 export declare const SE_JUL_CAL:0,SE_GREG_CAL:1,SEFLG_JPLEPH:1,SEFLG_SWIEPH:2,SEFLG_HELCTR:8,SEFLG_SPEED:256,SEFLG_EQUATORIAL:2048;
+export declare const SE_ECL2HOR:0,SE_EQU2HOR:1;
 export declare const SE_ECL_NUT:-1,SE_SUN:0,SE_MOON:1,SE_MERCURY:2,SE_VENUS:3,SE_MARS:4,SE_JUPITER:5,SE_SATURN:6,SE_URANUS:7,SE_NEPTUNE:8,SE_PLUTO:9;
 export interface ExperimentalSwissResult {
   readonly longitude:number; readonly latitude:number; readonly distance:number;
@@ -35,9 +36,11 @@ export interface ExperimentalHouseSupport {
 }
 export interface ExperimentalHouses {readonly house:readonly number[];readonly ascendant:number;readonly mc:number;readonly armc:number;readonly trueObliquity:number;readonly model:'EXPERIMENTAL_IAU2006_2000B_HOUSES';readonly warnings:readonly string[];}
 export interface ExperimentalHousePosition {readonly housePosition:number;readonly model:'EXPERIMENTAL_PLACIDUS_POSITION';readonly warnings:readonly string[];}
+export interface ExperimentalHorizontal {azimuth:number;trueAltitude:number;apparentAltitude:number;readonly model:'EXPERIMENTAL_GEOMETRIC_HORIZON'|'EXPERIMENTAL_NOAA_STANDARD_HORIZON';readonly warnings:readonly string[];}
 export interface ExperimentalSwissSubset {
   readonly SE_JUL_CAL:0;readonly SE_GREG_CAL:1;readonly SEFLG_JPLEPH:1;readonly SEFLG_SWIEPH:2;readonly SEFLG_HELCTR:8;readonly SEFLG_EQUATORIAL:2048;readonly SEFLG_SPEED:256;
-  readonly SE_ECL_NUT:-1;readonly SE_SUN:0;readonly SE_MOON:1;readonly SE_MERCURY:2;readonly SE_VENUS:3;readonly SE_MARS:4;readonly SE_JUPITER:5;readonly SE_SATURN:6;readonly SE_URANUS:7;readonly SE_NEPTUNE:8;readonly SE_PLUTO:9;
+  readonly SE_ECL2HOR:0;readonly SE_EQU2HOR:1;readonly SE_ECL_NUT:-1;readonly SE_SUN:0;readonly SE_MOON:1;readonly SE_MERCURY:2;readonly SE_VENUS:3;readonly SE_MARS:4;readonly SE_JUPITER:5;readonly SE_SATURN:6;readonly SE_URANUS:7;readonly SE_NEPTUNE:8;readonly SE_PLUTO:9;
+  swe_azalt(julianDay:number,mode:0|1,longitudeDegEast:number,latitudeDeg:number,heightMetres:number,pressureHpa:number,temperatureC:number,longitudeOrRa:number,latitudeOrDec:number,distance:number,callback?:(result:ExperimentalHorizontal)=>void):ExperimentalHorizontal;
   swe_get_planet_name(body:number,callback?:(result:Readonly<{name:string}>)=>void):Readonly<{name:string}>;
   swe_calc(julianDayTt:number,body:-1,flags:0,callback?:(result:ExperimentalEclipticNutation)=>void):Readonly<ExperimentalEclipticNutation>;
   swe_julday(year:number,month:number,day:number,hour:number,calendarFlag:0|1):number;
@@ -49,4 +52,4 @@ export interface ExperimentalSwissSubset {
   swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalHouses)=>void):Readonly<ExperimentalHouses>;
   swe_houses_pos(armcDeg:number,latitudeDeg:number,trueObliquityDeg:number,system:'P',longitudeDeg:number,latitudeEclipticDeg:number,callback?:(result:ExperimentalHousePosition)=>void):Readonly<ExperimentalHousePosition>;
 }
-export declare function createExperimentalSwissSubset(options:{executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>}):Readonly<ExperimentalSwissSubset>;
+export declare function createExperimentalSwissSubset(options:{executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;horizontalSupport?:Readonly<{refraction:'GEOMETRIC'|'NOAA_STANDARD'}>;physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>}):Readonly<ExperimentalSwissSubset>;

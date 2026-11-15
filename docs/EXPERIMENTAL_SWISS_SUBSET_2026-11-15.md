@@ -41,6 +41,25 @@ errors. Callbacks are synchronous and receive the returned frozen object.
 `swe_get_planet_name` supports numeric IDs 0–9, Sun through Pluto; all other
 IDs are errors rather than guessed names.
 
+`swe_azalt` is opt-in via `horizontalSupport: {refraction: 'GEOMETRIC'}`
+or `{refraction: 'NOAA_STANDARD'}`. It accepts `SE_ECL2HOR` or `SE_EQU2HOR`,
+explicit UT1 and the configured time converter. Azimuth follows Swiss's
+south-through-west convention. The returned coordinate fields are mutable so
+the existing app can rotate azimuth; warnings remain immutable. Directions
+must already contain any intended parallax. Distance is not used; height,
+pressure and temperature currently must be zero placeholders. Unsupported
+weather and observer height fail instead of being ignored. Exact poles and
+undefined azimuth at zenith/nadir fail explicitly.
+
+`GEOMETRIC` returns the true altitude also as apparent altitude and labels the
+absence of refraction. `NOAA_STANDARD` applies the existing fixed-atmosphere
+NOAA approximation from −1° to 90°; below −1° it returns geometric altitude
+with a warning. Neither mode implements pressure/temperature-aware Swiss
+refraction, local weather, terrain, topocentric parallax, or Swiss parity.
+The comparison to Swiss azimuth and true altitude is limited to a small Rome
+sample; the standard-atmosphere model is tested against NOAA equations, not
+calibrated to Swiss atmospheric output.
+
 Sun, Moon, Mercury and Venus physical centers use the supplied classic DE441.
 Mars through Pluto require the corresponding explicit physical-center SPK path;
 missing data or coverage are errors and system barycenters are **not** silently

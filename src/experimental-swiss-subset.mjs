@@ -16,6 +16,7 @@
 import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_HELCTR=8,SEFLG_SPEED=256,SEFLG_EQUATORIAL=2048;
+export const SE_ECL2HOR=0,SE_EQU2HOR=1;
 export const SE_ECL_NUT=-1,SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
@@ -60,10 +61,15 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
+  let horizontalModel=null;
+  if(horizontalSupport!==undefined){
+    if(!horizontalSupport || typeof horizontalSupport!=='object' || !['GEOMETRIC','NOAA_STANDARD'].includes(horizontalSupport.refraction))throw new TypeError('Explicit horizontal refraction model is required');
+    horizontalModel=horizontalSupport.refraction;
+  }
   const centers={};
   if(physicalCenterKernels!==undefined){
     if(!physicalCenterKernels || typeof physicalCenterKernels!=='object' || Array.isArray(physicalCenterKernels))throw new TypeError('Physical-center SPK paths must be an object');
@@ -107,7 +113,23 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   };
   const star=name=>{if(!stars)throw new Error('An explicit star catalog is required');return stars.lookup(name);};
   const api={
-    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL2HOR,SE_EQU2HOR,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    swe_azalt(julianDay,mode,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC,longitudeOrRa,latitudeOrDec,distance,callback){
+      if(!horizontalModel)throw new Error('Explicit horizontal refraction model is required');
+      callbackType(callback);
+      if(mode!==SE_ECL2HOR && mode!==SE_EQU2HOR)throw new RangeError('Only ecliptic and equatorial horizontal inputs are supported');
+      if(![julianDay,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC,longitudeOrRa,latitudeOrDec,distance].every(Number.isFinite) || heightMetres!==0 || pressureHpa!==0 || temperatureC!==0 || distance<0)throw new RangeError('Finite coordinates and zero height, pressure and temperature placeholders are required');
+      const {ttJulianDay}=getEpochs(julianDay);
+      const horizontal=provider.calculateHorizontal({ut1JulianDay:julianDay,ttJulianDay,longitudeDegEast,latitudeDeg,rightAscensionDeg:longitudeOrRa,declinationDeg:latitudeOrDec,coordinateFrame:mode===SE_ECL2HOR?'ecliptic':'equatorial'});
+      if(horizontal.azimuthSouthWestDeg===null)throw new RangeError('Azimuth is undefined at zenith, nadir or a geographic pole');
+      let apparentAltitude=horizontal.trueAltitudeDeg;
+      const notes=['NOT_SWISS_PARITY','INPUT_PARALLAX_NOT_APPLIED','NO_POLAR_MOTION','DISTANCE_UNUSED'];
+      if(horizontalModel==='GEOMETRIC')notes.push('NO_REFRACTION');
+      else if(horizontal.trueAltitudeDeg < -1)notes.push('BELOW_MINUS_ONE_NO_REFRACTION');
+      else {apparentAltitude=provider.calculateStandardRefraction({trueAltitudeDeg:horizontal.trueAltitudeDeg}).apparentAltitudeDeg;notes.push('NOAA_FIXED_ATMOSPHERE_APPROXIMATE');}
+      const value={azimuth:horizontal.azimuthSouthWestDeg,trueAltitude:horizontal.trueAltitudeDeg,apparentAltitude,model:horizontalModel==='GEOMETRIC'?'EXPERIMENTAL_GEOMETRIC_HORIZON':'EXPERIMENTAL_NOAA_STANDARD_HORIZON',warnings:Object.freeze(notes)};
+      if(callback!==undefined)callback(value);return value;
+    },
     swe_get_planet_name(body,callback){
       callbackType(callback);if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto names are supported');
       const value=Object.freeze({name:PHYSICAL_TARGETS[body]});if(callback!==undefined)callback(value);return value;

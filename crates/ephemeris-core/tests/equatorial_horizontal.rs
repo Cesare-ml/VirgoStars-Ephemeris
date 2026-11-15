@@ -18,9 +18,33 @@
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use virgostars_ephemeris_core::equatorial_horizontal::{
-    equatorial_to_horizontal, noaa_standard_refraction, true_equatorial_to_horizontal,
-    HorizontalConversionError, HorizontalError,
+    equatorial_to_horizontal, noaa_standard_refraction, true_ecliptic_to_horizontal,
+    true_equatorial_to_horizontal, HorizontalConversionError, HorizontalError,
 };
+
+#[test]
+fn ecliptic_equinox_and_solstice_match_equatorial_geometry() {
+    let (ut, tt, lat, lon) = (2_461_354.5, 2_461_354.500_8, 41.9, 12.5);
+    let eps = virgostars_ephemeris_core::earth_orientation::ecliptic_nutation(tt)
+        .unwrap()
+        .true_obliquity_deg();
+    for (ecl_lon, ra, dec) in [
+        (0.0, 0.0, 0.0),
+        (90.0, 90.0, eps),
+        (180.0, 180.0, 0.0),
+        (270.0, 270.0, -eps),
+    ] {
+        let ecl = true_ecliptic_to_horizontal(ut, tt, lat, lon, ecl_lon, 0.0).unwrap();
+        let equ = true_equatorial_to_horizontal(ut, tt, lat, lon, ra, dec).unwrap();
+        assert!((ecl.true_altitude_deg - equ.true_altitude_deg).abs() < 1e-12);
+        assert!(
+            (ecl.azimuth_south_west_deg.unwrap() - equ.azimuth_south_west_deg.unwrap()).abs()
+                < 1e-12
+        );
+    }
+    assert!(true_ecliptic_to_horizontal(ut, tt, lat, lon, 360.0, 0.0).is_err());
+    assert!(true_ecliptic_to_horizontal(ut, tt, lat, lon, 0.0, 90.1).is_err());
+}
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
     assert!(

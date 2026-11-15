@@ -17,6 +17,36 @@ import assert from 'node:assert/strict';
 import {createExperimentalSwissSubset as create} from '../src/experimental-swiss-subset.mjs';
 
 const fixtureStar={name:'Synthetic A',aliases:['A'],epochTdbJulianDay:2451545,rightAscensionDeg:20,declinationDeg:-30,properMotionRaCosDecMasPerYear:120,properMotionDecMasPerYear:-40,parallaxMas:50,radialVelocityKmPerSecond:20,visualMagnitude:1.23};
+test('horizontal operation requires an explicit model and rejects unsupported weather',()=>{
+  const options={executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})};
+  assert.throws(()=>create(options).swe_azalt(2451545,0,0,0,0,0,0,0,0,0),/model/);
+  assert.throws(()=>create({...options,horizontalSupport:{refraction:'SWISS'}}),/model/);
+  const api=create({...options,horizontalSupport:{refraction:'GEOMETRIC'}});
+  assert.throws(()=>api.swe_azalt(2451545,0,0,0,0,1013,0,0,0,0),/pressure/);
+  assert.throws(()=>api.swe_azalt(2451545,0,0,0,1,0,0,0,0,0),/height/);
+});
+
+test('horizontal coordinate modes match sampled Swiss geometry with explicit refraction',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH,
+},()=>{
+  const options={executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.000800741,tdbJulianDay:ut1+0.000800725})};
+  const geometric=create({...options,horizontalSupport:{refraction:'GEOMETRIC'}});
+  const noaa=create({...options,horizontalSupport:{refraction:'NOAA_STANDARD'}});
+  // Recorded Swiss 2.09.03 geometry, Rome, at the same UT1; the two atmospheric models differ.
+  for(const [longitude,latitude,az,alt] of [[47.6,0,34.6566451561,61.4276244692],[90,0,299.1958339192,60.0787708356],[227.6,0,214.6566451561,-61.4276244692],[180,30,222.3448671159,-7.4588384727]]){
+    let callback;
+    const value=geometric.swe_azalt(2461354.5,geometric.SE_ECL2HOR,12.4964,41.9028,0,0,0,longitude,latitude,0,v=>{callback=v;});
+    assert.equal(value,callback);assert.ok(Math.abs(value.azimuth-az)<0.0001);assert.ok(Math.abs(value.trueAltitude-alt)<0.0001);
+    assert.equal(value.apparentAltitude,value.trueAltitude);
+    value.azimuth=(value.azimuth+180)%360;assert.ok(value.azimuth>=0 && value.azimuth<360);
+    const withRefraction=noaa.swe_azalt(2461354.5,noaa.SE_ECL2HOR,12.4964,41.9028,0,0,0,longitude,latitude,0);
+    if(alt < -1){assert.equal(withRefraction.apparentAltitude,withRefraction.trueAltitude);assert.ok(withRefraction.warnings.includes('BELOW_MINUS_ONE_NO_REFRACTION'));}
+    else {assert.ok(withRefraction.apparentAltitude>withRefraction.trueAltitude);assert.ok(withRefraction.warnings.includes('NOAA_FIXED_ATMOSPHERE_APPROXIMATE'));}
+  }
+  const eq=geometric.swe_azalt(2461354.5,geometric.SE_EQU2HOR,12.4964,41.9028,0,0,0,225.1367,-17.0811,0);
+  assert.ok(Math.abs(eq.azimuth-214.6566549742)<0.0001);assert.ok(Math.abs(eq.trueAltitude-(-61.4277080391))<0.0001);
+  assert.throws(()=>geometric.swe_azalt(2461354.5,geometric.SE_ECL2HOR,0,90,0,0,0,90,0,0),/undefined/);
+});
 test('planet names are explicit and synchronous',()=>{
   const api=create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})});
   const names=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'];

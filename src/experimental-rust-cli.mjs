@@ -239,10 +239,10 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if(Math.abs(altitude-trueAltitudeDeg)>1e-9 || correctionDeg<0 || Math.abs(apparentAltitudeDeg-altitude-correctionDeg)>1e-9) throw new Error('Out-of-range refraction CSV row');
       return Object.freeze({trueAltitudeDeg:altitude,correctionDeg,apparentAltitudeDeg,model:'NOAA_STANDARD_APPROXIMATE',warnings:Object.freeze(['FIXED_ATMOSPHERE','NOT_SWISS_PARITY','NO_LOCAL_WEATHER'])});
     },
-    calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
+    calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg,coordinateFrame='equatorial'}) {
       const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];
-      if(!values.every(Number.isFinite))throw new TypeError('Finite UT1, TT, location and equatorial direction are required');
-      const lines=execute(['horizontal',...values.map(String)]);
+      if(!values.every(Number.isFinite) || !['equatorial','ecliptic'].includes(coordinateFrame))throw new TypeError('Finite UT1, TT, location and supported direction are required');
+      const lines=execute([coordinateFrame==='equatorial'?'horizontal':'ecliptic_horizontal',...values.map(String)]);
       if(lines.length!==2 || lines[0]!==HORIZONTAL_HEADER)throw new Error('Invalid horizontal CSV contract');
       const parts=lines[1].split(',');
       if(parts.length!==3 || !parts[0].trim() || !Number.isFinite(Number(parts[0])))throw new Error('Invalid horizontal CSV row');

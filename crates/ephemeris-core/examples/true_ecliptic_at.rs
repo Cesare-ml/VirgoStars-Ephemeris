@@ -21,7 +21,7 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::equatorial_horizontal::{
-    noaa_standard_refraction, true_equatorial_to_horizontal,
+    noaa_standard_refraction, true_ecliptic_to_horizontal, true_equatorial_to_horizontal,
 };
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::fixed_star::{calculate_star, FixedStarCatalogEntry};
@@ -358,15 +358,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         return Ok(());
     }
-    if args.len() == 8 && args[1] == "horizontal" {
-        let output = true_equatorial_to_horizontal(
+    if args.len() == 8 && (args[1] == "horizontal" || args[1] == "ecliptic_horizontal") {
+        let input = (
             arg(2)?.parse()?,
             arg(3)?.parse()?,
             arg(4)?.parse()?,
             arg(5)?.parse()?,
             arg(6)?.parse()?,
             arg(7)?.parse()?,
-        )?;
+        );
+        let output = if args[1] == "horizontal" {
+            true_equatorial_to_horizontal(input.0, input.1, input.2, input.3, input.4, input.5)?
+        } else {
+            true_ecliptic_to_horizontal(input.0, input.1, input.2, input.3, input.4, input.5)?
+        };
         println!("true_altitude_deg,azimuth_north_east_deg,azimuth_south_west_deg");
         match (output.azimuth_north_east_deg, output.azimuth_south_west_deg) {
             (Some(north), Some(south)) => println!(
