@@ -44,6 +44,7 @@ use virgostars_ephemeris_core::planetary_solar_deflection::{
     calculate_deflected_planet, PlanetFrame, PlanetTarget,
 };
 use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+use virgostars_ephemeris_core::tcb_tdb::tcb_to_tdb;
 use virgostars_ephemeris_core::true_ecliptic::{
     geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil, geocentric_true_equatorial,
     geocentric_true_equatorial_from_civil, heliocentric_true_ecliptic,
@@ -88,6 +89,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 4 && args[1] == "tcb_to_tdb" {
+        let (first, second) = tcb_to_tdb(arg(2)?.parse()?, arg(3)?.parse()?)?;
+        println!("tdb_part1,tdb_part2");
+        println!("{first:.17},{second:.17}");
+        return Ok(());
+    }
     if args.len() == 6 && args[1] == "utc_instant" {
         let value = explicit_utc_instant(
             arg(2)?.parse()?,

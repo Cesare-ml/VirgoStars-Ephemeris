@@ -24,13 +24,17 @@ node scripts/compare-gaia-position-icrs.mjs `
   --identity-audit="C:\VirgoStarsData\gaia-rv-audit.json" --identity-audit-sha256="<sha256>" `
   --gaia-observed="C:\VirgoStarsData\gaia-j2016.tsv" --gaia-observed-sha256="<sha256>" `
   --hip=57757 --executable="C:\VirgoStarsData\true_ecliptic_at.exe" `
-  --epoch-policy=TCB_JD_AS_TDB_JD_APPROXIMATION --out="C:\VirgoStarsData\position-diagnostic.json"
+  --epoch-policy=IAU2006_B3_TCB_TO_TDB --out="C:\VirgoStarsData\position-diagnostic.json"
 ```
 
 Gaia's reference epoch is a Julian year in TCB, as [the data model states](https://gea.esac.esa.int/archive/documentation/GEDR3/Gaia_archive/chap_datamodel/sec_dm_main_tables/ssec_dm_gaia_source.html).
-This diagnostic explicitly treats its numeric J2016.0 JD as TDB rather than
-implementing a TCB↔TDB conversion. The input Hipparcos epoch is likewise
-interpreted under the importer’s TDB convention. The classical stellar motion
+The `IAU2006_B3_TCB_TO_TDB` policy converts that TCB epoch with the Rust
+split-JD [IAU 2006 B3 relation](TCB_TDB_IAU2006_2026-11-15.md), then passes a
+single binary64 TDB JD to the existing star CLI (about 40 microseconds of JD
+granularity near the present). The former same-numeric-JD approximation is
+still available only when explicitly selected and reports its offset as
+unknown. The input Hipparcos epoch is interpreted under the importer’s TDB
+convention. The classical stellar motion
 omits stellar light-time and relativity. Gaia and Hipparcos measurement errors,
 covariances, crossmatch ambiguity, possible multiplicity and variability,
 systematic errors, differences in models and photometric/RV source quality
@@ -42,10 +46,11 @@ published fields; they are not an error budget or an automatic quality verdict.
 One pilot used a HIP 57757 ↔ Gaia DR3 3796442680948579328 association from
 SIMBAD, a local Hipparcos source, a provisional Gaia radial velocity and a
 V magnitude with unreported uncertainty. Its Rust-propagated direction and
-Gaia J2016.0 position differed by **0.01286114 arcseconds**. The Gaia RUWE was
+Gaia J2016.0 position differed by **0.01286155 arcseconds** with the IAU
+TCB→TDB conversion (TDB−TCB ≈ −19.082696 seconds). The Gaia RUWE was
 2.811 and requires review. This is one candidate at one epoch, with the
-approximations above; it does not establish a tolerance, accuracy bound, source
+remaining approximations above; it does not establish a tolerance, accuracy bound, source
 identity, catalog rights, observed-star certification, apparent/ecliptic
 accuracy, or a production-ready result. Input snapshots and output reports
 remain outside the repository. The numerical result may change with reviewed
-sources, a proper time conversion and a full uncertainty analysis.
+sources, a refined Hipparcos epoch treatment and a full uncertainty analysis.
