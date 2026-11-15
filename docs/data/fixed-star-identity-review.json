@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "created": "2026-11-15",
+  "purpose": "Manual-review queue for the ten remaining VirgoStars backend star labels that cannot be safely assigned one-to-one HIP aliases without historical-name/component review. Suggestions are non-authoritative until accepted.",
+  "reviewStatus": "NO_AUTOMATIC_RESOLUTION",
+  "scientificallyValidated": 0,
+  "sourceNote": "Official IAU catalog/current IAU mirror, SIMBAD object records and historical nomenclature contextual references. No proprietary Swiss fixed-star numeric data.",
+  "names": [
+    {
+      "name": "Alsuhail",
+      "reason": "Historical Alsuhail spelling likely refers to Lambda Velorum, whose official IAU name is Suhail; alias must be confirmed against the actual backend expectation.",
+      "options": [
+        {
+          "designation": "Lambda Velorum (Suhail)",
+          "hip": 44816,
+          "sourceUrl": "https://exopla.net/star-names/modern-iau-star-names/"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Foramen",
+      "reason": "Historical name for Eta Carinae: extremely variable interacting binary with unusual extended ejecta; no source-vetted HIP I/311 record established. Do not fabricate 6D Hipparcos values.",
+      "options": [
+        {
+          "designation": "Eta Carinae",
+          "hip": null,
+          "sourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Eta+Carinae"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Gienah cygni",
+      "reason": "The name Gienah was formerly shared by Epsilon Cygni and Gamma Corvi; IAU names Epsilon Cygni Aljanah. Review the backend's intended component and name normalization.",
+      "options": [
+        {
+          "designation": "Epsilon Cygni (Aljanah)",
+          "hip": 102488,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Epsilon+Cygni"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Gienah Ghurab",
+      "reason": "Legacy descriptive label distinguishes Gamma Corvi from Epsilon Cygni; official IAU Gienah applies to Gamma Corvi. Resolve semantics before adding aliases.",
+      "options": [
+        {
+          "designation": "Gamma Corvi (Gienah)",
+          "hip": 59803,
+          "sourceUrl": "https://exopla.net/star-names/modern-iau-star-names/"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Han",
+      "reason": "Historical Han/Khan label attached to Zeta Ophiuchi; not a unique current IAU name in the source snapshot. Verify object identity and terminology.",
+      "options": [
+        {
+          "designation": "Zeta Ophiuchi",
+          "hip": 81377,
+          "sourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Zeta+Ophiuchi"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Metallach",
+      "reason": "Legacy Metallach/Metallah spelling for Alpha Trianguli (Mothallah); this is a variable binary, and aliases require explicit review.",
+      "options": [
+        {
+          "designation": "Alpha Trianguli (Mothallah)",
+          "hip": 8796,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Alpha+Trianguli"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Ras Alhague",
+      "reason": "Historical spelling variant of IAU Rasalhague on Alpha Ophiuchi; record whether the backend expects the primary or system.",
+      "options": [
+        {
+          "designation": "Alpha Ophiuchi (Rasalhague)",
+          "hip": 86032,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Alpha+Ophiuchi"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Rigil",
+      "reason": "Historical name for Alpha Centauri can mean the whole system; official Rigil Kentaurus is Alpha Cen A, while Toliman is B; component motion and magnitudes differ.",
+      "options": [
+        {
+          "designation": "Alpha Centauri A (Rigil Kentaurus)",
+          "hip": 71683,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Alpha+Centauri+A"
+        },
+        {
+          "designation": "Alpha Centauri B (Toliman)",
+          "hip": 71681,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Alpha+Centauri+B"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Shedir",
+      "reason": "Historical spelling of IAU Schedar for Alpha Cassiopeiae. Validate casing/legacy alias and a single HIP component.",
+      "options": [
+        {
+          "designation": "Alpha Cassiopeiae (Schedar)",
+          "hip": 3179,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Schedar"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    },
+    {
+      "name": "Tureis",
+      "reason": "Name conflict is substantive: IAU Tureis means Rho Puppis, whereas older astrological lists also applied Tureis to Iota Carinae (Aspidiske). Cannot choose merely by matching the IAU proper name.",
+      "options": [
+        {
+          "designation": "Rho Puppis (IAU Tureis)",
+          "hip": 39757,
+          "sourceUrl": "https://exopla.net/star-names/modern-iau-star-names/"
+        },
+        {
+          "designation": "Iota Carinae (Aspidiske, historical Tureis)",
+          "hip": 45556,
+          "sourceUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Iota+Carinae"
+        }
+      ],
+      "status": "REQUIRES_LEGACY_SEMANTICS_REVIEW",
+      "catalogReady": false
+    }
+  ]
+}

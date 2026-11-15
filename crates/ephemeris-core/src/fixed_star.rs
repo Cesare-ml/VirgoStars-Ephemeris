@@ -190,6 +190,43 @@ pub fn geometric_star_vector(
     Ok(position)
 }
 
+/// SSB-centered, geometric ICRS astrometric direction at an explicit TDB epoch.
+/// No DE441 kernel, observer parallax, annual aberration, solar deflection,
+/// precession, nutation or stellar light-time is applied. This is a native
+/// experimental comparison path, **not** the apparent ecliptic star API.
+/// The source six-vector is propagated rectilinearly; ERFA pmsafe uses its
+/// own safe distance handling and may differ for pathological inputs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IcrsAstrometricStarPosition {
+    pub tdb_julian_day: f64,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub distance_au: f64,
+}
+
+pub fn propagate_star_icrs_astrometric(
+    entry: FixedStarCatalogEntry,
+    tdb: JulianDateTdb,
+) -> Result<IcrsAstrometricStarPosition, FixedStarError> {
+    let p = geometric_star_vector(entry, tdb, [0.0; 3])?;
+    let xy = p[0].hypot(p[1]);
+    let distance = xy.hypot(p[2]);
+    if !xy.is_finite() || xy <= 32.0 * f64::EPSILON || !distance.is_finite() || distance <= 0.0 {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    let ra = p[1].atan2(p[0]).to_degrees().rem_euclid(360.0);
+    let dec = p[2].atan2(xy).to_degrees();
+    if !ra.is_finite() || !dec.is_finite() || dec.abs() >= 90.0 {
+        return Err(FixedStarError::InvalidGeometry);
+    }
+    Ok(IcrsAstrometricStarPosition {
+        tdb_julian_day: tdb.0,
+        right_ascension_deg: if ra >= 360.0 { 0.0 } else { ra },
+        declination_deg: dec,
+        distance_au: distance,
+    })
+}
+
 fn sample<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     entry: FixedStarCatalogEntry,
@@ -305,6 +342,31 @@ mod tests {
             parallax_mas: 1000.0,
             radial_velocity_km_per_second: 0.0,
         }
+    }
+    #[test]
+    fn icrs_astrometric_propagation_is_barycentric_and_kernel_free() {
+        let e = example();
+        let epoch = propagate_star_icrs_astrometric(e, e.epoch_tdb).unwrap();
+        assert!(epoch.right_ascension_deg.abs() < 1e-12);
+        assert!(epoch.declination_deg.abs() < 1e-12);
+        let future =
+            propagate_star_icrs_astrometric(e, JulianDateTdb(e.epoch_tdb.0 + 3652.5)).unwrap();
+        // 1000 mas/year over ten Julian years = 10 arcsec, to first order.
+        assert!((future.right_ascension_deg - 10.0 / 3600.0).abs() < 1e-10);
+        assert!(future.distance_au.is_finite());
+        assert_eq!(future.tdb_julian_day, e.epoch_tdb.0 + 3652.5);
+    }
+    #[test]
+    fn icrs_astrometric_ra_wraps_without_ecliptic_projection() {
+        let mut e = example();
+        e.right_ascension_deg = 359.999;
+        let p = propagate_star_icrs_astrometric(e, JulianDateTdb(e.epoch_tdb.0 + 3652.5)).unwrap();
+        assert!(p.right_ascension_deg > 0.0 && p.right_ascension_deg < 0.01);
+        e.parallax_mas = 0.0;
+        assert!(matches!(
+            propagate_star_icrs_astrometric(e, e.epoch_tdb),
+            Err(FixedStarError::InvalidCatalog)
+        ));
     }
     #[test]
     fn motion_and_parallax_have_expected_direction_and_scale() {
