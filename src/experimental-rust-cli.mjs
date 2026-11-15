@@ -63,6 +63,16 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if (![year, month, day].every(Number.isInteger) || month < 1 || month > 12 || day < 1 || day > 31 || decimalHour < 0 || decimalHour >= 24) throw new Error('Out-of-range reverse Julian-day CSV row');
       return Object.freeze({year, month, day, decimalHour, calendar, timeScale});
     },
+    calculateAtEpoch({target,ttJulianDay,tdbJulianDay}) {
+      if(!TARGETS.includes(target) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay)) throw new TypeError('Supported target and explicit finite TT and TDB are required');
+      const lines=execute(['calc_epoch',kernelPath,target,String(ttJulianDay),String(tdbJulianDay)]);
+      if(lines.length!==2 || lines[0]!==HEADER) throw new Error('Invalid epoch ephemeris CSV contract');
+      const [returnedTarget,...parts]=lines[1].split(',');
+      if(returnedTarget!==target || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid epoch ephemeris CSV row');
+      const [tt,tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay]=parts.map(Number);
+      if(tt!==ttJulianDay || tdb!==tdbJulianDay || longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0) throw new Error('Out-of-range epoch ephemeris CSV row');
+      return Object.freeze({target,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
+    },
     calculate(timestamp) {
       if (typeof timestamp !== 'string' || !timestamp.trim()) {
         throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');

@@ -31,8 +31,8 @@ use virgostars_ephemeris_core::horizon_events::{
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
 use virgostars_ephemeris_core::true_ecliptic::{
-    geocentric_true_ecliptic_from_civil, geocentric_true_equatorial_from_civil,
-    heliocentric_true_ecliptic_from_civil,
+    geocentric_true_ecliptic, geocentric_true_ecliptic_from_civil,
+    geocentric_true_equatorial_from_civil, heliocentric_true_ecliptic_from_civil,
 };
 
 const BODIES: [Body; 10] = [
@@ -73,6 +73,30 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 6 && args[1] == "calc_epoch" {
+        let target = BODIES
+            .into_iter()
+            .find(|body| format!("{body:?}") == arg(3).unwrap_or(""))
+            .ok_or("unsupported target")?;
+        let tt = arg(4)?.parse()?;
+        let tdb = JulianDateTdb(arg(5)?.parse()?);
+        let mut eph = De441::open(&args[2])?;
+        let state = geocentric_true_ecliptic(&mut eph, target, tdb, tt)?;
+        println!("target,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day");
+        println!(
+            "{:?},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            state.target,
+            state.reception_tt_jd,
+            state.reception_tdb.0,
+            state.longitude_deg,
+            state.latitude_deg,
+            state.distance_au,
+            state.longitude_speed_deg_per_tdb_day,
+            state.latitude_speed_deg_per_tdb_day,
+            state.distance_speed_au_per_tdb_day
+        );
+        return Ok(());
+    }
     if args.len() == 11 && args[1] == "standard_solar_event" {
         let kind = match arg(3)? {
             "rise" => HorizonEventKind::Rise,
