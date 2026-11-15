@@ -26,7 +26,7 @@
 //!
 //! Created 2026-11-11. Original implementation, no external source copied.
 
-use crate::earth_orientation::{gast_iau2006, OrientationError};
+use crate::earth_orientation::{ecliptic_nutation, gast_iau2006, OrientationError};
 use std::error::Error;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 use std::fmt;
@@ -172,6 +172,39 @@ pub fn true_equatorial_to_horizontal(
         azimuth_north_east_deg,
         azimuth_south_west_deg,
     })
+}
+
+/// Convert an already corrected true-ecliptic-of-date direction to the ideal
+/// horizon. No topocentric parallax or refraction is applied. TT and UT1
+/// must describe the same instant. Azimuth conventions match the equatorial
+/// entry point and undefined directions remain explicit.
+pub fn true_ecliptic_to_horizontal(
+    ut1_jd: f64,
+    tt_jd: f64,
+    latitude_deg: f64,
+    longitude_deg_east: f64,
+    ecliptic_longitude_deg: f64,
+    ecliptic_latitude_deg: f64,
+) -> Result<HorizontalDegrees, HorizontalConversionError> {
+    if !ecliptic_longitude_deg.is_finite()
+        || !(0.0..360.0).contains(&ecliptic_longitude_deg)
+        || !ecliptic_latitude_deg.is_finite()
+        || ecliptic_latitude_deg.abs() > 90.0
+    {
+        return Err(HorizontalConversionError::InvalidInput);
+    }
+    let eps = ecliptic_nutation(tt_jd)
+        .map_err(HorizontalConversionError::Orientation)?
+        .true_obliquity_rad;
+    let (sl, cl) = ecliptic_longitude_deg.to_radians().sin_cos();
+    let (sb, cb) = ecliptic_latitude_deg.to_radians().sin_cos();
+    let (se, ce) = eps.sin_cos();
+    let x = cb * cl;
+    let y = cb * sl * ce - sb * se;
+    let z = cb * sl * se + sb * ce;
+    let ra = y.atan2(x).to_degrees().rem_euclid(360.0);
+    let dec = z.atan2(x.hypot(y)).to_degrees();
+    true_equatorial_to_horizontal(ut1_jd, tt_jd, latitude_deg, longitude_deg_east, ra, dec)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
