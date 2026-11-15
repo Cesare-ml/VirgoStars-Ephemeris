@@ -68,6 +68,9 @@ export function createExperimentalLegacyBridge(options){
     return value;
   };
   return Object.freeze({...engine,
+    // Legacy callers use this Swiss ID as an inclusive iteration bound. Its
+    // presence does not make this or any other unsupported target calculable.
+    SE_PLUTO_PICKERING:54,
     swe_set_ephe_path(path){
       const requested=canonicalDirectory(path);
       if(comparable(requested)!==comparable(directory))throw new RangeError('Path differs from the explicitly configured legacy directory');

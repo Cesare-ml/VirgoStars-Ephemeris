@@ -7,6 +7,7 @@ export interface ExperimentalLegacyOptions extends ExperimentalSwissOptions {
   mutableResults:'LEGACY'|'FROZEN';
 }
 export interface ExperimentalLegacyMethods {
+  readonly SE_PLUTO_PICKERING:54;
   swe_set_ephe_path(path:string):string;
   swe_julday(year:number,month:number,day:number,hour:number,calendarFlag?:0|1):number;
   swe_rise_trans(julianDay:number,body:0,starName:'',flags:number,event:1|2|4|8,longitudeDegEast:number,latitudeDeg:number,heightMetres:0,pressureHpa:0,temperatureC:0,callback?:(result:ExperimentalSolarEvent)=>void):Readonly<ExperimentalSolarEvent>;
