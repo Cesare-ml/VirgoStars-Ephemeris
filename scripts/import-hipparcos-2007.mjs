@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {readHip2Rows,HIP2_EXPECTED_ROWS} from './hipparcos-source-rows.mjs';
+import {readHip2Rows,HIP2_EXPECTED_ROWS,parseHip2Uncertainties} from './hipparcos-source-rows.mjs';
 
 export const HIP2_ROWS = HIP2_EXPECTED_ROWS;
 export const HIP_EPOCH_TDB_JD = 2448349.0625; // Julian epoch J1991.25
@@ -77,7 +77,10 @@ export function parseSupplementTsv(tsv) {
 
 export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
   hip2Sha256, supplementsSha256, requireFullCatalog = true, allowComplexSolutions = false,
+  minParallaxSignalToNoise = 5,
 } = {}) {
+  if (!Number.isFinite(minParallaxSignalToNoise) || minParallaxSignalToNoise <= 0 || minParallaxSignalToNoise > 1000)
+    throw new Error('Parallax SNR threshold must be finite, positive and at most 1000');
   checkDigest(hip2Bytes, hip2Sha256, 'Hipparcos I/311 hip2.dat');
   checkDigest(supplementsBytes, supplementsSha256, 'Curated supplements');
   const supplement = parseSupplementTsv(supplementsBytes.toString('utf8'));
@@ -92,6 +95,14 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
     const isStandard = ast.solutionCode === 5 && ast.components === 1;
     if (!isStandard && !allowComplexSolutions) throw new Error(`HIP ${hip}: non-standard/multiple/variable astrometric solution (${ast.solutionCode}, ${ast.components} components); explicit scientific review required`);
     if (!(ast.parallaxMas >= 0.001 && ast.parallaxMas <= 10000)) throw new Error(`HIP ${hip}: missing/nonpositive/out-of-range parallax; no invented distance`);
+    const formalUncertainties=parseHip2Uncertainties(line);
+    if(Object.values(formalUncertainties).some(x=>x===null))
+      throw new Error(`HIP ${hip}: missing formal astrometric uncertainty; source quality cannot be certified`);
+    if(!(formalUncertainties.parallaxMas>0))
+      throw new Error(`HIP ${hip}: parallax formal uncertainty must be strictly positive`);
+    const parallaxSignalToNoise=ast.parallaxMas/formalUncertainties.parallaxMas;
+    if(parallaxSignalToNoise<minParallaxSignalToNoise)
+      throw new Error(`HIP ${hip}: low parallax signal-to-noise (${parallaxSignalToNoise.toFixed(2)} < ${minParallaxSignalToNoise}); exclude or review separately`);
     const record = {name:extra.name,aliases:extra.aliases,epochTdbJulianDay:HIP_EPOCH_TDB_JD,
       rightAscensionDeg:ast.ra * RAD_TO_DEG,declinationDeg:ast.dec * RAD_TO_DEG,
       properMotionRaCosDecMasPerYear:ast.pmRa,properMotionDecMasPerYear:ast.pmDec,
@@ -99,7 +110,9 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
       visualMagnitude:extra.visualMagnitude};
     records.push(record);
     auditStars.push({hip, name:extra.name, solutionCode:ast.solutionCode, components:ast.components,
-      astrometryReviewStatus:isStandard?'STANDARD_5_PARAM':'EXPERIMENTAL_COMPLEX_SOLUTION_NOT_CERTIFIED',...extra.provenance});
+      astrometryReviewStatus:isStandard?'STANDARD_5_PARAM':'EXPERIMENTAL_COMPLEX_SOLUTION_NOT_CERTIFIED',
+      formalUncertainties,parallaxSignalToNoise,qualityPolicyMinParallaxSignalToNoise:minParallaxSignalToNoise,
+      ...extra.provenance});
   }
   for (const hip of supplement.keys()) if (!found.has(hip)) throw new Error(`HIP ${hip}: not found in Hipparcos source`);
   const sorted = records.map((record,i)=>({record,audit:auditStars[i]})).sort((a,b)=>a.audit.hip-b.audit.hip);
@@ -112,6 +125,7 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
     units:{raDec:'degrees',pm:'mas/Julian year (RA includes cos declination)',parallax:'mas',radialVelocity:'km/s',magnitude:'Johnson V'},
     status:'Catalog provenance asserted by inputs; data rights and independent numeric validation remain separate release gates',
     complexSolutionsAllowed:allowComplexSolutions,
+    qualityPolicy:{requireAllFiveFormalUncertainties:true,positiveFormalParallaxError:true,minParallaxSignalToNoise},
     stars:sorted.map(x=>x.audit)};
   return {catalog,audit};
 }
@@ -123,7 +137,8 @@ export function importHipparcos2007(args) {
   if (options['--out'] === options['--audit']) throw new Error('Catalog output and audit must differ');
   const {catalog,audit} = buildHipparcosCatalog(readFileSync(resolve(options['--hip2'])),readFileSync(resolve(options['--supplements'])),{
     hip2Sha256:options['--hip2-sha256'],supplementsSha256:options['--supplements-sha256'],
-    allowComplexSolutions:options['--allow-complex-solutions']==='true'});
+    allowComplexSolutions:options['--allow-complex-solutions']==='true',
+    minParallaxSignalToNoise:options['--min-parallax-snr']===undefined?5:numeric(options['--min-parallax-snr'],'minimum parallax SNR')});
   writeFileSync(resolve(options['--out']), JSON.stringify(catalog,null,2)+'\n',{flag:'wx'});
   writeFileSync(resolve(options['--audit']), JSON.stringify(audit,null,2)+'\n',{flag:'wx'});
   return {count:catalog.records.length,catalogId:catalog.id};
