@@ -3,8 +3,8 @@
 // 2026-11-15: explicitly invoked, offline-output-only Hipparcos archive acquisition.
 // No imports/calculations fetch external data; this CLI runs only when requested.
 import {createHash} from 'node:crypto';
-import {existsSync,readFileSync,writeFileSync,unlinkSync,statSync} from 'node:fs';
-import {isAbsolute,resolve,relative,dirname,sep} from 'node:path';
+import {existsSync,readFileSync,writeFileSync,unlinkSync,statSync,realpathSync,openSync,closeSync} from 'node:fs';
+import {isAbsolute,resolve,relative,dirname,basename,sep} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {readHip2Rows,HIP2_MAX_BYTES} from './hipparcos-source-rows.mjs';
@@ -113,6 +113,46 @@ export async function acquireHipparcos2007({
   return decodeHipparcos2007Archive(archive,{expectedArchiveSha256,requireFullCatalog,acquiredFromOfficialMirror:true});
 }
 
+
+/** Validate both output paths including their symlink-resolved parents. */
+export function assertHipparcosDestination(out,manifestPath){
+  if(typeof out!=='string' || !isAbsolute(out) || typeof manifestPath!=='string' || !isAbsolute(manifestPath))
+    throw new Error('Output and manifest must be absolute paths outside Git');
+  const root=realpathSync(resolve(dirname(fileURLToPath(import.meta.url)),'..'));
+  const paths=[resolve(out),resolve(manifestPath)];
+  if(paths[0]===paths[1])throw new Error('Source output and provenance manifest must be distinct files');
+  for(const dest of paths){
+    const candidates=[dest];
+    try{candidates.push(resolve(realpathSync(dirname(dest)),basename(dest)));}
+    catch(error){if(error?.code!=='ENOENT')throw error;}
+    for(const candidate of candidates){
+      const rel=relative(root,candidate);
+      if(rel==='' || (rel!=='..' && !rel.startsWith('..'+sep) && !isAbsolute(rel)))
+        throw new Error('Hipparcos data output must be outside the Git repository');
+    }
+  }
+  if(paths.some(p=>existsSync(p)))throw new Error('Output file already exists; no overwrite allowed');
+  return paths;
+}
+
+/** Best-effort synchronous rollback, not a crash-atomic filesystem transaction. */
+export function writeHipparcosSourcePair(out,manifestPath,raw,provenance){
+  const paths=assertHipparcosDestination(out,manifestPath);
+  const created=[];
+  try{
+    for(const [dest,contents] of [[paths[0],raw],[paths[1],JSON.stringify(provenance,null,2)+'\n']]){
+      const fd=openSync(dest,'wx',0o600);
+      created.push(dest);
+      try{writeFileSync(fd,contents);}
+      finally{closeSync(fd);}
+    }
+  }catch(error){
+    for(const dest of created.reverse())try{unlinkSync(dest);}catch{}
+    throw error;
+  }
+  return {rawFile:paths[0],manifestFile:paths[1]};
+}
+
 export async function runHipparcosDownload(argv) {
   const args=Object.fromEntries(argv.filter(x=>x.startsWith('--')&&x.includes('=')).map(s=>{
     const i=s.indexOf('=');return [s.slice(0,i),s.slice(i+1)];
@@ -122,12 +162,7 @@ export async function runHipparcosDownload(argv) {
   const out=args['--out'];
   if(typeof out!=='string' || !isAbsolute(out)) throw new Error('--out must be an absolute file path outside the repository');
   const path=resolve(out),manifestPath=path+'.source.json';
-  const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-  const relativeToRepository=relative(root,path);
-  if(relativeToRepository==='' || (relativeToRepository!=='..' && !relativeToRepository.startsWith('..'+sep) && !isAbsolute(relativeToRepository)))
-    throw new Error('Hipparcos data output must be outside the Git repository');
-  if(existsSync(path) || existsSync(manifestPath))
-    throw new Error('Output file already exists; no overwrite allowed');
+  assertHipparcosDestination(path,manifestPath);
   if(args['--archive']!==undefined && (!args['--archive'] || !isAbsolute(args['--archive'])))
     throw new Error('--archive must be an absolute path to an existing gzip file');
   // Bound local archive reads before allocating an entire caller-supplied file.
@@ -145,15 +180,8 @@ export async function runHipparcosDownload(argv) {
     :decodeHipparcos2007Archive(localArchive,{
       expectedArchiveSha256:args['--archive-sha256'],
     });
-  let wroteRaw=false;
-  try{
-    writeFileSync(path,raw,{flag:'wx',mode:0o600});wroteRaw=true;
-    writeFileSync(manifestPath,JSON.stringify(provenance,null,2)+'\n',{flag:'wx',mode:0o600});
-  }catch(error){
-    if(wroteRaw) try{unlinkSync(path)}catch{}
-    throw error;
-  }
-  return {rawFile:path,manifestFile:manifestPath,rawSha256:provenance.rawSha256,rows:provenance.rows};
+  const written=writeHipparcosSourcePair(path,manifestPath,raw,provenance);
+  return {...written,rawSha256:provenance.rawSha256,rows:provenance.rows};
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   try{console.log(JSON.stringify(await runHipparcosDownload(process.argv.slice(2))));}
