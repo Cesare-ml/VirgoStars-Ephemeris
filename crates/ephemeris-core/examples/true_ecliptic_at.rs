@@ -26,8 +26,8 @@ use virgostars_ephemeris_core::equatorial_horizontal::{
 use virgostars_ephemeris_core::explicit_utc_instant::{explicit_utc_instant, ExplicitUtcOffsets};
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::fixed_star::{
-    calculate_star, calculate_star_with_solar_deflection, FixedStarCatalogEntry,
-    StellarSolarDeflection,
+    calculate_star, calculate_star_with_solar_deflection, geometric_barycentric_star,
+    FixedStarCatalogEntry, StellarSolarDeflection,
 };
 use virgostars_ephemeris_core::horizon_events::{
     find_geometric_event, find_standard_solar_event, find_topocentric_geometric_event,
@@ -269,6 +269,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.longitude_speed_deg_per_tdb_day,
             state.latitude_speed_deg_per_tdb_day,
             state.distance_speed_au_per_tdb_day
+        );
+        return Ok(());
+    }
+    if args.len() == 10 && args[1] == "star_icrs" {
+        let entry = FixedStarCatalogEntry {
+            epoch_tdb: JulianDateTdb(arg(2)?.parse()?),
+            right_ascension_deg: arg(3)?.parse()?,
+            declination_deg: arg(4)?.parse()?,
+            proper_motion_ra_cos_dec_mas_per_year: arg(5)?.parse()?,
+            proper_motion_dec_mas_per_year: arg(6)?.parse()?,
+            parallax_mas: arg(7)?.parse()?,
+            radial_velocity_km_per_second: arg(8)?.parse()?,
+        };
+        let star = geometric_barycentric_star(entry, JulianDateTdb(arg(9)?.parse()?))?;
+        println!("tdb_jd,ra_deg,declination_deg,distance_au");
+        println!(
+            "{:.17},{:.15},{:.15},{:.15}",
+            star.tdb.0, star.right_ascension_deg, star.declination_deg, star.distance_au
         );
         return Ok(());
     }

@@ -4,7 +4,7 @@
 
 ## Coordinate reference and units
 
-The existing VirgoStars experimental `swe_fixstar_ut` returns a geocentric, apparent **ecliptic** result. It must NOT be compared to the **SSB-centered ICRS astrometric** coordinates from SOFA/ERFA `pmsafe`. The dedicated script `scripts/compare-star-epoch-icrs.mjs` requires an explicitly separate ICRS astrometric engine output. Such an exporter is **not yet available** in VirgoStars; do not relabel a bridge result as ICRS.
+The existing VirgoStars experimental `swe_fixstar_ut` returns a geocentric, apparent **ecliptic** result. It must NOT be compared to the **SSB-centered ICRS astrometric** coordinates from SOFA/ERFA `pmsafe`. The dedicated script `scripts/compare-star-epoch-icrs.mjs` requires a separate barycentric ICRS stellar-motion output. The candidate exporter below uses the existing Rust classical geometric propagation; it does not relabel the ecliptic bridge result.
 
 The independent reference uses the ERFA `pmsafe` algorithm (https://github.com/liberfa/erfa/blob/master/src/pmsafe.c). Input epochs are **TDB Julian Dates**. Input RA, Dec and proper motion are in radians and radians per Julian year respectively; parallax is in arcseconds and RV in km/s (+ for recession). By contrast, Hipparcos I/311/hip2 provides `pmRA = (dRA/dt) * cos(Dec)` in **mas per Julian year**. The reference generator explicitly divides by `cos(Dec)`, converts mas to radians and converts parallax mas to arcsec. It uses split two-part TDB epochs to limit rounding error.
 
@@ -29,11 +29,40 @@ The report uses `referenceModel:"ERFA_PMSAFE"`, `coordinateFrame:"ICRS_ASTROMETR
 
 ## Step 2: export separate VirgoStars ICRS astrometric positions
 
-**This capability is still to be implemented.** The candidate must be produced by a genuinely independent native VirgoStars ICRS stellar-motion calculation, not by copying the reference or by using the present apparent/ecliptic bridge. Its JSON contract includes:
+Build the experimental Rust example and run the candidate exporter with pinned input files and an output outside the repository:
+
+```powershell
+cargo build --example true_ecliptic_at --locked
+node scripts/export-hipparcos-icrs-candidate.mjs `
+  --catalog="C:\VirgoStarsData\hipparcos-curated.json" `
+  --catalog-sha256="<trusted catalog SHA-256>" `
+  --audit="C:\VirgoStarsData\hipparcos-curated.audit.json" `
+  --audit-sha256="<trusted audit SHA-256>" `
+  --executable="C:\VirgoStarsData\true_ecliptic_at.exe" `
+  --out="C:\VirgoStarsData\virgostars-icrs-candidate.json"
+```
+
+The executable path must point to the actual compiled example. The exporter
+checks the catalog and audit hashes and their identity mapping, but **does not
+independently certify the audit's scientific or licensing assertions**. The
+separate reference generator applies its own more restrictive science gates.
+It accepts at most 1000 records, launches one Rust process per star/epoch, and
+uses the three fixed epochs above. Output is exclusively created outside Git.
+
+The candidate is a **classical geometric approximation** to the ICRS catalog
+motion and deliberately omits stellar Roemer/light-time and relativity,
+unlike ERFA `pmsafe`. Its `ICRS_ASTROMETRIC` frame label makes the directions
+comparable in the comparator's common frame; it does not assert identical
+physical models. Differences from ERFA are expected, can grow with stellar
+motion or elapsed time, and must not be hidden. No geocentric parallax,
+aberration, deflection, observed-star certification or Swiss parity follows.
+The supplied catalog epoch is interpreted as TDB under the importer contract.
+
+The candidate JSON contract includes:
 
 - `schemaVersion:1`, `coordinateFrame:"ICRS_ASTROMETRIC"`, `epochConvention:"TDB_JULIAN_DAY"`.
 - `catalogId`, `inputCatalogSha256` and `epochsTdbJulianDay` exactly matching the reference.
-- `candidateModel` truthfully naming the ICRS engine (must not be `ERFA_PMSAFE` or `EXPERIMENTAL_ICRS_LINEAR_STAR`).
+- `candidateModel:"VIRGOSTARS_CLASSICAL_BARYCENTRIC_ICRS_NO_LIGHT_TIME"`.
 - `stars`, one per HIP identifier, each containing `name`, `hip`, and three `samples` with `tdbJulianDay`, `rightAscensionDeg`, and `declinationDeg`.
 
 Input coordinates must be astrometric ICRS at the source epoch, with the same radial-velocity, proper-motion and TDB conventions. The comparator refuses mismatched frames, epochs, source hashes, duplicate HIP IDs or missing samples.
@@ -61,9 +90,16 @@ python -m unittest discover -s test -p 'test_hipparcos_erfa_reference.py'
 
 The Node tests exercise angular wraparound, bad frames, missing epochs and file hashes. The Python tests inject a **mock** in place of ERFA to check the correct proper-motion/parallax unit conversion and source gates; they do not run authentic ERFA, and real observed-star numerical parity remains untested.
 
+The candidate exporter also has a fictional-star regression against three
+recorded pyerfa 2.0.1.5 `pmsafe` values. A local operator-only smoke test ran
+the actual reference generator with installed pyerfa, the Rust candidate
+exporter and this comparator at those three epochs; the synthetic example
+passed an illustrative 0.01 arcsecond threshold. The test source and audit
+are fabricated, and this single result is neither a general error bound nor
+validation of any real star, rights, or the apparent/ecliptic pipeline.
+
 ### Remaining work
 
 1. Acquire authentic full Hipparcos I/311 source and separately vet catalog rights, Johnson V, barycentric RV and HIP component identity.
-2. Implement a dedicated Rust **ICRS astrometric** star-motion exporter, distinct from the current geocentric apparent/ecliptic bridge.
-3. Run genuine multi-epoch comparisons with independently vetted positions and acceptable tolerances.
-4. Subsequently validate the geocentric apparent, ecliptic, topocentric, magnitude and legacy Swiss API compatibility paths separately.
+2. Run genuine multi-epoch comparisons with independently vetted positions and acceptable tolerances, accounting for the different light-time models.
+3. Subsequently validate the geocentric apparent, ecliptic, topocentric, magnitude and legacy Swiss API compatibility paths separately.
