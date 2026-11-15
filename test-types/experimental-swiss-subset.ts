@@ -16,6 +16,8 @@ const name:string=api.swe_get_planet_name(api.SE_SUN).name;
 void nutation;void name;
 const horizon=api.swe_azalt(jd,api.SE_ECL2HOR,12.5,41.9,0,0,0,20,1,0);
 horizon.azimuth=(horizon.azimuth+180)%360;
+const rise=api.swe_rise_trans(jd,api.SE_SUN,'',api.SEFLG_JPLEPH,api.SE_CALC_RISE,12.5,41.9,0,0,0);
+const transitUt1:number=rise.transitTime;void transitUt1;
 const mutable=createExperimentalSwissSubset({executablePath:'example',kernelPath:'example',legacyMutableResults:true,convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
 const mutableHouse=mutable.swe_houses(jd,-41,12,'P');mutableHouse.house[0]=12;mutableHouse.ascendant=10;
 const mutableStar=mutable.swe_fixstar_ut('A',jd,SEFLG_JPLEPH);delete mutableStar.name;mutableStar.longitude=10;

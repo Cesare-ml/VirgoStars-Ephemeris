@@ -72,6 +72,28 @@ must explicitly copy the model, warnings, obliquity and catalog identifier
 when needed. The default remains immutable with enumerable metadata. This
 switch does not supply missing house angles or certify compatibility.
 
+`swe_rise_trans` optionally exposes solar rise, set, upper transit and lower
+transit. The caller must explicitly configure, for example,
+`solarEventSupport: {windowDays: 1.5, stepMinutes: 10,
+timeOffsets: 'CONSTANT_IN_SEARCH'}`. The window must be in (0, 2] days and
+the cadence in [1, 60] minutes. The assumption means the start-epoch TT−UT1
+and TDB−UT1 differences are kept constant throughout the search; the engine
+does not interpolate UT1 or handle leap seconds inside the interval. The
+caller must choose an interval where this approximation is appropriate.
+
+Only the Sun, empty star name, explicit JPL flag, the four listed event codes,
+and zero height/pressure/temperature placeholders are accepted. Rise/set use
+the conventional geocentric solar-center altitude of −50 arcminutes,
+representing average refraction and mean solar semidiameter. Transits use the
+topocentric geometric Sun at zero height, without atmospheric refraction,
+observer light time or diurnal aberration. Returned `transitTime` is **UT1
+Julian day**, not UTC; `bracketSeconds` is numerical convergence, not physical
+accuracy. Unsupported cases, no crossing within the window and singular
+locations throw; the optional callback runs synchronously only on success.
+Sampling can miss grazing crossings and all results remain approximate.
+At one Rome epoch the conventional rise/set differ from Swiss 2.09.03 by
+about 16 seconds; this is not a general error bound or Swiss parity.
+
 Sun, Moon, Mercury and Venus physical centers use the supplied classic DE441.
 Mars through Pluto require the corresponding explicit physical-center SPK path;
 missing data or coverage are errors and system barycenters are **not** silently
@@ -123,7 +145,8 @@ subset instead requires explicit files and epochs, accepts JPL flags only,
 does not expose all those additional calls through the same interface, and
 returns frozen house objects unless legacy mutability is explicitly selected.
 A direct module substitution therefore fails or changes
-behavior. Other consumers call `swe_rise_trans` and eclipse routines. Those
+behavior. Other consumers call `swe_rise_trans` with Swiss flags and eclipse
+routines, which this restricted interface cannot replace directly. Those
 requirements need their own compatibility contracts and validation; merely
 renaming a flag or claiming a Swiss source would misrepresent the model.
 
