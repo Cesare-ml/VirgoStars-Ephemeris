@@ -19,7 +19,9 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
     julday_f64, revjul_f64, DecimalHourDateTime,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
-use virgostars_ephemeris_core::equatorial_horizontal::true_equatorial_to_horizontal;
+use virgostars_ephemeris_core::equatorial_horizontal::{
+    noaa_standard_refraction, true_equatorial_to_horizontal,
+};
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::horizon_events::{
     find_geometric_event, find_topocentric_geometric_event, topocentric_equatorial_direction,
@@ -70,6 +72,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 3 && args[1] == "noaa_refraction" {
+        let r = noaa_standard_refraction(arg(2)?.parse()?).map_err(|error| error.to_string())?;
+        println!(
+            "true_altitude_deg,correction_deg,apparent_altitude_deg\n{:.12},{:.12},{:.12}",
+            r.true_altitude_deg, r.correction_deg, r.apparent_altitude_deg
+        );
+        return Ok(());
+    }
     if args.len() == 10 && args[1] == "topocentric" {
         let site = Observer {
             latitude_deg: arg(4)?.parse()?,

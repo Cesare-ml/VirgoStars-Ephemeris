@@ -166,6 +166,16 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if(rightAscensionDegResult<0 || rightAscensionDegResult>=360 || Math.abs(declinationDegResult)>90) throw new Error('Out-of-range topocentric direction');
       return Object.freeze({rightAscensionDeg:rightAscensionDegResult,declinationDeg:declinationDegResult,model:'EXPERIMENTAL_WGS84_PARALLAX',warnings:Object.freeze(['NO_DIURNAL_ABERRATION','NO_OBSERVER_LIGHT_TIME','NO_POLAR_MOTION'])});
     },
+    calculateStandardRefraction({trueAltitudeDeg}) {
+      if(!Number.isFinite(trueAltitudeDeg)) throw new TypeError('A finite geometric altitude is required');
+      const lines=execute(['noaa_refraction',String(trueAltitudeDeg)]);
+      if(lines.length!==2 || lines[0]!=='true_altitude_deg,correction_deg,apparent_altitude_deg') throw new Error('Invalid refraction CSV contract');
+      const parts=lines[1].split(',');
+      if(parts.length!==3 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid refraction CSV row');
+      const [altitude,correctionDeg,apparentAltitudeDeg]=parts.map(Number);
+      if(Math.abs(altitude-trueAltitudeDeg)>1e-9 || correctionDeg<0 || Math.abs(apparentAltitudeDeg-altitude-correctionDeg)>1e-9) throw new Error('Out-of-range refraction CSV row');
+      return Object.freeze({trueAltitudeDeg:altitude,correctionDeg,apparentAltitudeDeg,model:'NOAA_STANDARD_APPROXIMATE',warnings:Object.freeze(['FIXED_ATMOSPHERE','NOT_SWISS_PARITY','NO_LOCAL_WEATHER'])});
+    },
     calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
       const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];
       if(!values.every(Number.isFinite))throw new TypeError('Finite UT1, TT, location and equatorial direction are required');

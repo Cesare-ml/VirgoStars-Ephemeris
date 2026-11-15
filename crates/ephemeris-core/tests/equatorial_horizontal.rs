@@ -18,8 +18,8 @@
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use virgostars_ephemeris_core::equatorial_horizontal::{
-    equatorial_to_horizontal, true_equatorial_to_horizontal, HorizontalConversionError,
-    HorizontalError,
+    equatorial_to_horizontal, noaa_standard_refraction, true_equatorial_to_horizontal,
+    HorizontalConversionError, HorizontalError,
 };
 
 fn near(actual: f64, expected: f64, tolerance: f64) {
@@ -27,6 +27,29 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
         (actual - expected).abs() <= tolerance,
         "expected {expected} rad, obtained {actual} rad; tolerance {tolerance}"
     );
+}
+
+#[test]
+fn noaa_refraction_uses_explicit_piecewise_contract_and_bounds() {
+    // Published NOAA equations evaluated at each interval and boundary.
+    for (altitude, expected) in [
+        (-1.0, 0.330_594_906_365_943_46),
+        (-0.575, 0.574_905_790_380_967_9),
+        (0.0, 1735.0 / 3600.0),
+        (1.0, 0.363_366_944_444_444_45),
+        (5.0, 0.159_618_055_555_555_55),
+        (15.0, 0.059_237_711_792_505_476),
+        (45.0, 0.016_119_468_333_333_338),
+        (85.0, 0.0),
+        (90.0, 0.0),
+    ] {
+        let result = noaa_standard_refraction(altitude).unwrap();
+        assert!((result.correction_deg - expected).abs() < 1e-12);
+        assert!((result.apparent_altitude_deg - altitude - expected).abs() < 1e-12);
+    }
+    for invalid in [f64::NAN, f64::INFINITY, -1.0001, 90.0001] {
+        assert!(noaa_standard_refraction(invalid).is_err());
+    }
 }
 
 #[test]
