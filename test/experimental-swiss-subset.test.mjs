@@ -110,6 +110,41 @@ test('catalog aliases and magnitudes are explicit immutable input snapshots',()=
   assert.throws(()=>create({...options,catalog:{id:'x',records:[{...fixtureStar,parallaxMas:0}]}}),/Invalid/);
   assert.throws(()=>create({...options,catalog:undefined}).swe_fixstar_mag('A'),/catalog/);
   assert.throws(()=>create({...options,starSolarDeflection:'SWISS'}),/deflection/);
+  assert.throws(()=>create({...options,planetSolarDeflection:'SWISS'}),/deflection/);
+});
+
+test('planetary solar deflection is explicit and velocities follow corrected positions',{
+  skip:['VIRGOSTARS_EPHEMERIS_CLI','DE441_PATH','MARS_SPK_PATH','JUPITER_SPK_PATH','SATURN_SPK_PATH','URANUS_SPK_PATH','NEPTUNE_SPK_PATH','PLUTO_SPK_PATH'].some(name=>!process.env[name]),
+},()=>{
+  const names=['Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'];
+  const paths=Object.fromEntries(names.map(name=>[name,process.env[name.toUpperCase()+'_SPK_PATH']]));
+  const options={executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,physicalCenterKernels:paths,convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.000800741,tdbJulianDay:ut1+0.000800725})};
+  const plain=create(options),corrected=create({...options,planetSolarDeflection:'POINT_MASS'}),t=2461354.5;
+  for(let body=0;body<10;body++){
+    let callback;const value=corrected.swe_calc_ut(t,body,corrected.SEFLG_JPLEPH|corrected.SEFLG_SPEED,x=>{callback=x;});
+    assert.equal(value,callback);assert.ok(value.longitude>=0 && value.longitude<360 && value.distance>0);
+    assert.ok(Number.isFinite(value.longitudeSpeed) && Number.isFinite(value.latitudeSpeed) && Number.isFinite(value.distanceSpeed));
+    assert.ok(value.warnings.includes(body===0?'SUN_SELF_DEFLECTION_NOT_APPLICABLE':'SOLAR_DEFLECTION_POINT_MASS_APPLIED'));
+    if(body===0)assert.deepEqual([value.longitude,value.latitude,value.distance],[plain.swe_calc_ut(t,body,257).longitude,plain.swe_calc_ut(t,body,257).latitude,plain.swe_calc_ut(t,body,257).distance]);
+  }
+  const uncorrected=plain.swe_calc_ut(t,plain.SE_MERCURY,257),fixed=corrected.swe_calc_ut(t,corrected.SE_MERCURY,257);
+  assert.ok(Math.abs(fixed.longitude-uncorrected.longitude)>1e-8);
+  // NASA Horizons observer quantity 31, geocenter, same TT: IAU76/80 frame
+  // differs from our 2006/2000B frame, and Mars mar099 differs from mar097.
+  for(const [body,lon,lat] of [[corrected.SE_MERCURY,216.3231960,1.3285547],[corrected.SE_VENUS,203.1924041,-2.6211221],[corrected.SE_MARS,143.0142629,1.7953367]]){
+    const value=corrected.swe_calc_ut(t,body,257);
+    assert.ok(Math.abs(value.longitude-lon)<.00003,`${body} Horizons longitude`);
+    assert.ok(Math.abs(value.latitude-lat)<.00003,`${body} Horizons latitude`);
+  }
+  for(const body of [corrected.SE_MERCURY,corrected.SE_JUPITER,corrected.SE_PLUTO])for(const [flag,first,firstRate,second,secondRate] of [[0,'longitude','longitudeSpeed','latitude','latitudeSpeed'],[corrected.SEFLG_EQUATORIAL,'rectAscension','rectAscensionSpeed','declination','declinationSpeed']]){
+    const flags=257|flag,h=.02,before=corrected.swe_calc_ut(t-h,body,flags),now=corrected.swe_calc_ut(t,body,flags),after=corrected.swe_calc_ut(t+h,body,flags),span=(t+h)-(t-h);
+    assert.ok(Math.abs(now[firstRate]-((after[first]-before[first]+540)%360-180)/span)<.0001,`${body} ${first} rate`);
+    assert.ok(Math.abs(now[secondRate]-(after[second]-before[second])/span)<.0001,`${body} ${second} rate`);
+    assert.ok(Math.abs(now.distanceSpeed-(after.distance-before.distance)/span)<.00001,`${body} range rate`);
+  }
+  const helio=corrected.swe_calc_ut(t,corrected.SE_MERCURY,corrected.SEFLG_JPLEPH|corrected.SEFLG_HELCTR);
+  assert.ok(helio.warnings.includes('NO_ANNUAL_ABERRATION'));assert.ok(!helio.warnings.includes('SOLAR_DEFLECTION_POINT_MASS_APPLIED'));
+  assert.throws(()=>corrected.swe_calc_ut(2451545,corrected.SE_MARS,257),/SupplementalSpk/);
 });
 
 test('optional stellar solar deflection changes near-Sun position and reports occultation',{

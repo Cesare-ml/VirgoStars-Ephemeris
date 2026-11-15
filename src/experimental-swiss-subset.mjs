@@ -28,6 +28,9 @@ const calendar=flag=>{
 };
 const warnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 const centerWarnings=Object.freeze([...warnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
+const deflectedPlanetWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_POINT_MASS_APPLIED','PLANETARY_DEFLECTION_OMITTED','PLANET_RATES_NUMERICAL_PRECISION_LIMITED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
+const deflectedCenterWarnings=Object.freeze([...deflectedPlanetWarnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
+const deflectedSunWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SUN_SELF_DEFLECTION_NOT_APPLICABLE','PLANETARY_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 const helioWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','NO_ANNUAL_ABERRATION','SOLAR_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 const helioCenterWarnings=Object.freeze([...helioWarnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
 const helioSunWarnings=Object.freeze([...helioWarnings,'SUN_CENTER_ZERO_SENTINEL_NO_DIRECTION']);
@@ -63,10 +66,11 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT'}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT',planetSolarDeflection='OMIT'}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
   if(!['OMIT','POINT_MASS'].includes(starSolarDeflection))throw new RangeError('Unsupported stellar solar deflection model');
+  if(!['OMIT','POINT_MASS'].includes(planetSolarDeflection))throw new RangeError('Unsupported planetary solar deflection model');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
   let solarEvents=null;
@@ -222,11 +226,12 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       const equatorial=(flags&SEFLG_EQUATORIAL)!==0, heliocentric=(flags&SEFLG_HELCTR)!==0;
       let state;
       if(heliocentric && body===SE_SUN)state={longitudeDeg:0,latitudeDeg:0,distanceAu:0,longitudeSpeedDegPerTdbDay:0,latitudeSpeedDegPerTdbDay:0,distanceSpeedAuPerTdbDay:0};
+      else if(!heliocentric && planetSolarDeflection==='POINT_MASS')state=provider.calculateCoordinateAtEpoch({mode:equatorial?'equatorial':'ecliptic',target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target],solarDeflection:planetSolarDeflection});
       else if(equatorial || heliocentric)state=provider.calculateCoordinateAtEpoch({mode:equatorial?'equatorial':'heliocentric',target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
       else state=body<4?provider.calculateAtEpoch({target,ttJulianDay,tdbJulianDay}):provider.calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
       const speed=(flags&SEFLG_SPEED)!==0;
       const coordinates=equatorial?{rectAscension:state.longitudeDeg,declination:state.latitudeDeg,rectAscensionSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,declinationSpeed:speed?state.latitudeSpeedDegPerTdbDay:0}:{longitude:state.longitudeDeg,latitude:state.latitudeDeg,longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0};
-      const chosenWarnings=heliocentric?(body===SE_SUN?helioSunWarnings:body<4?helioWarnings:helioCenterWarnings):body<4?warnings:centerWarnings;
+      const chosenWarnings=heliocentric?(body===SE_SUN?helioSunWarnings:body<4?helioWarnings:helioCenterWarnings):planetSolarDeflection==='POINT_MASS'?(body===SE_SUN?deflectedSunWarnings:body<4?deflectedPlanetWarnings:deflectedCenterWarnings):body<4?warnings:centerWarnings;
       const value=Object.freeze({...coordinates,distance:state.distanceAu,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
         rflag:flags,model:'EXPERIMENTAL_DE441_IAU2006_2000B',warnings:chosenWarnings});
       if(callback!==undefined)callback(value);
