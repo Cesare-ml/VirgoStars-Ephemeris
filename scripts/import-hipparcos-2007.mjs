@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Cesare-ml (VirgoStars project). All Rights Reserved.
 // Added 2026-11-15: offline provenance-checked Hipparcos 2007 fixed-star importer.
 import {createHash} from 'node:crypto';
-import {readFileSync, writeFileSync} from 'node:fs';
-import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {readFileSync, writeFileSync, existsSync, unlinkSync} from 'node:fs';
+import {resolve, relative, dirname, isAbsolute, sep} from 'node:path';
+import {pathToFileURL, fileURLToPath} from 'node:url';
 import {readHip2Rows,HIP2_EXPECTED_ROWS,parseHip2Uncertainties} from './hipparcos-source-rows.mjs';
 
 export const HIP2_ROWS = HIP2_EXPECTED_ROWS;
@@ -135,12 +135,32 @@ export function importHipparcos2007(args) {
   const required = ['--hip2','--supplements','--hip2-sha256','--supplements-sha256','--out','--audit'];
   for (const key of required) if (!options[key]) throw new Error(`Required argument: ${key}=VALUE`);
   if (options['--out'] === options['--audit']) throw new Error('Catalog output and audit must differ');
+  // Keep downloaded/derived third-party data outside the Git source tree.
+  const catalogPath=resolve(options['--out']), auditPath=resolve(options['--audit']);
+  const repositoryRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+  for (const outputPath of [catalogPath,auditPath]) {
+    const p=relative(repositoryRoot,outputPath);
+    if (p==='' || (p!=='..' && !p.startsWith('..'+sep) && !isAbsolute(p)))
+      throw new Error('Generated catalog and audit must remain outside the Git repository');
+  }
+  if (catalogPath===auditPath) throw new Error('Catalog output and audit resolve to the same file');
+  if (existsSync(catalogPath) || existsSync(auditPath)) throw new Error('Catalog or audit output already exists; no overwrite');
   const {catalog,audit} = buildHipparcosCatalog(readFileSync(resolve(options['--hip2'])),readFileSync(resolve(options['--supplements'])),{
     hip2Sha256:options['--hip2-sha256'],supplementsSha256:options['--supplements-sha256'],
     allowComplexSolutions:options['--allow-complex-solutions']==='true',
     minParallaxSignalToNoise:options['--min-parallax-snr']===undefined?5:numeric(options['--min-parallax-snr'],'minimum parallax SNR')});
-  writeFileSync(resolve(options['--out']), JSON.stringify(catalog,null,2)+'\n',{flag:'wx'});
-  writeFileSync(resolve(options['--audit']), JSON.stringify(audit,null,2)+'\n',{flag:'wx'});
+  // Best-effort rollback: never leave a newly created catalog without its audit.
+  // 'wx' remains authoritative against a concurrent writer; never delete
+  // an existing audit or an output we did not successfully create ourselves.
+  let catalogWritten=false;
+  try {
+    writeFileSync(catalogPath,JSON.stringify(catalog,null,2)+'\n',{flag:'wx',mode:0o600});
+    catalogWritten=true;
+    writeFileSync(auditPath,JSON.stringify(audit,null,2)+'\n',{flag:'wx',mode:0o600});
+  } catch(error) {
+    if(catalogWritten)try {unlinkSync(catalogPath);}catch {}
+    throw error;
+  }
   return {count:catalog.records.length,catalogId:catalog.id};
 }
 
