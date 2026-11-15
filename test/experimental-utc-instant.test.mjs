@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
-import {createExplicitUtcInstant as create} from '../src/experimental-utc-instant.mjs';
+import {createExplicitUtcInstant as create,createExplicitUt1Window} from '../src/experimental-utc-instant.mjs';
 import {createExperimentalSwissSubset} from '../src/experimental-swiss-subset.mjs';
 
 test('explicit UTC adapter rejects ambiguous dates and unsupported offset inputs',()=>{
@@ -59,4 +59,31 @@ test('explicit UTC instant composes with actual Sun and house providers',{
   const houses=api.swe_houses(instant.ut1JulianDay,41.9028,12.4964,'P');
   assert.ok(sun.longitude>=0 && sun.longitude<360);assert.equal(houses.house.length,12);
   assert.throws(()=>api.swe_calc_ut(instant.ut1JulianDay+.1,api.SE_SUN,api.SEFLG_JPLEPH),/only/);
+});
+
+test('bounded constant-offset window converts several UT1 instants and drives actual positions',{
+  skip:['VIRGOSTARS_EPHEMERIS_CLI','DE441_PATH','VIRGOSTARS_HOUSE_SET_MODULE'].some(key=>!process.env[key]),
+},async()=>{
+  const common={executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,ut1MinusUtcSeconds:.355,taiMinusUtcSeconds:32,tdbMinusTtSeconds:0,sourceId:'ERFA anchor; constant-offset test assumption'};
+  const options={...common,startUtc:'2000-01-01T00:00:00.000Z',endUtc:'2000-01-03T00:00:00.000Z',offsetPolicy:'CONSTANT_IN_WINDOW',leapSecondPolicy:'NO_LEAP_SECOND_IN_WINDOW'};
+  assert.throws(()=>createExplicitUt1Window({...options,offsetPolicy:'automatic'}),/policies/);
+  assert.throws(()=>createExplicitUt1Window({...options,endUtc:'2000-02-03T00:00:00.000Z'}),/31 days/);
+  const window=createExplicitUt1Window(options);
+  const anchor=create({...common,datetimeUtc:'2000-01-01T12:00:00.000Z'});
+  assert.equal(window.convertUt1ToUtc(anchor.ut1JulianDay),'2000-01-01T12:00:00.000Z');
+  assert.ok(Math.abs(window.convertUt1ToTtTdb(anchor.ut1JulianDay).ttJulianDay-2451545.0007428704)<1e-9);
+  assert.equal(window.convertUt1ToUtc(window.startUt1JulianDay),options.startUtc);
+  assert.equal(window.convertUt1ToUtc(window.endUt1JulianDay),options.endUtc);
+  assert.throws(()=>window.convertUt1ToTtTdb(window.endUt1JulianDay+.01),/outside/);
+  assert.throws(()=>window.convertUt1ToUtc(NaN),/outside/);
+  const {calculateHouseSet}=await import(pathToFileURL(process.env.VIRGOSTARS_HOUSE_SET_MODULE));
+  const api=createExperimentalSwissSubset({executablePath:common.executablePath,kernelPath:process.env.DE441_PATH,convertUt1ToTtTdb:window.convertUt1ToTtTdb,
+    houseSupport:{calculateHouseSet,convertUt1ToUtc:window.convertUt1ToUtc,engineVersion:'test',kernelSetId:'test',timeModel:'CALLER_SUPPLIED_CONSTANT_OFFSETS'}});
+  const first=api.swe_calc_ut(anchor.ut1JulianDay,api.SE_SUN,api.SEFLG_JPLEPH|api.SEFLG_SPEED);
+  const next=api.swe_calc_ut(anchor.ut1JulianDay+.5,api.SE_SUN,api.SEFLG_JPLEPH|api.SEFLG_SPEED);
+  assert.notEqual(first.longitude,next.longitude);
+  const firstHouses=api.swe_houses(anchor.ut1JulianDay,41.9028,12.4964,'P');
+  const nextHouses=api.swe_houses(anchor.ut1JulianDay+.5,41.9028,12.4964,'P');
+  assert.equal(firstHouses.house.length,12);assert.notEqual(firstHouses.house[0],nextHouses.house[0]);
+  assert.ok(window.warnings.includes('NO_LEAP_SECOND_CALLER_ASSERTION'));
 });

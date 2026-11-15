@@ -41,3 +41,31 @@ export function createExplicitUtcInstant({executablePath,datetimeUtc,ut1MinusUtc
     convertUt1ToUtc(jd){requireInstant(jd);return datetimeUtc;},
   });
 }
+
+/** Short inclusive window, with caller-assumed constant offsets and no leap labels. */
+export function createExplicitUt1Window({executablePath,startUtc,endUtc,ut1MinusUtcSeconds,taiMinusUtcSeconds,tdbMinusTtSeconds,sourceId,offsetPolicy,leapSecondPolicy}){
+  if(offsetPolicy!=='CONSTANT_IN_WINDOW' || leapSecondPolicy!=='NO_LEAP_SECOND_IN_WINDOW')throw new TypeError('Explicit constant-offset and no-leap-second policies are required');
+  const common={executablePath,ut1MinusUtcSeconds,taiMinusUtcSeconds,tdbMinusTtSeconds,sourceId};
+  const start=createExplicitUtcInstant({...common,datetimeUtc:startUtc});
+  const end=createExplicitUtcInstant({...common,datetimeUtc:endUtc});
+  if(end.unixMilliseconds<=start.unixMilliseconds || end.unixMilliseconds-start.unixMilliseconds>31*86400000)throw new RangeError('UTC window must be ordered and at most 31 days');
+  const convert=jd=>{
+    if(!Number.isFinite(jd) || jd<start.ut1JulianDay || jd>end.ut1JulianDay)throw new RangeError('UT1 instant is outside the explicit window');
+    const args=['ut1_window',String(jd),String(start.unixMilliseconds),String(end.unixMilliseconds),String(ut1MinusUtcSeconds),String(taiMinusUtcSeconds),String(tdbMinusTtSeconds)];
+    const child=spawnSync(executablePath,args,{encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:65536});
+    if(child.error)throw new Error(`Time conversion process failed: ${child.error.message}`,{cause:child.error});
+    if(child.status!==0)throw new Error(`Time conversion process exited with status ${child.status}: ${(child.stderr||'').trim()}`);
+    const lines=child.stdout.trim().split(/\r?\n/);
+    if(lines.length!==2 || lines[0]!=='unix_milliseconds,ut1_jd,tt_jd,tdb_jd')throw new Error('Invalid explicit window CSV contract');
+    const parts=lines[1].split(',');
+    if(parts.length!==4 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid explicit window CSV row');
+    const [ms,reportedJd,ttJulianDay,tdbJulianDay]=parts.map(Number);
+    if(!Number.isSafeInteger(ms) || ms<start.unixMilliseconds || ms>end.unixMilliseconds || reportedJd!==jd || Math.abs((ttJulianDay-jd)*86400-(taiMinusUtcSeconds+32.184-ut1MinusUtcSeconds))>.00012 || Math.abs((tdbJulianDay-ttJulianDay)*86400-tdbMinusTtSeconds)>.00012)throw new Error('Incoherent explicit window CSV row');
+    return {datetimeUtc:new Date(ms).toISOString(),ttJulianDay,tdbJulianDay};
+  };
+  return Object.freeze({startUtc,endUtc,startUt1JulianDay:start.ut1JulianDay,endUt1JulianDay:end.ut1JulianDay,sourceId,
+    warnings:Object.freeze(['OFFSETS_CALLER_SUPPLIED_NOT_VERIFIED','CONSTANT_OFFSETS_APPROXIMATION','NO_LEAP_SECOND_CALLER_ASSERTION','UTC_ROUNDED_TO_MILLISECOND','BINARY64_JULIAN_DAY_PRECISION']),
+    convertUt1ToTtTdb(jd){const {ttJulianDay,tdbJulianDay}=convert(jd);return Object.freeze({ttJulianDay,tdbJulianDay});},
+    convertUt1ToUtc(jd){return convert(jd).datetimeUtc;},
+  });
+}
