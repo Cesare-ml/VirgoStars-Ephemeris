@@ -19,7 +19,7 @@ const fixedRow=()=>{
   for(let i=0;i<size;i++)arr[offset+i]=str[i];
  };
  fill(0,6,123);fill(7,3,5);fill(13,1,1);fill(15,13,'1.3');
- fill(29,13,'0.5');fill(43,7,'10');fill(51,8,'2');fill(60,8,'3');
+ fill(29,13,'0.5');fill(43,7,'10');fill(51,8,'2');fill(60,8,'3');fill(69,6,'0.7');fill(76,6,'0.8');fill(83,6,'1.0');fill(90,6,'1.2');fill(97,6,'1.5');
  return arr.join('')+'\n';
 };
 test('offline Hipparcos converter feeds pinned loader and magnitude API with the same alias',t=>{
