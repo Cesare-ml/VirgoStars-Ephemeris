@@ -19,7 +19,11 @@ export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_HELC
 export const SE_ECL2HOR=0,SE_EQU2HOR=1;
 export const SE_CALC_RISE=1,SE_CALC_SET=2,SE_CALC_MTRANSIT=4,SE_CALC_ITRANSIT=8;
 export const SE_ECL_NUT=-1,SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
+export const SE_MEAN_NODE=10,SE_TRUE_NODE=11,SE_MEAN_APOG=12,SE_OSCU_APOG=13;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
+const LUNAR_POINTS=Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
+const LUNAR_NAMES=Object.freeze(['mean Node','true Node','mean Apogee','osc. Apogee']);
+const lunarWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','GEOCENTRIC_MATHEMATICAL_POINT','MEAN_POINTS_ANALYTIC_NOT_JPL','MEAN_MODEL_AND_DISTANCES_APPROXIMATE','OSCULATION_FROM_GEOMETRIC_DE441','OSCULATION_RATES_NUMERICAL','NUTATION_IAU_2000B_APPROXIMATE','TT_DAY_RATES_NOT_EXACT_UT_RATES']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
   if(flag===SE_GREG_CAL)return 'gregorian';
@@ -69,11 +73,12 @@ export function validateExperimentalStarCatalog(catalog){snapshotCatalog(catalog
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT',planetSolarDeflection='OMIT'}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false,starSolarDeflection='OMIT',planetSolarDeflection='OMIT',lunarPointPolicy='DISABLED'}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
   if(!['OMIT','POINT_MASS'].includes(starSolarDeflection))throw new RangeError('Unsupported stellar solar deflection model');
   if(!['OMIT','POINT_MASS'].includes(planetSolarDeflection))throw new RangeError('Unsupported planetary solar deflection model');
+  if(!['DISABLED','EXPERIMENTAL_GEOCENTRIC'].includes(lunarPointPolicy))throw new RangeError('Unsupported lunar point policy');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
   let solarEvents=null;
@@ -131,7 +136,7 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   };
   const star=name=>{if(!stars)throw new Error('An explicit star catalog is required');return stars.lookup(name);};
   const api={
-    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL2HOR,SE_EQU2HOR,SE_CALC_RISE,SE_CALC_SET,SE_CALC_MTRANSIT,SE_CALC_ITRANSIT,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL2HOR,SE_EQU2HOR,SE_CALC_RISE,SE_CALC_SET,SE_CALC_MTRANSIT,SE_CALC_ITRANSIT,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,SE_MEAN_NODE,SE_TRUE_NODE,SE_MEAN_APOG,SE_OSCU_APOG,
     swe_rise_trans(julianDay,body,starName,flags,event,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC,callback){
       if(!solarEvents)throw new Error('Explicit solar event search configuration is required');
       callbackType(callback);
@@ -161,8 +166,8 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       if(callback!==undefined)callback(value);return value;
     },
     swe_get_planet_name(body,callback){
-      callbackType(callback);if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto names are supported');
-      const value=Object.freeze({name:PHYSICAL_TARGETS[body]});if(callback!==undefined)callback(value);return value;
+      callbackType(callback);if(!Number.isInteger(body) || body<0 || (body>=PHYSICAL_TARGETS.length && !(lunarPointPolicy==='EXPERIMENTAL_GEOCENTRIC' && body<=SE_OSCU_APOG)))throw new RangeError('Only configured physical and lunar point names are supported');
+      const value=Object.freeze({name:body<PHYSICAL_TARGETS.length?PHYSICAL_TARGETS[body]:LUNAR_NAMES[body-SE_MEAN_NODE]});if(callback!==undefined)callback(value);return value;
     },
     swe_calc(julianDayTt,body,flags,callback){
       if(body!==SE_ECL_NUT)throw new RangeError('Only SE_ECL_NUT is supported in swe_calc');
@@ -220,6 +225,15 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
       if(body===SE_ECL_NUT){callbackType(callback);if(flags!==0)throw new RangeError('Ecliptic nutation accepts only flags 0');return nutation(getEpochs(julianDay).ttJulianDay,flags,callback);}
+      if(Number.isInteger(body) && body>=SE_MEAN_NODE && body<=SE_OSCU_APOG){
+        if(lunarPointPolicy!=='EXPERIMENTAL_GEOCENTRIC')throw new RangeError('Experimental lunar points require explicit opt-in');
+        if(!Number.isInteger(flags) || ![SEFLG_JPLEPH,SEFLG_JPLEPH|SEFLG_SPEED].includes(flags))throw new RangeError('Lunar points support only geocentric ecliptic JPL with optional speed');
+        callbackType(callback);const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
+        const state=provider.calculateLunarPointAtEpoch({point:LUNAR_POINTS[body-SE_MEAN_NODE],ttJulianDay,tdbJulianDay});
+        const speed=(flags&SEFLG_SPEED)!==0;
+        const value=Object.freeze({longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,longitudeSpeed:speed?state.longitudeSpeedDegPerTtDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTtDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTtDay:0,rflag:flags,model:'EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT',warnings:lunarWarnings});
+        if(callback!==undefined)callback(value);return value;
+      }
       if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
       if(!Number.isInteger(flags) || flags<0 || flags>(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL) || (flags&SEFLG_JPLEPH)===0 || (flags&~(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL))!==0 || ((flags&SEFLG_HELCTR)!==0 && (flags&SEFLG_EQUATORIAL)!==0))throw new RangeError('Only explicit JPL, optional speed, and one supported coordinate flag are allowed in flags');
       callbackType(callback);
