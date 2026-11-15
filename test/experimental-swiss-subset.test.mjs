@@ -109,6 +109,28 @@ test('catalog aliases and magnitudes are explicit immutable input snapshots',()=
   assert.throws(()=>create({...options,catalog:{id:'x',records:[fixtureStar,{...fixtureStar,name:'other'}]}}),/Duplicate/);
   assert.throws(()=>create({...options,catalog:{id:'x',records:[{...fixtureStar,parallaxMas:0}]}}),/Invalid/);
   assert.throws(()=>create({...options,catalog:undefined}).swe_fixstar_mag('A'),/catalog/);
+  assert.throws(()=>create({...options,starSolarDeflection:'SWISS'}),/deflection/);
+});
+
+test('optional stellar solar deflection changes near-Sun position and reports occultation',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH,
+},()=>{
+  const tt=2456165.901182685,deg=180/Math.PI,mas=deg*3600000;
+  const star={name:'Synthetic ERFA',aliases:['E'],epochTdbJulianDay:2451545,rightAscensionDeg:2.71*deg,declinationDeg:.174*deg,properMotionRaCosDecMasPerYear:1e-5*Math.cos(.174)*mas,properMotionDecMasPerYear:5e-6*mas,parallaxMas:100,radialVelocityKmPerSecond:55,visualMagnitude:1};
+  const earth=[0.9033585441304302,-0.4153952370279949,-0.18008401414326577];
+  const ra=(Math.atan2(-earth[1],-earth[0])*deg+360)%360,dec=Math.atan2(-earth[2],Math.hypot(earth[0],earth[1]))*deg;
+  const occulted={...star,name:'Occulted',aliases:[],epochTdbJulianDay:tt,rightAscensionDeg:ra,declinationDeg:dec,properMotionRaCosDecMasPerYear:0,properMotionDecMasPerYear:0,radialVelocityKmPerSecond:0};
+  const opts={executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd}),catalog:{id:'synthetic-erfa',records:[star,occulted]}};
+  const without=create(opts),withBending=create({...opts,starSolarDeflection:'POINT_MASS'});
+  const a=without.swe_fixstar_ut('E',tt,without.SEFLG_JPLEPH|without.SEFLG_SPEED);
+  let cb;const b=withBending.swe_fixstar_ut('E',tt,withBending.SEFLG_JPLEPH|withBending.SEFLG_SPEED,v=>{cb=v;});
+  assert.equal(b,cb);assert.ok(a.warnings.includes('SOLAR_DEFLECTION_OMITTED'));assert.ok(b.warnings.includes('SOLAR_DEFLECTION_POINT_MASS_APPLIED'));
+  const delta=Math.hypot((b.longitude-a.longitude)*Math.cos(b.latitude/deg),b.latitude-a.latitude)*3600;
+  assert.ok(delta>1 && delta<2,`${delta} arcseconds`);
+  const h=.001,before=withBending.swe_fixstar_ut('E',tt-h,1),after=withBending.swe_fixstar_ut('E',tt+h,1),span=(tt+h)-(tt-h);
+  assert.ok(Math.abs(b.longitudeSpeed-((after.longitude-before.longitude+540)%360-180)/span)<.001);
+  assert.ok(Math.abs(b.latitudeSpeed-(after.latitude-before.latitude)/span)<.001);
+  assert.throws(()=>withBending.swe_fixstar_ut('Occulted',tt,1),/solar disk/);
 });
 
 test('rejects absent converters, unsupported bodies, flags and incoherent epochs without fallback',()=>{

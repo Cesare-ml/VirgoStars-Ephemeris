@@ -73,10 +73,10 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if (![year, month, day].every(Number.isInteger) || month < 1 || month > 12 || day < 1 || day > 31 || decimalHour < 0 || decimalHour >= 24) throw new Error('Out-of-range reverse Julian-day CSV row');
       return Object.freeze({year, month, day, decimalHour, calendar, timeScale});
     },
-    calculateStarAtEpoch({ttJulianDay,tdbJulianDay,epochTdbJulianDay,rightAscensionDeg,declinationDeg,properMotionRaCosDecMasPerYear,properMotionDecMasPerYear,parallaxMas,radialVelocityKmPerSecond}) {
+    calculateStarAtEpoch({ttJulianDay,tdbJulianDay,epochTdbJulianDay,rightAscensionDeg,declinationDeg,properMotionRaCosDecMasPerYear,properMotionDecMasPerYear,parallaxMas,radialVelocityKmPerSecond,solarDeflection='OMIT'}) {
       const values=[ttJulianDay,tdbJulianDay,epochTdbJulianDay,rightAscensionDeg,declinationDeg,properMotionRaCosDecMasPerYear,properMotionDecMasPerYear,parallaxMas,radialVelocityKmPerSecond];
-      if(!values.every(Number.isFinite))throw new TypeError('Explicit finite TT, TDB and stellar astrometry are required');
-      const lines=execute(['star_epoch',kernelPath,...values.map(String)]);
+      if(!values.every(Number.isFinite) || !['OMIT','POINT_MASS'].includes(solarDeflection))throw new TypeError('Explicit finite TT, TDB, stellar astrometry and supported solar deflection are required');
+      const lines=execute([solarDeflection==='POINT_MASS'?'star_epoch_solar':'star_epoch',kernelPath,...values.map(String)]);
       if(lines.length!==2 || lines[0]!=='tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tdb_day,latitude_deg_per_tdb_day,distance_au_per_tdb_day')throw new Error('Invalid star CSV contract');
       const parts=lines[1].split(',');if(parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid star CSV row');
       const [tt,tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay]=parts.map(Number);
