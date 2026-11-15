@@ -53,6 +53,48 @@ export function decodeHipparcos2007Archive(archive,{
   };
 }
 
+/**
+ * Consume an HTTPS response in bounded chunks. Fetch's response.arrayBuffer()
+ * would buffer an arbitrarily large response before the compressed-size limit
+ * could be applied. Real Node fetch responses expose a Web ReadableStream.
+ * Reject missing/non-streaming bodies rather than falling back to unbounded IO.
+ */
+export async function readBoundedArchiveResponse(response,{maxBytes=MAX_GZIP_BYTES}={}){
+  if(!Number.isSafeInteger(maxBytes) || maxBytes<2 || maxBytes>MAX_GZIP_BYTES)
+    throw new Error('Invalid compressed-stream size limit');
+  const rawHeader=response?.headers?.get?.('content-length');
+  let declaredSize=null;
+  if(rawHeader!==null && rawHeader!==undefined){
+    if(!/^\\d+$/.test(rawHeader)) throw new Error('Invalid Hipparcos Content-Length header');
+    declaredSize=Number(rawHeader);
+    if(!Number.isSafeInteger(declaredSize) || declaredSize>maxBytes)
+      throw new Error('Hipparcos compressed archive exceeds the configured 20 MiB cap');
+  }
+  const reader=response?.body?.getReader?.();
+  if(!reader || typeof reader.read!=='function')
+    throw new Error('Hipparcos HTTPS response must have a streaming body');
+  const chunks=[];
+  let bytesRead=0,completed=false;
+  try {
+    for(;;){
+      const {value,done}=await reader.read();
+      if(done){completed=true;break;}
+      if(!(value instanceof Uint8Array))throw new Error('Invalid Hipparcos download stream chunk');
+      if(value.length>maxBytes-bytesRead)
+        throw new Error('Hipparcos compressed archive exceeds the configured 20 MiB cap');
+      bytesRead+=value.length;
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    if(!completed)try{await reader.cancel();}catch{}
+    try{reader.releaseLock();}catch{}
+  }
+  if(bytesRead<2)throw new Error('Hipparcos compressed archive is empty or truncated');
+  if(declaredSize!==null && bytesRead!==declaredSize)
+    throw new Error('Hipparcos Content-Length does not match streamed archive bytes');
+  return Buffer.concat(chunks,bytesRead);
+}
+
 export async function acquireHipparcos2007({
   fetchImpl=fetch,
   expectedArchiveSha256,
@@ -67,10 +109,7 @@ export async function acquireHipparcos2007({
     signal:AbortSignal.timeout(120000),
   });
   if(!response || !response.ok) throw new Error(`Official Hipparcos download failed: HTTP ${response?.status??'unknown'}`);
-  const declaredSize=Number(response.headers?.get?.('content-length'));
-  if(Number.isFinite(declaredSize) && declaredSize>MAX_GZIP_BYTES)
-    throw new Error('Hipparcos compressed archive exceeds the configured 20 MiB cap');
-  const archive=Buffer.from(await response.arrayBuffer());
+  const archive=await readBoundedArchiveResponse(response);
   return decodeHipparcos2007Archive(archive,{expectedArchiveSha256,requireFullCatalog,acquiredFromOfficialMirror:true});
 }
 
