@@ -17,6 +17,7 @@ import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_HELCTR=8,SEFLG_SPEED=256,SEFLG_EQUATORIAL=2048;
 export const SE_ECL2HOR=0,SE_EQU2HOR=1;
+export const SE_CALC_RISE=1,SE_CALC_SET=2,SE_CALC_MTRANSIT=4,SE_CALC_ITRANSIT=8;
 export const SE_ECL_NUT=-1,SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
@@ -61,11 +62,18 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,legacyMutableResults=false}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,solarEventSupport,legacyMutableResults=false}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
+  let solarEvents=null;
+  if(solarEventSupport!==undefined){
+    if(!solarEventSupport || typeof solarEventSupport!=='object')throw new TypeError('Explicit solar event search configuration is required');
+    const {windowDays,stepMinutes,timeOffsets}=solarEventSupport;
+    if(!Number.isFinite(windowDays) || windowDays<=0 || windowDays>2 || !Number.isFinite(stepMinutes) || stepMinutes<1 || stepMinutes>60 || timeOffsets!=='CONSTANT_IN_SEARCH')throw new RangeError('Solar event window, cadence and constant-time-offset assumption are required');
+    solarEvents=Object.freeze({windowDays,stepMinutes});
+  }
   let horizontalModel=null;
   if(horizontalSupport!==undefined){
     if(!horizontalSupport || typeof horizontalSupport!=='object' || !['GEOMETRIC','NOAA_STANDARD'].includes(horizontalSupport.refraction))throw new TypeError('Explicit horizontal refraction model is required');
@@ -114,7 +122,19 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   };
   const star=name=>{if(!stars)throw new Error('An explicit star catalog is required');return stars.lookup(name);};
   const api={
-    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL2HOR,SE_EQU2HOR,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL2HOR,SE_EQU2HOR,SE_CALC_RISE,SE_CALC_SET,SE_CALC_MTRANSIT,SE_CALC_ITRANSIT,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    swe_rise_trans(julianDay,body,starName,flags,event,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC,callback){
+      if(!solarEvents)throw new Error('Explicit solar event search configuration is required');
+      callbackType(callback);
+      if(body!==SE_SUN || starName!=='' || flags!==SEFLG_JPLEPH || ![SE_CALC_RISE,SE_CALC_SET,SE_CALC_MTRANSIT,SE_CALC_ITRANSIT].includes(event))throw new RangeError('Only explicit JPL solar rise, set and meridian transit events are supported');
+      if(![julianDay,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC].every(Number.isFinite) || Math.abs(longitudeDegEast)>180 || Math.abs(latitudeDeg)>=90 || heightMetres!==0 || pressureHpa!==0 || temperatureC!==0)throw new RangeError('Valid nonpolar site and zero height, pressure and temperature placeholders are required');
+      const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
+      const kind=event===SE_CALC_RISE?'rise':event===SE_CALC_SET?'set':event===SE_CALC_MTRANSIT?'upper_transit':'lower_transit';
+      const input={kind,ut1JulianDay:julianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,...solarEvents};
+      const result=event===SE_CALC_RISE || event===SE_CALC_SET?provider.findStandardSolarEvent(input):provider.findGeometricEvent({...input,target:'Sun',thresholdAltitudeDeg:0,observerHeightM:0});
+      const value=Object.freeze({name:'',transitTime:result.ut1JulianDay,bracketSeconds:result.bracketSeconds,model:result.model,warnings:result.warnings});
+      if(callback!==undefined)callback(value);return value;
+    },
     swe_azalt(julianDay,mode,longitudeDegEast,latitudeDeg,heightMetres,pressureHpa,temperatureC,longitudeOrRa,latitudeOrDec,distance,callback){
       if(!horizontalModel)throw new Error('Explicit horizontal refraction model is required');
       callbackType(callback);

@@ -17,6 +17,34 @@ import assert from 'node:assert/strict';
 import {createExperimentalSwissSubset as create} from '../src/experimental-swiss-subset.mjs';
 
 const fixtureStar={name:'Synthetic A',aliases:['A'],epochTdbJulianDay:2451545,rightAscensionDeg:20,declinationDeg:-30,properMotionRaCosDecMasPerYear:120,properMotionDecMasPerYear:-40,parallaxMas:50,radialVelocityKmPerSecond:20,visualMagnitude:1.23};
+test('solar event search requires explicit bounded assumptions',()=>{
+  const base={executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})};
+  assert.throws(()=>create(base).swe_rise_trans(2451545,0,'',1,1,0,0,0,0,0),/configuration/);
+  assert.throws(()=>create({...base,solarEventSupport:{windowDays:2.1,stepMinutes:10,timeOffsets:'CONSTANT_IN_SEARCH'}}),/window/);
+  assert.throws(()=>create({...base,solarEventSupport:{windowDays:1,stepMinutes:10}}),/assumption/);
+  const api=create({...base,solarEventSupport:{windowDays:1,stepMinutes:10,timeOffsets:'CONSTANT_IN_SEARCH'}});
+  assert.throws(()=>api.swe_rise_trans(2451545,api.SE_MOON,'',1,1,0,0,0,0,0),/solar/);
+  assert.throws(()=>api.swe_rise_trans(2451545,api.SE_SUN,'',api.SEFLG_SWIEPH,1,0,0,0,0,0),/JPL/);
+  assert.throws(()=>api.swe_rise_trans(2451545,api.SE_SUN,'',1,1,0,0,0,1013,0),/pressure/);
+});
+
+test('solar rise, set and meridian transits expose bounded UT1 events',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH,
+},()=>{
+  const configuration={windowDays:1.5,stepMinutes:10,timeOffsets:'CONSTANT_IN_SEARCH'};
+  const api=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,solarEventSupport:configuration,
+    convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.000800741,tdbJulianDay:ut1+0.000800725})});
+  configuration.windowDays=0;
+  // Swiss 2.09.03 at Rome for one epoch: diagnostic only, differing models.
+  const cases=[[api.SE_CALC_RISE,2461354.7451938586,30],[api.SE_CALC_SET,2461355.1627058745,30],[api.SE_CALC_MTRANSIT,2461354.9541137326,2],[api.SE_CALC_ITRANSIT,2461355.454149394,2]];
+  for(const [event,reference,toleranceSeconds] of cases){
+    let callback;const value=api.swe_rise_trans(2461354.5,api.SE_SUN,'',api.SEFLG_JPLEPH,event,12.4964,41.9028,0,0,0,v=>{callback=v;});
+    assert.equal(value,callback);assert.equal(value.name,'');assert.ok(Math.abs(value.transitTime-reference)*86400<toleranceSeconds);
+    assert.ok(value.bracketSeconds>=0 && value.bracketSeconds<=0.25);assert.ok(value.warnings.includes('NOT_SWISS_PARITY'));
+    assert.ok(value.warnings.includes('NO_UT1_INTERPOLATION'));
+  }
+  assert.throws(()=>api.swe_rise_trans(2461354.5,api.SE_SUN,'',api.SEFLG_JPLEPH,api.SE_CALC_RISE,0,89,0,0,0),/crossing/i);
+});
 test('horizontal operation requires an explicit model and rejects unsupported weather',()=>{
   const options={executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})};
   assert.throws(()=>create(options).swe_azalt(2451545,0,0,0,0,0,0,0,0,0),/model/);
