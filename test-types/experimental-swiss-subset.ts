@@ -1,6 +1,10 @@
 import {createExperimentalSwissSubset,SE_GREG_CAL,SE_SUN,SEFLG_JPLEPH,SEFLG_SPEED} from 'virgostars-ephemeris/experimental-swiss-subset';
 import {createExplicitUtcInstant} from 'virgostars-ephemeris/experimental-utc-instant';
 import {createExperimentalLegacyBridge} from 'virgostars-ephemeris/experimental-legacy-bridge';
+import {loadExperimentalStarCatalogFile} from 'virgostars-ephemeris/experimental-star-catalog-file';
+
+const loadedCatalog=loadExperimentalStarCatalogFile({filePath:'/absolute/catalog.json',sha256:'0'.repeat(64),source:'caller source',license:'caller license'});
+const catalogId:string=loadedCatalog.catalog.id;void catalogId;
 const api=createExperimentalSwissSubset({executablePath:'example',kernelPath:'example',physicalCenterKernels:{Mars:'mars.bsp'},convertUt1ToTtTdb:jd=>({ttJulianDay:jd,tdbJulianDay:jd})});
 const jd:number=api.swe_julday(2000,1,1,12,SE_GREG_CAL);
 const coords=api.swe_calc_ut(jd,SE_SUN,SEFLG_JPLEPH|SEFLG_SPEED);

@@ -11,6 +11,10 @@
       "types": "./src/experimental-utc-instant.d.mts",
       "import": "./src/experimental-utc-instant.mjs"
     },
+    "./experimental-star-catalog-file": {
+      "types": "./src/experimental-star-catalog-file.d.mts",
+      "import": "./src/experimental-star-catalog-file.mjs"
+    },
     "./experimental-legacy-bridge": {
       "types": "./src/experimental-legacy-bridge.d.mts",
       "import": "./src/experimental-legacy-bridge.mjs"
