@@ -3,12 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,writeFileSync,existsSync,rmSync,truncateSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync,truncateSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
-import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,decodeHipparcos2007Archive,readBoundedArchiveResponse,runHipparcosDownload} from '../scripts/fetch-hipparcos-2007.mjs';
+import {OFFICIAL_HIP2_GZIP_URL,acquireHipparcos2007,decodeHipparcos2007Archive,readBoundedArchiveResponse,runHipparcosDownload,writeHipparcosSourcePair} from '../scripts/fetch-hipparcos-2007.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const row=(id)=>String(id).padStart(6)+Array(270).fill(' ').join('');
@@ -144,4 +144,46 @@ test('offline archive loader refuses oversized local source before allocating th
   await assert.rejects(()=>runHipparcosDownload(['--archive='+archive,'--out='+out]),/at most 20 MiB/);
   assert.equal(existsSync(out),false);
   assert.equal(existsSync(out+'.source.json'),false);
+});
+
+test('raw Hipparcos file and provenance manifest are written as a protected pair',t=>{
+  const dir=mkdtempSync(join(tmpdir(),'hip2-source-pair-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const output=join(dir,'hip2.dat'),manifest=output+'.source.json';
+  const bytes=Buffer.from('Synthetic bytes - not actual Hipparcos');
+  const provenance={sourceUrl:null,rawSha256:sha(bytes)};
+  const result=writeHipparcosSourcePair(output,manifest,bytes,provenance);
+  assert.equal(result.rawFile,output);
+  assert.deepEqual(readFileSync(output),bytes);
+  assert.deepEqual(JSON.parse(readFileSync(manifest,'utf8')),provenance);
+  assert.throws(()=>writeHipparcosSourcePair(output,manifest,bytes,provenance),/already exists/);
+});
+
+test('provenance output failure removes only files newly created by this invocation',t=>{
+  const dir=mkdtempSync(join(tmpdir(),'hip2-rollback-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const rawFile=join(dir,'hip2.dat');
+  const nonexistentManifest=join(dir,'not-a-real-dir','manifest.json');
+  const raw=Buffer.from('Synthetic only');
+  assert.throws(()=>writeHipparcosSourcePair(rawFile,nonexistentManifest,raw,{}),/ENOENT/);
+  assert.equal(existsSync(rawFile),false);
+  assert.equal(existsSync(nonexistentManifest),false);
+  const existingManifest=join(dir,'existing-source.json');
+  writeFileSync(existingManifest,'retained content');
+  assert.throws(()=>writeHipparcosSourcePair(rawFile,existingManifest,raw,{}),/already exists/);
+  assert.equal(existsSync(rawFile),false);
+  assert.equal(readFileSync(existingManifest,'utf8'),'retained content');
+});
+
+test('download source cannot write through an external symlink into repository',{
+  skip:process.platform==='win32'?'Windows directory symlinks may need elevated privileges':false,
+},t=>{
+  const dir=mkdtempSync(join(tmpdir(),'hip2-symlink-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const alias=join(dir,'repo-alias');
+  const root=fileURLToPath(new URL('../',import.meta.url));
+  symlinkSync(root,alias,'dir');
+  const data=join(alias,'hip2-should-not-be-written.dat');
+  assert.throws(()=>writeHipparcosSourcePair(data,join(dir,'outside.manifest.json'),Buffer.from('Test'),{}),/outside the Git repository/);
+  assert.equal(existsSync(data),false);
 });
