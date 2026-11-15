@@ -84,7 +84,7 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       return Object.freeze({target,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
     },
     calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath}) {
-      if(!['Mars','Jupiter','Saturn'].includes(target) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || typeof centerKernelPath!=='string' || !centerKernelPath.trim())throw new TypeError('Physical target, explicit center SPK and finite TT and TDB are required');
+      if(!['Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'].includes(target) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || typeof centerKernelPath!=='string' || !centerKernelPath.trim())throw new TypeError('Physical target, explicit center SPK and finite TT and TDB are required');
       const lines=execute(['physical_epoch',kernelPath,centerKernelPath,target,String(ttJulianDay),String(tdbJulianDay)]);
       if(lines.length!==2 || lines[0]!==HEADER)throw new Error('Invalid physical epoch CSV contract');
       const [returnedTarget,...parts]=lines[1].split(',');

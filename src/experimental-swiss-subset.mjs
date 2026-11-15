@@ -17,7 +17,7 @@ import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_SPEED=256;
 export const SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
-const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn']);
+const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
   if(flag===SE_GREG_CAL)return 'gregorian';
@@ -65,7 +65,7 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   if(physicalCenterKernels!==undefined){
     if(!physicalCenterKernels || typeof physicalCenterKernels!=='object' || Array.isArray(physicalCenterKernels))throw new TypeError('Physical-center SPK paths must be an object');
     for(const [name,path] of Object.entries(physicalCenterKernels)){
-      if(!['Mars','Jupiter','Saturn'].includes(name) || typeof path!=='string' || !path.trim())throw new TypeError('Supported physical-center SPK paths are required');
+      if(!PHYSICAL_TARGETS.slice(4).includes(name) || typeof path!=='string' || !path.trim())throw new TypeError('Supported physical-center SPK paths are required');
       centers[name]=path;
     }
   }
@@ -145,7 +145,7 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     },
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
-      if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Saturn physical centers are supported');
+      if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
       validFlags(flags);callbackType(callback);
       const target=PHYSICAL_TARGETS[body];
       if(body>=4 && !Object.hasOwn(centers,target))throw new RangeError('Explicit physical-center SPK is required for '+target);

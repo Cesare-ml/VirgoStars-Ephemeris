@@ -81,6 +81,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             "Mars" => PhysicalPlanet::Mars,
             "Jupiter" => PhysicalPlanet::Jupiter,
             "Saturn" => PhysicalPlanet::Saturn,
+            "Uranus" => PhysicalPlanet::Uranus,
+            "Neptune" => PhysicalPlanet::Neptune,
+            "Pluto" => PhysicalPlanet::Pluto,
             _ => return Err("unsupported physical planet".into()),
         };
         let tt = arg(5)?.parse()?;

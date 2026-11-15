@@ -30,6 +30,9 @@ pub enum PhysicalPlanet {
     Mars,
     Jupiter,
     Saturn,
+    Uranus,
+    Neptune,
+    Pluto,
 }
 impl PhysicalPlanet {
     fn identifiers(self) -> (Body, i32, i32) {
@@ -37,6 +40,9 @@ impl PhysicalPlanet {
             Self::Mars => (Body::MarsBarycenter, 499, 4),
             Self::Jupiter => (Body::JupiterBarycenter, 599, 5),
             Self::Saturn => (Body::SaturnBarycenter, 699, 6),
+            Self::Uranus => (Body::UranusBarycenter, 799, 7),
+            Self::Neptune => (Body::NeptuneBarycenter, 899, 8),
+            Self::Pluto => (Body::PlutoBarycenter, 999, 9),
         }
     }
 }
@@ -206,6 +212,104 @@ mod tests {
     fn no_supplied_kernel_is_an_error() {
         let mut set = SpkKernelSet::<std::io::Cursor<Vec<u8>>>::new();
         assert!(center_offset(&mut set, PhysicalPlanet::Mars, JulianDateTdb(2_451_545.0)).is_err());
+    }
+    #[test]
+    #[ignore = "requires DE441_PATH, URANUS_SPK_PATH, NEPTUNE_SPK_PATH and PLUTO_SPK_PATH"]
+    fn outer_planet_centers_compare_to_horizons_and_compose() {
+        let mut eph = De441::open(std::env::var_os("DE441_PATH").expect("DE441_PATH")).unwrap();
+        let tdb = JulianDateTdb(2_461_354.500_800_725);
+        let tt = 2_461_354.500_800_741;
+        // Horizons: ura184 and nep098 differ from the local older solutions;
+        // plu060 agrees closely. Tolerances below are empirical checks only.
+        let cases = [
+            (
+                PhysicalPlanet::Uranus,
+                "URANUS_SPK_PATH",
+                [
+                    -35.962_594_800_158_35,
+                    1.874_982_643_587_162,
+                    22.420_404_424_131_19,
+                ],
+                [
+                    0.000_218_788_072_510_758_6,
+                    -0.000_123_174_200_987_074_1,
+                    0.000_267_040_820_474_963_2,
+                ],
+                0.5,
+                0.000_002,
+            ),
+            (
+                PhysicalPlanet::Neptune,
+                "NEPTUNE_SPK_PATH",
+                [
+                    -24.630_398_198_227_28,
+                    -42.295_975_881_538_06,
+                    -55.712_597_743_909_53,
+                ],
+                [
+                    -0.000_714_898_649_480_756_2,
+                    -0.000_256_245_531_876_690_6,
+                    0.000_510_571_570_913_134_8,
+                ],
+                0.2,
+                0.000_002,
+            ),
+            (
+                PhysicalPlanet::Pluto,
+                "PLUTO_SPK_PATH",
+                [
+                    -1_075.700_228_001_03,
+                    -752.177_192_189_817_3,
+                    1_679.331_176_690_275,
+                ],
+                [
+                    0.012_966_468_644_582_01,
+                    0.014_296_503_652_490_59,
+                    0.014_713_220_517_607_07,
+                ],
+                0.000_001,
+                0.000_000_000_1,
+            ),
+        ];
+        for (planet, key, position, velocity, pos_tol, vel_tol) in cases {
+            let mut set = SpkKernelSet::new();
+            set.load(std::fs::File::open(std::env::var_os(key).expect(key)).unwrap())
+                .unwrap();
+            let offset = center_offset(&mut set, planet, tdb).unwrap();
+            for (actual, expected) in offset.position_km.into_iter().zip(position) {
+                assert!((actual - expected).abs() < pos_tol);
+            }
+            for (actual, expected) in offset.velocity_km_per_second.into_iter().zip(velocity) {
+                assert!((actual - expected).abs() < vel_tol);
+            }
+            let result = geocentric_physical_center(&mut eph, &mut set, planet, tdb, tt).unwrap();
+            assert_eq!(result.planet, planet);
+            assert!((0.0..360.0).contains(&result.longitude_deg));
+            let before = geocentric_physical_center(
+                &mut eph,
+                &mut set,
+                planet,
+                JulianDateTdb(tdb.0 - 0.05),
+                tt - 0.05,
+            )
+            .unwrap();
+            let after = geocentric_physical_center(
+                &mut eph,
+                &mut set,
+                planet,
+                JulianDateTdb(tdb.0 + 0.05),
+                tt + 0.05,
+            )
+            .unwrap();
+            let delta =
+                (after.longitude_deg - before.longitude_deg + 180.0).rem_euclid(360.0) - 180.0;
+            assert!(
+                (result.longitude_speed_deg_per_tdb_day
+                    - delta / ((tdb.0 + 0.05) - (tdb.0 - 0.05)))
+                    .abs()
+                    < 0.0001
+            );
+        }
     }
     #[test]
     #[ignore = "requires DE441_PATH, MARS_SPK_PATH, JUPITER_SPK_PATH and SATURN_SPK_PATH"]
