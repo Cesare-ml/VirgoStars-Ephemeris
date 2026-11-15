@@ -57,3 +57,14 @@ assumed for that diagnostic. The recorded rise and set differ by about 0.10 s
 and 0.04 s respectively; the 3 s test tolerance covers model and numerical
 differences for those two fixtures only. Swiss is a comparison implementation,
 not an independent JPL/Horizons validation or proof of general parity.
+
+A broader local diagnostic used the same Swiss version and DE441: 2026 Jan 15,
+Apr 15, Jul 15 and Oct 15 at 00:00 UT; sites (latitude, east longitude) (0, 0),
+(41.9028, 12.4964), (-33.8688, 151.2093), (51.5072, -0.1276), and (-45, 170),
+all at 20 m. For Sun and Moon, it compared center rise and set, without
+refraction, over a two-day window with 10-minute samples. The search used
+UT1=UTC, TT=UTC+69.184 s and TDB=TT. All 80 events were found; the largest
+absolute differences were 0.079 s (Sun) and 0.226 s (Moon). These are observed
+differences for this finite grid, not error bounds: high latitudes, grazing
+events, other epochs, atmospheric effects and other ephemerides were not
+covered. The 0.25 s bisection bracket limits the resolution of this comparison.
