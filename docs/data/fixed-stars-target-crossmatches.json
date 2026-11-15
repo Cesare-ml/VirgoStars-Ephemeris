@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "created": "2026-11-15",
+  "purpose": "Curated target selection only, not a calculable catalog or redistributable astrometric measurements",
+  "catalogSource": "https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/I/311?format=html&tex=true",
+  "crossmatchSource": "SIMBAD (CDS)",
+  "selectionSource": "Common bright fixed stars of astrological interest; not an Astrodienst dataset reproduction",
+  "stars": [
+    {
+      "name": "Sirius",
+      "hip": 32349,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=HIP+32349",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Spectroscopic binary; verify resolved source/component identity"
+    },
+    {
+      "name": "Regulus",
+      "hip": 49669,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Regulus",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Bright multiple system; confirm RV source convention"
+    },
+    {
+      "name": "Spica",
+      "hip": 65474,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Spica",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Binary star; confirm component and adopted astrometric solution"
+    },
+    {
+      "name": "Aldebaran",
+      "hip": 21421,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+21421",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Not recovered in Gaia DR3 according to SIMBAD; Hipparcos identity important"
+    },
+    {
+      "name": "Antares",
+      "hip": 80763,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+80763",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Variable red supergiant; verify photometry and astrometric reliability"
+    },
+    {
+      "name": "Arcturus",
+      "hip": 69673,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=HIP69673",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "High proper motion; use declared epoch and RV frame"
+    },
+    {
+      "name": "Vega",
+      "hip": 91262,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+91262",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Variable; not recovered in Gaia DR3 according to SIMBAD"
+    },
+    {
+      "name": "Fomalhaut",
+      "hip": 113368,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Fomalhaut",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Confirm primary object rather than companions"
+    },
+    {
+      "name": "Betelgeuse",
+      "hip": 27989,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=BETELGEUSE",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Variable supergiant; special-case astrometric uncertainties"
+    },
+    {
+      "name": "Polaris",
+      "hip": 11767,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+11767",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Multiple system, variable; confirm specific component"
+    }
+  ]
+}
