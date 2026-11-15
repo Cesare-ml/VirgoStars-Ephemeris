@@ -48,7 +48,7 @@ test('source integrity, duplicate identifiers and target coverage are auditable'
  assert.deepEqual(report.counts,{ASTROMETRY_PRECHECK_PASSED:1,HIP_NOT_FOUND:1});
  assert.equal(report.stars[1].catalogReady,false);
  assert.throws(()=>auditHipparcosTargets(raw,other,{hip2Sha256:'0'.repeat(64),requireFullCatalog:false}),/SHA-256 mismatch/);
- assert.throws(()=>audit(line(123)+'\n'+line(123)+'\n'),/Repeated source HIP/);
+ assert.throws(()=>audit(line(123)+'\n'+line(123)+'\n'),/duplicate HIP/);
  assert.throws(()=>audit(line(123)+'\n',manifest(),{requireFullCatalog:true}),/117955/);
  assert.throws(()=>audit('bad\n'),/276 characters/);
 });
