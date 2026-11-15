@@ -1,5 +1,8 @@
 import {createExperimentalSwissSubset,SE_GREG_CAL,SE_SUN,SEFLG_JPLEPH,SEFLG_SPEED} from 'virgostars-ephemeris/experimental-swiss-subset';
-import {createExplicitUtcInstant} from 'virgostars-ephemeris/experimental-utc-instant';
+import {createExplicitUtcInstant,createExplicitUt1Window} from 'virgostars-ephemeris/experimental-utc-instant';
+
+const timeWindow=createExplicitUt1Window({executablePath:'/example',startUtc:'2000-01-01T00:00:00.000Z',endUtc:'2000-01-02T00:00:00.000Z',ut1MinusUtcSeconds:0,taiMinusUtcSeconds:32,tdbMinusTtSeconds:0,sourceId:'example',offsetPolicy:'CONSTANT_IN_WINDOW',leapSecondPolicy:'NO_LEAP_SECOND_IN_WINDOW'});
+const windowUtc:string=timeWindow.convertUt1ToUtc(timeWindow.startUt1JulianDay);void windowUtc;
 import {createExperimentalLegacyBridge} from 'virgostars-ephemeris/experimental-legacy-bridge';
 import {loadExperimentalStarCatalogFile} from 'virgostars-ephemeris/experimental-star-catalog-file';
 

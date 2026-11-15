@@ -23,7 +23,9 @@ use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::equatorial_horizontal::{
     noaa_standard_refraction, true_ecliptic_to_horizontal, true_equatorial_to_horizontal,
 };
-use virgostars_ephemeris_core::explicit_utc_instant::{explicit_utc_instant, ExplicitUtcOffsets};
+use virgostars_ephemeris_core::explicit_utc_instant::{
+    explicit_ut1_in_window, explicit_utc_instant, ExplicitUtcOffsets,
+};
 use virgostars_ephemeris_core::first_sky::{CivilTimestamp, Observer};
 use virgostars_ephemeris_core::fixed_star::{
     calculate_star, calculate_star_with_solar_deflection, FixedStarCatalogEntry,
@@ -88,6 +90,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 8 && args[1] == "ut1_window" {
+        let value = explicit_ut1_in_window(
+            arg(2)?.parse()?,
+            arg(3)?.parse()?,
+            arg(4)?.parse()?,
+            ExplicitUtcOffsets {
+                ut1_minus_utc_seconds: arg(5)?.parse()?,
+                tai_minus_utc_seconds: arg(6)?.parse()?,
+                tdb_minus_tt_seconds: arg(7)?.parse()?,
+            },
+        )?;
+        println!("unix_milliseconds,ut1_jd,tt_jd,tdb_jd");
+        println!(
+            "{},{:.17},{:.17},{:.17}",
+            value.unix_milliseconds, value.ut1_jd, value.tt_jd, value.tdb_jd
+        );
+        return Ok(());
+    }
     if args.len() == 6 && args[1] == "utc_instant" {
         let value = explicit_utc_instant(
             arg(2)?.parse()?,
