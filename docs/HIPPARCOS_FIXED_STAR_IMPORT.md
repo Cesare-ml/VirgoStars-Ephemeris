@@ -1,6 +1,6 @@
 # Fixed-star catalog: independent Hipparcos 2007 import (experimental)
 
-**Status (2026-11-15): importer, synthetic parser tests and 59 named HIP crossmatch targets only. NO vetted real star dataset is committed, no observed-star validation has passed, no Swiss parity and no production migration.**
+**Status (2026-11-15): importer, synthetic parser tests, 81 named HIP identity candidates, five extended objects and ten pending historical-name reviews only. NO vetted real star dataset is committed, no observed-star validation has passed, no Swiss parity and no production migration.**
 
 ## Scientific data boundary
 
@@ -13,7 +13,7 @@
 
 Obtain `hip2.dat` separately from the CDS I/311 archive. Review its licensing and redistribution terms before using or publishing transformed catalog data. The importer **does not download files** and commits **no third-party catalog**.
 
-A first curated target list of **59 named-star / Hipparcos crossmatches** is in [docs/data/fixed-stars-target-crossmatches.json](data/fixed-stars-target-crossmatches.json). These are **identifications, not scientific position fixtures**: no usable V magnitude or barycentric radial velocity measurement is included there. A source citation for an object's identity does not certify its distance or velocity. This target list does not reproduce Astrodienst data.
+A first curated target list of **81 named-star / Hipparcos crossmatches** is in [docs/data/fixed-stars-target-crossmatches.json](data/fixed-stars-target-crossmatches.json). These are **identifications, not scientific position fixtures**: no usable V magnitude or barycentric radial velocity measurement is included there. A source citation for an object's identity does not certify its distance or velocity. This target list does not reproduce Astrodienst data.
 
 Prepare a local UTF-8 **TSV** with this exact header (tabs between fields):
 
@@ -60,7 +60,7 @@ The optional `scripts/audit-hipparcos-2007.mjs` performs a *read-only analysis* 
 | 91–96, 98–103 | mas/year | Proper-motion formal errors |
 | 8–10, 14 | codes | Solution type `Sn` and component count `Nc` |
 
-The quality check classifies each of the 59 HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
+The quality check classifies each of the 81 HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
 
 ### Genuine dataset source
 
@@ -122,7 +122,7 @@ The **backend's actual usage**, not the Astrodienst wiki or the original Swiss d
 
 - **106** names declared in `STARS_ASTRODIENST`, of which **96** have IDs in `STARS_ASTRODIENST_TO_COW_ID` and are considered by current `getStelleTema()`.
 - **10** legacy list names have no mapping and are not currently used by that mapped-star path: Ahadi, Birdun, Girtab, Kakkab, Koo She, Manus, Muhlifain, Peregrini, Regor and Wei.
-- The experimental curated HIP target list currently identifies **59 of those 96** mapped names; **37** mapped names still need original-source astronomical identities, photometry, and (where available/required) radial velocities.
+- The experimental curated HIP target list currently identifies **81 of those 96** mapped names now have preliminary name/HIP candidates; five other labels represent extended objects and ten remain explicitly unresolved historical aliases. Every candidate still requires source-reviewed measurements and scientific validation.
 - **Zero** stars are independently certified for production calculation by these inventories. A name/ID match is not a scientific numerical validation.
 
 The backend `getStella()` call site also uses `swe_fixstar_ut`, `swe_fixstar_mag`, `swe_azalt`, mutates the returned `latlng` object and applies an azimuth orientation/ southern-hemisphere longitude transformation. The app-specific behavior belongs to integration compatibility tests, not the standalone astronomical library.
@@ -144,9 +144,9 @@ $env:VIRGOSTARS_BACKEND_STARS_HELPER = "C:\\repos\\virgo-stars\\backend\\helpers
 node --test test/audit-fixed-star-coverage.test.mjs
 ```
 
-The test requires the current known source contract: 106 listed names, 96 mapped backend stars, 30 SIMBAD-linked candidate identities and 66 names still missing. It intentionally skips in isolated CI when the backend path is absent. These are naming/cross-identification counts, **not** verified positions, brightness measurements, production readiness or a substitute for `swe_fixstar_ut` numerical parity.
+The test requires the current known source contract: 106 listed names, 96 mapped backend objects, 81 preliminary named-star HIP candidates, five extended-object labels, ten identity reviews and zero untriaged names. It intentionally skips in isolated CI when the backend path is absent. These are naming/cross-identification counts, **not** verified positions, brightness measurements, production readiness or a substitute for `swe_fixstar_ut` numerical parity.
 
-## 59 HIP identities and five extended objects (2026-11-15)
+## Previous checkpoint: 59 HIP identities and five extended objects (2026-11-15)
 
 An additional 29 **backend-active** star names have been cross-identified to HIP IDs using the IAU Catalog of Star Names (including the [IAU historical catalog](https://iauarchive.eso.org/public/themes/naming_stars/)) and specific SIMBAD lookups. Each entry retains its HIP number and a SIMBAD query link, while its source type explicitly indicates that no observed Hipparcos astrometry has been imported or certified. The 59 entries are **identity candidates, not certified positions**.
 
@@ -156,10 +156,33 @@ Four legacy VirgoStars spellings need explicit name-alias review before integrat
 
 **Do not generate a fake HIP ID or six-dimensional stellar state for any of the five.** Extended objects require a distinct catalog, explicit adopted center and epoch, and an application-level policy for point-vs-extended geometry and angular extent. Even a measured cluster proper motion is not an individual stellar proper motion.
 
-For the **96 currently mapped VirgoStars names**, the actionable classification is therefore **59 HIP-based star identities + 5 extended-object/region identifications + 32 still-unclassified names**. Scientific acceptance remains **0**. Both star and extended-object manifests are inputs to the read-only naming audit:
+The **previous checkpoint** classified 59 preliminary HIP-based identities, five extended objects and 32 outstanding labels. The subsequent 81/5/10 triage below supersedes these counts. Scientific acceptance remains **0**. The first two manifests are inputs to the read-only naming audit:
 
 ```powershell
 node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-stars\\backend\\helpers\\stars.helper.js" "--candidates=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-stars-target-crossmatches.json" "--extended=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\extended-fixed-star-targets.json"
 ```
 
 Catalog data remains caller-supplied and separately rights-reviewed; the PR does not import third-party datasets into the shipping engine.
+
+## Latest triage: 81 stellar HIP identities, five extended objects and ten unresolved historical labels
+
+A further 22 **exact-string** IAU name-to-HIP candidate pairs, all corresponding to mapped names actually used by VirgoStars, were added to [fixed-stars-target-crossmatches.json](data/fixed-stars-target-crossmatches.json). For these 22, a pinned source snapshot is recorded on every entry: [the IAU-CSN derivative CSV](https://github.com/cyschneck/iau-star-names/blob/main/data/1_iau_stars.csv), Git blob `c3d9289db7dbf585bf5fcb51980c008cb4f3d38d`. Cross-reference with the [IAU Catalog of Star Names](https://exopla.net/star-names/modern-iau-star-names/) and SIMBAD before promoting any identity to science-ready. The CSV is an external compiled naming reference; its fields do **not** provide approved 6D Hipparcos inputs and must not be treated as an authoritative star-position table. Example checks: Nashira is **HIP 106985**, Tania Australis **HIP 50801** (not Tania Borealis, HIP 50372), and Aljanah/Epsilon Cygni **HIP 102488** differs from Gienah/Gamma Corvi **HIP 59803**.
+
+The remaining ten backend names are explicitly recorded in [fixed-star-identity-review.json](data/fixed-star-identity-review.json): `Alsuhail`, `Foramen`, `Gienah cygni`, `Gienah Ghurab`, `Han`, `Metallach`, `Ras Alhague`, `Rigil`, `Shedir` and `Tureis`. Each review row contains source URLs and **non-binding candidate alternatives** where supported. No reviewer has approved a unique HIP alias; the values in the review queue are not imported or passed to any numerical engine. In particular:
+
+- `Tureis` can mean IAU Tureis/Rho Puppis (HIP 39757) **or** an older Iota Carinae/Aspidiske association (HIP 45556). These are different stars, so a name-only automatic mapping would be unsafe.
+- `Rigil` can refer to the Alpha Centauri system or its A component (Rigil Kentaurus, HIP 71683), whereas the B component is Toliman (HIP 71681). Binary propagation requires component-specific treatment.
+- `Gienah cygni` is Epsilon Cygni/Aljanah and `Gienah Ghurab` is Gamma Corvi/Gienah. The formal [IAU WGSN report](https://www.iau.org/static/science/scientific_bodies/working_groups/280/wg-starnames-triennial-report-2015-2018.pdf) explicitly records the historical duplicated name.
+- `Foramen` historically denotes Eta Carinae, an interacting, strongly variable system. Do **not** invent a Hipparcos parallax or pretend a normal 5-parameter source solution exists for it.
+
+This yields **96/96 backend labels classified or explicitly triaged**: 81 named individual stellar HIP candidates, five nonstellar/extended targets, ten unresolved historical-name cases. That does **not** imply 96 valid astronomical coordinates: 10 labels remain unresolved and **0** sources have independently validated numeric parity, photometric/RV provenance and usage rights.
+
+Run the read-only local backend coverage audit with all three manifests:
+
+```powershell
+node scripts/audit-fixed-star-coverage.mjs "--backend-helper=C:\\repos\\virgo-stars\\backend\\helpers\\stars.helper.js" "--candidates=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-stars-target-crossmatches.json" "--extended=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\extended-fixed-star-targets.json" "--review=C:\\repos\\VirgoStars-Ephemeris\\docs\\data\\fixed-star-identity-review.json"
+```
+
+The audit reports `candidatesIdentified=81`, `nonstellarIdentified=5`, `pendingIdentityReview=10`, `unclassifiedCount=0` against the reviewed VirgoStars helper version. Its `missingCandidates=10` count remains **nonzero by design**: pending review is never counted as a successfully resolved HIP star. The opt-in test requires `VIRGOSTARS_BACKEND_STARS_HELPER` pointing to the local helper. Normal CI tests only synthetic files/manifests, not the authentic Hipparcos catalog.
+
+Release gates unchanged: authentic I/311 input, external V-band photometry, separately documented barycentric RV (or independently validated proper fallback), data rights, epoch-by-epoch astrometric reference checks and backend behavior parity.
