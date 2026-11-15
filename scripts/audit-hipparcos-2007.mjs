@@ -6,28 +6,10 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {HIP2_ROWS,parseHip2Line} from './import-hipparcos-2007.mjs';
-import {readHip2Rows} from './hipparcos-source-rows.mjs';
+import {readHip2Rows,parseHip2Uncertainties} from './hipparcos-source-rows.mjs';
+export {parseHip2Uncertainties} from './hipparcos-source-rows.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const optionalNonnegative = (line,start,end,label) => {
-  const raw = line.slice(start,end).trim();
-  if (!raw) return null;
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw)) throw new Error(`Invalid ${label}`);
-  const value=Number(raw);
-  if (!Number.isFinite(value)) throw new Error(`Invalid ${label}`);
-  return value;
-};
-export function parseHip2Uncertainties(line) {
-  if (line.length < 103) throw new Error('Hipparcos quality columns truncated');
-  return {
-    raMas:optionalNonnegative(line,69,75,'e_RArad'),
-    decMas:optionalNonnegative(line,76,82,'e_DErad'),
-    parallaxMas:optionalNonnegative(line,83,89,'e_Plx'),
-    properMotionRaMasPerYear:optionalNonnegative(line,90,96,'e_pmRA'),
-    properMotionDecMasPerYear:optionalNonnegative(line,97,103,'e_pmDE'),
-  };
-}
-
 export function auditHipparcosTargets(hip2Bytes,targetsManifestBytes,{
   hip2Sha256,requireFullCatalog=true,minParallaxSignalToNoise=5,
 }={}) {
