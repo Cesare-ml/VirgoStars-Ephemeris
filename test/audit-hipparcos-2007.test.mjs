@@ -41,6 +41,17 @@ test('weak, missing or negative parallax and complex astrometry are transparentl
  assert.equal(audit(line(123,{plx:-2,plxError:3})+'\n').stars[0].status,'NONPOSITIVE_PARALLAX');
  assert.equal(audit(line(123,{sn:15,nc:2})+'\n').stars[0].status,'COMPLEX_ASTROMETRY_REVIEW');
 });
+test('audit flags missing non-parallax formal uncertainties consistently with catalog export',()=>{
+ const full=line(123,{plx:10,plxError:1});
+ const missingRaError=full.slice(0,69)+' '.repeat(6)+full.slice(75);
+ const report=audit(missingRaError+'\n');
+ assert.equal(report.stars[0].status,'OTHER_FORMAL_UNCERTAINTIES_UNAVAILABLE');
+ assert.equal(report.stars[0].uncertainties.raMas,null);
+ assert.equal(report.stars[0].catalogReady,false);
+ const weak=audit(line(123,{plx:4,plxError:1})+'\n');
+ assert.equal(weak.stars[0].status,'LOW_PARALLAX_SIGNAL_TO_NOISE');
+});
+
 test('source integrity, duplicate identifiers and target coverage are auditable',()=>{
  const raw=Buffer.from(line(123)+'\n');
  const other=manifest([123,124]);
