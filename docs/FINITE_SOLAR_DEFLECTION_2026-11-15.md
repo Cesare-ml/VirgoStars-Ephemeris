@@ -75,3 +75,27 @@ Horizons uses IAU 1976/1980 ecliptic-of-date and mar099 for Mars; this branch
 uses IAU 2006/2000B and mar097. The model and precision differences preclude
 direct high-precision parity claims. This single epoch is not a general bound,
 nor does it independently validate velocities, all bodies, or occultations.
+
+### Multi-epoch inner-planet diagnostic
+
+The optional `horizons_deflected_planets` Rust test additionally compares
+Mercury (199) and Venus (299) at TT Julian dates `2451545.0`, `2455197.5`,
+and `2469807.5` (2000, 2010, 2050). Horizons observer quantity 31 was
+requested with `CENTER=500@399`, `TIME_TYPE=TT`, `ANG_FORMAT=DEG`, airless,
+and `TLIST` equal to the three dates. To independently approximate angular
+rates, Horizons was also queried at ±0.01 TT day around each date; the
+seven-decimal printed angles are differenced over 0.02 day, with longitude
+wrapping. The test supplies TDB=TT only as a sub-two-millisecond numerical
+approximation for these fixtures and compares its TDB-day rates with the
+TT-day finite differences.
+
+Across these six samples the largest component difference was approximately
+0.000014° for position and 0.0000041°/day for the derived angular rates.
+The regression tolerance is 0.00003° or °/day, allowing for rounded Horizons
+output and different models. Horizons uses IAU76/80 ecliptic-of-date, while
+this engine uses IAU 2006/2000B. This finite grid contains only two planets;
+it does not establish full-domain precision, radial-speed accuracy, stellar
+accuracy or Swiss compatibility. Run `cargo test --test
+horizons_deflected_planets --locked -- --include-ignored` with `DE441_PATH`
+set to a separately obtained classic DE441 binary; no reference network call
+or external data file is needed during the test other than that kernel.
