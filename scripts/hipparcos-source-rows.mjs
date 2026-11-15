@@ -35,3 +35,27 @@ export function readHip2Rows(bytes,{requireFullCatalog=true}={}) {
   }
   return lines;
 }
+
+// CDS I/311/hip2 ReadMe, revised 16-Sep-2008:
+// 70-75 e_RArad (mas), 77-82 e_DErad (mas), 84-89 e_Plx (mas),
+// 91-96 e_pmRA (mas/yr), 98-103 e_pmDE (mas/yr).
+// Return null for blank fields; never silently replace missing uncertainty by 0.
+const nonnegativeUncertainty=(line,start,end,label)=>{
+  const raw=line.slice(start,end).trim();
+  if(!raw)return null;
+  if(!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw))
+    throw new Error(`Invalid Hipparcos uncertainty ${label}`);
+  const value=Number(raw);
+  if(!Number.isFinite(value))throw new Error(`Non-finite Hipparcos uncertainty ${label}`);
+  return value;
+};
+export function parseHip2Uncertainties(line){
+  if(typeof line!=='string' || line.length<103)throw new Error('Hipparcos quality columns truncated');
+  return {
+    raMas:nonnegativeUncertainty(line,69,75,'e_RArad'),
+    decMas:nonnegativeUncertainty(line,76,82,'e_DErad'),
+    parallaxMas:nonnegativeUncertainty(line,83,89,'e_Plx'),
+    properMotionRaMasPerYear:nonnegativeUncertainty(line,90,96,'e_pmRA'),
+    properMotionDecMasPerYear:nonnegativeUncertainty(line,97,103,'e_pmDE'),
+  };
+}
