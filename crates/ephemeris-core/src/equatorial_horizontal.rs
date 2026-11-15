@@ -54,6 +54,58 @@ pub struct HorizontalDegrees {
     pub azimuth_south_west_deg: Option<f64>,
 }
 
+/// NOAA solar-position refraction estimate in degrees. This fixed-atmosphere
+/// approximation does not accept observed temperature or pressure.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StandardRefraction {
+    pub true_altitude_deg: f64,
+    pub correction_deg: f64,
+    pub apparent_altitude_deg: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvalidRefractionAltitude;
+impl fmt::Display for InvalidRefractionAltitude {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "geometric altitude must be finite and between -1 and 90 degrees"
+        )
+    }
+}
+impl Error for InvalidRefractionAltitude {}
+
+/// NOAA's published piecewise solar-position refraction approximation, with
+/// an explicitly restricted input range of -1° to 90°. Atmosphere is not
+/// inferred from site elevation. The output is not a visibility prediction
+/// or a replacement for pressure/temperature-aware Swiss refraction.
+/// <https://gml.noaa.gov/grad/solcalc/calcdetails.html>
+/// Added 2026-11-15.
+pub fn noaa_standard_refraction(
+    true_altitude_deg: f64,
+) -> Result<StandardRefraction, InvalidRefractionAltitude> {
+    if !true_altitude_deg.is_finite() || !(-1.0..=90.0).contains(&true_altitude_deg) {
+        return Err(InvalidRefractionAltitude);
+    }
+    let h = true_altitude_deg;
+    let correction_arcsec = if h >= 85.0 {
+        0.0
+    } else if h > 5.0 {
+        let t = h.to_radians().tan();
+        58.1 / t - 0.07 / t.powi(3) + 0.000086 / t.powi(5)
+    } else if h >= -0.575 {
+        1735.0 + h * (-518.2 + h * (103.4 + h * (-12.79 + h * 0.711)))
+    } else {
+        -20.774 / h.to_radians().tan()
+    };
+    let correction_deg = correction_arcsec / 3600.0;
+    Ok(StandardRefraction {
+        true_altitude_deg,
+        correction_deg,
+        apparent_altitude_deg: h + correction_deg,
+    })
+}
+
 #[derive(Debug)]
 pub enum HorizontalConversionError {
     InvalidInput,

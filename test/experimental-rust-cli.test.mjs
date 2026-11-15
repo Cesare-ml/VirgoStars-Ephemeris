@@ -70,6 +70,19 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.ok(Math.abs(horizontal.azimuthSouthWestDeg-214.65670592212305)<0.001);
   assert.ok(Math.abs(horizontal.trueAltitudeDeg+61.42775066117141)<0.001);
   assert.ok(horizontal.warnings.includes('NO_REFRACTION'));
+  const refracted=provider.calculateStandardRefraction({trueAltitudeDeg:0});
+  assert.ok(Math.abs(refracted.apparentAltitudeDeg-1735/3600)<1e-11);
+  assert.equal(refracted.model,'NOAA_STANDARD_APPROXIMATE');
+  assert.ok(refracted.warnings.includes('NO_LOCAL_WEATHER'));
+  assert.throws(()=>provider.calculateStandardRefraction({trueAltitudeDeg:-2}), /geometric altitude/);
+  const solarSearch={kind:'rise',ut1JulianDay:2461354.5,ttJulianDay:output.results[0].ttJulianDay,tdbJulianDay:output.results[0].tdbJulianDay,latitudeDeg:41.9028,longitudeDegEast:12.4964,windowDays:1,stepMinutes:10};
+  const conventionalRise=provider.findStandardSolarEvent(solarSearch);
+  const conventionalSet=provider.findStandardSolarEvent({...solarSearch,kind:'set'});
+  assert.equal(conventionalRise.model,'USNO_CONVENTIONAL_SOLAR_CENTER_MINUS_50_ARCMIN');
+  // Swiss 2.09.03 default solar rise/set, Rome, for a coarse diagnostic only.
+  assert.ok(Math.abs(conventionalRise.ut1JulianDay-2461354.7451938586)*86400<30);
+  assert.ok(Math.abs(conventionalSet.ut1JulianDay-2461355.1627058745)*86400<30);
+  assert.throws(()=>provider.findStandardSolarEvent({...solarSearch,kind:'upper_transit'}), TypeError);
   const search={target:'Sun',kind:'rise',ut1JulianDay:2461354.5,ttJulianDay:output.results[0].ttJulianDay,tdbJulianDay:output.results[0].tdbJulianDay,latitudeDeg:41.9028,longitudeDegEast:12.4964,thresholdAltitudeDeg:0,windowDays:1,stepMinutes:10};
   const rise=provider.findGeometricEvent(search);
   const transit=provider.findGeometricEvent({...search,kind:'upper_transit'});

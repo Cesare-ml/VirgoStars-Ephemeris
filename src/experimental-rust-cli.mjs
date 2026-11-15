@@ -166,6 +166,27 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if(rightAscensionDegResult<0 || rightAscensionDegResult>=360 || Math.abs(declinationDegResult)>90) throw new Error('Out-of-range topocentric direction');
       return Object.freeze({rightAscensionDeg:rightAscensionDegResult,declinationDeg:declinationDegResult,model:'EXPERIMENTAL_WGS84_PARALLAX',warnings:Object.freeze(['NO_DIURNAL_ABERRATION','NO_OBSERVER_LIGHT_TIME','NO_POLAR_MOTION'])});
     },
+    findStandardSolarEvent({kind,ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,windowDays,stepMinutes}) {
+      const values=[ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,windowDays,stepMinutes];
+      if(!['rise','set'].includes(kind) || !values.every(Number.isFinite)) throw new TypeError('Rise/set and all finite search parameters are required');
+      const lines=execute(['standard_solar_event',kernelPath,kind,...values.map(String)]);
+      if(lines.length!==2 || lines[0]!==EVENT_HEADER) throw new Error('Invalid event CSV contract');
+      const [eventKind,target,...parts]=lines[1].split(',');
+      if(eventKind!==kind || target!=='Sun' || parts.length!==4 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid event CSV row');
+      const [eventUt1JulianDay,eventTtJulianDay,eventTdbJulianDay,bracketSeconds]=parts.map(Number);
+      if(eventUt1JulianDay<ut1JulianDay || eventUt1JulianDay>ut1JulianDay+windowDays || bracketSeconds<0 || bracketSeconds>0.25) throw new Error('Out-of-range event CSV row');
+      return Object.freeze({kind,target,ut1JulianDay:eventUt1JulianDay,ttJulianDay:eventTtJulianDay,tdbJulianDay:eventTdbJulianDay,bracketSeconds,model:'USNO_CONVENTIONAL_SOLAR_CENTER_MINUS_50_ARCMIN',warnings:Object.freeze(['NOT_SWISS_PARITY','AVERAGE_ATMOSPHERE_AND_SEMIDIAMETER','NO_TERRAIN','NO_UT1_INTERPOLATION','SAMPLING_MAY_MISS_CROSSINGS'])});
+    },
+    calculateStandardRefraction({trueAltitudeDeg}) {
+      if(!Number.isFinite(trueAltitudeDeg)) throw new TypeError('A finite geometric altitude is required');
+      const lines=execute(['noaa_refraction',String(trueAltitudeDeg)]);
+      if(lines.length!==2 || lines[0]!=='true_altitude_deg,correction_deg,apparent_altitude_deg') throw new Error('Invalid refraction CSV contract');
+      const parts=lines[1].split(',');
+      if(parts.length!==3 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid refraction CSV row');
+      const [altitude,correctionDeg,apparentAltitudeDeg]=parts.map(Number);
+      if(Math.abs(altitude-trueAltitudeDeg)>1e-9 || correctionDeg<0 || Math.abs(apparentAltitudeDeg-altitude-correctionDeg)>1e-9) throw new Error('Out-of-range refraction CSV row');
+      return Object.freeze({trueAltitudeDeg:altitude,correctionDeg,apparentAltitudeDeg,model:'NOAA_STANDARD_APPROXIMATE',warnings:Object.freeze(['FIXED_ATMOSPHERE','NOT_SWISS_PARITY','NO_LOCAL_WEATHER'])});
+    },
     calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
       const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];
       if(!values.every(Number.isFinite))throw new TypeError('Finite UT1, TT, location and equatorial direction are required');
