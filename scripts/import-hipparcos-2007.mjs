@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Cesare-ml (VirgoStars project). All Rights Reserved.
 // Added 2026-11-15: offline provenance-checked Hipparcos 2007 fixed-star importer.
 import {createHash} from 'node:crypto';
-import {readFileSync, writeFileSync, existsSync, unlinkSync} from 'node:fs';
-import {resolve, relative, dirname, isAbsolute, sep} from 'node:path';
+import {readFileSync, writeFileSync, existsSync, unlinkSync, realpathSync, openSync, closeSync} from 'node:fs';
+import {resolve, relative, dirname, basename, isAbsolute, sep} from 'node:path';
 import {pathToFileURL, fileURLToPath} from 'node:url';
 import {readHip2Rows,HIP2_EXPECTED_ROWS,parseHip2Uncertainties} from './hipparcos-source-rows.mjs';
 
@@ -142,22 +142,37 @@ export function writeHipparcosOutputPair(catalogOutputPath,auditOutputPath,catal
   const catalogPath=resolve(options['--out']), auditPath=resolve(options['--audit']);
   const repositoryRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
   for (const outputPath of [catalogPath,auditPath]) {
-    const p=relative(repositoryRoot,outputPath);
-    if (p==='' || (p!=='..' && !p.startsWith('..'+sep) && !isAbsolute(p)))
-      throw new Error('Generated catalog and audit must remain outside the Git repository');
+    // Test both the lexical destination and its existing parent directory after
+    // symlink resolution. If the parent does not exist, the subsequent exclusive
+    // open still fails without overwriting anything.
+    let canonicalParent;
+    try {canonicalParent=realpathSync(dirname(outputPath));}
+    catch (error) {if(error?.code!=='ENOENT')throw error;}
+    const pathsToCheck=[outputPath];
+    if(canonicalParent)pathsToCheck.push(resolve(canonicalParent,basename(outputPath)));
+    for(const candidate of pathsToCheck){
+      const p=relative(repositoryRoot,candidate);
+      if (p==='' || (p!=='..' && !p.startsWith('..'+sep) && !isAbsolute(p)))
+        throw new Error('Generated catalog and audit must remain outside the Git repository');
+    }
   }
   if (catalogPath===auditPath) throw new Error('Catalog output and audit resolve to the same file');
   if (existsSync(catalogPath) || existsSync(auditPath)) throw new Error('Catalog or audit output already exists; no overwrite');
   // Best-effort rollback: never leave a newly created catalog without its audit.
   // 'wx' remains authoritative against a concurrent writer; never delete
   // an existing audit or an output we did not successfully create ourselves.
-  let catalogWritten=false;
+  const created=[];
   try {
-    writeFileSync(catalogPath,JSON.stringify(catalog,null,2)+'\n',{flag:'wx',mode:0o600});
-    catalogWritten=true;
-    writeFileSync(auditPath,JSON.stringify(audit,null,2)+'\n',{flag:'wx',mode:0o600});
+    for(const [path,payload] of [[catalogPath,catalog],[auditPath,audit]]) {
+      const fd=openSync(path,'wx',0o600); // Record ownership before writing.
+      created.push(path);
+      try {writeFileSync(fd,JSON.stringify(payload,null,2)+'\n');}
+      finally {closeSync(fd);}
+    }
   } catch(error) {
-    if(catalogWritten)try {unlinkSync(catalogPath);}catch {}
+    // An I/O failure may leave a partially written audit as well as catalog.
+    // Delete only files that this invocation opened with O_EXCL successfully.
+    for(const path of created.reverse())try {unlinkSync(path);}catch {}
     throw error;
   }
   return {catalogPath,auditPath};
