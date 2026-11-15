@@ -48,3 +48,45 @@ Run `node --test test/import-hipparcos-2007.test.mjs` and `node --test test/fixe
 3. Compare observed-source results at multiple epochs against independent **ERFA/SOFA or NOVAS** references with clearly declared frames, time scales, correction choices, tolerances and documented failures. Synthetic fixtures only establish parsing/contract behavior.
 4. Integrate reviewed PRs in dependency order, complete `swe_fixstar_ut`/`swe_fixstar_mag` contracts and the Node CommonJS bridge; then verify real backend call sites without switching production until scientific and regression gates pass.
 5. Keep astrological attributions and interpretations in `astrological-functions`, not the astronomical ephemeris engine. The Astro.com list is a **coverage reference**, not a source of redistributable catalog bytes.
+
+## Independent astrometric-quality audit (new)
+
+The optional `scripts/audit-hipparcos-2007.mjs` performs a *read-only analysis* of a **locally supplied genuine** CDS I/311 `hip2.dat` without requiring any stellar V magnitudes or radial velocities. It verifies the full **117,955 rows at 276 characters per row**, a caller-provided source SHA-256, unique HIP identifiers and the 2007 quality columns:
+
+| Catalogue columns (1-based) | Units | Interpretation |
+| --- | --- | --- |
+| 70–75, 77–82 | milliarcseconds | Errors on RA and Dec |
+| 84–89 | milliarcseconds | Parallax formal error |
+| 91–96, 98–103 | mas/year | Proper-motion formal errors |
+| 8–10, 14 | codes | Solution type `Sn` and component count `Nc` |
+
+The quality check classifies each of the ten HIP targets as `ASTROMETRY_PRECHECK_PASSED`, `LOW_PARALLAX_SIGNAL_TO_NOISE`, `NONPOSITIVE_PARALLAX`, `PARALLAX_UNCERTAINTY_UNAVAILABLE`, `COMPLEX_ASTROMETRY_REVIEW`, or `HIP_NOT_FOUND`. The default threshold is parallax divided by its formal error >= 5, and the standard single-star solution requires `Sn=5, Nc=1`. **A precheck pass is not scientific certification or permission to distribute the data.** The audit always records `catalogReady:false` until independent photometry, RV, rights and epoch-based positional comparisons are reviewed.
+
+### Genuine dataset source
+
+The original CDS I/311 site is https://cdsarc.cds.unistra.fr/ftp/I/311/ . A mirror with the exact 2008-09-15 catalog release is publicly listed by Harvard at https://vizier.cfa.harvard.edu/ftp/cats/I/311/ (`hip2.dat.gz`, with a separate `ReadMe`). See the mirror `ReadMe` for corrected editions: the original June–September 2008 reduction files had errors. Verify the downloaded archive's source identity and current permissions before use. The importer itself does **not** fetch or publish data.
+
+On Windows PowerShell, to prepare a local file (replace paths if needed):
+
+```powershell
+Invoke-WebRequest "https://vizier.cfa.harvard.edu/ftp/cats/I/311/hip2.dat.gz" -OutFile "hip2.dat.gz"
+$source = [System.IO.File]::OpenRead((Resolve-Path "hip2.dat.gz"))
+$gz = [System.IO.Compression.GZipStream]::new($source,[System.IO.Compression.CompressionMode]::Decompress)
+$target = [System.IO.File]::Create((Join-Path (Get-Location) "hip2.dat"))
+try { $gz.CopyTo($target) } finally { $target.Dispose(); $gz.Dispose(); $source.Dispose() }
+$hash = (Get-FileHash -Algorithm SHA256 "hip2.dat").Hash.ToLowerInvariant()
+node scripts/audit-hipparcos-2007.mjs "--hip2=$(Resolve-Path 'hip2.dat')" "--hip2-sha256=$hash" "--targets=$(Resolve-Path 'docs/data/fixed-stars-target-crossmatches.json')" "--out=$(Join-Path (Get-Location) 'hip2-audit.json')"
+```
+
+The computed hash pins the checked local input; it does **not** by itself authenticate the original publisher or confer redistribution rights. The audit writes an external JSON file and refuses to overwrite it. Keep the audit outside the source tree or under an ignored local path; do **not** commit external catalog measurements until licensing review.
+
+For an **opt-in authentic-data regression** after manually sourcing the complete file:
+
+```powershell
+$env:VIRGOSTARS_HIP2_PATH = (Resolve-Path "hip2.dat").Path
+$env:VIRGOSTARS_HIP2_SHA256 = $hash
+node --test test/audit-hipparcos-2007.test.mjs
+```
+
+The genuine-data test is intentionally **skipped** in ordinary CI unless these two environment variables are present. Synthetic/structural tests are *not* a substitute for real-data tests or independent numerical validation.
+
