@@ -5,8 +5,9 @@ import {createHash} from 'node:crypto';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {readHip2Rows,HIP2_EXPECTED_ROWS} from './hipparcos-source-rows.mjs';
 
-export const HIP2_ROWS = 117955;
+export const HIP2_ROWS = HIP2_EXPECTED_ROWS;
 export const HIP_EPOCH_TDB_JD = 2448349.0625; // Julian epoch J1991.25
 const RAD_TO_DEG = 180 / Math.PI;
 const COLUMNS = ['HIP','name','aliases','visualMagnitude','visualMagnitudeSource','radialVelocityKmPerSecond','radialVelocitySource','radialVelocityReferenceFrame','nameSource'];
@@ -81,13 +82,9 @@ export function buildHipparcosCatalog(hip2Bytes, supplementsBytes, {
   checkDigest(supplementsBytes, supplementsSha256, 'Curated supplements');
   const supplement = parseSupplementTsv(supplementsBytes.toString('utf8'));
   const found = new Set(), records = [], auditStars = [];
-  const lines = hip2Bytes.toString('utf8').trimEnd().split(/\r?\n/);
-  if (requireFullCatalog && lines.length !== HIP2_ROWS) throw new Error(`Incomplete hip2.dat: expected ${HIP2_ROWS} rows, found ${lines.length}`);
+  const lines=readHip2Rows(hip2Bytes,{requireFullCatalog});
   for (const line of lines) {
-    if (!line) throw new Error('Blank row in hip2.dat');
-    const hipText = line.slice(0,6).trim();
-    if (!/^\d+$/.test(hipText)) throw new Error('Invalid HIP identifier in hip2.dat');
-    const hip = Number(hipText);
+    const hip=Number(line.slice(0,6).trim());
     if (!supplement.has(hip)) continue;
     if (found.has(hip)) throw new Error(`Duplicate Hipparcos HIP ${hip}`);
     found.add(hip);
