@@ -29,7 +29,7 @@ The report uses `referenceModel:"ERFA_PMSAFE"`, `coordinateFrame:"ICRS_ASTROMETR
 
 ## Step 2: export separate VirgoStars ICRS astrometric positions
 
-**This capability is still to be implemented.** The candidate must be produced by a genuinely independent native VirgoStars ICRS stellar-motion calculation, not by copying the reference or by using the present apparent/ecliptic bridge. Its JSON contract includes:
+**A kernel-free experimental Rust ICRS exporter is now implemented** in `crates/ephemeris-core/src/bin/star_icrs_epoch.rs` (core method `propagate_star_icrs_astrometric`). The opt-in `scripts/export-native-icrs-candidate.mjs` orchestrates the pinned catalog/reference epoch grid and invokes the Rust executable for each star and epoch. This is rectilinear 6D propagation without stellar light-time or an independent scientific validation; it is not the existing apparent/ecliptic bridge. The candidate must be produced by a genuinely independent native VirgoStars ICRS stellar-motion calculation, not by copying the reference or by using the present apparent/ecliptic bridge. Its JSON contract includes:
 
 - `schemaVersion:1`, `coordinateFrame:"ICRS_ASTROMETRIC"`, `epochConvention:"TDB_JULIAN_DAY"`.
 - `catalogId`, `inputCatalogSha256` and `epochsTdbJulianDay` exactly matching the reference.
@@ -64,6 +64,22 @@ The Node tests exercise angular wraparound, bad frames, missing epochs and file 
 ### Remaining work
 
 1. Acquire authentic full Hipparcos I/311 source and separately vet catalog rights, Johnson V, barycentric RV and HIP component identity.
-2. Implement a dedicated Rust **ICRS astrometric** star-motion exporter, distinct from the current geocentric apparent/ecliptic bridge.
+2. Run the newly added Rust **ICRS astrometric** exporter on authentic source-pinned stars and inspect differences against PyERFA (including pmsafe light-time behavior).
 3. Run genuine multi-epoch comparisons with independently vetted positions and acceptable tolerances.
 4. Subsequently validate the geocentric apparent, ecliptic, topocentric, magnitude and legacy Swiss API compatibility paths separately.
+
+## Native Rust candidate command (added 2026-11-15)
+
+Build the experimental CLI locally with `cargo build --release -p virgostars-ephemeris-core --bin star_icrs_epoch`. Then invoke the operator-only orchestrator, using absolute file paths and **actual independent SHA-256 pins**:
+
+```powershell
+node scripts/export-native-icrs-candidate.mjs `
+  --catalog="C:\VirgoStarsData\hipparcos-curated.json" `
+  --catalog-sha256="<trusted catalog SHA-256>" `
+  --reference="C:\VirgoStarsData\erfa-icrs-reference.json" `
+  --reference-sha256="<trusted reference SHA-256>" `
+  --executable="C:\path\to\star_icrs_epoch.exe" `
+  --out="C:\VirgoStarsData\virgostars-icrs-candidate.json"
+```
+
+The Node orchestrator uses only the reference **star names, HIP IDs, catalog hash and TDB epoch grid**; it never reads or copies ERFA reference coordinates to populate the candidate. The Rust executable computes each ICRS direction from the separately pinned source astrometry, without DE441. Compare the output with the previously documented `compare-star-epoch-icrs.mjs` command. No observed-star numeric parity has yet been run; the tolerance remains operator-selected and scientific interpretation of differences is required.
