@@ -54,3 +54,18 @@ test('current curated crossmatch manifest stays explicitly non-calculable',()=>{
   assert.equal(report.candidatesIdentified,3);
   assert.ok(candidates.stars.every(s=>s.astrometryStatus==='NOT_YET_REVIEWED'));
 });
+
+const backendHelperPath=process.env.VIRGOSTARS_BACKEND_STARS_HELPER;
+test('optional exact current backend naming coverage against local checked-out virgo-stars repository',{
+  skip:!backendHelperPath?'Set VIRGOSTARS_BACKEND_STARS_HELPER to the local stars.helper.js path':false,
+},()=>{
+  const helper=readFileSync(backendHelperPath,'utf8');
+  const candidates=JSON.parse(readFileSync(new URL('../docs/data/fixed-stars-target-crossmatches.json',import.meta.url),'utf8'));
+  const report=checkFixedStarCoverage(helper,candidates);
+  assert.equal(report.legacyDeclared,106);
+  assert.equal(report.legacyUsed,96);
+  assert.equal(report.candidatesIdentified,30);
+  assert.equal(report.missingCandidates,66);
+  assert.equal(report.candidateNamesNotUsed.length,0);
+  assert.equal(report.scientificallyValidated,0);
+});
