@@ -513,26 +513,33 @@ mod tests {
             / (2.0 * h_days * SECONDS_PER_DAY);
 
         assert!(center.emission_epoch.0 < center.observation_epoch.0);
-        assert!(sph.longitude_rate_rad_per_day < 0.0, "synthetic angular motion must be retrograde");
+        assert!(
+            sph.longitude_rate_rad_per_day < 0.0,
+            "synthetic angular motion must be retrograde"
+        );
         assert!(
             (sph.longitude_rate_rad_per_day - numerical_longitude_rate).abs() < 3.0e-7,
             "retarded longitude derivative disagrees: analytic={}, finite={}",
-            sph.longitude_rate_rad_per_day, numerical_longitude_rate
+            sph.longitude_rate_rad_per_day,
+            numerical_longitude_rate
         );
         assert!(
             (sph.latitude_rate_rad_per_day - numerical_latitude_rate).abs() < 3.0e-7,
             "retarded latitude derivative disagrees: analytic={}, finite={}",
-            sph.latitude_rate_rad_per_day, numerical_latitude_rate
+            sph.latitude_rate_rad_per_day,
+            numerical_latitude_rate
         );
         assert!(
             (sph.distance_rate_km_per_day - numerical_distance_rate).abs() < 0.1,
             "retarded distance derivative disagrees: analytic={}, finite={}",
-            sph.distance_rate_km_per_day, numerical_distance_rate
+            sph.distance_rate_km_per_day,
+            numerical_distance_rate
         );
         assert!(
             (center.light_time_rate - numerical_delay_rate).abs() < 3.0e-8,
             "light-time derivative disagrees: analytic={}, finite={}",
-            center.light_time_rate, numerical_delay_rate
+            center.light_time_rate,
+            numerical_delay_rate
         );
     }
 
@@ -559,14 +566,19 @@ mod tests {
                     position_km: std::array::from_fn(|i| position[i] + (t.0 - JD) * velocity[i]),
                     velocity_km_per_day: velocity,
                 })
-            }).unwrap();
-            project_fixed_axes(&StateVector {
-                target: corrected.target,
-                center: Body::Earth,
-                epoch,
-                position_km: corrected.position_km,
-                velocity_km_per_day: corrected.velocity_km_per_day,
-            }, 0.0).unwrap()
+            })
+            .unwrap();
+            project_fixed_axes(
+                &StateVector {
+                    target: corrected.target,
+                    center: Body::Earth,
+                    epoch,
+                    position_km: corrected.position_km,
+                    velocity_km_per_day: corrected.velocity_km_per_day,
+                },
+                0.0,
+            )
+            .unwrap()
         };
 
         let h = 600.0 / SECONDS_PER_DAY;
@@ -581,7 +593,8 @@ mod tests {
         assert!(
             (current.longitude_rate_rad_per_day - numerical_rate).abs() < 3.0e-7,
             "longitude wrap regression: analytic={}, finite={}",
-            current.longitude_rate_rad_per_day, numerical_rate
+            current.longitude_rate_rad_per_day,
+            numerical_rate
         );
     }
 
@@ -596,7 +609,10 @@ mod tests {
                 velocity_km_per_day: [0.0; 3],
             })
         });
-        assert!(matches!(zero_range, Err(LightTimeError::UndefinedDirection)));
+        assert!(matches!(
+            zero_range,
+            Err(LightTimeError::UndefinedDirection)
+        ));
 
         let bad_velocity = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
             let mut state = linear(body, epoch)?;
