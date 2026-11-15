@@ -142,6 +142,16 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
         results: Object.freeze(results),
       });
     },
+    calculateLunarPointAtEpoch({point,ttJulianDay,tdbJulianDay}) {
+      if(!LUNAR_POINTS.includes(point) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay))throw new TypeError('Lunar point and explicit finite TT and TDB are required');
+      const lines=execute(['lunar_epoch',kernelPath,point,String(ttJulianDay),String(tdbJulianDay)]);
+      if(lines.length!==2 || lines[0]!==LUNAR_HEADER)throw new Error('Invalid lunar-point epoch CSV contract');
+      const [returnedPoint,...parts]=lines[1].split(',');
+      if(returnedPoint!==point || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid lunar-point epoch CSV row');
+      const [tt,tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay]=parts.map(Number);
+      if(tt!==ttJulianDay || tdb!==tdbJulianDay || longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0)throw new Error('Out-of-range lunar-point epoch CSV row');
+      return Object.freeze({point,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTtDay,latitudeSpeedDegPerTtDay,distanceSpeedAuPerTtDay});
+    },
     calculateLunarPoints(timestamp) {
       if (typeof timestamp !== 'string' || !timestamp.trim()) throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');
       const lines = execute(['lunar',kernelPath,timestamp]);

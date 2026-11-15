@@ -516,6 +516,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         return Ok(());
     }
+    if args.len() == 6 && args[1] == "lunar_epoch" {
+        let point = match arg(3)? {
+            "MeanNode" => LunarPoint::MeanNode,
+            "TrueNode" => LunarPoint::TrueNode,
+            "MeanApogee" => LunarPoint::MeanApogee,
+            "OsculatingApogee" => LunarPoint::OsculatingApogee,
+            _ => return Err("unsupported lunar point".into()),
+        };
+        let tt: f64 = arg(4)?.parse()?;
+        let tdb = JulianDateTdb(arg(5)?.parse()?);
+        let mut eph = De441::open(&args[2])?;
+        let r = calculate_lunar_point(&mut eph, point, tt, tdb, true)?;
+        println!("point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day");
+        println!(
+            "{:?},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+            r.point,
+            tt,
+            tdb.0,
+            r.longitude_deg,
+            r.latitude_deg,
+            r.distance_au,
+            r.longitude_rate_deg_per_day,
+            r.latitude_rate_deg_per_day,
+            r.distance_rate_au_per_day
+        );
+        return Ok(());
+    }
     if args.len() == 4 && args[1] == "lunar" {
         let civil = CivilTimestamp::parse(arg(3)?)?;
         let (tt, tdb) = civil.to_tt_and_approximate_tdb()?;
