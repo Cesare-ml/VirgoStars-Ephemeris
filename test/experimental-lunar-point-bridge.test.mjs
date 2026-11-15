@@ -27,7 +27,7 @@ test('lunar point support is opt-in and unsupported frames fail explicitly',()=>
   const on=createExperimentalLegacyBridge({...basic,lunarPointPolicy:'EXPERIMENTAL_GEOCENTRIC'});
   assert.equal(on.swe_get_planet_name(on.SE_MEAN_NODE).name,'mean Node');
   assert.throws(()=>on.swe_calc_ut(2451545,on.SE_MEAN_NODE,on.SEFLG_SWIEPH|on.SEFLG_HELCTR),/sentinel/);
-  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_TRUE_NODE,on.SEFLG_SWIEPH|on.SEFLG_EQUATORIAL),/equatorial/);
+  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_TRUE_NODE,on.SEFLG_SWIEPH|on.SEFLG_EQUATORIAL|on.SEFLG_HELCTR),/geocentric/);
 });
 
 test('opt-in lunar heliocentric zero sentinel is identified and preserves flag provenance',()=>{
@@ -52,8 +52,8 @@ test('explicit epochs expose four existing geocentric lunar models with labelled
   const api=createExperimentalLegacyBridge({...basic,executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,ephemerisDirectory:dirname(process.env.DE441_PATH),lunarPointPolicy:'EXPERIMENTAL_GEOCENTRIC',convertUt1ToTtTdb:()=>({ttJulianDay:2461354.500800741,tdbJulianDay:2461354.500800725})});
   // Two-epoch Swiss comparisons already documented in the existing Rust tests;
   // this single sample tests the bridge, not independent scientific accuracy.
-  const fixtures=[[10,'mean Node',325.5968857875848,0,0.0025695552898,-0.05293949325348264],[11,'true Node',326.0305909519062,0,0.0026645118450,-0.24050703343076724],[12,'mean Apogee',276.2819455302067,-3.9062359911988915,0.0027106251317,0.11151843478988532],[13,'osc. Apogee',278.40526692736915,-3.693729929709786,0.0027057726868,1.477587673426814]];
-  for(const [id,name,expected,latitude,distance,speed] of fixtures){
+  const fixtures=[[10,'mean Node',325.5968857875848,0,0.0025695552898,-0.05293949325348264,327.8591356215528,-12.987346076475953,-0.05115879177491181,-0.01782004566127463],[11,'true Node',326.0305909519062,0,0.0026645118450,-0.24050703343076724,328.27797742377686,-12.840941923138532,-0.23212880611319137,-0.08137155313763952],[12,'mean Apogee',276.2819455302067,-3.9062359911988915,0.0027106251317,0.11151843478988532,277.04965467270614,-27.19050579022158,0.12440249583877462,0.01505963994096096],[13,'osc. Apogee',278.40526692736915,-3.693729929709786,0.0027057726868,1.477587673426814,279.4105317679838,-26.857444000994672,1.6419170948150232,0.19676381971495702]];
+  for(const [id,name,expected,latitude,distance,speed,ra,dec,raSpeed,decSpeed] of fixtures){
     let called;
     const value=api.swe_calc_ut(2461354.5,id,api.SEFLG_SWIEPH|api.SEFLG_SPEED,v=>{called=v;});
     assert.equal(called,value);assert.equal(api.swe_get_planet_name(id).name,name);
@@ -66,5 +66,12 @@ test('explicit epochs expose four existing geocentric lunar models with labelled
     assert.ok(value.warnings.includes('LEGACY_SWIEPH_REQUEST_REPLACED_BY_JPL'));
     const noSpeed=api.swe_calc_ut(2461354.5,id,api.SEFLG_JPLEPH);
     assert.equal(noSpeed.longitudeSpeed,0);assert.equal(noSpeed.latitudeSpeed,0);assert.equal(noSpeed.distanceSpeed,0);
+    const eq=api.swe_calc_ut(2461354.5,id,api.SEFLG_JPLEPH|api.SEFLG_EQUATORIAL|api.SEFLG_SPEED);
+    assert.equal(eq.model,'EXPERIMENTAL_EQUATORIAL_LUNAR_POINT');
+    assert.ok(Math.abs(eq.rectAscension-ra)<.003);assert.ok(Math.abs(eq.declination-dec)<.002);
+    assert.ok(Math.abs(eq.rectAscensionSpeed-raSpeed)<.0003);assert.ok(Math.abs(eq.declinationSpeed-decSpeed)<.0003);
+    assert.ok(eq.warnings.includes('OBLIQUITY_RATE_NUMERICAL'));
+    const eqNoSpeed=api.swe_calc_ut(2461354.5,id,api.SEFLG_JPLEPH|api.SEFLG_EQUATORIAL);
+    assert.equal(eqNoSpeed.rectAscensionSpeed,0);assert.equal(eqNoSpeed.declinationSpeed,0);
   }
 });

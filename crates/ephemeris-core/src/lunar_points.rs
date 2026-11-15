@@ -35,8 +35,8 @@ use std::io::{Read, Seek};
 
 use crate::de441::{Body, De441, De441Error, JulianDateTdb};
 use crate::earth_orientation::{
-    iau2000b_nutation, matrix_vector_multiply, true_ecliptic_of_date_matrix, OrientationError,
-    DAYS_PER_JULIAN_CENTURY, J2000_TT_JD, JD_TT_MAX, JD_TT_MIN,
+    ecliptic_nutation, iau2000b_nutation, matrix_vector_multiply, true_ecliptic_of_date_matrix,
+    OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD, JD_TT_MAX, JD_TT_MIN,
 };
 
 /// Gravitational parameter of the Earth–Moon system in km^3 / s^2 (DE441 standard).
@@ -111,6 +111,19 @@ pub struct LunarPointCoordinates {
     pub distance_rate_au_per_day: f64,
 }
 
+/// Geocentric lunar mathematical point in true equator and equinox of date.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LunarPointEquatorial {
+    pub point: LunarPoint,
+    pub tt_jd: f64,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub distance_au: f64,
+    pub right_ascension_rate_deg_per_tt_day: f64,
+    pub declination_rate_deg_per_tt_day: f64,
+    pub distance_rate_au_per_tt_day: f64,
+}
+
 impl LunarPointCoordinates {
     /// Array representation matching Swiss Ephemeris 6-value output `[lon, lat, dist, lon_spd, lat_spd, dist_spd]`.
     pub fn to_swiss_array(&self) -> [f64; 6] {
@@ -131,6 +144,8 @@ pub enum LunarPointError {
     Ephemeris(De441Error),
     Orientation(OrientationError),
     NonFiniteInput,
+    /// Ecliptic longitude, latitude or distance is outside the valid domain.
+    InvalidEclipticDirection,
     /// TT and TDB are not plausibly the same reception instant.
     IncoherentEpoch,
     /// The selected point does not support the requested frame.
@@ -139,6 +154,8 @@ pub enum LunarPointError {
     UndefinedNode,
     /// Orbit is perfectly circular or parabolic; apogee undefined.
     UndefinedApogee,
+    /// Right ascension and its rate are undefined at an equatorial pole.
+    SingularEquatorialDirection,
 }
 
 impl fmt::Display for LunarPointError {
@@ -147,14 +164,84 @@ impl fmt::Display for LunarPointError {
             Self::Ephemeris(err) => write!(f, "lunar point ephemeris error: {err}"),
             Self::Orientation(err) => write!(f, "lunar point orientation error: {err}"),
             Self::NonFiniteInput => write!(f, "non-finite input for lunar point evaluation"),
+            Self::InvalidEclipticDirection => write!(f, "invalid ecliptic direction or distance"),
             Self::IncoherentEpoch => write!(f, "TT and TDB must describe the same instant"),
             Self::UnsupportedFrame => {
                 write!(f, "osculating points require the true ecliptic of date")
             }
             Self::UndefinedNode => write!(f, "lunar orbital node is undefined"),
             Self::UndefinedApogee => write!(f, "lunar osculating apogee is undefined"),
+            Self::SingularEquatorialDirection => {
+                write!(f, "equatorial right ascension is undefined at the pole")
+            }
         }
     }
+}
+
+/// Rotate a geocentric true-ecliptic-of-date point to the true equator of
+/// date. Rates include the changing true obliquity (a centered ±0.01 TT-day
+/// difference); input and output angular rates are per TT day.
+pub fn lunar_point_to_equatorial(
+    p: LunarPointCoordinates,
+) -> Result<LunarPointEquatorial, LunarPointError> {
+    if ![
+        p.tt_jd,
+        p.longitude_deg,
+        p.latitude_deg,
+        p.distance_au,
+        p.longitude_rate_deg_per_day,
+        p.latitude_rate_deg_per_day,
+        p.distance_rate_au_per_day,
+    ]
+    .iter()
+    .all(|x| x.is_finite())
+    {
+        return Err(LunarPointError::NonFiniteInput);
+    }
+    if !(0.0..360.0).contains(&p.longitude_deg)
+        || p.latitude_deg.abs() > 90.0
+        || p.distance_au <= 0.0
+    {
+        return Err(LunarPointError::InvalidEclipticDirection);
+    }
+    let eps = ecliptic_nutation(p.tt_jd)?.true_obliquity_rad;
+    let before = p.tt_jd - 0.01;
+    let after = p.tt_jd + 0.01;
+    let eps_rate = (ecliptic_nutation(after)?.true_obliquity_rad
+        - ecliptic_nutation(before)?.true_obliquity_rad)
+        / (after - before);
+    let (sl, cl) = p.longitude_deg.to_radians().sin_cos();
+    let (sb, cb) = p.latitude_deg.to_radians().sin_cos();
+    let (se, ce) = eps.sin_cos();
+    let dl = p.longitude_rate_deg_per_day.to_radians();
+    let db = p.latitude_rate_deg_per_day.to_radians();
+    let x = cb * cl;
+    let ecl_y = cb * sl;
+    let ecl_z = sb;
+    let dx = -sb * db * cl - cb * sl * dl;
+    let de_y = -sb * db * sl + cb * cl * dl;
+    let de_z = cb * db;
+    let y = ce * ecl_y - se * ecl_z;
+    let z = se * ecl_y + ce * ecl_z;
+    let dy = ce * de_y - se * de_z - eps_rate * z;
+    let dz = se * de_y + ce * de_z + eps_rate * y;
+    let h = x.hypot(y);
+    if h < 1e-12 {
+        return Err(LunarPointError::SingularEquatorialDirection);
+    }
+    let dh = (x * dx + y * dy) / h;
+    let ra_rate = (x * dy - y * dx) / (h * h);
+    let dec_rate = (h * dz - z * dh) / (h * h + z * z);
+    Ok(LunarPointEquatorial {
+        point: p.point,
+        tt_jd: p.tt_jd,
+        right_ascension_deg: wrap_degrees(y.atan2(x).to_degrees()),
+        declination_deg: z.atan2(h).to_degrees(),
+        distance_au: p.distance_au,
+        right_ascension_rate_deg_per_tt_day: ra_rate.to_degrees(),
+        declination_rate_deg_per_tt_day: dec_rate.to_degrees(),
+        distance_rate_au_per_tt_day: p.distance_rate_au_per_day,
+    })
 }
 
 impl Error for LunarPointError {
@@ -466,6 +553,62 @@ pub fn calculate_lunar_point<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn equatorial_transform_matches_independent_erfa_position_and_rates() {
+        // pyerfa 2.0.1.5: s2c, obl06 + nut00b, rx, c2s. Rates from
+        // symmetric ±0.001 day samples with linearly changing input angles.
+        let p = LunarPointCoordinates {
+            point: LunarPoint::MeanApogee,
+            tt_jd: 2_461_354.500_800_741,
+            longitude_deg: 276.281_945_530_206_7,
+            latitude_deg: -3.906_235_991_198_891_5,
+            distance_au: 0.0027,
+            distance_km: 0.0027 * AU_KM,
+            longitude_rate_deg_per_day: 0.111_518_434_789_885_32,
+            latitude_rate_deg_per_day: 0.02,
+            distance_rate_au_per_day: 0.00001,
+        };
+        let eq = lunar_point_to_equatorial(p).unwrap();
+        near(eq.right_ascension_deg, 277.049_654_679_266_5, 1e-10);
+        near(eq.declination_deg, -27.190_505_893_487_636, 1e-10);
+        near(
+            eq.right_ascension_rate_deg_per_tt_day,
+            0.123_830_728_597_340_57,
+            1e-7,
+        );
+        near(
+            eq.declination_rate_deg_per_tt_day,
+            0.025_438_465_277_360_933,
+            1e-7,
+        );
+        assert_eq!(eq.distance_au, p.distance_au);
+        assert_eq!(eq.distance_rate_au_per_tt_day, p.distance_rate_au_per_day);
+        let eps = ecliptic_nutation(p.tt_jd).unwrap().true_obliquity_deg();
+        let pole = LunarPointCoordinates {
+            longitude_deg: 90.0,
+            latitude_deg: 90.0 - eps,
+            ..p
+        };
+        assert!(matches!(
+            lunar_point_to_equatorial(pole),
+            Err(LunarPointError::SingularEquatorialDirection)
+        ));
+        assert!(matches!(
+            lunar_point_to_equatorial(LunarPointCoordinates {
+                longitude_deg: 360.0,
+                ..p
+            }),
+            Err(LunarPointError::InvalidEclipticDirection)
+        ));
+        let near_wrap = lunar_point_to_equatorial(LunarPointCoordinates {
+            longitude_deg: 359.99,
+            latitude_deg: 0.0,
+            ..p
+        })
+        .unwrap();
+        assert!(near_wrap.right_ascension_deg > 359.0 && near_wrap.right_ascension_deg < 360.0);
+    }
 
     fn near(a: f64, b: f64, tolerance: f64) {
         assert!(

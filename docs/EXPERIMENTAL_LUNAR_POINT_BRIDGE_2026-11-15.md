@@ -4,10 +4,10 @@ Set `lunarPointPolicy:'EXPERIMENTAL_GEOCENTRIC'` in the experimental subset or
 legacy bridge to opt into `SE_MEAN_NODE` (10), `SE_TRUE_NODE` (11),
 `SE_MEAN_APOG` (12) and `SE_OSCU_APOG` (13). The default remains `DISABLED`.
 The caller must supply explicit, coherent UT1→TT/TDB conversions as for the
-planetary functions. Only geocentric ecliptic-of-date results with JPL and an
-optional speed flag are supported. In the separately configured legacy bridge
+planetary functions. Geocentric true-ecliptic-of-date and true-equatorial-of-date
+results accept JPL and an optional speed flag. In the separately configured legacy bridge
 the Swiss source flag may be mapped to JPL with an explicit warning. Requests
-for heliocentric or equatorial points or unsupported flags fail by default.
+for heliocentric points or unsupported flags fail by default.
 
 For a legacy caller that explicitly expects Swiss's heliocentric zero
 convention, additionally set `lunarHeliocentricPolicy:'ZERO_SENTINEL'`. This
@@ -29,6 +29,16 @@ No light-time, aberration or gravitational deflection is applied. The flag
 describes input/shape compatibility, not complete Swiss semantics. Each result
 is labelled `EXPERIMENTAL_GEOCENTRIC_LUNAR_POINT` and carries warnings.
 
+Equatorial output is labelled `EXPERIMENTAL_EQUATORIAL_LUNAR_POINT`. The Rust
+core rotates the true ecliptic direction and its derivative using the IAU
+2006/2000B true obliquity; the obliquity rate is obtained by a centered
+±0.01 TT-day difference. Thus speeds include the changing axes, and still
+inherit the point model's numerical and physical limitations. Right ascension
+is undefined at an equatorial pole, which produces an error. A synthetic
+direction and rate were independently checked using pyerfa 2.0.1.5 `s2c`,
+`obl06`, `nut00b`, `rx` and `c2s` (rate via ±0.001-day differences); this
+checks the rotation only, not the lunar models' scientific accuracy.
+
 The real-file test compares one sample against the previously documented
 Swiss comparison with a deliberately loose tolerance; it tests interface
 composition and is not independent scientific validation or an error bound.
@@ -37,7 +47,6 @@ definitions, time scales, data provenance and known differences. No new data,
 dependency or independent validation is claimed.
 
 This does not yet make the backend's default chart work: that code also asks
-for equatorial representations of these points and for Chiron. Those requests
-need their own documented definitions, data and tests. The backend must also
-retain or otherwise surface warnings instead of displaying sentinel values as
-physical positions.
+for Chiron, which needs documented data and tests. The backend must also retain
+or otherwise surface warnings instead of displaying sentinel values as physical
+positions, and handle the UTC/UT1/TT boundaries correctly.

@@ -37,7 +37,9 @@ use virgostars_ephemeris_core::horizon_events::{
     StandardSolarEventSearch,
 };
 use virgostars_ephemeris_core::house_angles;
-use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
+use virgostars_ephemeris_core::lunar_points::{
+    calculate_lunar_point, lunar_point_to_equatorial, LunarPoint,
+};
 use virgostars_ephemeris_core::physical_center::{
     geocentric_physical_center, geocentric_physical_equatorial, heliocentric_physical_center,
     PhysicalPlanet,
@@ -516,7 +518,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         return Ok(());
     }
-    if args.len() == 6 && args[1] == "lunar_epoch" {
+    if args.len() == 6 && (args[1] == "lunar_epoch" || args[1] == "lunar_equatorial_epoch") {
         let point = match arg(3)? {
             "MeanNode" => LunarPoint::MeanNode,
             "TrueNode" => LunarPoint::TrueNode,
@@ -528,6 +530,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         let tdb = JulianDateTdb(arg(5)?.parse()?);
         let mut eph = De441::open(&args[2])?;
         let r = calculate_lunar_point(&mut eph, point, tt, tdb, true)?;
+        if args[1] == "lunar_equatorial_epoch" {
+            let eq = lunar_point_to_equatorial(r)?;
+            println!("point,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tt_day,declination_deg_per_tt_day,distance_au_per_tt_day");
+            println!(
+                "{:?},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+                eq.point,
+                tt,
+                tdb.0,
+                eq.right_ascension_deg,
+                eq.declination_deg,
+                eq.distance_au,
+                eq.right_ascension_rate_deg_per_tt_day,
+                eq.declination_rate_deg_per_tt_day,
+                eq.distance_rate_au_per_tt_day
+            );
+            return Ok(());
+        }
         println!("point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,longitude_deg_per_tt_day,latitude_deg_per_tt_day,distance_au_per_tt_day");
         println!(
             "{:?},{:.17},{:.17},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
