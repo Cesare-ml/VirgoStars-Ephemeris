@@ -8,7 +8,7 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const line=(hip,ra,dec,plx,pmra,pmdec,sn=5,components=1)=>{
   const s=Array(276).fill(' ');
   const put=(start,length,value)=>{const str=String(value).padStart(length);assert.ok(str.length<=length);for(let i=0;i<length;i++)s[start+i]=str[i];};
-  put(0,6,hip);put(7,3,sn);put(13,1,components);put(15,13,ra);put(29,13,dec);put(43,7,plx);put(51,8,pmra);put(60,8,pmdec);
+  put(0,6,hip);put(7,3,sn);put(13,1,components);put(15,13,ra);put(29,13,dec);put(43,7,plx);put(51,8,pmra);put(60,8,pmdec);put(69,6,'0.7');put(76,6,'0.8');put(83,6,'1.0');put(90,6,'1.2');put(97,6,'1.5');
   return s.join('');
 };
 const header='HIP\tname\taliases\tvisualMagnitude\tvisualMagnitudeSource\tradialVelocityKmPerSecond\tradialVelocitySource\tradialVelocityReferenceFrame\tnameSource';
@@ -62,4 +62,19 @@ test('heliocentric radial velocities cannot be silently treated as barycentric',
  const row=line(123,'1.3','0.5','10','2','3');
  const supplement=`${header}\n123\tTestStar\tOther Name\t2.45\thttps://example.org/mag\t12.5\thttps://example.org/rv\tHELIOCENTRIC\thttps://example.org/names\n`;
  assert.throws(()=>buildHipparcosCatalog(...input(row,supplement)),/BARYCENTRIC/);
+});
+
+test('import gate rejects missing or unreliable formal uncertainties by default',()=>{
+ const base=line(123,'1.3','0.5','10','2','3');
+ const replace=(start,end,field)=>base.slice(0,start)+field.padStart(end-start)+base.slice(end);
+ assert.throws(()=>buildHipparcosCatalog(...input(replace(83,89,'5.0'))),/low parallax signal-to-noise/);
+ assert.throws(()=>buildHipparcosCatalog(...input(replace(83,89,''))),/missing formal astrometric uncertainty/);
+ assert.throws(()=>buildHipparcosCatalog(...input(replace(69,75,''))),/missing formal astrometric uncertainty/);
+ assert.throws(()=>buildHipparcosCatalog(...input(replace(83,89,'0.0'))),/strictly positive/);
+ const [h,extra,opts]=input(replace(83,89,'5.0'));
+ const {audit}=buildHipparcosCatalog(h,extra,{...opts,minParallaxSignalToNoise:1});
+ assert.equal(audit.qualityPolicy.minParallaxSignalToNoise,1);
+ assert.equal(audit.stars[0].formalUncertainties.parallaxMas,5);
+ assert.equal(audit.stars[0].parallaxSignalToNoise,2);
+ assert.throws(()=>buildHipparcosCatalog(h,extra,{...opts,minParallaxSignalToNoise:NaN}),/SNR threshold/);
 });
