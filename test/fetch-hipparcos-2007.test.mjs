@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,existsSync,rmSync,truncateSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -133,4 +133,15 @@ test('bounded streamed archive preserves byte order when Content-Length is absen
   });
   assert.equal(got.provenance.rows,1);
   assert.equal(got.provenance.sourceArchiveSha256,sha(archive));
+});
+
+test('offline archive loader refuses oversized local source before allocating the whole file',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'hip2-gzip-cap-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const archive=join(dir,'oversized.gz'),out=join(dir,'catalog.dat');
+  writeFileSync(archive,Buffer.from([0x1f,0x8b]));
+  truncateSync(archive,20*1024*1024+1); // sparse source, no external data required
+  await assert.rejects(()=>runHipparcosDownload(['--archive='+archive,'--out='+out]),/at most 20 MiB/);
+  assert.equal(existsSync(out),false);
+  assert.equal(existsSync(out+'.source.json'),false);
 });
