@@ -60,6 +60,18 @@ The comparison to Swiss azimuth and true altitude is limited to a small Rome
 sample; the standard-atmosphere model is tested against NOAA equations, not
 calibrated to Swiss atmospheric output.
 
+For legacy callers that mutate house and star results, the factory accepts
+`legacyMutableResults: true`. House cusp arrays and numeric house fields are
+then mutable, as are star coordinate fields and the star's `name` property.
+House `trueObliquity`, `model`, and `warnings`, and star `model`, `warnings`,
+and `catalogId`, remain accessible but are **non-enumerable**. This prevents
+the existing app's southern-inversion `for...in` loop from treating metadata as
+angles. Consequently those metadata fields are omitted by `JSON.stringify`,
+object spread, and `Object.keys`: callers that persist or transmit results
+must explicitly copy the model, warnings, obliquity and catalog identifier
+when needed. The default remains immutable with enumerable metadata. This
+switch does not supply missing house angles or certify compatibility.
+
 Sun, Moon, Mercury and Venus physical centers use the supplied classic DE441.
 Mars through Pluto require the corresponding explicit physical-center SPK path;
 missing data or coverage are errors and system barycenters are **not** silently
@@ -108,8 +120,9 @@ ephemeris directory globally, requests `SEFLG_SWIEPH` with speed, heliocentric
 and equatorial variants, calls `swe_calc` for obliquity, `swe_azalt`, planet
 names, stars and five house systems, and adds fields to house results. The
 subset instead requires explicit files and epochs, accepts JPL flags only,
-does not expose all those additional calls through the same interface, and returns
-frozen house objects. A direct module substitution therefore fails or changes
+does not expose all those additional calls through the same interface, and
+returns frozen house objects unless legacy mutability is explicitly selected.
+A direct module substitution therefore fails or changes
 behavior. Other consumers call `swe_rise_trans` and eclipse routines. Those
 requirements need their own compatibility contracts and validation; merely
 renaming a flag or claiming a Swiss source would misrepresent the model.

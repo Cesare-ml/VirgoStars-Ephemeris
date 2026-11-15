@@ -52,4 +52,12 @@ export interface ExperimentalSwissSubset {
   swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalHouses)=>void):Readonly<ExperimentalHouses>;
   swe_houses_pos(armcDeg:number,latitudeDeg:number,trueObliquityDeg:number,system:'P',longitudeDeg:number,latitudeEclipticDeg:number,callback?:(result:ExperimentalHousePosition)=>void):Readonly<ExperimentalHousePosition>;
 }
-export declare function createExperimentalSwissSubset(options:{executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;horizontalSupport?:Readonly<{refraction:'GEOMETRIC'|'NOAA_STANDARD'}>;physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>}):Readonly<ExperimentalSwissSubset>;
+export interface ExperimentalSwissOptions {executablePath:string;kernelPath:string;convertUt1ToTtTdb:(ut1JulianDay:number)=>{ttJulianDay:number;tdbJulianDay:number};catalog?:Readonly<{id:string;records:readonly ExperimentalStarRecord[]}>;houseSupport?:Readonly<ExperimentalHouseSupport>;horizontalSupport?:Readonly<{refraction:'GEOMETRIC'|'NOAA_STANDARD'}>;physicalCenterKernels?:Readonly<Partial<Record<'Mars'|'Jupiter'|'Saturn'|'Uranus'|'Neptune'|'Pluto',string>>>;}
+export interface ExperimentalMutableHouses {house:number[];ascendant:number;mc:number;armc:number;readonly trueObliquity:number;readonly model:'EXPERIMENTAL_IAU2006_2000B_HOUSES';readonly warnings:readonly string[];}
+export type ExperimentalMutableStar=Omit<{ -readonly [K in keyof ExperimentalStarResult]: ExperimentalStarResult[K] },'name'|'model'|'warnings'|'catalogId'> & Pick<ExperimentalStarResult,'model'|'warnings'|'catalogId'> & {name?:string};
+export interface ExperimentalMutableSubset extends Omit<ExperimentalSwissSubset,'swe_houses'|'swe_fixstar_ut'> {
+  swe_houses(julianDay:number,latitudeDeg:number,longitudeDegEast:number,system:'V'|'P'|'K'|'R'|'O',callback?:(result:ExperimentalMutableHouses)=>void):ExperimentalMutableHouses;
+  swe_fixstar_ut(name:string,julianDay:number,flags:number,callback?:(result:ExperimentalMutableStar)=>void):ExperimentalMutableStar;
+}
+export declare function createExperimentalSwissSubset(options:ExperimentalSwissOptions & {legacyMutableResults:true}):Readonly<ExperimentalMutableSubset>;
+export declare function createExperimentalSwissSubset(options:ExperimentalSwissOptions & {legacyMutableResults?:false}):Readonly<ExperimentalSwissSubset>;
