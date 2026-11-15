@@ -14,9 +14,12 @@ Build the experimental binary with
 obtained classic DE441 and the relevant physical-center SPKs. Provide absolute
 paths to the `calculateHouseSet` and `calculatePlacidusHousePosition` modules
 from compatible Astrological Functions worktrees, and a caller-supplied star
-catalog with documented rights and astrometry. The Placidus-position provider
-is not assumed to be merged or installed. No ephemeris, catalog, provider or
-network access is bundled by the example.
+catalog with documented rights and astrometry. The five-system house provider
+and Placidus-position provider have been merged in Astrological Functions PRs
+[#118](https://github.com/Cesare-ml/astrological-functions/pull/118) and
+[#120](https://github.com/Cesare-ml/astrological-functions/pull/120). The
+example still requires explicit paths; it does not install either provider.
+No ephemeris, catalog, provider or network access is bundled by the example.
 
 Save an absolute JSON configuration file, replacing all `/absolute/...`
 placeholders with actual paths for your platform:
@@ -74,3 +77,8 @@ azimuths fail instead of falling back. Each calculation launches a process;
 large catalogs or repeated calls may be slow. Solar deflection remains a
 point-mass approximation and the current star and planet models have documented
 limitations in the adjacent fixed-star and finite-solar-deflection notes.
+
+On 2026-11-15 the example and house bridge integration tests also passed using
+the Astrological Functions `main` snapshot `07a4142`, an external local DE441,
+and an external Mars SPK. This is a reproducible compatibility check for that
+snapshot, not a claim of full production integration or scientific validation.
