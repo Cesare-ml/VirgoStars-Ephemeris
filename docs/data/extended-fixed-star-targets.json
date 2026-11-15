@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "created": "2026-11-15",
+  "purpose": "Scientific type routing for legacy fixed-star labels that refer to clusters/nebular regions, not individual Hipparcos stars. These are NOT ready-to-compute positions.",
+  "catalogReady": false,
+  "sources": "NASA Science and CDS SIMBAD for astronomical type; legacy label mapping is a separately reviewed application concern",
+  "objects": [
+    {
+      "name": "Aculeus",
+      "messier": "M6",
+      "ngc": "NGC 6405",
+      "astronomicalType": "OPEN_CLUSTER",
+      "sourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=M6",
+      "status": "NOT_HIPPARCOS_STAR",
+      "review": "Butterfly Cluster: cluster-centre coordinates must be defined separately from any member star; no HIP ID inferred"
+    },
+    {
+      "name": "Acumen",
+      "messier": "M7",
+      "ngc": "NGC 6475",
+      "astronomicalType": "OPEN_CLUSTER",
+      "sourceUrl": "https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-7/",
+      "status": "NOT_HIPPARCOS_STAR",
+      "review": "Ptolemy's Cluster: requires explicit centre/epoch and angular-extent policy; no member-star substitution"
+    },
+    {
+      "name": "Facies",
+      "messier": "M22",
+      "ngc": "NGC 6656",
+      "astronomicalType": "GLOBULAR_CLUSTER",
+      "sourceUrl": "https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-22/",
+      "status": "NOT_HIPPARCOS_STAR",
+      "review": "M22 traditional Facies association must be reviewed separately; cluster centre rather than member-star 6D state"
+    },
+    {
+      "name": "Praesepe",
+      "messier": "M44",
+      "ngc": "NGC 2632",
+      "astronomicalType": "OPEN_CLUSTER",
+      "sourceUrl": "https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-44/",
+      "status": "NOT_HIPPARCOS_STAR",
+      "review": "Beehive Cluster/Praesepe is an extended open cluster; select an explicit astrometric centre"
+    },
+    {
+      "name": "Spiculum",
+      "messier": "M8",
+      "ngc": "NGC 6523",
+      "astronomicalType": "AMBIGUOUS_NEBULAR_REGION",
+      "sourceUrl": "https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-8/",
+      "status": "TRADITIONAL_LABEL_REQUIRES_SELECTION",
+      "review": "Traditional Spiculum may refer to a complex around M8, M20 and M21; M8 is a nebula, not a unique stellar point; do not infer one-to-one HIP or unique centre"
+    }
+  ]
+}
