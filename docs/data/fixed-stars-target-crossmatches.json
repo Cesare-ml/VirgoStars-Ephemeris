@@ -225,6 +225,116 @@
       "visualMagnitude": null,
       "barycentricRadialVelocityKmPerSecond": null,
       "review": "Check selected HIP component, formal errors and photometric variability"
+    },
+    {
+      "name": "Achernar",
+      "hip": 7588,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=HR+472",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Rapidly rotating variable star; verify component/astrometric accuracy, no Gaia DR3 crossmatch claimed"
+    },
+    {
+      "name": "Alpheratz",
+      "hip": 677,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Alpheratz",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Multiple/chemically peculiar star; inspect component and solution class"
+    },
+    {
+      "name": "Hamal",
+      "hip": 9884,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=Hamal",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Review astrometric precision and radial-velocity reference"
+    },
+    {
+      "name": "Alkaid",
+      "hip": 67301,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Alkaid",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Source is identified through HIP; external Johnson V and barycentric RV missing"
+    },
+    {
+      "name": "Alioth",
+      "hip": 62956,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-id?Ident=ALIOTH",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Alpha2 Canum Venaticorum variable; V magnitude and spectral RV need epoch-aware review"
+    },
+    {
+      "name": "Alnilam",
+      "hip": 26311,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Alnilam",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Variable supergiant and distant star; inspect parallax uncertainty and V variability"
+    },
+    {
+      "name": "Alnitak",
+      "hip": 26727,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Alnitak",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Multiple-star system; HIP identifies unresolved system rather than certified single-star motion"
+    },
+    {
+      "name": "El Nath",
+      "hip": 25428,
+      "simbadUrl": "https://simbad.u-strasbg.fr/simbad/sim-basic?Ident=HIP025428",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Backend spelling maps to official Elnath name; review source and alias separately"
+    },
+    {
+      "name": "Mizar",
+      "hip": 65378,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=HIP65378",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "SIMBAD identifies HIP 65378 as multiple-star Mizar; component-specific astrometry not certified"
+    },
+    {
+      "name": "Dubhe",
+      "hip": 54061,
+      "simbadUrl": "https://simbad.cds.unistra.fr/simbad/sim-basic?Ident=Dubhe",
+      "selection": "astrological-interest-candidate",
+      "crossmatchStatus": "HIP_NAME_MATCH_REFERENCED",
+      "astrometryStatus": "NOT_YET_REVIEWED",
+      "visualMagnitude": null,
+      "barycentricRadialVelocityKmPerSecond": null,
+      "review": "Bright double/multiple system; source names refer to a system and require component review"
     }
   ]
 }
