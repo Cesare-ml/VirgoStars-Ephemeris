@@ -17,7 +17,7 @@ import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_SPEED=256;
 export const SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
-const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus']);
+const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
   if(flag===SE_GREG_CAL)return 'gregorian';
@@ -25,6 +25,7 @@ const calendar=flag=>{
   throw new RangeError('Explicit Gregorian or Julian calendar flag is required');
 };
 const warnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
+const centerWarnings=Object.freeze([...warnings,'PHYSICAL_CENTER_SPK_EXPLICIT','DE441_AND_SPK_MAY_USE_DIFFERENT_SOLUTIONS']);
 const starWarnings=Object.freeze(['EXPERIMENTAL_NOT_SWISS_PARITY','SOLAR_DEFLECTION_OMITTED','STELLAR_LIGHT_TIME_OMITTED','RECTILINEAR_STELLAR_MOTION','STAR_RATES_NUMERICAL_PRECISION_LIMITED','NUTATION_IAU_2000B_APPROXIMATE','TDB_DAY_RATES_NOT_EXACT_UT_RATES']);
 
 function snapshotCatalog(catalog){
@@ -56,10 +57,19 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
+  const centers={};
+  if(physicalCenterKernels!==undefined){
+    if(!physicalCenterKernels || typeof physicalCenterKernels!=='object' || Array.isArray(physicalCenterKernels))throw new TypeError('Physical-center SPK paths must be an object');
+    for(const [name,path] of Object.entries(physicalCenterKernels)){
+      if(!PHYSICAL_TARGETS.slice(4).includes(name) || typeof path!=='string' || !path.trim())throw new TypeError('Supported physical-center SPK paths are required');
+      centers[name]=path;
+    }
+  }
+  Object.freeze(centers);
   let houseConfig=null;
   if(houseSupport!==undefined){
     if(!houseSupport || typeof houseSupport!=='object')throw new TypeError('Explicit house configuration required');
@@ -135,14 +145,16 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     },
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
-      if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun, Moon, Mercury and Venus physical centers are supported');
+      if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
       validFlags(flags);callbackType(callback);
+      const target=PHYSICAL_TARGETS[body];
+      if(body>=4 && !Object.hasOwn(centers,target))throw new RangeError('Explicit physical-center SPK is required for '+target);
       const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
-      const state=provider.calculateAtEpoch({target:PHYSICAL_TARGETS[body],ttJulianDay,tdbJulianDay});
+      const state=body<4?provider.calculateAtEpoch({target,ttJulianDay,tdbJulianDay}):provider.calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath:centers[target]});
       const speed=(flags&SEFLG_SPEED)!==0;
       const value=Object.freeze({longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,
         longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
-        rflag:flags,model:'EXPERIMENTAL_DE441_IAU2006_2000B',warnings});
+        rflag:flags,model:'EXPERIMENTAL_DE441_IAU2006_2000B',warnings:body<4?warnings:centerWarnings});
       if(callback!==undefined)callback(value);
       return value;
     },

@@ -11,6 +11,8 @@ import {createExperimentalSwissSubset} from 'virgostars-ephemeris/experimental-s
 
 const swe = createExperimentalSwissSubset({
   executablePath, kernelPath,
+  // Supply only the separate SPKs available for the desired physical centers.
+  physicalCenterKernels: { Mars: marsSpkPath, Jupiter: jupiterSpkPath },
   // Caller provides a documented time model for the same instant.
   convertUt1ToTtTdb: ut1JulianDay => getCoherentTtAndTdb(ut1JulianDay),
 });
@@ -26,10 +28,11 @@ validated with proleptic Gregorian or Julian arithmetic, and hours must be in
 binding-specific defaults. Neither function performs timezone, UTC or leap
 second conversion.
 
-Only Sun, Moon, Mercury and Venus physical centers are accepted by
-`swe_calc_ut`. Other numeric body constants are provided to make rejection
-explicit; Mars and outer system barycenters are **not** silently presented as
-physical planets. Supported flags are exactly `SEFLG_JPLEPH` and
+Sun, Moon, Mercury and Venus physical centers use the supplied classic DE441.
+Mars through Pluto require the corresponding explicit physical-center SPK path;
+missing data or coverage are errors and system barycenters are **not** silently
+presented as physical planets. See [physical-center notes](PHYSICAL_CENTERS_SPK_2026-11-15.md).
+Supported flags are exactly `SEFLG_JPLEPH` and
 `SEFLG_JPLEPH | SEFLG_SPEED`: Swiss data, other flags and implicit defaults
 are rejected. An optional callback is invoked synchronously once on success,
 and the same frozen result is returned. Failures throw; callback error behavior
@@ -40,8 +43,8 @@ and speed bits; it does not certify Swiss numerical or physical parity.
 The six fields follow the DE441 prototype's Earth-centered light-time plus
 annual-aberration, IAU 2006/2000B true-ecliptic-of-date model. Speeds are per
 reception **TDB day**, not exactly UT1 day. Solar deflection, full nutation,
-complete physical planet-center coverage, all Swiss flag semantics, fixed
-stars, a native Node binary loader and production use remain missing. Model and
+all Swiss flag semantics, a vetted bundled fixed-star catalog, a native Node
+binary loader and production use remain missing. Model and
 warning fields make the incomplete correction set explicit; consumers must not
 strip or ignore them when interpreting accuracy. Each call starts a process;
 no throughput or concurrency guarantees are made.
@@ -52,3 +55,19 @@ The latter are compatibility diagnostics for this limited sample, not an
 independent validation of the complete model. A real kernel and compiled CLI
 are required for the integration test; set `DE441_PATH` and
 `VIRGOSTARS_EPHEMERIS_CLI`. Tests do not invoke Swiss or redistribute its data.
+
+## Current VirgoStars integration gaps
+
+The application's `backend/services/astrology/func.js` currently sets an
+ephemeris directory globally, requests `SEFLG_SWIEPH` with speed, heliocentric
+and equatorial variants, calls `swe_calc` for obliquity, `swe_azalt`, planet
+names, stars and five house systems, and adds fields to house results. The
+subset instead requires explicit files and epochs, accepts JPL flags only,
+does not expose those additional calls through the same interface, and returns
+frozen house objects. A direct module substitution therefore fails or changes
+behavior. Other consumers call `swe_rise_trans` and eclipse routines. Those
+requirements need their own compatibility contracts and validation; merely
+renaming a flag or claiming a Swiss source would misrepresent the model.
+
+Fixed-star methods accept a caller-supplied catalog, and house methods require
+injected providers; see the corresponding star and house documentation.

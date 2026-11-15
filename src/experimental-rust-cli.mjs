@@ -83,6 +83,16 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if(tt!==ttJulianDay || tdb!==tdbJulianDay || longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0) throw new Error('Out-of-range epoch ephemeris CSV row');
       return Object.freeze({target,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
     },
+    calculatePhysicalAtEpoch({target,ttJulianDay,tdbJulianDay,centerKernelPath}) {
+      if(!['Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'].includes(target) || !Number.isFinite(ttJulianDay) || !Number.isFinite(tdbJulianDay) || typeof centerKernelPath!=='string' || !centerKernelPath.trim())throw new TypeError('Physical target, explicit center SPK and finite TT and TDB are required');
+      const lines=execute(['physical_epoch',kernelPath,centerKernelPath,target,String(ttJulianDay),String(tdbJulianDay)]);
+      if(lines.length!==2 || lines[0]!==HEADER)throw new Error('Invalid physical epoch CSV contract');
+      const [returnedTarget,...parts]=lines[1].split(',');
+      if(returnedTarget!==target || parts.length!==8 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part))))throw new Error('Invalid physical epoch CSV row');
+      const [tt,tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay]=parts.map(Number);
+      if(tt!==ttJulianDay || tdb!==tdbJulianDay || longitudeDeg<0 || longitudeDeg>=360 || Math.abs(latitudeDeg)>90 || distanceAu<=0)throw new Error('Out-of-range physical epoch CSV row');
+      return Object.freeze({target,ttJulianDay:tt,tdbJulianDay:tdb,longitudeDeg,latitudeDeg,distanceAu,longitudeSpeedDegPerTdbDay,latitudeSpeedDegPerTdbDay,distanceSpeedAuPerTdbDay});
+    },
     calculate(timestamp) {
       if (typeof timestamp !== 'string' || !timestamp.trim()) {
         throw new TypeError('An ISO civil timestamp with explicit UTC offset is required');

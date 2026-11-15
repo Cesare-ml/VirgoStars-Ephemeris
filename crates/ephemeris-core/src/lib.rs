@@ -17,7 +17,8 @@
 //! Experimental pre-release crate. The classic DE441 reader, bounded civil
 //! time conversion, light-time, aberration and date-frame projection do not
 //! yet constitute a fully validated astronomical or Swiss-compatible engine.
-//! The Rust core does not parse SPK files or silently fall back to lite data.
+//! A separate experimental SPK reader handles selected J2000 type 2/3
+//! geometric states. No mode silently falls back to lite data.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
@@ -42,7 +43,12 @@ pub mod horizon_events;
 pub mod house_angles;
 pub mod light_time;
 pub mod lunar_points;
+pub mod physical_center;
 pub mod six_field_units;
+pub mod spk_direct_state;
+pub mod spk_index;
+pub mod spk_kernel_set;
+pub mod spk_relative_state;
 pub mod state;
 pub mod time;
 pub mod true_ecliptic;
