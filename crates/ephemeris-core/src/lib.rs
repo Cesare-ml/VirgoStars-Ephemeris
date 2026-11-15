@@ -37,6 +37,7 @@ pub mod de441;
 pub mod earth_orientation;
 pub mod equatorial_horizontal;
 pub mod error;
+pub mod explicit_utc_instant;
 pub mod first_sky;
 pub mod fixed_star;
 pub mod horizon_events;

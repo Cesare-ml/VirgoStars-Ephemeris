@@ -7,6 +7,10 @@
   "exports": {
     ".": "./src/index.mjs",
     "./experimental-rust-cli": "./src/experimental-rust-cli.mjs",
+    "./experimental-utc-instant": {
+      "types": "./src/experimental-utc-instant.d.mts",
+      "import": "./src/experimental-utc-instant.mjs"
+    },
     "./experimental-swiss-subset": {
       "types": "./src/experimental-swiss-subset.d.mts",
       "import": "./src/experimental-swiss-subset.mjs"

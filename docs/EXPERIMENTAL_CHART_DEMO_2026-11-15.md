@@ -82,3 +82,8 @@ On 2026-11-15 the example and house bridge integration tests also passed using
 the Astrological Functions `main` snapshot `07a4142`, an external local DE441,
 and an external Mars SPK. This is a reproducible compatibility check for that
 snapshot, not a claim of full production integration or scientific validation.
+
+For a programmatic one-instant UTC conversion with independently supplied
+DUT1, TAI−UTC and TDB−TT offsets, see the separate
+[explicit UTC helper](EXPLICIT_UTC_INSTANT_2026-11-15.md). It does not infer
+those values and does not automatically modify this JSON example.
