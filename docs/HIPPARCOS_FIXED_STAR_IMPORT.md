@@ -37,7 +37,7 @@ node scripts/import-hipparcos-2007.mjs \
   --audit=/abs/path/hipparcos-curated.audit.json
 ```
 
-Use fully specified arguments `--key=value`. The importer checks both digests, the exact 117,955-row Hipparcos file size in records, fixed-column angular units, positive parallax and unique HIP/name/alias mappings. It rejects missing source measurements instead of guessing. It reads the Hipparcos `Sn` solution type (code `10*d+s`) and number of components (`Nc`). By default only a standard 5-parameter single-star solution (`Sn=5, Nc=1`) is accepted. Complex solutions including binaries, variables, photocenter measurements and 7/9-parameter solutions require separate scientific review. The explicit `--allow-complex-solutions=true` override permits an experimental import but records `EXPERIMENTAL_COMPLEX_SOLUTION_NOT_CERTIFIED` in the audit; this is **not** a validation of a linear motion model. The outputs are written with `wx` to avoid silently replacing an earlier audit. It creates the JSON object `{id,records}` accepted by the experimental `loadExperimentalStarCatalogFile` PR #429, and a separate audit manifest with per-star supplemental source URLs and both source hashes. The audit is **not automatically attached to each `swe_fixstar_ut` response**.
+Use fully specified arguments `--key=value`. The importer checks both digests, the exact 117,955-row Hipparcos file size in records, 276 printable ASCII characters in **every** record, global HIP uniqueness, fixed-column angular units, positive parallax and unique star names/aliases. The shared parser preserves trailing fixed-width spaces rather than calling `trimEnd()` on the entire file. It rejects missing source measurements instead of guessing. It reads the Hipparcos `Sn` solution type (code `10*d+s`) and number of components (`Nc`). By default only a standard 5-parameter single-star solution (`Sn=5, Nc=1`) is accepted. Complex solutions including binaries, variables, photocenter measurements and 7/9-parameter solutions require separate scientific review. The explicit `--allow-complex-solutions=true` override permits an experimental import but records `EXPERIMENTAL_COMPLEX_SOLUTION_NOT_CERTIFIED` in the audit; this is **not** a validation of a linear motion model. The outputs are written with `wx` to avoid silently replacing an earlier audit. It creates the JSON object `{id,records}` accepted by the experimental `loadExperimentalStarCatalogFile` PR #429, and a separate audit manifest with per-star supplemental source URLs and both source hashes. The audit is **not automatically attached to each `swe_fixstar_ut` response**.
 
 Run `node --test test/import-hipparcos-2007.test.mjs` and `node --test test/fixed-star-crossmatches.test.mjs` for synthetic parser and crossmatch-manifest regression; neither test validates observed stellar positions. Once the #429 loader is integrated, use it with the JSON, pinned output SHA-256, explicit source and verified rights labels. Keep the generated raw/derived files out of Git until data-rights approval. No runtime network calls, new third-party library, or changes to astronomical Rust algorithms are introduced here.
 
@@ -89,4 +89,21 @@ node --test test/audit-hipparcos-2007.test.mjs
 ```
 
 The genuine-data test is intentionally **skipped** in ordinary CI unless these two environment variables are present. Synthetic/structural tests are *not* a substitute for real-data tests or independent numerical validation.
+
+
+## One-command explicit acquisition (optional; never during runtime)
+
+For reproducible work without a manual gzip extraction step, `scripts/fetch-hipparcos-2007.mjs` is a separately invoked **operator-only** downloader. It requests exclusively the fixed Harvard CDS mirror URL using HTTPS, rejects redirects and unexpected content, bounds compressed/decompressed sizes, validates **all 117,955 records and HIP identifiers**, computes both SHA-256 hashes and writes an uncompressed `hip2.dat` plus `hip2.dat.source.json` provenance outside Git. It never silently overwrites existing files and is **not invoked** when the astronomical package is imported or called.
+
+Example on Windows PowerShell, from the repository root:
+
+```powershell
+$dataDir = Join-Path $HOME 'VirgoStarsData'
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+node scripts/fetch-hipparcos-2007.mjs "--out=$(Join-Path $dataDir 'hip2.dat')"
+```
+
+This requires normal HTTPS access from the machine executing the command. Source archive SHA-256 may optionally be independently pinned via `--archive-sha256=<64-lowercase-hex>`, obtained from a **trusted external reference**; it is **not** known/pinned by this repository. Without it, the local hashes record byte identity, **not verified publisher authenticity**. Never paste an invented digest. Do not assume possession of the scientific data grants commercial redistribution rights.
+
+The downloaded `hip2.dat` can be passed to `scripts/audit-hipparcos-2007.mjs` with its `rawSha256` from the manifest. The complete, genuine CDS integration check remains opt-in and excluded from network-free CI. The importer and auditor now share `scripts/hipparcos-source-rows.mjs` for exact fixed-width integrity checks.
 
