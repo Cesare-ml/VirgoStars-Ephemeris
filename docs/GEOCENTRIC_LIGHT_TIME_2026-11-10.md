@@ -110,3 +110,17 @@ mathematical/representation regression cases, **not** new NASA/JPL reference
 validation, real DE441 integration evidence, or a claim that the classic
 reader can resolve finer times. A future two-part JD solver must be separately
 specified and tested.
+
+## Reconciled transverse-rate regressions — 2026-11-15
+
+The former draft PR #45 contained three useful synthetic test cases that were not present in the current dev/ephemeris light-time module. They have been carried forward on a fresh branch based on the current integration branch, without rewriting or closing the original draft:
+
+- A 3D linear-motion fixture with nonzero transverse Earth and target velocity compares fixed-ICRF geometric longitude, latitude, distance and reception light-time rates against centered finite differences at ±600 seconds.
+- A retrograde target crosses the 0/2π longitude meridian; the test uses the signed shortest angular arc and checks the negative analytic longitude rate.
+- Coincident Earth/target range and an infinite observer velocity must fail closed with their typed errors.
+
+The regression tolerances are retained from the original synthetic fixture: 3e-7 rad/TDB-day for longitude and latitude, 0.1 km/TDB-day for distance, and 3e-8 s/s for the light-time rate. These are sample-specific numerical regression thresholds, not observational error budgets.
+
+The transplant changes only the light-time test module and this explanatory note. It does not modify the light-time solver, coordinate projection, public API, units, time scales, or physical corrections. The tests are not a substitute for real-kernel NAIF/JPL comparison or apparent-of-date validation.
+
+**CPAL-1.0 modification record (2026-11-15):** restored three synthetic cross-stage regression cases from the preserved draft PR #45 onto the current integration baseline; no third-party code or data incorporated.
