@@ -11,6 +11,9 @@ void magnitude;void starLongitude;
 const houses=api.swe_houses(jd,41.9,12.5,'P');
 const housePosition:number=api.swe_houses_pos(houses.armc,41.9,houses.trueObliquity,'P',20,1).housePosition;
 void housePosition;
+const nutation:number=api.swe_calc(jd,api.SE_ECL_NUT,0).longitude;
+const name:string=api.swe_get_planet_name(api.SE_SUN).name;
+void nutation;void name;
 // @ts-expect-error only P positions are supported
 api.swe_houses_pos(0,41.9,23.4,'V',20,0);
 // @ts-expect-error the calendar flag must be explicit

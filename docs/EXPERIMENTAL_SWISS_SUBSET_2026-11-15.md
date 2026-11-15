@@ -28,6 +28,19 @@ validated with proleptic Gregorian or Julian arithmetic, and hours must be in
 binding-specific defaults. Neither function performs timezone, UTC or leap
 second conversion.
 
+`swe_calc(ttJulianDay, SE_ECL_NUT, 0)` supplies IAU 2006/2000B obliquity
+and nutation in the binding's six-field shape. `longitude` is true obliquity,
+`latitude` mean obliquity, `distance` nutation in longitude, and
+`longitudeSpeed` nutation in obliquity; the last two fields are zero. These
+fields are angles in degrees, **not planetary positions or speed values**.
+This call consumes TT directly; `swe_calc_ut(ut1JulianDay, SE_ECL_NUT, 0)`
+instead requires and invokes the explicit UT1-to-TT/TDB converter. Only flags
+0 are accepted for this special body. Unlike Swiss, there is no guessed
+ephemeris flag. Values outside the experimental 1900–2100 TT model range are
+errors. Callbacks are synchronous and receive the returned frozen object.
+`swe_get_planet_name` supports numeric IDs 0–9, Sun through Pluto; all other
+IDs are errors rather than guessed names.
+
 Sun, Moon, Mercury and Venus physical centers use the supplied classic DE441.
 Mars through Pluto require the corresponding explicit physical-center SPK path;
 missing data or coverage are errors and system barycenters are **not** silently
@@ -69,7 +82,9 @@ are required for the integration test; set `DE441_PATH` and
 
 ## Current VirgoStars integration gaps
 
-The application's `backend/services/astrology/func.js` currently sets an
+The application's `backend/services/astrology/func.js` currently passes its
+UT-based Julian day to `swe_calc` for obliquity, although `swe_calc` expects
+TT; migrating the caller needs an explicit time-scale decision. It also sets an
 ephemeris directory globally, requests `SEFLG_SWIEPH` with speed, heliocentric
 and equatorial variants, calls `swe_calc` for obliquity, `swe_azalt`, planet
 names, stars and five house systems, and adds fields to house results. The

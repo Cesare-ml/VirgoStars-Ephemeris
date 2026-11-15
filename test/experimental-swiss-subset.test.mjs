@@ -17,6 +17,30 @@ import assert from 'node:assert/strict';
 import {createExperimentalSwissSubset as create} from '../src/experimental-swiss-subset.mjs';
 
 const fixtureStar={name:'Synthetic A',aliases:['A'],epochTdbJulianDay:2451545,rightAscensionDeg:20,declinationDeg:-30,properMotionRaCosDecMasPerYear:120,properMotionDecMasPerYear:-40,parallaxMas:50,radialVelocityKmPerSecond:20,visualMagnitude:1.23};
+test('planet names are explicit and synchronous',()=>{
+  const api=create({executablePath:'x',kernelPath:'y',convertUt1ToTtTdb:()=>({ttJulianDay:0,tdbJulianDay:0})});
+  const names=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'];
+  for(let i=0;i<names.length;i++){let callback;const result=api.swe_get_planet_name(i,v=>{callback=v;});assert.equal(result,callback);assert.deepEqual(result,{name:names[i]});assert.ok(Object.isFrozen(result));}
+  assert.throws(()=>api.swe_get_planet_name(-1),/names/);
+  assert.throws(()=>api.swe_calc(2451545,api.SE_SUN,0),/SE_ECL_NUT/);
+  assert.throws(()=>api.swe_calc(2451545,api.SE_ECL_NUT,1),/flags/);
+});
+
+test('ecliptic nutation uses explicit TT and distinguishes UT conversion',{
+  skip:!process.env.VIRGOSTARS_EPHEMERIS_CLI || !process.env.DE441_PATH,
+},()=>{
+  const tt=2461354.5;
+  const api=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+0.0008,tdbJulianDay:ut1+0.0008})});
+  let callback;const result=api.swe_calc(tt,api.SE_ECL_NUT,0,v=>{callback=v;});
+  assert.equal(result,callback);
+  // Swiss 2.09.03 at equal TT; model differs (IAU 2000B vs full nutation).
+  for(const [actual,reference] of [[result.longitude,23.437859793212688],[result.latitude,23.435785305361748],[result.distance,0.002194607342977857],[result.longitudeSpeed,0.0020744878509422666]])assert.ok(Math.abs(actual-reference)<0.000001);
+  assert.ok(Math.abs(result.longitude-result.latitude-result.longitudeSpeed)<1e-12);
+  assert.deepEqual([result.latitudeSpeed,result.distanceSpeed,result.rflag],[0,0,0]);
+  assert.ok(result.warnings.includes('FIELDS_ARE_ANGLES_NOT_POSITION_OR_SPEED'));
+  assert.deepEqual(api.swe_calc_ut(tt,api.SE_ECL_NUT,0),api.swe_calc(tt+0.0008,api.SE_ECL_NUT,0));
+  assert.throws(()=>api.swe_calc(2300000,api.SE_ECL_NUT,0),/status/);
+});
 test('catalog aliases and magnitudes are explicit immutable input snapshots',()=>{
   const record={...fixtureStar,aliases:[...fixtureStar.aliases]};
   const catalog={id:'synthetic-fixture',records:[record]};

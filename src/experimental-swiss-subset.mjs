@@ -16,7 +16,7 @@
 import {createExperimentalRustCli} from './experimental-rust-cli.mjs';
 
 export const SE_JUL_CAL=0,SE_GREG_CAL=1,SEFLG_JPLEPH=1,SEFLG_SWIEPH=2,SEFLG_HELCTR=8,SEFLG_SPEED=256,SEFLG_EQUATORIAL=2048;
-export const SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
+export const SE_ECL_NUT=-1,SE_SUN=0,SE_MOON=1,SE_MERCURY=2,SE_VENUS=3,SE_MARS=4,SE_JUPITER=5,SE_SATURN=6,SE_URANUS=7,SE_NEPTUNE=8,SE_PLUTO=9;
 const PHYSICAL_TARGETS=Object.freeze(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto']);
 const HOUSE_SYSTEMS=Object.freeze({V:'vehlow',P:'placidus',K:'koch',R:'regiomontanus',O:'porphyry'});
 const calendar=flag=>{
@@ -99,9 +99,23 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
   };
   const validFlags=flags=>{if(flags!==SEFLG_JPLEPH && flags!==(SEFLG_JPLEPH|SEFLG_SPEED))throw new RangeError('Only explicit JPL and optional speed flags are supported');};
   const callbackType=callback=>{if(callback!==undefined && typeof callback!=='function')throw new TypeError('Callback must be a function');};
+  const nutation=(ttJulianDay,flags,callback)=>{
+    callbackType(callback);if(flags!==0)throw new RangeError('Ecliptic nutation accepts only flags 0');
+    const n=provider.eclipticNutation(ttJulianDay);
+    const value=Object.freeze({longitude:n.trueObliquity,latitude:n.meanObliquity,distance:n.nutationLongitude,longitudeSpeed:n.nutationObliquity,latitudeSpeed:0,distanceSpeed:0,rflag:0,model:'EXPERIMENTAL_IAU2006_2000B_NUTATION',warnings:Object.freeze(['NUTATION_IAU_2000B_APPROXIMATE','FIELDS_ARE_ANGLES_NOT_POSITION_OR_SPEED'])});
+    if(callback!==undefined)callback(value);return value;
+  };
   const star=name=>{if(!stars)throw new Error('An explicit star catalog is required');return stars.lookup(name);};
   const api={
-    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    SE_JUL_CAL,SE_GREG_CAL,SEFLG_JPLEPH,SEFLG_SWIEPH,SEFLG_HELCTR,SEFLG_EQUATORIAL,SEFLG_SPEED,SE_ECL_NUT,SE_SUN,SE_MOON,SE_MERCURY,SE_VENUS,SE_MARS,SE_JUPITER,SE_SATURN,SE_URANUS,SE_NEPTUNE,SE_PLUTO,
+    swe_get_planet_name(body,callback){
+      callbackType(callback);if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto names are supported');
+      const value=Object.freeze({name:PHYSICAL_TARGETS[body]});if(callback!==undefined)callback(value);return value;
+    },
+    swe_calc(julianDayTt,body,flags,callback){
+      if(body!==SE_ECL_NUT)throw new RangeError('Only SE_ECL_NUT is supported in swe_calc');
+      return nutation(julianDayTt,flags,callback);
+    },
     swe_julday(year,month,day,hour,calendarFlag){
       return provider.julianDay({year,month,day,decimalHour:hour,calendar:calendar(calendarFlag),timeScale:'ut1'});
     },
@@ -148,6 +162,7 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
     },
     swe_calc_ut(julianDay,body,flags,callback){
       if(!Number.isFinite(julianDay))throw new TypeError('A finite UT1 Julian day is required');
+      if(body===SE_ECL_NUT){callbackType(callback);if(flags!==0)throw new RangeError('Ecliptic nutation accepts only flags 0');return nutation(getEpochs(julianDay).ttJulianDay,flags,callback);}
       if(!Number.isInteger(body) || body<0 || body>=PHYSICAL_TARGETS.length)throw new RangeError('Only Sun through Pluto physical centers are supported');
       if(!Number.isInteger(flags) || flags<0 || flags>(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL) || (flags&SEFLG_JPLEPH)===0 || (flags&~(SEFLG_JPLEPH|SEFLG_SPEED|SEFLG_HELCTR|SEFLG_EQUATORIAL))!==0 || ((flags&SEFLG_HELCTR)!==0 && (flags&SEFLG_EQUATORIAL)!==0))throw new RangeError('Only explicit JPL, optional speed, and one supported coordinate flag are allowed in flags');
       callbackType(callback);

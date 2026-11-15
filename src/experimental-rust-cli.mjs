@@ -47,6 +47,16 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
     return child.stdout.trim().split(/\r?\n/);
   };
   return Object.freeze({
+    eclipticNutation(ttJulianDay) {
+      if(!Number.isFinite(ttJulianDay))throw new TypeError('Explicit finite TT Julian day required');
+      const lines=execute(['ecl_nut',String(ttJulianDay)]);
+      if(lines.length!==2 || lines[0]!=='true_obliquity_deg,mean_obliquity_deg,nutation_longitude_deg,nutation_obliquity_deg,reserved_4,reserved_5')throw new Error('Invalid ecliptic nutation CSV contract');
+      const parts=lines[1].split(',');
+      if(parts.length!==6 || parts.some(value=>!value.trim() || !Number.isFinite(Number(value))))throw new Error('Invalid ecliptic nutation CSV row');
+      const [trueObliquity,meanObliquity,nutationLongitude,nutationObliquity,reserved4,reserved5]=parts.map(Number);
+      if(trueObliquity<=0 || trueObliquity>=90 || meanObliquity<=0 || meanObliquity>=90 || reserved4!==0 || reserved5!==0 || Math.abs(trueObliquity-meanObliquity-nutationObliquity)>1e-12)throw new Error('Out-of-range ecliptic nutation CSV row');
+      return Object.freeze({trueObliquity,meanObliquity,nutationLongitude,nutationObliquity});
+    },
     julianDay({year, month, day, decimalHour, calendar, timeScale}) {
       if (![year, month, day].every(Number.isInteger) || !Number.isFinite(decimalHour) || typeof calendar !== 'string' || typeof timeScale !== 'string') throw new TypeError('Explicit numeric date, decimal hour, calendar and time scale are required');
       const lines = execute(['julday', String(year), String(month), String(day), String(decimalHour), calendar, timeScale]);
