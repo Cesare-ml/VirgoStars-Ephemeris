@@ -26,6 +26,7 @@ const LUNAR_HEADER = 'point,tt_jd,tdb_jd,longitude_deg,latitude_deg,distance_au,
 const LUNAR_POINTS = Object.freeze(['MeanNode','TrueNode','MeanApogee','OsculatingApogee']);
 const EQUATORIAL_HEADER = 'target,tt_jd,tdb_jd,ra_deg,declination_deg,distance_au,ra_deg_per_tdb_day,declination_deg_per_tdb_day,distance_au_per_tdb_day';
 const HORIZONTAL_HEADER = 'true_altitude_deg,azimuth_north_east_deg,azimuth_south_west_deg';
+const EVENT_HEADER = 'event,target,ut1_jd,tt_jd,tdb_jd,bracket_seconds';
 
 /**
  * Construct an explicit offline provider. It returns experimental positions,
@@ -140,6 +141,17 @@ export function createExperimentalRustCli({ executablePath, kernelPath }) {
       if ([armcDeg, ascendantDeg, midheavenDeg].some(value => value < 0 || value >= 360) || trueObliquityDeg <= 0 || trueObliquityDeg >= 90) throw new Error('Out-of-range angle CSV row');
       return Object.freeze({ armcDeg, ascendantDeg, midheavenDeg, trueObliquityDeg,
         model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME', ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast });
+    },
+    findGeometricEvent({target,kind,ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,thresholdAltitudeDeg,windowDays,stepMinutes}) {
+      const values=[ut1JulianDay,ttJulianDay,tdbJulianDay,latitudeDeg,longitudeDegEast,thresholdAltitudeDeg,windowDays,stepMinutes];
+      if(!TARGETS.includes(target) || !['rise','set','upper_transit','lower_transit'].includes(kind) || !values.every(Number.isFinite)) throw new TypeError('A supported target, event kind and all finite search parameters are required');
+      const lines=execute(['event',kernelPath,target,kind,...values.map(String)]);
+      if(lines.length!==2 || lines[0]!==EVENT_HEADER) throw new Error('Invalid event CSV contract');
+      const [eventKind,eventTarget,...parts]=lines[1].split(',');
+      if(eventKind!==kind || eventTarget!==target || parts.length!==4 || parts.some(part=>!part.trim() || !Number.isFinite(Number(part)))) throw new Error('Invalid event CSV row');
+      const [eventUt1JulianDay,eventTtJulianDay,eventTdbJulianDay,bracketSeconds]=parts.map(Number);
+      if(eventUt1JulianDay<ut1JulianDay || eventUt1JulianDay>ut1JulianDay+windowDays || bracketSeconds<0 || bracketSeconds>0.25) throw new Error('Out-of-range event CSV row');
+      return Object.freeze({target,kind,ut1JulianDay:eventUt1JulianDay,ttJulianDay:eventTtJulianDay,tdbJulianDay:eventTdbJulianDay,bracketSeconds,model:'EXPERIMENTAL_GEOCENTRIC_GEOMETRIC',warnings:Object.freeze(['NOT_SWISS_PARITY','NO_PARALLAX','NO_REFRACTION','NO_LIMB','NO_UT1_INTERPOLATION','SAMPLING_MAY_MISS_CROSSINGS'])});
     },
     calculateHorizontal({ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg}) {
       const values=[ut1JulianDay,ttJulianDay,latitudeDeg,longitudeDegEast,rightAscensionDeg,declinationDeg];
