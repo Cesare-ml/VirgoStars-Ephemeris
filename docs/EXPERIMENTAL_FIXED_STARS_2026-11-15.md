@@ -54,3 +54,34 @@ omitted Roemer term acknowledged), invalid inputs, aliases and magnitude
 snapshotting, and a synthetic catalog through a real DE441 executable. The
 stellar catalog records in the integration test are fictional. No independent
 catalog-to-observed-star validation or scientific accuracy bound is claimed.
+
+## Independent near-Sun pipeline check
+
+A second optional test uses the synthetic input and date of ERFA's published
+[`t_atci13` fixture](https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c):
+ICRS RA 2.71 rad, declination 0.174 rad, catalog-epoch J2000, raw RA and
+declination proper motions 1e-5 and 5e-6 rad/Julian year, parallax 0.1 arcsec,
+radial velocity 55 km/s and TT JD 2456165.901182685. The library interface
+converts raw RA motion to μα* by multiplying by cos(declination). For this
+fixture only, TDB is approximated as TT; no general time conversion is implied.
+
+The full published ERFA CIRS output, converted to equinox-based RA by
+subtracting its equation of origins, includes solar gravitational deflection.
+The fixture happens to be very close to the Sun: this implementation's output
+differs from the complete ERFA reference by approximately **1.57 arcseconds**.
+That is a concrete example of why omitted deflection matters; it is not an
+error bound or observed-star comparison. To isolate that omission, an
+independent no-solar-deflection reference was generated with pyerfa 2.0.1.5:
+`apci13` (Earth astrometry), `pmpx` (catalog motion and parallax), `ab`
+(annual aberration), then `pnm06a` (true equator/equinox), deliberately
+omitting `ldsun`. The resulting RA/declination in radians are
+`2.7130228830832768` and `0.17294471809826534`. The implementation using
+DE441, IAU 2000B and no solar bending differs by about 0.4 milliarcseconds;
+the regression tolerance is 10 milliarcseconds to allow the differing Earth
+ephemeris, nutation, aberration and time approximations. ERFA's annual
+aberration includes a small solar-potential term not included in our model.
+This isolated numerical agreement is not full apparent-place validation.
+
+Run `cargo test --lib erfa_pipeline_exposes --locked -- --include-ignored`
+with `DE441_PATH` set to a separately obtained classic DE441 file. ERFA is
+only an external reference generator and is not added as a runtime dependency.
