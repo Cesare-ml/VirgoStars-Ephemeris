@@ -29,6 +29,13 @@ auxiliary angles are **not** returned. The injected house-set function
 calculates all five systems even when one is requested; if any system fails,
 the entire call fails. Polar and singular cases have no fallback.
 
+The default result and cusp array are frozen. For applications that mutate
+the cusps, explicitly set `legacyMutableResults: true` on the factory. In
+that mode `house`, `ascendant`, `mc` and `armc` are enumerable and mutable;
+`trueObliquity`, `model` and `warnings` are non-enumerable and read-only so
+legacy numeric enumeration does not treat them as angles. Copy metadata
+explicitly when serializing, because JSON omits non-enumerable fields.
+
 `swe_houses_pos` accepts only Placidus `P`, using both ecliptic longitude and
 latitude. Because the legacy-shaped signature supplies no instant or source,
 the caller must explicitly configure a fixed `positionContext` with UTC,

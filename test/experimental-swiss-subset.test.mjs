@@ -214,4 +214,11 @@ test('real DE441 star calculation exposes the supplied astrometry and signed rat
   const numerical=(((after.longitude-before.longitude+540)%360)-180)/0.5;
   assert.ok(Math.abs(numerical-result.longitudeSpeed)<0.00005);
   assert.equal(before.longitudeSpeed,0);
+  const legacy=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,legacyMutableResults:true,
+    convertUt1ToTtTdb:ut1=>({ttJulianDay:ut1+69.184/86400,tdbJulianDay:ut1+69.184/86400}),catalog:{id:'synthetic-fixture',records:[fixtureStar]}});
+  const mutable=legacy.swe_fixstar_ut('A',2461354.5,legacy.SEFLG_JPLEPH);
+  const original=mutable.longitude;delete mutable.name;mutable.longitude=(mutable.longitude+180)%360;
+  assert.equal(mutable.name,undefined);assert.equal(mutable.longitude,(original+180)%360);
+  assert.equal(mutable.catalogId,'synthetic-fixture');assert.ok(mutable.warnings.includes('STELLAR_LIGHT_TIME_OMITTED'));
+  assert.equal(Object.keys(mutable).includes('warnings'),false);
 });

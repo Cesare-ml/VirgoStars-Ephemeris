@@ -23,6 +23,7 @@ test('house bridge requires explicit providers and context',()=>{
   assert.throws(()=>api.swe_houses(2451545,40,10,'P'),/house support/);
   assert.throws(()=>api.swe_houses_pos(0,40,23,'P',20,0),/position provider/);
   assert.throws(()=>create({...options,houseSupport:{}}),/House provider/);
+  assert.throws(()=>create({...options,legacyMutableResults:'yes'}),/boolean/);
 });
 
 const modules=['VIRGOSTARS_HOUSE_SET_MODULE','VIRGOSTARS_PLACIDUS_POSITION_MODULE'];
@@ -48,4 +49,15 @@ test('real Rust angles compose with five house systems and Placidus position',{
   assert.equal(placement,cb);assert.ok(Math.abs(placement.housePosition-3.5213852131119285)<0.00001);
   assert.throws(()=>api.swe_houses(2461354.5,41.9028,12.4964,'X'),/Only V/);
   assert.throws(()=>api.swe_houses_pos(houses.armc,41.9028,houses.trueObliquity,'V',227.5,-2),/Only Placidus/);
+  const legacy=create({executablePath:process.env.VIRGOSTARS_EPHEMERIS_CLI,kernelPath:process.env.DE441_PATH,legacyMutableResults:true,
+    convertUt1ToTtTdb:()=>({ttJulianDay:2461354.500800741,tdbJulianDay:2461354.500800725}),
+    houseSupport:{calculateHouseSet,convertUt1ToUtc:()=> '2026-11-10T00:00:00Z',engineVersion:'fixture',kernelSetId:'external-DE441',timeModel:'UT1_EQUALS_UTC_TEST_ASSUMPTION'}});
+  const mutable=legacy.swe_houses(2461354.5,-41.9028,12.4964,'P');
+  const original=mutable.house[0];
+  assert.deepEqual(Object.keys(mutable),['house','ascendant','mc','armc']);
+  for(const key in mutable){if(key==='house')for(let i=0;i<mutable.house.length;i++)mutable.house[i]=(mutable.house[i]+180)%360;else mutable[key]=(mutable[key]+180)%360;}
+  mutable.ds=(mutable.ascendant+180)%360;mutable.ic=(mutable.mc+180)%360;
+  assert.equal(mutable.house[0],(original+180)%360);assert.ok(Number.isFinite(mutable.ds));
+  assert.ok(mutable.warnings.includes('NOT_SWISS_PARITY'));assert.ok(Number.isFinite(mutable.trueObliquity));
+  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(mutable)),'warnings'),false);
 });

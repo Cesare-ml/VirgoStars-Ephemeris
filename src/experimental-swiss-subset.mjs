@@ -61,8 +61,9 @@ function snapshotCatalog(catalog){
  * synchronous UT1→{TT,TDB} provider for the same instant. No time conversion,
  * file-path inference, missing-body fallback or unsupported flag is invented.
  */
-export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport}) {
+export function createExperimentalSwissSubset({executablePath,kernelPath,convertUt1ToTtTdb,catalog,houseSupport,physicalCenterKernels,horizontalSupport,legacyMutableResults=false}) {
   if(typeof convertUt1ToTtTdb!=='function')throw new TypeError('An explicit UT1 to TT/TDB converter is required');
+  if(typeof legacyMutableResults!=='boolean')throw new TypeError('legacyMutableResults must be boolean');
   const provider=createExperimentalRustCli({executablePath,kernelPath});
   const stars=snapshotCatalog(catalog);
   let horizontalModel=null;
@@ -167,7 +168,12 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       const {houseSystem,cuspsDeg}=chosen;
       if(houseSystem!==HOUSE_SYSTEMS[system].toUpperCase() || !Array.isArray(cuspsDeg) || cuspsDeg.length!==12)throw new Error('Invalid house cusp contract');
       const cusps=[];for(let i=0;i<12;i++){if(!Object.hasOwn(cuspsDeg,i))throw new Error('Invalid house cusp row');const v=cuspsDeg[i];if(!Number.isFinite(v) || v<0 || v>=360)throw new Error('Invalid house cusp row');cusps.push(v);}
-      const value=Object.freeze({house:Object.freeze(cusps),ascendant:angles.ascendantDeg,mc:angles.midheavenDeg,armc:angles.armcDeg,trueObliquity:angles.trueObliquityDeg,model:'EXPERIMENTAL_IAU2006_2000B_HOUSES',warnings:Object.freeze(['NOT_SWISS_PARITY','AUXILIARY_ANGLES_OMITTED','NO_SOUTHERN_INVERSION','ALL_FIVE_SYSTEMS_REQUIRED'])});
+      const houseWarnings=Object.freeze(['NOT_SWISS_PARITY','AUXILIARY_ANGLES_OMITTED','NO_SOUTHERN_INVERSION','ALL_FIVE_SYSTEMS_REQUIRED']);
+      let value;
+      if(legacyMutableResults){
+        value={house:cusps,ascendant:angles.ascendantDeg,mc:angles.midheavenDeg,armc:angles.armcDeg};
+        Object.defineProperties(value,{trueObliquity:{value:angles.trueObliquityDeg},model:{value:'EXPERIMENTAL_IAU2006_2000B_HOUSES'},warnings:{value:houseWarnings}});
+      } else value=Object.freeze({house:Object.freeze(cusps),ascendant:angles.ascendantDeg,mc:angles.midheavenDeg,armc:angles.armcDeg,trueObliquity:angles.trueObliquityDeg,model:'EXPERIMENTAL_IAU2006_2000B_HOUSES',warnings:houseWarnings});
       if(callback!==undefined)callback(value);return value;
     },
     swe_houses_pos(armcDeg,latitudeDeg,trueObliquityDeg,system,eclipticLongitudeDeg,eclipticLatitudeDeg,callback){
@@ -209,9 +215,13 @@ export function createExperimentalSwissSubset({executablePath,kernelPath,convert
       const {ttJulianDay,tdbJulianDay}=getEpochs(julianDay);
       const state=provider.calculateStarAtEpoch({...entry,ttJulianDay,tdbJulianDay});
       const speed=(flags&SEFLG_SPEED)!==0;
-      const value=Object.freeze({name:entry.name,longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,
+      const fields={name:entry.name,longitude:state.longitudeDeg,latitude:state.latitudeDeg,distance:state.distanceAu,
         longitudeSpeed:speed?state.longitudeSpeedDegPerTdbDay:0,latitudeSpeed:speed?state.latitudeSpeedDegPerTdbDay:0,distanceSpeed:speed?state.distanceSpeedAuPerTdbDay:0,
-        rflag:flags,model:'EXPERIMENTAL_ICRS_LINEAR_STAR',catalogId:stars.id,warnings:starWarnings});
+        rflag:flags};
+      let value;
+      if(legacyMutableResults){
+        value=fields;Object.defineProperties(value,{model:{value:'EXPERIMENTAL_ICRS_LINEAR_STAR'},catalogId:{value:stars.id},warnings:{value:starWarnings}});
+      } else value=Object.freeze({...fields,model:'EXPERIMENTAL_ICRS_LINEAR_STAR',catalogId:stars.id,warnings:starWarnings});
       if(callback!==undefined)callback(value);return value;
     },
     swe_fixstar_mag(name,callback){
