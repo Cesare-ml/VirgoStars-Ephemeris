@@ -70,6 +70,15 @@ test('real Rust process and DE441 yield immutable labelled results', {
   assert.ok(Math.abs(horizontal.azimuthSouthWestDeg-214.65670592212305)<0.001);
   assert.ok(Math.abs(horizontal.trueAltitudeDeg+61.42775066117141)<0.001);
   assert.ok(horizontal.warnings.includes('NO_REFRACTION'));
+  const search={target:'Sun',kind:'rise',ut1JulianDay:2461354.5,ttJulianDay:output.results[0].ttJulianDay,tdbJulianDay:output.results[0].tdbJulianDay,latitudeDeg:41.9028,longitudeDegEast:12.4964,thresholdAltitudeDeg:0,windowDays:1,stepMinutes:10};
+  const rise=provider.findGeometricEvent(search);
+  const transit=provider.findGeometricEvent({...search,kind:'upper_transit'});
+  const set=provider.findGeometricEvent({...search,kind:'set'});
+  assert.ok(rise.ut1JulianDay<transit.ut1JulianDay && transit.ut1JulianDay<set.ut1JulianDay);
+  assert.ok(rise.bracketSeconds<=0.25 && rise.warnings.includes('NO_PARALLAX'));
+  assert.ok(Object.isFrozen(rise));
+  assert.throws(()=>provider.findGeometricEvent({...search,thresholdAltitudeDeg:80}), /no requested crossing/);
+  assert.throws(()=>provider.findGeometricEvent({...search,target:'Chiron'}), TypeError);
   const polar=provider.calculateHorizontal({ut1JulianDay:2451545,ttJulianDay:2451545,latitudeDeg:90,longitudeDegEast:0,rightAscensionDeg:0,declinationDeg:0});
   assert.equal(polar.azimuthNorthEastDeg,null);
   assert.equal(polar.azimuthSouthWestDeg,null);

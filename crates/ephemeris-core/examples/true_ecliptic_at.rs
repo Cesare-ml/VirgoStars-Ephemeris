@@ -18,9 +18,12 @@ use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{
     julday_f64, revjul_f64, DecimalHourDateTime,
 };
-use virgostars_ephemeris_core::de441::{Body, De441};
+use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::equatorial_horizontal::true_equatorial_to_horizontal;
 use virgostars_ephemeris_core::first_sky::CivilTimestamp;
+use virgostars_ephemeris_core::horizon_events::{
+    find_geometric_event, HorizonEventKind, HorizonEventSearch,
+};
 use virgostars_ephemeris_core::house_angles;
 use virgostars_ephemeris_core::lunar_points::{calculate_lunar_point, LunarPoint};
 use virgostars_ephemeris_core::true_ecliptic::{
@@ -66,6 +69,44 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => Err("scale must be ut1, tt, tai, or tdb".into()),
         }
     };
+    if args.len() == 13 && args[1] == "event" {
+        let target = BODIES
+            .into_iter()
+            .find(|body| format!("{body:?}") == arg(3).unwrap_or(""))
+            .ok_or("unsupported event target")?;
+        let kind = match arg(4)? {
+            "rise" => HorizonEventKind::Rise,
+            "set" => HorizonEventKind::Set,
+            "upper_transit" => HorizonEventKind::UpperTransit,
+            "lower_transit" => HorizonEventKind::LowerTransit,
+            _ => return Err("unsupported event kind".into()),
+        };
+        let input = HorizonEventSearch {
+            target,
+            kind,
+            start_ut1_jd: arg(5)?.parse()?,
+            start_tt_jd: arg(6)?.parse()?,
+            start_tdb: JulianDateTdb(arg(7)?.parse()?),
+            latitude_deg: arg(8)?.parse()?,
+            longitude_deg_east: arg(9)?.parse()?,
+            threshold_altitude_deg: arg(10)?.parse()?,
+            window_days: arg(11)?.parse()?,
+            step_minutes: arg(12)?.parse()?,
+        };
+        let mut eph = De441::open(&args[2])?;
+        let event = find_geometric_event(&mut eph, input).map_err(|error| error.to_string())?;
+        println!("event,target,ut1_jd,tt_jd,tdb_jd,bracket_seconds");
+        println!(
+            "{},{:?},{:.17},{:.17},{:.17},{:.12}",
+            arg(4)?,
+            event.target,
+            event.ut1_jd,
+            event.tt_jd,
+            event.tdb.0,
+            event.bracket_seconds
+        );
+        return Ok(());
+    }
     if args.len() == 8 && args[1] == "horizontal" {
         let output = true_equatorial_to_horizontal(
             arg(2)?.parse()?,
