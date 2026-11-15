@@ -20,7 +20,7 @@ SPDX-License-Identifier: CPAL-1.0
 use std::cell::Cell;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::rc::Rc;
-use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
 
 fn f64_field(bytes: &mut [u8], offset: usize, value: f64) {
     bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
@@ -39,9 +39,9 @@ fn fixture() -> Vec<u8> {
     f64_field(&mut bytes, 2668, 32.0);
     f64_field(&mut bytes, 2688, 81.0);
     i32_field(&mut bytes, 2840, 441);
-    // Mercury T0 only, and a final pointer that fixes record size.
-    for (index, first) in [(0, 3), (12, 373)] {
-        let offset = if index == 12 { 2844 } else { 2696 };
+    // Mercury and Venus T0, plus a final pointer that fixes record size.
+    for (index, first) in [(0, 3), (1, 6), (12, 373)] {
+        let offset = if index == 12 { 2844 } else { 2696 + index * 12 };
         i32_field(&mut bytes, offset, first);
         i32_field(&mut bytes, offset + 4, 1);
         i32_field(&mut bytes, offset + 8, 1);
@@ -51,6 +51,7 @@ fn fixture() -> Vec<u8> {
         f64_field(&mut bytes, offset, 1000.0 + record as f64 * 32.0);
         f64_field(&mut bytes, offset + 8, 1032.0 + record as f64 * 32.0);
         f64_field(&mut bytes, offset + 16, 100.0 + record as f64 * 100.0);
+        f64_field(&mut bytes, offset + 40, 300.0 + record as f64 * 100.0);
     }
     bytes
 }
@@ -124,4 +125,76 @@ fn repeated_queries_in_same_record_do_not_read_from_source_again() {
         .unwrap();
     assert_eq!(back.position_km[0], 100.0);
     assert_eq!(reads.get(), first_record_reads + 2);
+}
+
+#[test]
+fn batch_matches_scalar_calls_preserves_order_and_uses_one_record_read() {
+    let reads = Rc::new(Cell::new(0));
+    let source = MeasuredCursor {
+        inner: Cursor::new(fixture()),
+        reads: reads.clone(),
+    };
+    let mut eph = De441::new(source).unwrap();
+    let header_reads = reads.get();
+
+    let epoch = JulianDateTdb(1008.0);
+    let targets = [
+        Body::Mercury,
+        Body::Venus,
+        Body::Mercury,
+        Body::SolarSystemBarycenter,
+        Body::Venus,
+    ];
+    let batch = eph.states_at(&targets, Body::Venus, epoch).unwrap();
+    assert_eq!(batch.len(), targets.len());
+
+    for (&target, state) in targets.iter().zip(&batch) {
+        assert_eq!(state.target, target);
+        assert_eq!(state.center, Body::Venus);
+        assert_eq!(state.epoch, epoch);
+        assert_eq!(*state, eph.state(target, Body::Venus, epoch).unwrap());
+    }
+    assert_eq!(reads.get(), header_reads + 1);
+    assert_eq!(batch[0].position_km[0], -200.0);
+    assert_eq!(batch[1].position_km, [0.0; 3]);
+    assert_eq!(batch[3].position_km[0], -300.0);
+}
+
+#[test]
+fn empty_batch_validates_epoch_but_does_not_read_coefficients() {
+    let reads = Rc::new(Cell::new(0));
+    let source = MeasuredCursor {
+        inner: Cursor::new(fixture()),
+        reads: reads.clone(),
+    };
+    let mut eph = De441::new(source).unwrap();
+    let header_reads = reads.get();
+
+    assert!(eph
+        .states_at(&[], Body::Venus, JulianDateTdb(1000.0))
+        .unwrap()
+        .is_empty());
+    assert_eq!(reads.get(), header_reads);
+    assert!(matches!(
+        eph.states_at(&[], Body::Venus, JulianDateTdb(f64::NAN)),
+        Err(De441Error::OutsideCoverage { .. })
+    ));
+    assert_eq!(reads.get(), header_reads);
+}
+
+#[test]
+fn batch_returns_error_instead_of_partial_results_for_missing_series() {
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    let epoch = JulianDateTdb(1008.0);
+    assert!(matches!(
+        eph.states_at(&[Body::Mercury, Body::Sun], Body::Venus, epoch),
+        Err(De441Error::MissingSeries(_))
+    ));
+    // A failed batch does not invalidate the previously valid cached record.
+    let valid = eph
+        .states_at(&[Body::Venus, Body::Mercury], Body::Venus, epoch)
+        .unwrap();
+    assert_eq!(valid.len(), 2);
+    assert_eq!(valid[0].position_km, [0.0; 3]);
+    assert_eq!(valid[1].position_km[0], -200.0);
 }
