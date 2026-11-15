@@ -59,3 +59,13 @@ were approximately 16 s later for sunrise and 16 s earlier for sunset than
 Swiss 2.09.03 default solar events, using the same DE441. These two comparisons
 are not a general error bound; actual weather and obstructions can change
 observed events substantially.
+
+A further local diagnostic checked 40 solar events: rise and set on 2026
+January 15, April 15, July 15 and October 15 at (latitude, east longitude)
+(0, 0), (41.9028, 12.4964), (-33.8688, 151.2093), (51.5072, -0.1276),
+and (-45, 170). The search began at 00:00 UTC with UT1=UTC, TT=UTC+69.184 s,
+TDB=TT, a 2-day window and 10-minute cadence. Swiss used its default solar
+rise/set settings with the same DE441 and sea-level observer. All 40 events
+were found; the absolute differences ranged from approximately 9.9 to 22.2 s.
+This finite sample does not cover grazing events, polar latitudes or changing
+weather, and it does not establish an accuracy limit for other dates or sites.
