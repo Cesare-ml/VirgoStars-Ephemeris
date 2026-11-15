@@ -37,6 +37,7 @@ pub mod earth_orientation;
 pub mod equatorial_horizontal;
 pub mod error;
 pub mod first_sky;
+pub mod fixed_star;
 pub mod horizon_events;
 pub mod house_angles;
 pub mod light_time;
