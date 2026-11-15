@@ -44,7 +44,7 @@ test('checks source hashes, source row counts, HIP uniqueness and alias collisio
  const [h,s,opts]=input(row);
  assert.throws(()=>buildHipparcosCatalog(h,s,{...opts,hip2Sha256:'0'.repeat(64)}),/SHA-256 mismatch/);
  assert.throws(()=>buildHipparcosCatalog(h,s,{...opts,requireFullCatalog:true}),/Incomplete hip2.dat/);
- assert.throws(()=>buildHipparcosCatalog(...input(row+'\n'+row)),/Duplicate Hipparcos/);
+ assert.throws(()=>buildHipparcosCatalog(...input(row+'\n'+row)),/duplicate HIP/);
  const dup=`${header}\n123\tStar\tAlias\t1\t${urls}\n124\tOther\tAlias\t1\t${urls}\n`;
  assert.throws(()=>parseSupplementTsv(dup),/Duplicate star name/);
 });
