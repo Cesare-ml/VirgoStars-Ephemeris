@@ -26,8 +26,24 @@ test('lunar point support is opt-in and unsupported frames fail explicitly',()=>
   assert.throws(()=>createExperimentalLegacyBridge({...basic,lunarPointPolicy:'AUTO'}),/policy/);
   const on=createExperimentalLegacyBridge({...basic,lunarPointPolicy:'EXPERIMENTAL_GEOCENTRIC'});
   assert.equal(on.swe_get_planet_name(on.SE_MEAN_NODE).name,'mean Node');
-  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_MEAN_NODE,on.SEFLG_SWIEPH|on.SEFLG_HELCTR),/geocentric/);
-  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_TRUE_NODE,on.SEFLG_SWIEPH|on.SEFLG_EQUATORIAL),/geocentric/);
+  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_MEAN_NODE,on.SEFLG_SWIEPH|on.SEFLG_HELCTR),/sentinel/);
+  assert.throws(()=>on.swe_calc_ut(2451545,on.SE_TRUE_NODE,on.SEFLG_SWIEPH|on.SEFLG_EQUATORIAL),/equatorial/);
+});
+
+test('opt-in lunar heliocentric zero sentinel is identified and preserves flag provenance',()=>{
+  assert.throws(()=>createExperimentalLegacyBridge({...basic,lunarHeliocentricPolicy:'ZERO_SENTINEL'}),/requires/);
+  const api=createExperimentalLegacyBridge({...basic,lunarPointPolicy:'EXPERIMENTAL_GEOCENTRIC',lunarHeliocentricPolicy:'ZERO_SENTINEL'});
+  for(const id of [api.SE_MEAN_NODE,api.SE_TRUE_NODE,api.SE_MEAN_APOG,api.SE_OSCU_APOG]){
+    let callback;
+    const value=api.swe_calc_ut(2451545,id,api.SEFLG_SWIEPH|api.SEFLG_HELCTR|api.SEFLG_SPEED,v=>{callback=v;});
+    assert.equal(value,callback);
+    for(const field of ['longitude','latitude','distance','longitudeSpeed','latitudeSpeed','distanceSpeed'])assert.equal(value[field],0);
+    assert.equal(value.model,'EXPERIMENTAL_LUNAR_HELIOCENTRIC_ZERO_SENTINEL');
+    assert.ok(value.warnings.includes('HELIOCENTRIC_ZERO_SENTINEL_NO_PHYSICAL_POSITION'));
+    assert.ok(value.warnings.includes('LEGACY_SWIEPH_REQUEST_REPLACED_BY_JPL'));
+    assert.ok(value.warnings.includes('RFLAG_OMITS_SWISS_IMPLICIT_FLAGS'));
+    assert.equal(value.rflag,api.SEFLG_JPLEPH|api.SEFLG_HELCTR|api.SEFLG_SPEED);
+  }
 });
 
 test('explicit epochs expose four existing geocentric lunar models with labelled rates',{
