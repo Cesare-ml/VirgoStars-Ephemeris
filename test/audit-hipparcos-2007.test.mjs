@@ -60,6 +60,6 @@ test('optional manual audit against authentic external I/311 hip2.dat', {
  const targets=readFileSync(new URL('../docs/data/fixed-stars-target-crossmatches.json',import.meta.url));
  const report=auditHipparcosTargets(source,targets,{hip2Sha256:realDigest});
  assert.equal(report.source.rawRows,117955);
- assert.equal(report.stars.length,30);
+ assert.equal(report.stars.length,59);
  assert.ok(report.stars.every(s=>s.status!=='HIP_NOT_FOUND'));
 });
