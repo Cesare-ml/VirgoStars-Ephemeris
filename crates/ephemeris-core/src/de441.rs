@@ -79,7 +79,10 @@ pub enum De441Error {
         end: JulianDateTdb,
     },
     MissingSeries(&'static str),
-    BatchOutputTooLarge { requested_states: usize, max_states: usize },
+    BatchOutputTooLarge {
+        requested_states: usize,
+        max_states: usize,
+    },
 }
 
 impl fmt::Display for De441Error {
