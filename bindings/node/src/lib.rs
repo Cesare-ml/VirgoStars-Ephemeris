@@ -35,7 +35,7 @@ use napi_derive::napi;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
     applied_corrections, geocentric_apparent_six_fields_many_with_options, tdb_to_tt_jd,
-    ApparentOptions,
+    ApparentCenter, ApparentFrame, ApparentOptions,
 };
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{
@@ -59,9 +59,15 @@ use virgostars_ephemeris_core::house_angles::house_angles;
 /// constants of the C API: `SEFLG_JPLEPH = 1`, `SEFLG_SPEED = 256`,
 /// `SEFLG_NOGDEFL = 512`). Anything else is rejected, never ignored.
 const FLAG_JPLEPH: i32 = 1;
+const FLAG_HELCTR: i32 = 8;
 const FLAG_SPEED: i32 = 256;
 const FLAG_NOGDEFL: i32 = 512;
-const SUPPORTED_FLAGS: i32 = FLAG_JPLEPH | FLAG_SPEED | FLAG_NOGDEFL;
+const FLAG_NOABERR: i32 = 1024;
+const FLAG_EQUATORIAL: i32 = 2048;
+const SUPPORTED_FLAGS: i32 =
+    FLAG_JPLEPH | FLAG_HELCTR | FLAG_SPEED | FLAG_NOGDEFL | FLAG_EQUATORIAL;
+/// Swiss body number of the Earth; computable only as a heliocentric target.
+const BODY_EARTH: i32 = 14;
 
 fn fail(code: &str, detail: impl std::fmt::Display) -> Error {
     Error::new(Status::GenericFailure, format!("{code}: {detail}"))
@@ -104,6 +110,7 @@ fn body_from_ipl(ipl: i32) -> Result<Body> {
         7 => Body::UranusBarycenter,
         8 => Body::NeptuneBarycenter,
         9 => Body::PlutoBarycenter,
+        BODY_EARTH => Body::Earth,
         other => {
             return Err(fail(
                 "E_UNSUPPORTED_BODY",
@@ -118,7 +125,7 @@ fn check_flags(flags: i32) -> Result<()> {
         return Err(fail(
             "E_UNSUPPORTED_FLAG",
             format!(
-                "flags {:#x} contain unsupported bits; supported: SEFLG_JPLEPH(1), SEFLG_SPEED(256), SEFLG_NOGDEFL(512)",
+                "flags {:#x} contain unsupported bits; supported: SEFLG_JPLEPH(1), SEFLG_HELCTR(8), SEFLG_SPEED(256), SEFLG_NOGDEFL(512), SEFLG_EQUATORIAL(2048)",
                 flags & !SUPPORTED_FLAGS
             ),
         ));
@@ -129,7 +136,28 @@ fn check_flags(flags: i32) -> Result<()> {
 fn options(flags: i32) -> ApparentOptions {
     ApparentOptions {
         solar_light_deflection: flags & FLAG_NOGDEFL == 0,
+        frame: if flags & FLAG_EQUATORIAL != 0 {
+            ApparentFrame::TrueEquatorOfDate
+        } else {
+            ApparentFrame::TrueEclipticOfDate
+        },
+        center: if flags & FLAG_HELCTR != 0 {
+            ApparentCenter::Heliocentric
+        } else {
+            ApparentCenter::Geocentric
+        },
     }
+}
+
+/// Flags reported back: those used, plus the two the heliocentric mode implies
+/// (no deflection, no aberration), exactly as the reference binding reports them.
+fn reported_flags(flags: i32) -> i32 {
+    let mut used =
+        (flags & (FLAG_SPEED | FLAG_NOGDEFL | FLAG_HELCTR | FLAG_EQUATORIAL)) | FLAG_JPLEPH;
+    if flags & FLAG_HELCTR != 0 {
+        used |= FLAG_NOGDEFL | FLAG_NOABERR;
+    }
+    used
 }
 
 fn source_label(source: &CivilTimeSource) -> String {
@@ -334,35 +362,46 @@ impl Engine {
     ) -> Result<CalcResult> {
         check_flags(flags)?;
         let body = body_from_ipl(ipl)?;
+        let helio = flags & FLAG_HELCTR != 0;
+        if ipl == BODY_EARTH && !helio {
+            return Err(fail(
+                "E_UNSUPPORTED_BODY",
+                "the Earth has no geocentric position; use SEFLG_HELCTR",
+            ));
+        }
         let opts = options(flags);
-        let rows = geocentric_apparent_six_fields_many_with_options(
-            &mut self.ephemeris,
-            &[body],
-            jd_tdb,
-            opts,
-        )
-        .map_err(|e| fail("E_CALC", e))?;
-        let f = rows[0].fields;
         let mut notes: Vec<String> = applied_corrections(opts)
             .into_iter()
             .map(str::to_string)
             .collect();
-        if ipl >= 4 {
+        if (4..=9).contains(&ipl) {
             notes.push("target is the planetary SYSTEM BARYCENTER, not the planet center".into());
         }
+        let six = if helio && ipl == 0 {
+            // The Sun seen from the Sun: all zeros, as the reference binding returns.
+            notes.push("the Sun seen from the Sun is the zero vector".into());
+            [0.0; 6]
+        } else {
+            let rows = geocentric_apparent_six_fields_many_with_options(
+                &mut self.ephemeris,
+                &[body],
+                jd_tdb,
+                opts,
+            )
+            .map_err(|e| fail("E_CALC", e))?;
+            let f = rows[0].fields;
+            [
+                f.longitude_deg,
+                f.latitude_deg,
+                f.distance_au,
+                f.longitude_speed_deg_per_tdb_day,
+                f.latitude_speed_deg_per_tdb_day,
+                f.distance_speed_au_per_tdb_day,
+            ]
+        };
         Ok(CalcResult {
-            xx: zero_speeds_unless_requested(
-                [
-                    f.longitude_deg,
-                    f.latitude_deg,
-                    f.distance_au,
-                    f.longitude_speed_deg_per_tdb_day,
-                    f.latitude_speed_deg_per_tdb_day,
-                    f.distance_speed_au_per_tdb_day,
-                ],
-                flags,
-            ),
-            rflag: (flags & (FLAG_SPEED | FLAG_NOGDEFL)) | FLAG_JPLEPH,
+            xx: zero_speeds_unless_requested(six, flags),
+            rflag: reported_flags(flags),
             time_source,
             notes,
         })
@@ -467,6 +506,12 @@ impl Engine {
         flags: i32,
     ) -> Result<CalcResult> {
         check_flags(flags)?;
+        if flags & (FLAG_HELCTR | FLAG_EQUATORIAL) != 0 {
+            return Err(fail(
+                "E_UNSUPPORTED_FLAG",
+                "fixed stars support neither SEFLG_HELCTR nor SEFLG_EQUATORIAL yet",
+            ));
+        }
         let record = self
             .stars
             .get(&hip)

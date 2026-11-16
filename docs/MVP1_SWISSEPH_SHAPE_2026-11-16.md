@@ -35,10 +35,15 @@ skipped with no data at all.
 
 - **`SEFLG_SWIEPH`.** The backend passes it. The facade rejects it unless created
   with `{ acceptSwiephFlag: true }`; the result never claims Swiss data files.
-- **Flags and bodies not yet computed** (MVP 2): `SEFLG_HELCTR`, `SEFLG_EQUATORIAL`
-  (the real package returns `rectAscension`, `declination`, `rectAscensionSpeed`,
-  `declinationSpeed` for it), `SEFLG_MOSEPH`, Chiron and every body above Pluto,
-  nodes and apogees. They return an `{ error }` object.
+- **Heliocentric and equatorial output** (`SEFLG_HELCTR`, `SEFLG_EQUATORIAL`) now exist
+  and return the reference's keys (`rectAscension, declination, rectAscensionSpeed,
+  declinationSpeed` for equatorial) and `rflag` values; see
+  [MVP1_HELIOCENTRIC_EQUATORIAL_2026-11-16.md](MVP1_HELIOCENTRIC_EQUATORIAL_2026-11-16.md),
+  including the up-to-0.9″ inner-planet difference in heliocentric light-time.
+- **Flags and bodies not yet computed** (MVP 2): `SEFLG_MOSEPH`, `SEFLG_NOABERR`,
+  `SEFLG_TRUEPOS`, `SEFLG_J2000`, `SEFLG_NONUT`, `SEFLG_BARYCTR`, `SEFLG_TOPOCTR`,
+  sidereal modes, Chiron and every body above Pluto, nodes and apogees. They return
+  an `{ error }` object.
 - **Moshier fallback.** With a missing flag or missing data files the real package
   silently falls back to its built-in Moshier ephemeris (`rflag 4`) or reports a
   missing `.se1` file. The facade never falls back: out-of-range epochs and

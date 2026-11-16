@@ -120,6 +120,7 @@ fn real_de441_deflection_is_bounded_and_sun_is_unchanged() {
     ];
     let off = ApparentOptions {
         solar_light_deflection: false,
+        ..ApparentOptions::default()
     };
     let mut jd = 2_415_100.5;
     while jd < 2_488_000.0 {

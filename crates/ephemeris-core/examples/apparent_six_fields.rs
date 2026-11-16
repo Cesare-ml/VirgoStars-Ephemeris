@@ -14,7 +14,8 @@
 
 //! Offline CLI: classic DE441 → apparent geocentric ecliptic of date.
 //!
-//! Usage: `apparent_six_fields [--no-solar-deflection] <de441.eph> <TDB-JD> [Body ...]`
+//! Usage: `apparent_six_fields [--no-solar-deflection] [--heliocentric] [--equatorial]
+//! <de441.eph> <TDB-JD> [Body ...]` (Earth is a valid body with `--heliocentric`)
 //!
 //! The DE441 file is supplied by the caller and never copied or downloaded.
 //! Output is CSV on stdout with explicit frame/correction provenance, in
@@ -25,11 +26,11 @@ use std::error::Error;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
     applied_corrections, geocentric_apparent_six_fields_many_with_options, not_applied_corrections,
-    ApparentOptions,
+    ApparentCenter, ApparentFrame, ApparentOptions,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 
-const DEFAULT_TARGETS: [(&str, Body); 10] = [
+const DEFAULT_TARGETS: [(&str, Body); 11] = [
     ("Sun", Body::Sun),
     ("Moon", Body::Moon),
     ("Mercury", Body::Mercury),
@@ -40,11 +41,20 @@ const DEFAULT_TARGETS: [(&str, Body); 10] = [
     ("UranusBarycenter", Body::UranusBarycenter),
     ("NeptuneBarycenter", Body::NeptuneBarycenter),
     ("PlutoBarycenter", Body::PlutoBarycenter),
+    ("Earth", Body::Earth),
 ];
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = env::args().collect();
     let mut options = ApparentOptions::default();
+    if let Some(pos) = args.iter().position(|a| a == "--heliocentric") {
+        args.remove(pos);
+        options.center = ApparentCenter::Heliocentric;
+    }
+    if let Some(pos) = args.iter().position(|a| a == "--equatorial") {
+        args.remove(pos);
+        options.frame = ApparentFrame::TrueEquatorOfDate;
+    }
     if let Some(pos) = args.iter().position(|a| a == "--no-solar-deflection") {
         args.remove(pos);
         options.solar_light_deflection = false;
@@ -68,7 +78,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             })
             .collect::<Result<_, _>>()?
     } else {
-        DEFAULT_TARGETS.to_vec()
+        DEFAULT_TARGETS
+            .iter()
+            .copied()
+            .filter(|(_, b)| *b != Body::Earth)
+            .collect()
     };
     let bodies: Vec<Body> = selected.iter().map(|(_, b)| *b).collect();
     let mut ephemeris = De441::open(&args[1])?;
@@ -79,9 +93,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         options,
     )?;
     println!("target,tdb_jd,tt_jd,longitude_deg,latitude_deg,distance_au,longitude_speed_deg_per_tdb_day,latitude_speed_deg_per_tdb_day,distance_speed_au_per_tdb_day,frame,applied,not_applied");
+    let frame_label = format!(
+        "{}-{}",
+        match options.frame {
+            ApparentFrame::TrueEclipticOfDate => "true-ecliptic-and-equinox-of-date",
+            ApparentFrame::TrueEquatorOfDate => "true-equator-and-equinox-of-date",
+        },
+        match options.center {
+            ApparentCenter::Geocentric => "geocentric",
+            ApparentCenter::Heliocentric => "heliocentric",
+        }
+    );
     for ((name, _), row) in selected.iter().zip(rows.iter()) {
         println!(
-            "{name},{jd:.9},{:.9},{:.12},{:.12},{:.15},{:.12},{:.12},{:.15},true-ecliptic-and-equinox-of-date-geocentric,{},{}",
+            "{name},{jd:.9},{:.9},{:.12},{:.12},{:.15},{:.12},{:.12},{:.15},{frame_label},{},{}",
             row.tt_jd,
             row.fields.longitude_deg,
             row.fields.latitude_deg,

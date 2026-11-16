@@ -104,6 +104,23 @@ pub fn geocentric_light_time<R: Read + Seek>(
     })
 }
 
+/// One-way reception correction for a target observed from the **Sun's center**
+/// (heliocentric): the photon leaves the target at the iterated emission epoch and
+/// arrives at the Sun at the observation epoch. The returned vector is
+/// `target(emission) − Sun(observation)` in ICRF axes and its velocity is the
+/// derivative with respect to the observation epoch (including the light-time
+/// rate), exactly as for [`geocentric_light_time`]. The Sun itself is rejected as
+/// a target (no direction exists); Earth is a valid target.
+pub fn heliocentric_light_time<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+) -> Result<GeocentricLightTimeState, LightTimeError> {
+    solve_from(Body::Sun, target, observation_epoch, |body, epoch| {
+        ephemeris.state(body, Body::SolarSystemBarycenter, epoch)
+    })
+}
+
 // Every input to the light-time solver must be a geometric state relative
 // to the solar-system barycenter at the exact requested TDB epoch. Checking
 // these tags prevents silently subtracting vectors for different origins or
@@ -130,20 +147,32 @@ fn checked_barycentric_state(
 fn solve<F>(
     target: Body,
     observation_epoch: JulianDateTdb,
+    barycentric_state: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from(Body::Earth, target, observation_epoch, barycentric_state)
+}
+
+fn solve_from<F>(
+    observer_body: Body,
+    target: Body,
+    observation_epoch: JulianDateTdb,
     mut barycentric_state: F,
 ) -> Result<GeocentricLightTimeState, LightTimeError>
 where
     F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
 {
-    if target == Body::Earth {
+    if target == observer_body {
         return Err(LightTimeError::UndefinedDirection);
     }
     if !observation_epoch.0.is_finite() {
         return Err(LightTimeError::InvalidGeometry);
     }
     let observer = checked_barycentric_state(
-        barycentric_state(Body::Earth, observation_epoch)?,
-        Body::Earth,
+        barycentric_state(observer_body, observation_epoch)?,
+        observer_body,
         observation_epoch,
     )?;
     let mut emission = observation_epoch;

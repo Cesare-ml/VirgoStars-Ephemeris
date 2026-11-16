@@ -25,7 +25,8 @@ test('J2000 Sun and Moon are plausible, with speeds only when requested', opts, 
 
 test('unsupported flags and bodies are explicit errors, not approximations', opts, () => {
   const e = new Engine(path);
-  for (const flags of [constants.SEFLG_SWIEPH, constants.SEFLG_MOSEPH, 8, 2048]) {
+  // 16 TRUEPOS, 32 J2000, 64 NONUT, 1024 NOABERR alone, 16384 BARYCTR, 32768 TOPOCTR, 65536 SIDEREAL
+  for (const flags of [constants.SEFLG_SWIEPH, constants.SEFLG_MOSEPH, 16, 32, 64, 1024, 16384, 32768, 65536]) {
     assert.throws(() => e.calcTdb(2451545.0, 0, flags), (x) => x.code === 'E_UNSUPPORTED_FLAG', String(flags));
   }
   for (const ipl of [-1, 10, 12, 15, 99]) {
@@ -85,7 +86,7 @@ test('facade: Swiss-shaped result keys, SWIEPH policy, error objects and callbac
   // Unsupported things return error objects (do not throw), like the Swiss binding.
   assert.deepEqual(Object.keys(swe.swe_calc_ut(2451545.0, 15, swe.SEFLG_SPEED)), ['error']);
   assert.equal(swe.swe_calc_ut(2451545.0, 15, swe.SEFLG_SPEED).code, 'E_UNSUPPORTED_BODY');
-  assert.ok(swe.swe_calc_ut(2451545.0, 0, 8).error);
+  assert.ok(swe.swe_calc_ut(2451545.0, 0, 16).error, 'TRUEPOS is not offered');
 
   let received;
   const returned = swe.swe_calc_ut(2451545.0, swe.SE_SUN, swe.SEFLG_SPEED, (value) => {
@@ -104,4 +105,25 @@ test('facade: a planetary chart for a fictional instant has ten finite bodies', 
     assert.ok(!p.error, p.error);
     assert.ok(p.longitude >= 0 && p.longitude < 360 && Number.isFinite(p.longitudeSpeed), String(ipl));
   }
+});
+
+test('equatorial and heliocentric requests: keys, rflag bits, the Sun-from-the-Sun zero vector, Earth only heliocentric', opts, () => {
+  const swe = createSwissShapedFacade(new Engine(path), { acceptSwiephFlag: true });
+  const equ = swe.swe_calc(2451545.0, swe.SE_MARS, SPEED | constants.SEFLG_EQUATORIAL);
+  assert.deepEqual(Object.keys(equ), ['rectAscension', 'declination', 'distance', 'rectAscensionSpeed', 'declinationSpeed', 'distanceSpeed', 'rflag']);
+  assert.ok(Math.abs(equ.rectAscension - 330.516) < 0.001 && Math.abs(equ.declination + 13.1827) < 0.001);
+  assert.equal(equ.rflag, 1 | 256 | 2048);
+  const helio = swe.swe_calc(2451545.0, swe.SE_MARS, SPEED | constants.SEFLG_HELCTR);
+  assert.deepEqual(Object.keys(helio), ['longitude', 'latitude', 'distance', 'longitudeSpeed', 'latitudeSpeed', 'distanceSpeed', 'rflag']);
+  assert.equal(helio.rflag, 1 | 8 | 256 | 512 | 1024, 'heliocentric implies no deflection and no aberration');
+  assert.ok(Math.abs(helio.distance - 1.3912) < 0.001);
+  const sun = swe.swe_calc(2451545.0, swe.SE_SUN, SPEED | constants.SEFLG_HELCTR);
+  assert.deepEqual([sun.longitude, sun.latitude, sun.distance, sun.longitudeSpeed], [0, 0, 0, 0]);
+  const earth = swe.swe_calc(2451545.0, constants.SE_EARTH, SPEED | constants.SEFLG_HELCTR);
+  assert.ok(Math.abs(earth.longitude - 100.368) < 0.001 && Math.abs(earth.distance - 0.98333) < 0.0001);
+  assert.equal(swe.swe_calc(2451545.0, constants.SE_EARTH, SPEED).code, 'E_UNSUPPORTED_BODY', 'no geocentric Earth');
+  const both = swe.swe_calc(2451545.0, swe.SE_MARS, SPEED | constants.SEFLG_HELCTR | constants.SEFLG_EQUATORIAL);
+  assert.ok(Math.abs(both.rectAscension - 0.0496) < 0.001 && Math.abs(both.declination + 1.526) < 0.001);
+  // Fixed stars do not offer these modes yet and say so.
+  assert.equal(typeof swe.swe_get_planet_name(14).name, 'string');
 });

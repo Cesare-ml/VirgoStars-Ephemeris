@@ -137,3 +137,33 @@ test('the constants the backend reads have the same values', opts, () => {
     assert.equal(ours[name], swiss[name], name);
   }
 });
+
+test('equatorial output: same keys, same rflag, positions within the common floor', opts, () => {
+  setup();
+  const jd = 2451545.0 + 12345.678;
+  for (let ipl = 0; ipl <= 9; ipl += 1) {
+    const flags = SPEED_JPL | 2048;
+    const a = swiss.swe_calc(jd, ipl, flags);
+    const b = ours.swe_calc(jd, ipl, flags);
+    assert.deepEqual(Object.keys(b), Object.keys(a), `keys of body ${ipl}`);
+    assert.equal(b.rflag, a.rflag, `rflag of body ${ipl}`);
+    assert.ok(Math.abs(wrap(b.rectAscension - a.rectAscension)) * 3600 < 0.01, `RA body ${ipl}`);
+    assert.ok(Math.abs(b.declination - a.declination) * 3600 < 0.01, `Dec body ${ipl}`);
+  }
+});
+
+test('heliocentric output: same keys and rflag; Moon, Earth and the outer planets agree closely', opts, () => {
+  setup();
+  const jd = 2451545.0 + 12345.678;
+  const sunA = swiss.swe_calc(jd, 0, SPEED_JPL | 8);
+  const sunB = ours.swe_calc(jd, 0, SPEED_JPL | 8);
+  assert.deepEqual(sunB, sunA, 'the Sun seen from the Sun is the same zero result');
+  for (const [ipl, toleranceArcsec] of [[1, 0.01], [14, 0.01], [5, 0.05], [6, 0.05], [7, 0.05], [8, 0.05], [9, 0.05]]) {
+    const a = swiss.swe_calc(jd, ipl, SPEED_JPL | 8);
+    const b = ours.swe_calc(jd, ipl, SPEED_JPL | 8);
+    assert.deepEqual(Object.keys(b), Object.keys(a), `keys of body ${ipl}`);
+    assert.equal(b.rflag, a.rflag, `rflag of body ${ipl}`);
+    assert.ok(Math.abs(wrap(b.longitude - a.longitude)) * 3600 < toleranceArcsec, `longitude body ${ipl}`);
+    assert.ok(Math.abs(b.latitude - a.latitude) * 3600 < toleranceArcsec, `latitude body ${ipl}`);
+  }
+});

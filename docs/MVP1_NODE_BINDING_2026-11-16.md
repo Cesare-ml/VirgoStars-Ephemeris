@@ -41,9 +41,9 @@ assumption. Errors are `Error`s with a stable `code`: `E_RANGE`,
 `E_UNSUPPORTED_FLAG`, `E_UNSUPPORTED_BODY`, `E_EPHEMERIS_FILE`, `E_CALC`,
 `E_CATALOG_FILE`, `E_STAR_QUALITY`, `E_STAR_NOT_LOADED`, `E_NATIVE_MISSING`.
 
-Supported flags: `SEFLG_JPLEPH` (1), `SEFLG_SPEED` (256), `SEFLG_NOGDEFL` (512).
-Anything else (including `SEFLG_MOSEPH`, `HELCTR`, `EQUATORIAL`, `TOPOCTR`,
-sidereal) is rejected. Supported bodies: 0–9 (Sun…Pluto; Mars–Pluto are DE441
+Supported flags: `SEFLG_JPLEPH` (1), `SEFLG_HELCTR` (8), `SEFLG_SPEED` (256),
+`SEFLG_NOGDEFL` (512), `SEFLG_EQUATORIAL` (2048). Anything else (including
+`SEFLG_MOSEPH`, `TOPOCTR`, sidereal) is rejected. Supported bodies: 0–9 (Sun…Pluto, and the Earth, 14, with `SEFLG_HELCTR` only; Mars–Pluto are DE441
 **system barycenters**, as in Swiss JPL mode, and `notes` says so). Nodes, apogees,
 Chiron, `SE_ECL_NUT`, houses, azimuth/altitude and rise/set are MVP 2 or other
 repositories and return `E_UNSUPPORTED_BODY`/`E_UNSUPPORTED_FLAG`.

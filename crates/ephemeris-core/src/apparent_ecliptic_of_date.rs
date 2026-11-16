@@ -67,11 +67,11 @@ use crate::aberration_state::{
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
 use crate::de441::{Body, De441, JulianDateTdb, StateVector, StateVectorWithAcceleration};
 use crate::earth_orientation::{
-    matrix_vector_multiply, true_ecliptic_of_date_matrix, Matrix3x3, OrientationError,
-    DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
+    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, Matrix3x3,
+    OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
 };
 use crate::light_deflection::{deflect_light_time_state_by_sun, DeflectionError};
-use crate::light_time::geocentric_light_time;
+use crate::light_time::{geocentric_light_time, heliocentric_light_time};
 use crate::six_field_units::{
     fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
 };
@@ -79,47 +79,81 @@ use crate::six_field_units::{
 /// Half-step, in TT days, of the central difference used for `dM/dt`.
 pub const MATRIX_RATE_HALF_STEP_DAYS: f64 = 0.01;
 
-/// Which optional corrections to apply. The default is the physically
-/// complete set this module offers (solar deflection on).
+/// Reference frame of the output coordinates (both are of date, true).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApparentFrame {
+    /// True ecliptic and equinox of date: longitude, latitude.
+    TrueEclipticOfDate,
+    /// True equator and equinox of date: right ascension, declination.
+    TrueEquatorOfDate,
+}
+
+/// Where the observer is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApparentCenter {
+    /// Earth's center: light-time, aberration, optional solar deflection.
+    Geocentric,
+    /// The Sun's center: light-time only (a photon arriving at the Sun has no
+    /// annual aberration and is not deflected by the Sun it is falling into).
+    Heliocentric,
+}
+
+/// Which optional corrections to apply and which frame/center to use. The default
+/// is the physically complete geocentric ecliptic set (solar deflection on).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ApparentOptions {
-    /// Apply first-order solar light deflection before aberration.
+    /// Apply first-order solar light deflection before aberration (geocentric only).
     pub solar_light_deflection: bool,
+    pub frame: ApparentFrame,
+    pub center: ApparentCenter,
 }
 
 impl Default for ApparentOptions {
     fn default() -> Self {
         Self {
             solar_light_deflection: true,
+            frame: ApparentFrame::TrueEclipticOfDate,
+            center: ApparentCenter::Geocentric,
         }
     }
 }
 
 /// Corrections applied for `options`, in order.
 pub fn applied_corrections(options: ApparentOptions) -> Vec<&'static str> {
-    let mut list = vec!["one-way geocentric light-time"];
-    if options.solar_light_deflection {
-        list.push("solar gravitational light deflection (first order, Sun only)");
+    let mut list = vec![match options.center {
+        ApparentCenter::Geocentric => "one-way geocentric light-time",
+        ApparentCenter::Heliocentric => "one-way heliocentric light-time",
+    }];
+    if options.center == ApparentCenter::Geocentric {
+        if options.solar_light_deflection {
+            list.push("solar gravitational light deflection (first order, Sun only)");
+        }
+        list.push("annual aberration (special-relativistic)");
     }
-    list.extend([
-        "annual aberration (special-relativistic)",
-        "IAU 2006 frame bias and precession",
-        "IAU 2000B nutation and true obliquity",
-    ]);
+    list.push("IAU 2006 frame bias and precession");
+    list.push("IAU 2000B nutation");
+    list.push(match options.frame {
+        ApparentFrame::TrueEclipticOfDate => "true obliquity (rotation to the ecliptic of date)",
+        ApparentFrame::TrueEquatorOfDate => "true equator of date (no ecliptic rotation)",
+    });
     list
 }
 
 /// Corrections that are **not** applied for `options`.
 pub fn not_applied_corrections(options: ApparentOptions) -> Vec<&'static str> {
     let mut list = Vec::new();
-    if !options.solar_light_deflection {
-        list.push("solar gravitational light deflection");
+    if options.center == ApparentCenter::Geocentric {
+        if !options.solar_light_deflection {
+            list.push("solar gravitational light deflection");
+        }
+        list.push("planetary gravitational light deflection");
+        list.push("topocentric parallax and diurnal aberration");
+    } else {
+        list.push(
+            "annual aberration and solar deflection (not defined for a Sun-centered observer)",
+        );
     }
-    list.extend([
-        "planetary gravitational light deflection",
-        "topocentric parallax and diurnal aberration",
-        "planetary-system barycenter to body-center offset",
-    ]);
+    list.push("planetary-system barycenter to body-center offset");
     list
 }
 
@@ -129,6 +163,7 @@ pub fn not_applied_corrections(options: ApparentOptions) -> Vec<&'static str> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ApparentEclipticOfDate {
     pub spherical: SphericalState,
+    pub frame: ApparentFrame,
     pub tt_jd: f64,
     pub solar_deflection_applied: bool,
     pub emission_epoch: JulianDateTdb,
@@ -141,6 +176,7 @@ pub struct ApparentEclipticOfDate {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ApparentSixFieldsDegreesAu {
     pub fields: FixedSixFieldsDegreesAu,
+    pub frame: ApparentFrame,
     pub tt_jd: f64,
     pub solar_deflection_applied: bool,
     pub emission_epoch: JulianDateTdb,
@@ -240,12 +276,42 @@ pub fn ecliptic_of_date_rotation_with_rate(
     Ok((m, dm))
 }
 
-/// Rotate an already aberrated ICRF state into the true ecliptic of date.
-pub fn apparent_ecliptic_of_date_from_aberrated_state(
-    state: &AberratedGeocentricState,
+/// Rotation ICRF → true equator and equinox of date and its derivative per TT day.
+pub fn equator_of_date_rotation_with_rate(
+    tt_jd: f64,
+) -> Result<(Matrix3x3, Matrix3x3), OrientationError> {
+    let h = MATRIX_RATE_HALF_STEP_DAYS;
+    let m = true_equator_of_date_matrix(tt_jd)?;
+    let plus = true_equator_of_date_matrix(tt_jd + h)?;
+    let minus = true_equator_of_date_matrix(tt_jd - h)?;
+    let mut dm = [[0.0; 3]; 3];
+    for (i, row) in dm.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            *cell = (plus[i][j] - minus[i][j]) / (2.0 * h);
+        }
+    }
+    Ok((m, dm))
+}
+
+/// Everything a finished ICRF state needs to become a spherical result.
+struct IcrfState {
+    target: Body,
+    center: Body,
+    observation_epoch: JulianDateTdb,
+    emission_epoch: JulianDateTdb,
+    light_time_seconds: f64,
+    light_time_rate: f64,
+    source: ObserverAccelerationSource,
+    position_km: [f64; 3],
+    velocity_km_per_tdb_day: [f64; 3],
+}
+
+fn finish(
+    state: &IcrfState,
+    frame: ApparentFrame,
     solar_deflection_applied: bool,
 ) -> Result<ApparentEclipticOfDate, ApparentError> {
-    if state.target == Body::Earth
+    if state.target == state.center
         || !state.observation_epoch.0.is_finite()
         || !state.emission_epoch.0.is_finite()
         || state.emission_epoch.0 > state.observation_epoch.0
@@ -256,7 +322,10 @@ pub fn apparent_ecliptic_of_date_from_aberrated_state(
         return Err(ApparentError::InvalidIntermediate);
     }
     let tt_jd = tdb_to_tt_jd(state.observation_epoch.0)?;
-    let (m, dm) = ecliptic_of_date_rotation_with_rate(tt_jd)?;
+    let (m, dm) = match frame {
+        ApparentFrame::TrueEclipticOfDate => ecliptic_of_date_rotation_with_rate(tt_jd)?,
+        ApparentFrame::TrueEquatorOfDate => equator_of_date_rotation_with_rate(tt_jd)?,
+    };
     let position = matrix_vector_multiply(m, state.position_km);
     let rotated_velocity = matrix_vector_multiply(m, state.velocity_km_per_tdb_day);
     let frame_velocity = matrix_vector_multiply(dm, state.position_km);
@@ -268,7 +337,7 @@ pub fn apparent_ecliptic_of_date_from_aberrated_state(
     ];
     let cartesian = StateVector {
         target: state.target,
-        center: Body::Earth,
+        center: state.center,
         epoch: state.observation_epoch,
         position_km: position,
         velocity_km_per_day: velocity,
@@ -276,13 +345,49 @@ pub fn apparent_ecliptic_of_date_from_aberrated_state(
     let spherical = project_fixed_axes(&cartesian, 0.0)?;
     Ok(ApparentEclipticOfDate {
         spherical,
+        frame,
         tt_jd,
         solar_deflection_applied,
         emission_epoch: state.emission_epoch,
         light_time_seconds: state.light_time_seconds,
         light_time_rate: state.light_time_rate,
-        observer_acceleration_source: state.observer_acceleration_source,
+        observer_acceleration_source: state.source,
     })
+}
+
+/// Rotate an already aberrated ICRF state into the true ecliptic of date.
+pub fn apparent_ecliptic_of_date_from_aberrated_state(
+    state: &AberratedGeocentricState,
+    solar_deflection_applied: bool,
+) -> Result<ApparentEclipticOfDate, ApparentError> {
+    apparent_from_aberrated_state_in_frame(
+        state,
+        ApparentFrame::TrueEclipticOfDate,
+        solar_deflection_applied,
+    )
+}
+
+/// As above, in either true frame of date.
+pub fn apparent_from_aberrated_state_in_frame(
+    state: &AberratedGeocentricState,
+    frame: ApparentFrame,
+    solar_deflection_applied: bool,
+) -> Result<ApparentEclipticOfDate, ApparentError> {
+    finish(
+        &IcrfState {
+            target: state.target,
+            center: Body::Earth,
+            observation_epoch: state.observation_epoch,
+            emission_epoch: state.emission_epoch,
+            light_time_seconds: state.light_time_seconds,
+            light_time_rate: state.light_time_rate,
+            source: state.observer_acceleration_source,
+            position_km: state.position_km,
+            velocity_km_per_tdb_day: state.velocity_km_per_tdb_day,
+        },
+        frame,
+        solar_deflection_applied,
+    )
 }
 
 /// Convert to degrees / AU / per-TDB-day units; no further astronomy.
@@ -291,6 +396,7 @@ pub fn apparent_to_degrees_au(
 ) -> Result<ApparentSixFieldsDegreesAu, ApparentError> {
     Ok(ApparentSixFieldsDegreesAu {
         fields: fixed_spherical_to_degrees_au(&result.spherical)?,
+        frame: result.frame,
         tt_jd: result.tt_jd,
         solar_deflection_applied: result.solar_deflection_applied,
         emission_epoch: result.emission_epoch,
@@ -352,11 +458,40 @@ pub fn geocentric_apparent_ecliptic_of_date_with_options<R: Read + Seek>(
     reception_epoch: JulianDateTdb,
     options: ApparentOptions,
 ) -> Result<ApparentEclipticOfDate, ApparentError> {
+    if options.center == ApparentCenter::Heliocentric {
+        return heliocentric_apparent(ephemeris, target, reception_epoch, options);
+    }
     let earth = ephemeris
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
         .map_err(AberratedStateError::from)?;
     let state = aberrated_state(ephemeris, target, reception_epoch, &earth, options)?;
-    apparent_ecliptic_of_date_from_aberrated_state(&state, options.solar_light_deflection)
+    apparent_from_aberrated_state_in_frame(&state, options.frame, options.solar_light_deflection)
+}
+
+/// Sun-centered position: light-time only, then the same frame rotation and rates.
+fn heliocentric_apparent<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
+) -> Result<ApparentEclipticOfDate, ApparentError> {
+    let light_time = heliocentric_light_time(ephemeris, target, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    finish(
+        &IcrfState {
+            target,
+            center: Body::Sun,
+            observation_epoch: light_time.observation_epoch,
+            emission_epoch: light_time.emission_epoch,
+            light_time_seconds: light_time.light_time_seconds,
+            light_time_rate: light_time.light_time_rate,
+            source: ObserverAccelerationSource::NotApplicable,
+            position_km: light_time.position_km,
+            velocity_km_per_tdb_day: light_time.velocity_km_per_day,
+        },
+        options.frame,
+        false,
+    )
 }
 
 /// DE441 → apparent geocentric six fields (degrees, AU, per TDB day).
@@ -397,6 +532,16 @@ pub fn geocentric_apparent_six_fields_many_with_options<R: Read + Seek>(
     if targets.is_empty() {
         return Ok(Vec::new());
     }
+    if options.center == ApparentCenter::Heliocentric {
+        return targets
+            .iter()
+            .copied()
+            .map(|target| {
+                let apparent = heliocentric_apparent(ephemeris, target, reception_epoch, options)?;
+                apparent_to_degrees_au(&apparent)
+            })
+            .collect();
+    }
     let earth = ephemeris
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
         .map_err(AberratedStateError::from)?;
@@ -405,8 +550,9 @@ pub fn geocentric_apparent_six_fields_many_with_options<R: Read + Seek>(
         .copied()
         .map(|target| {
             let state = aberrated_state(ephemeris, target, reception_epoch, &earth, options)?;
-            let apparent = apparent_ecliptic_of_date_from_aberrated_state(
+            let apparent = apparent_from_aberrated_state_in_frame(
                 &state,
+                options.frame,
                 options.solar_light_deflection,
             )?;
             apparent_to_degrees_au(&apparent)

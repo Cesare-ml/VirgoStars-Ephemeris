@@ -34,6 +34,9 @@ use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTi
 /// analytic JPL second derivative; its step is a TDB-day offset.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ObserverAccelerationSource {
+    /// No observer acceleration was used (e.g. a heliocentric state, which has no
+    /// aberration step).
+    NotApplicable,
     CallerProvided,
     /// Exact second derivative of the selected **DE441 Chebyshev
     /// interpolation polynomial**, not independently verified physical

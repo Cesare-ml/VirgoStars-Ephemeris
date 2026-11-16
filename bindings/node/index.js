@@ -24,10 +24,13 @@ const constants = Object.freeze({
   SE_SUN: 0, SE_MOON: 1, SE_MERCURY: 2, SE_VENUS: 3, SE_MARS: 4,
   SE_JUPITER: 5, SE_SATURN: 6, SE_URANUS: 7, SE_NEPTUNE: 8, SE_PLUTO: 9,
   SE_GREG_CAL: 1, SE_JUL_CAL: 0,
-  SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_SPEED: 256, SEFLG_NOGDEFL: 512,
+  SE_EARTH: 14,
+  SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
+  SEFLG_NOGDEFL: 512, SEFLG_NOABERR: 1024, SEFLG_EQUATORIAL: 2048,
 });
 
 const BODY_NAMES = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
+BODY_NAMES[14] = 'Earth';
 
 function parseError(error) {
   const text = String(error && error.message ? error.message : error);
@@ -206,12 +209,19 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
     return result;
   }
 
-  function shape(r) {
-    const result = {
-      longitude: r.xx[0], latitude: r.xx[1], distance: r.xx[2],
-      longitudeSpeed: r.xx[3], latitudeSpeed: r.xx[4], distanceSpeed: r.xx[5],
-      rflag: r.rflag,
-    };
+  function shape(r, flags = 0) {
+    const equatorial = (flags & constants.SEFLG_EQUATORIAL) !== 0;
+    const result = equatorial
+      ? {
+        rectAscension: r.xx[0], declination: r.xx[1], distance: r.xx[2],
+        rectAscensionSpeed: r.xx[3], declinationSpeed: r.xx[4], distanceSpeed: r.xx[5],
+        rflag: r.rflag,
+      }
+      : {
+        longitude: r.xx[0], latitude: r.xx[1], distance: r.xx[2],
+        longitudeSpeed: r.xx[3], latitudeSpeed: r.xx[4], distanceSpeed: r.xx[5],
+        rflag: r.rflag,
+      };
     if (provenance) {
       result.timeSource = r.timeSource;
       result.notes = r.notes;
@@ -260,11 +270,16 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
       lenientJulday(year, month, day, hour, gregflag === constants.SE_GREG_CAL),
     swe_revjul: (jd, gregflag = constants.SE_GREG_CAL) => revjul(jd, gregflag === constants.SE_GREG_CAL),
     swe_calc_ut: (...args) =>
-      deliver(args, guarded(() => shape(engine.calcUt(args[0], args[1], normalizeFlags(args[2] ?? 0))))),
+      deliver(args, guarded(() => {
+        const flags = normalizeFlags(args[2] ?? 0);
+        return shape(engine.calcUt(args[0], args[1], flags), flags);
+      })),
     swe_calc: (...args) =>
-      deliver(args, guarded(() => (args[1] === -1
-        ? eclNut(args[0])
-        : shape(engine.calcTdb(args[0], args[1], normalizeFlags(args[2] ?? 0)))))),
+      deliver(args, guarded(() => {
+        if (args[1] === -1) return eclNut(args[0]);
+        const flags = normalizeFlags(args[2] ?? 0);
+        return shape(engine.calcTdb(args[0], args[1], flags), flags);
+      })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
   });
 }
