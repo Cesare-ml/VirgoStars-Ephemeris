@@ -55,11 +55,9 @@ skipped with no data at all.
   facade uses the declared policy (IERS leap seconds from 1972, Espenak–Meeus ΔT
   1900–1972). Positions agree to within 0.1″ for Sun and planets and 0.8″ for the
   Moon in the test dates (see the Node-binding document).
-- **`swe_houses` / `swe_houses_pos`.** The real `swe_houses` returns
-  `{ house[12], ascendant, mc, armc, vertex, equatorialAscendant, kochCoAscendant,
-  munkaseyCoAscendant, munkaseyPolarAscendant }`. The house systems live in
-  `astrological-functions`; a facade over them is not written. Vertex, equatorial
-  ascendant and the co-ascendants are not computed anywhere yet.
+- **`swe_houses` / `swe_houses_pos`** (systems V, P, K, R, O; Placidus position) are offered through
+  injected house methods, with all nine result keys: see
+  [MVP2_HOUSES_FACADE_2026-11-16.md](MVP2_HOUSES_FACADE_2026-11-16.md).
 - **`swe_azalt`, `swe_azalt_rev`, `swe_refrac`, `swe_refrac_extended`, `swe_rise_trans`**
   are offered, with the reference's result keys: see
   [MVP2_HORIZON_EVENTS_2026-11-16.md](MVP2_HORIZON_EVENTS_2026-11-16.md).

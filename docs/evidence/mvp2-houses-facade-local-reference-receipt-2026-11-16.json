@@ -1,0 +1,68 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node + astrological-functions feat/houses-reference-validation-20261116",
+  "calls": "swe_houses and swe_houses_pos of the Swiss-shaped facade, with calculateHouseSetWithWarnings injected",
+  "commit": "working tree on top of be40608"
+ },
+ "against_installed_swisseph_0_5_17": {
+  "random_cases": "4000 dates 1950-2026 x 5 systems (V,P,K,R,O); latitudes -60..60 plus 15% polar (60..89.5); any longitude",
+  "cases_compared": 19052,
+  "result_key_sets_identical": true,
+  "reference_refuses_but_engine_returns_values": 948,
+  "engine_errors_where_reference_succeeds": 0,
+  "cusps_max_residual_arcsec": {
+   "V": 0.04646,
+   "P": 0.02307,
+   "K": 0.07226,
+   "O": 0.04646,
+   "R_excluding_known_polar_artifact": "see regiomontanus_note"
+  },
+  "angles": {
+   "ascendant": {
+    "samples": 19052,
+    "rms_arcsec": 0.00207,
+    "max_arcsec": 0.04646
+   },
+   "armc": {
+    "samples": 19052,
+    "rms_arcsec": 0.00185,
+    "max_arcsec": 0.00282
+   },
+   "vertex": {
+    "samples": 19052,
+    "rms_arcsec": 0.00218,
+    "max_arcsec": 0.03431
+   },
+   "equatorialAscendant": {
+    "samples": 19052,
+    "rms_arcsec": 0.00185,
+    "max_arcsec": 0.00308
+   },
+   "kochCoAscendant": {
+    "samples": 19052,
+    "rms_arcsec": 0.00211,
+    "max_arcsec": 0.03715
+   },
+   "munkaseyCoAscendant": {
+    "samples": 19052,
+    "rms_arcsec": 0.00193,
+    "max_arcsec": 0.02892
+   },
+   "munkaseyPolarAscendant": {
+    "samples": 19052,
+    "rms_arcsec": 0.00211,
+    "max_arcsec": 0.03715
+   }
+  },
+  "regiomontanus_note": "150 cases (only Regiomontanus, |latitude| >= 67 degrees) differ by exactly 180 degrees in mc and in the cusps tied to it: the reference's polar Midheaven mislabelling, deliberately not reproduced (maintainer decision 2026-11-16)",
+  "placidus_house_position": {
+   "samples": 4000,
+   "rms_arcsec": 0.0,
+   "max_arcsec": 0.0
+  },
+  "extra_points_identification": "vertex, East Point and the three co-ascendants were fitted to the reference over 2,496 sites/dates first (no residual above 0.5 arcsec) and then confirmed by this comparison"
+ }
+}

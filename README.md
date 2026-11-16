@@ -59,6 +59,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Lunar nodes and apogees (bodies 10-13) compared with swisseph 0.5.17](docs/MVP2_LUNAR_POINTS_2026-11-16.md)
 - [Chiron from a JPL small-body SPK (new type 21 reader), compared with Horizons and swisseph](docs/MVP2_CHIRON_2026-11-16.md)
 - [Horizon coordinates, refraction, rise/set and transits (azalt, refrac, rise_trans), compared with swisseph 0.5.17](docs/MVP2_HORIZON_EVENTS_2026-11-16.md)
+- [`swe_houses` facade: vertex, East Point, co-ascendants, cusps via astrological-functions, compared with swisseph 0.5.17](docs/MVP2_HOUSES_FACADE_2026-11-16.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)

@@ -51,6 +51,32 @@ pub struct HouseAngles {
     pub true_obliquity_deg: f64,
     pub ascendant_deg: f64,
     pub midheaven_deg: f64,
+    /// Further angles of the reference's house calculation, see [`ExtraAngles`].
+    pub extra: ExtraAngles,
+}
+
+/// The five points that accompany the Ascendant and Midheaven in the reference's
+/// `swe_houses` result. All are ecliptic longitudes of the true ecliptic of date,
+/// built from the same ascendant formula with another sidereal angle and latitude
+/// (`asc(a, φ)` is the ecliptic point rising at ARMC `a` for latitude `φ`):
+///
+/// - `vertex`: `asc(ARMC + 180°, 90° − φ)`, the intersection of the ecliptic and the
+///   prime vertical; where two exist (|φ| ≤ obliquity) the one west of the Midheaven;
+/// - `equatorial_ascendant` (East Point): `asc(ARMC, 0)`;
+/// - `koch_co_ascendant` (W. Koch): `asc(ARMC, −φ)`;
+/// - `munkasey_co_ascendant` (M. Munkasey): `asc(ARMC, 90° − φ)`;
+/// - `munkasey_polar_ascendant`: `asc(ARMC, −φ) + 180°`.
+///
+/// The constructions were identified by comparison with the reference over 2,500
+/// sites and dates (no difference above 0.5 arcsecond); they are definitions of
+/// points, not of house systems.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExtraAngles {
+    pub vertex_deg: f64,
+    pub equatorial_ascendant_deg: f64,
+    pub koch_co_ascendant_deg: f64,
+    pub munkasey_co_ascendant_deg: f64,
+    pub munkasey_polar_ascendant_deg: f64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -106,6 +132,32 @@ pub fn angles_from_armc(armc_deg: f64, true_obliquity_deg: f64, latitude_deg: f6
     (ascendant, midheaven)
 }
 
+/// The [`ExtraAngles`] for a known ARMC, true obliquity, latitude and Midheaven.
+pub fn extra_angles_from_armc(
+    armc_deg: f64,
+    true_obliquity_deg: f64,
+    latitude_deg: f64,
+    midheaven_deg: f64,
+) -> ExtraAngles {
+    let asc = |armc: f64, lat: f64| angles_from_armc(armc, true_obliquity_deg, lat).0;
+    let mut vertex = asc(armc_deg + 180.0, 90.0 - latitude_deg);
+    // Within the tropics the ecliptic crosses the prime vertical twice: the vertex is
+    // the western crossing, i.e. the one that is not east of the Midheaven.
+    if latitude_deg.abs() <= true_obliquity_deg
+        && (vertex - midheaven_deg + 540.0).rem_euclid(360.0) - 180.0 > 0.0
+    {
+        vertex = wrap_360(vertex + 180.0);
+    }
+    let koch = asc(armc_deg, -latitude_deg);
+    ExtraAngles {
+        vertex_deg: vertex,
+        equatorial_ascendant_deg: asc(armc_deg, 0.0),
+        koch_co_ascendant_deg: koch,
+        munkasey_co_ascendant_deg: asc(armc_deg, 90.0 - latitude_deg),
+        munkasey_polar_ascendant_deg: wrap_360(koch + 180.0),
+    }
+}
+
 /// House astronomy for a site at `(ut1_jd, tt_jd)`.
 pub fn house_angles(
     ut1_jd: f64,
@@ -133,5 +185,6 @@ pub fn house_angles(
         true_obliquity_deg: obliquity,
         ascendant_deg: ascendant,
         midheaven_deg: midheaven,
+        extra: extra_angles_from_armc(armc, obliquity, latitude_deg, midheaven),
     })
 }

@@ -253,6 +253,12 @@ pub struct HouseAnglesResult {
     pub true_obliquity_deg: f64,
     pub ascendant_deg: f64,
     pub midheaven_deg: f64,
+    /// Vertex (western intersection of the ecliptic and the prime vertical).
+    pub vertex_deg: f64,
+    pub equatorial_ascendant_deg: f64,
+    pub koch_co_ascendant_deg: f64,
+    pub munkasey_co_ascendant_deg: f64,
+    pub munkasey_polar_ascendant_deg: f64,
     /// `EXPLICIT_UT1_TT` when both scales were supplied, otherwise the UT policy label.
     pub time_source: String,
 }
@@ -274,6 +280,11 @@ fn angles_result(
         true_obliquity_deg: a.true_obliquity_deg,
         ascendant_deg: a.ascendant_deg,
         midheaven_deg: a.midheaven_deg,
+        vertex_deg: a.extra.vertex_deg,
+        equatorial_ascendant_deg: a.extra.equatorial_ascendant_deg,
+        koch_co_ascendant_deg: a.extra.koch_co_ascendant_deg,
+        munkasey_co_ascendant_deg: a.extra.munkasey_co_ascendant_deg,
+        munkasey_polar_ascendant_deg: a.extra.munkasey_polar_ascendant_deg,
         time_source,
     })
 }
@@ -699,6 +710,20 @@ impl Engine {
         .map_err(|e| fail("E_RANGE", e))?;
         let tt = tdb_to_tt_jd(tdb.0).map_err(|e| fail("E_RANGE", e))?;
         Ok((tdb, tt, source_label(&source)))
+    }
+
+    /// House astronomy from a UT Julian date under this engine's time policy: with a
+    /// loaded ΔT table TT is the measured one (the free function uses the declared
+    /// polynomial/leap-second policy only).
+    #[napi]
+    pub fn house_angles_ut(
+        &self,
+        jd_ut: f64,
+        latitude_deg: f64,
+        longitude_deg_east: f64,
+    ) -> Result<HouseAnglesResult> {
+        let (_, tt, time_source) = self.epoch_from_ut(jd_ut)?;
+        angles_result(jd_ut, tt, latitude_deg, longitude_deg_east, time_source)
     }
 
     /// `swe_azalt`-shaped. `equatorial_input` false: `x0, x1` are true ecliptic

@@ -96,3 +96,51 @@ fn full_pipeline_has_sane_values_and_fails_closed() {
         Err(HouseAnglesError::Orientation(_))
     ));
 }
+
+// ---- the five extra points of the reference's house result ----
+
+use virgostars_ephemeris_core::horizon::{ecliptic_to_equatorial, equatorial_to_horizontal};
+
+#[test]
+fn extra_points_satisfy_their_definitions() {
+    let tt = 2_455_000.5;
+    for &(lat, lon) in &[
+        (41.9, 12.5),
+        (-33.9, 151.2),
+        (64.1, -21.9),
+        (10.0, 0.0),
+        (-10.0, 100.0),
+        (-0.2, -78.5),
+        (60.0, 20.0),
+    ] {
+        let a = house_angles(tt, tt, lat, lon).unwrap();
+        let x = a.extra;
+        // East Point: the point of the ecliptic whose right ascension is ARMC + 90 degrees.
+        let (ra, _) = ecliptic_to_equatorial(tt, x.equatorial_ascendant_deg, 0.0).unwrap();
+        near(ra, a.armc_deg + 90.0, 1e-9);
+        // Vertex: on the prime vertical (azimuth east or west), in the west.
+        let (vra, vdec) = ecliptic_to_equatorial(tt, x.vertex_deg, 0.0).unwrap();
+        let h = equatorial_to_horizontal(vra, vdec, a.armc_deg, lat).unwrap();
+        let az = h.azimuth_north_east_deg;
+        assert!(
+            (az - 270.0).abs() < 1e-6 || (az - 90.0).abs() < 1e-6,
+            "{lat}: azimuth {az}"
+        );
+        if lat.abs() > 23.5 && lat > 0.0 {
+            assert!(
+                (az - 270.0).abs() < 1e-6,
+                "north of the tropics the vertex is west: {az}"
+            );
+        }
+        // The polar ascendant is the opposite of the Koch co-ascendant.
+        near(
+            x.munkasey_polar_ascendant_deg,
+            x.koch_co_ascendant_deg + 180.0,
+            1e-12,
+        );
+    }
+    let eq = house_angles(tt, tt, 0.0, 33.0).unwrap();
+    // On the equator the Koch co-ascendant and the East Point are the Ascendant.
+    near(eq.extra.koch_co_ascendant_deg, eq.ascendant_deg, 1e-9);
+    near(eq.extra.equatorial_ascendant_deg, eq.ascendant_deg, 1e-9);
+}

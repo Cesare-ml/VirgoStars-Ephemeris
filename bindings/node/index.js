@@ -28,6 +28,7 @@ const constants = Object.freeze({
   SE_EARTH: 14,
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
   SEFLG_NOGDEFL: 512, SEFLG_NOABERR: 1024, SEFLG_EQUATORIAL: 2048,
+  SE_ASC: 0, SE_MC: 1, SE_ARMC: 2, SE_VERTEX: 3, SE_EQUASC: 4, SE_COASC1: 5, SE_COASC2: 6, SE_POLASC: 7,
   SE_ECL2HOR: 0, SE_EQU2HOR: 1, SE_HOR2ECL: 0, SE_HOR2EQU: 1,
   SE_TRUE_TO_APP: 0, SE_APP_TO_TRUE: 1,
   SE_CALC_RISE: 1, SE_CALC_SET: 2, SE_CALC_MTRANSIT: 4, SE_CALC_ITRANSIT: 8,
@@ -110,6 +111,15 @@ class Engine {
    */
   loadChiron(spkPath) {
     return this._call(() => this._native.loadChiron(spkPath));
+  }
+
+  /**
+   * House astronomy (ARMC, true obliquity, Ascendant, Midheaven, Vertex, East Point and
+   * the co-ascendants) from a UT Julian date; TT follows this engine's time policy,
+   * including a loaded measured DeltaT table.
+   */
+  houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast) {
+    return this._call(() => this._native.houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast));
   }
 
   /**
@@ -204,6 +214,11 @@ function createHouseAngleProvider() {
         ascendantDeg: r.ascendantDeg,
         midheavenDeg: r.midheavenDeg,
         trueObliquityDeg: r.trueObliquityDeg,
+        vertexDeg: r.vertexDeg,
+        equatorialAscendantDeg: r.equatorialAscendantDeg,
+        kochCoAscendantDeg: r.kochCoAscendantDeg,
+        munkaseyCoAscendantDeg: r.munkaseyCoAscendantDeg,
+        munkaseyPolarAscendantDeg: r.munkaseyPolarAscendantDeg,
       });
     },
   });
@@ -264,7 +279,9 @@ const BODY_NAMES_BY_NUMBER = BODY_NAMES;
  *  - The error object also carries a non-enumerable `code`.
  *  - Mars..Pluto are system barycenters (as in Swiss JPL mode).
  */
-function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance = false } = {}) {
+const HOUSE_SYSTEMS = Object.freeze({ V: 'vehlow', P: 'placidus', K: 'koch', R: 'regiomontanus', O: 'porphyry' });
+
+function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance = false, houseMethods = null } = {}) {
   function deliver(args, result) {
     const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
     if (callback) callback(result);
@@ -343,6 +360,79 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
         return shape(engine.calcTdb(args[0], args[1], flags), flags);
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
+    // swe_houses(tjd_ut, geolat, geolon, hsys). The house systems are astrological methods and
+    // live in astrological-functions: pass its `calculateHouseSetWithWarnings` as
+    // `houseMethods.calculateHouseSetWithWarnings`; this package never depends on it.
+    swe_houses: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, lat, lon, hsys] = args;
+        const method = houseMethods && houseMethods.calculateHouseSetWithWarnings;
+        if (typeof method !== 'function') {
+          throw coded('E_UNSUPPORTED_BODY', 'swe_houses needs createSwissShapedFacade(engine, { houseMethods: { calculateHouseSetWithWarnings } }) from astrological-functions');
+        }
+        const key = HOUSE_SYSTEMS[hsys];
+        if (!key) {
+          throw coded('E_UNSUPPORTED_FLAG', `house system ${JSON.stringify(hsys)} is not available (V, P, K, R, O); the reference silently falls back to Placidus for unknown letters, this engine refuses`);
+        }
+        if (![jd, lat, lon].every((v) => typeof v === 'number' && Number.isFinite(v))) {
+          throw coded('E_RANGE', 'swe_houses needs finite numbers for tjd_ut, geolat and geolon');
+        }
+        const angles = engine.houseAnglesUt(jd, lat, lon);
+        const set = method({
+          datetimeUtc: new Date(Math.round((jd - 2440587.5) * 86400000)).toISOString(),
+          birthTimeKnown: true,
+          ut1JulianDay: jd,
+          ttJulianDay: angles.ttJulianDay,
+          latitudeDeg: lat,
+          longitudeDegEast: lon,
+          engineVersion: 'virgostars-ephemeris-node',
+          kernelSetId: 'not-applicable-sidereal-time-only',
+          timeModel: 'UT1_EQUALS_UT_INPUT',
+        }, createHouseAngleProvider());
+        const system = set.houses[key];
+        if (system.status === 'UNAVAILABLE') {
+          throw coded('E_CALC', `houses are undefined for this geometry (${system.reason}) and no substitute exists`);
+        }
+        const result = {
+          house: [...system.cuspsDeg],
+          ascendant: set.angles.ascendantDeg,
+          mc: set.angles.midheavenDeg,
+          armc: set.angles.armcDeg,
+          vertex: angles.vertexDeg,
+          equatorialAscendant: angles.equatorialAscendantDeg,
+          kochCoAscendant: angles.kochCoAscendantDeg,
+          munkaseyCoAscendant: angles.munkaseyCoAscendantDeg,
+          munkaseyPolarAscendant: angles.munkaseyPolarAscendantDeg,
+        };
+        if (provenance) {
+          result.warnings = [...set.warnings];
+          result.status = system.status;
+          result.timeSource = angles.timeSource;
+        }
+        return result;
+      })),
+    // swe_houses_pos(armc, geolat, eps, hsys, lon, lat): Placidus only.
+    swe_houses_pos: (...args) =>
+      deliver(args, guarded(() => {
+        const [armc, lat, eps, hsys, lon, eclLat] = args;
+        const method = houseMethods && houseMethods.calculatePlacidusHousePosition;
+        if (typeof method !== 'function') {
+          throw coded('E_UNSUPPORTED_BODY', 'swe_houses_pos needs houseMethods.calculatePlacidusHousePosition from astrological-functions');
+        }
+        if (hsys !== 'P') throw coded('E_UNSUPPORTED_FLAG', `house system ${JSON.stringify(hsys)} has no position method here (only 'P')`);
+        const r = method({
+          armcDeg: armc, latitudeDeg: lat, trueObliquityDeg: eps,
+          eclipticLongitudeDeg: lon, eclipticLatitudeDeg: eclLat ?? 0,
+          frame: 'ECLIPTIC_OF_DATE', zodiac: 'TROPICAL', birthTimeKnown: true,
+          // Required by the contract, not used by the position and not part of the result.
+          datetimeUtc: '2000-01-01T12:00:00Z',
+          source: {
+            engineVersion: 'virgostars-ephemeris-node', kernelSetId: 'not-applicable', timeModel: 'NOT_USED',
+            corrections: 'CALLER_SUPPLIED', center: 'EARTH', observerLongitudeDegEast: 0,
+          },
+        });
+        return { housePosition: r.housePosition };
+      })),
     // swe_azalt(tjd_ut, calc_flag, geolon, geolat, geoalt, atpress, attemp, x0, x1, x2[, cb])
     swe_azalt: (...args) =>
       deliver(args, guarded(() => {

@@ -24,6 +24,8 @@ export class Engine {
   loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
   loadChiron(spkPath: string): void;
   loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
+  /** House astronomy from a UT Julian date under this engine's time policy (measured DeltaT if loaded). */
+  houseAnglesUt(jdUt: number, latitudeDeg: number, longitudeDegEast: number): HouseAnglesResult;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
   /**
    * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
@@ -81,6 +83,11 @@ export interface HouseAnglesResult {
   trueObliquityDeg: number;
   ascendantDeg: number;
   midheavenDeg: number;
+  vertexDeg: number;
+  equatorialAscendantDeg: number;
+  kochCoAscendantDeg: number;
+  munkaseyCoAscendantDeg: number;
+  munkaseyPolarAscendantDeg: number;
   timeSource: string;
 }
 export function houseAnglesUt(jdUt: number, latitudeDeg: number, longitudeDegEast: number): HouseAnglesResult;
@@ -123,6 +130,11 @@ export interface SwissShapedError {
 
 export function createSwissShapedFacade(
   engine: Engine | null,
-  options?: { acceptSwiephFlag?: boolean },
+  options?: {
+    acceptSwiephFlag?: boolean;
+    provenance?: boolean;
+    /** Functions of astrological-functions that supply swe_houses / swe_houses_pos. */
+    houseMethods?: { calculateHouseSetWithWarnings?: Function; calculatePlacidusHousePosition?: Function };
+  },
 ): Readonly<Record<string, unknown>>;
 export function loadNative(): unknown;
