@@ -453,7 +453,7 @@ impl<R: Read + Seek> De441<R> {
         let state_bytes = std::mem::size_of::<StateVector>();
         let max_states = MAX_DE441_BATCH_OUTPUT_BYTES / state_bytes;
         let requested_bytes = targets.len().checked_mul(state_bytes);
-        if requested_bytes.is_none_or(|bytes| bytes > MAX_DE441_BATCH_OUTPUT_BYTES) {
+        if requested_bytes.map_or(true, |bytes| bytes > MAX_DE441_BATCH_OUTPUT_BYTES) {
             return Err(De441Error::BatchOutputTooLarge {
                 requested_states: targets.len(),
                 max_states,
