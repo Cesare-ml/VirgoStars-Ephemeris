@@ -34,6 +34,31 @@ dates. It does not convert a date from another time scale.
 Invalid dates, invalid times, non-finite fractions and unsupported ranges are
 explicit errors. Fractions and seconds are `f64`, not arbitrary precision.
 
+### Stepwise time navigation (2026-11-11)
+
+Use `JulianDate::checked_add_seconds(delta)` to move an existing split
+Julian date by a signed number of coordinate seconds. The method normalizes
+negative/positive offsets across midnight, retains the original `TimeScale`
+label, preserves subsecond detail better than collapsing the date to a single
+`f64`, and rejects nonfinite/unrepresentable inputs. One calendar day is
+always **86,400 coordinate seconds**; this is intentionally **not UTC
+civil-time addition** and does not account for leap seconds, time zones or
+TT/UT1/TDB conversions.
+
+```rust
+// Increment an already-TDB epoch for a live chart (no scale conversion).
+let next = jd.checked_add_seconds(1.0)?;
+let previous = next.checked_add_seconds(-1.0)?;
+assert_eq!(previous.scale(), TimeScale::Tdb);
+```
+
+For fast interactive playback, reuse the split `JulianDate` between steps.
+Only collapse it to one floating-point JD when interacting with legacy APIs
+that require a single value. Integration tests check midnight rollover,
+backward stepping, leap-year boundaries, 1-microsecond steps, 3,600 one-second
+steps, time-scale preservation and fail-closed invalid inputs. These are
+synthetic calendar arithmetic tests, **not independent JPL or Swiss parity**.
+
 This is calendar arithmetic, **not a conversion between time scales**. A day
 is represented as 86400 coordinate seconds. UTC, time zones, leap-second
 labels (including second 60), ΔT, TT↔TDB and Earth-orientation corrections
@@ -52,3 +77,5 @@ ERFA reference-data attribution and terms are in
 
 Modification date: 2026-11-10. Original VirgoStars code remains under CPAL-1.0;
 no ephemeris data or runtime dependency is added.
+
+2026-11-11 modification: documented `JulianDate::checked_add_seconds` and its precision/UTC limitations.

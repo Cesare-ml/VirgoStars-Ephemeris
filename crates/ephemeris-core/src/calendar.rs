@@ -219,6 +219,49 @@ impl JulianDate {
         Ok((self.day_number as f64 - 0.5, self.midnight_fraction))
     }
 
+    /// Add a signed number of 86,400-second coordinate-day seconds.
+    ///
+    /// This advances the existing declared time scale (TAI, TT, TDB or UT1)
+    /// without converting scales. In particular this is NOT UTC clock-time
+    /// arithmetic: leap seconds, time zones and Delta T are not modeled.
+    ///
+    /// The integer day and sub-day fraction are updated separately, avoiding
+    /// the quantization of adding a small duration to a single large f64 JD.
+    /// Very small steps may still be unrepresentable at f64 precision.
+    ///
+    /// Modified 2026-11-11: add explicit, fallible split-date time stepping.
+    pub fn checked_add_seconds(self, seconds: f64) -> Result<Self, CalendarError> {
+        if !seconds.is_finite() {
+            return Err(CalendarError::InvalidTime);
+        }
+        // Euclidean division ensures that negative offsets normalize
+        // correctly across midnight without changing the time-scale label.
+        let whole_days = seconds.div_euclid(SECONDS_PER_DAY);
+        let remainder_seconds = seconds.rem_euclid(SECONDS_PER_DAY);
+        if !whole_days.is_finite() || whole_days.abs() > (1_u64 << 51) as f64 {
+            return Err(CalendarError::YearOutOfRange);
+        }
+        // Very small negative remainders can round up to a full day in f64;
+        // reject rather than fabricate an incorrect instant.
+        if !(0.0..SECONDS_PER_DAY).contains(&remainder_seconds) {
+            return Err(CalendarError::UnrepresentableTime);
+        }
+
+        let sum_fraction = self.midnight_fraction + remainder_seconds / SECONDS_PER_DAY;
+        let (offset_days, fraction) = if sum_fraction >= 1.0 {
+            (whole_days as i64 + 1, sum_fraction - 1.0)
+        } else {
+            (whole_days as i64, sum_fraction)
+        };
+        let day_number = self
+            .day_number
+            .checked_add(offset_days)
+            .ok_or(CalendarError::YearOutOfRange)?;
+        let result = Self::new(day_number, fraction, self.scale)?;
+        result.parts()?; // Enforce the existing exact-integer JD representation bound.
+        Ok(result)
+    }
+
     /// Express an already-TDB split Julian date as TDB seconds past J2000.
     ///
     /// Unlike converting to a single `f64` JD first, this keeps the integral
