@@ -53,7 +53,9 @@ function main() {
     Module._load = function (request, parent, isMain) {
       return request === 'swisseph' ? facade : originalLoad.call(this, request, parent, isMain);
     };
-    backend = require(resolve(backendPath));
+    const module = require(resolve(backendPath));
+    backend = typeof module.createAstrologyFunctions === 'function'
+      ? module.createAstrologyFunctions(facade) : module;
   } finally {
     Module._load = originalLoad;
   }

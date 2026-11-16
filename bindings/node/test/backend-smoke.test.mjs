@@ -41,7 +41,9 @@ test('unchanged backend builds a fictional chart and star via the explicit adapt
     Module._load = function (request, parent, isMain) {
       return request === 'swisseph' ? facade : originalLoad.call(this, request, parent, isMain);
     };
-    backend = require(backendPath);
+    const module = require(backendPath);
+    backend = typeof module.createAstrologyFunctions === 'function'
+      ? module.createAstrologyFunctions(facade) : module;
   } finally {
     Module._load = originalLoad;
   }

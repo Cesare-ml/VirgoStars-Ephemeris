@@ -93,8 +93,12 @@ comparison; it does not replace the individual model and validation contracts.
    identifies polar fallback and unavailable Placidus positions that still
    need explicit handling in serialized backend responses.
    An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
-   now serializes these warnings separately in a local backend test; application
-   wiring, product contract and rollout remain open.
+   now serializes these warnings separately. A separate local backend branch
+   `codex/ephemeris-house-diagnostics-20261116` adds explicit provider injection,
+   a versioned experimental natal contract and an opt-in loopback HTTP laboratory.
+   Eleven focused tests passed, including a real polar HTTP calculation; the
+   regular backend server remains unchanged. Broader parity, product approval,
+   release provisioning and rollout/rollback remain open.
 4. **[Open — release engineering]** Validate reproducible builds on target
    platforms, licensing/attribution and data distribution, CI and appropriate
    packaging; agree on the versioned public contract. Staging and deployment

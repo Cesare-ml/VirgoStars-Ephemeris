@@ -1,5 +1,12 @@
 # Optional serialized house diagnostics — 2026-11-16
 
+**Later local integration:** backend branch `codex/ephemeris-house-diagnostics-20261116`
+adds explicit injection and an experimental loopback-only HTTP laboratory. The
+main backend server remains unchanged; that branch documents its contract,
+test evidence and remaining validation in `docs/backend/EPHEMERIS_NATAL_BRIDGE_2026-11-16.md`.
+The original test-only module hook described below remains a compatibility test
+for the unchanged legacy module, not the new integration mechanism.
+
 **Status: implemented and tested locally with the unchanged legacy backend;
 not installed in Virgo Stars, not production activated.** This bridge prepares
 a reviewable response contract for the missing polar warnings identified in

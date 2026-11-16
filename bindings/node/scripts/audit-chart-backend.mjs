@@ -18,7 +18,9 @@ function loadBackend(path, swisseph) {
     Module._load = function (name, parent, isMain) {
       return name === 'swisseph' ? swisseph : previous.call(this, name, parent, isMain);
     };
-    return require(target);
+    const module = require(target);
+    return typeof module.createAstrologyFunctions === 'function'
+      ? module.createAstrologyFunctions(swisseph) : module;
   } finally {
     Module._load = previous;
     delete require.cache[target];

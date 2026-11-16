@@ -28,7 +28,9 @@ test('actual backend returns serializable polar diagnostics without changing leg
     Module._load = function (request, parent, isMain) {
       return request === 'swisseph' ? session.facade : oldLoad.call(this, request, parent, isMain);
     };
-    backend = require(backendPath);
+    const module = require(backendPath);
+    backend = typeof module.createAstrologyFunctions === 'function'
+      ? module.createAstrologyFunctions(session.facade) : module;
   } finally { Module._load = oldLoad; }
 
   const normal = session.run(() => backend.getPianetiCase('2024-03-20 12:00:00', 12.5, 41.9));
