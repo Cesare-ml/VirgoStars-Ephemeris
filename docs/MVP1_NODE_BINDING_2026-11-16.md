@@ -67,7 +67,9 @@ Deliberate, visible differences:
   assert Swiss data files), and maps it to "use the configured DE441 file" only if
   created with `{ acceptSwiephFlag: true }`; `rflag` never carries that bit.
 - A directory of `.se1` files cannot be passed: the load interface takes a DE441
-  *file*, and the facade has no `swe_set_ephe_path`.
+  *file*. The facade offers `swe_set_ephe_path` only with an explicitly
+  configured `legacyEphePath`; it validates the supplied directory and never
+  changes the already-open engine's data source.
 - Key names, value types, error shape, synchronous callback behavior, `swe_julday`
   leniency and `SE_ECL_NUT` slots were checked against the installed `swisseph`
   0.5.17 on 2026-11-16 and aligned; see

@@ -106,7 +106,11 @@ check of radial velocity, magnitude and identity.
    independent sources; the 81-name HIP target list on the star branch is a
    starting point, unreviewed.
 4. **Quality policy** is decided only for the traditional stars above.
-5. `swe_fixstar_ut`/`swe_fixstar_mag`-shaped facade, magnitude lookup and
-   missing-star errors belong to the Node/WASM binding (row 5).
+5. The Node facade now provides `swe_fixstar_ut` and `swe_fixstar_mag` with
+   caller-supplied names, aliases, HIP identifiers, explicit radial velocity and
+   magnitude; no reviewed catalog is included. A null radial velocity is an
+   explicit zero assumption; a null magnitude produces `E_STAR_MAGNITUDE`.
+   `fixstarUt` uses the engine's selected UT conversion policy. The facade is
+   tested locally but is not a claim of full Swiss star-name compatibility.
 6. No JPL Horizons or SOFA/NOVAS comparison beyond the ERFA fixtures; rays
    closer to the Sun than the deflection model's 1000× rule are rejected.

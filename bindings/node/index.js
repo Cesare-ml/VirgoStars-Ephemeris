@@ -24,6 +24,7 @@ const constants = Object.freeze({
   SE_SUN: 0, SE_MOON: 1, SE_MERCURY: 2, SE_VENUS: 3, SE_MARS: 4,
   SE_JUPITER: 5, SE_SATURN: 6, SE_URANUS: 7, SE_NEPTUNE: 8, SE_PLUTO: 9,
   SE_MEAN_NODE: 10, SE_TRUE_NODE: 11, SE_MEAN_APOG: 12, SE_OSCU_APOG: 13, SE_CHIRON: 15,
+  SE_PLUTO_PICKERING: 54,
   SE_GREG_CAL: 1, SE_JUL_CAL: 0,
   SE_EARTH: 14,
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
@@ -185,6 +186,12 @@ class Engine {
     const r = this._call(() => this._native.fixstarTdb(hip, rvKmS, jdTdb, flags));
     return { xx: r.xx, rflag: r.rflag, timeSource: r.timeSource, notes: r.notes };
   }
+
+  /** Uses the same UT conversion and Delta T policy as calcUt. */
+  fixstarUt(hip, rvKmS, jdUt, flags = 0) {
+    const r = this._call(() => this._native.fixstarUt(hip, rvKmS, jdUt, flags));
+    return { xx: r.xx, rflag: r.rflag, timeSource: r.timeSource, notes: r.notes };
+  }
 }
 
 function julday(year, month, day, hour, gregorian = true) {
@@ -310,7 +317,35 @@ const BODY_NAMES_BY_NUMBER = BODY_NAMES;
  */
 const HOUSE_SYSTEMS = Object.freeze({ V: 'vehlow', P: 'placidus', K: 'koch', R: 'regiomontanus', O: 'porphyry' });
 
-function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance = false, houseMethods = null } = {}) {
+function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance = false, houseMethods = null, starCatalog = [], legacyEphePath = null } = {}) {
+  if (legacyEphePath !== null && (typeof legacyEphePath !== 'string' || !legacyEphePath.trim())) {
+    throw coded('E_RANGE', 'legacyEphePath must be a non-empty directory path');
+  }
+  // Catalog metadata is supplied by the caller, never inferred from HIP2 or a
+  // third-party catalog. Reject ambiguous aliases when constructing the facade.
+  if (!Array.isArray(starCatalog)) throw coded('E_CATALOG', 'starCatalog must be an array');
+  const stars = new Map();
+  for (const entry of starCatalog) {
+    if (!entry || typeof entry.name !== 'string' || !entry.name.trim()
+      || !Number.isSafeInteger(entry.hip) || entry.hip <= 0 || entry.hip > 0xffffffff
+      || !(entry.radialVelocityKmS === null || (typeof entry.radialVelocityKmS === 'number' && Number.isFinite(entry.radialVelocityKmS)))
+      || !(entry.magnitude === null || (typeof entry.magnitude === 'number' && Number.isFinite(entry.magnitude)))
+      || !Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== 'string' || !alias.trim())) {
+      throw coded('E_CATALOG', 'each star needs a name, HIP, aliases, explicit radialVelocityKmS and magnitude');
+    }
+    const star = { name: entry.name.trim(), hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
+    for (const name of [entry.name, ...entry.aliases]) {
+      const key = name.trim().toLocaleLowerCase('en-US');
+      if (stars.has(key)) throw coded('E_CATALOG', `duplicate star name or alias: ${name}`);
+      stars.set(key, star);
+    }
+  }
+  function findStar(name) {
+    if (typeof name !== 'string' || !name.trim()) throw coded('E_STAR_NOT_FOUND', 'star name is required');
+    const star = stars.get(name.trim().toLocaleLowerCase('en-US'));
+    if (!star) throw coded('E_STAR_NOT_FOUND', `unknown star: ${name}`);
+    return star;
+  }
   function deliver(args, result) {
     const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
     if (callback) callback(result);
@@ -381,6 +416,14 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
   return Object.freeze({
     ...constants,
     SE_ECL_NUT: -1,
+    // Explicit compatibility bridge only: the Engine was configured separately;
+    // accepting this exact legacy directory must never change its data source.
+    swe_set_ephe_path: (directory) => {
+      if (legacyEphePath === null || typeof directory !== 'string'
+        || path.resolve(directory) !== path.resolve(legacyEphePath)) {
+        throw coded('E_EPHEMERIS_FILE', 'legacy ephemeris directory is not explicitly configured or does not match');
+      }
+    },
     swe_julday: (year, month, day, hour, gregflag = constants.SE_GREG_CAL) =>
       lenientJulday(year, month, day, hour, gregflag === constants.SE_GREG_CAL),
     swe_revjul: (jd, gregflag = constants.SE_GREG_CAL) => revjul(jd, gregflag === constants.SE_GREG_CAL),
@@ -394,6 +437,18 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
         if (args[1] === -1) return eclNut(args[0]);
         const flags = normalizeFlags(args[2] ?? 0);
         return shape(engine.calcTdb(args[0], args[1], flags), flags);
+      })),
+    swe_fixstar_ut: (...args) =>
+      deliver(args, guarded(() => {
+        const star = findStar(args[0]);
+        const flags = normalizeFlags(typeof args[2] === 'function' ? 0 : (args[2] ?? 0));
+        return { name: star.name, ...shape(engine.fixstarUt(star.hip, star.radialVelocityKmS, args[1], flags), flags) };
+      })),
+    swe_fixstar_mag: (...args) =>
+      deliver(args, guarded(() => {
+        const star = findStar(args[0]);
+        if (star.magnitude === null) throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}`);
+        return { name: star.name, magnitude: star.magnitude };
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
     // swe_houses(tjd_ut, geolat, geolon, hsys). The house systems are astrological methods and

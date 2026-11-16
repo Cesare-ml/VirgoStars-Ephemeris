@@ -124,3 +124,34 @@ The regression tolerances are retained from the original synthetic fixture: 3e-7
 The transplant changes only the light-time test module and this explanatory note. It does not modify the light-time solver, coordinate projection, public API, units, time scales, or physical corrections. The tests are not a substitute for real-kernel NAIF/JPL comparison or apparent-of-date validation.
 
 **CPAL-1.0 modification record (2026-11-15):** restored three synthetic cross-stage regression cases from the preserved draft PR #45 onto the current integration baseline; no third-party code or data incorporated.
+
+## Local rerun on the integration branch — 2026-11-16
+
+On Windows, commit `af2f6e8` was tested with Rust 1.99.1 and an existing
+external classic DE441 file (2,788,676,624 bytes; SHA-256
+`476096486def4e41bfceb29aa27f50784da0bce318902bcf7b88caad058cd4da`).
+The file's original acquisition and the raw Horizons responses were not
+independently reauthenticated during this rerun; its hash identifies the local
+bytes, not their origin or redistribution rights. No kernel is included.
+
+`cargo test --workspace --locked` passed with the external-data tests ignored.
+With `DE441_PATH` pointing to that file, `cargo test --workspace --locked --
+--ignored` also passed. A separate `cargo test --locked --test
+light_time_horizons -- --ignored --nocapture` passed both tests, reporting
+maximum per-axis position residuals of 0.000246674 km (Moon), 0.000352770 km
+(Venus), 0.000322014 km (Mars barycenter), and 0.000121117 km (Jupiter
+barycenter). The maximum instantaneous-velocity residual was
+0.000000000106 km/s, the maximum finite-difference derivative residual was
+0.000000409766 km/s, and the maximum light-time residual was
+0.000000000791 s. These figures use the existing fixture and limits described
+above, not a fresh Horizons query or a new independent reference set.
+
+This rerun demonstrates a narrow, repeatable comparison of the classic DE441
+reader and reception light-time stage at one epoch. It does not validate the
+SPK reader, the full DE441 coverage, apparent positions, or the MVP as a whole;
+the kernel provenance, raw reference evidence and broader independent matrix
+remain review gates. CI, staging and production were not evaluated here.
+
+**CPAL-1.0 modification record (2026-11-16):** documented a local rerun of
+existing checks, their kernel fingerprint and evidence limitations; no source
+code, scientific fixture, external dataset, dependency or license was changed.

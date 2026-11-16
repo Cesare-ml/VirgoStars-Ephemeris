@@ -136,6 +136,9 @@ pub fn spherical_from_aberrated_state(
         || !state.light_time_seconds.is_finite()
         || state.light_time_seconds <= 0.0
         || !state.light_time_rate.is_finite()
+        || matches!(state.observer_acceleration_source,
+            ObserverAccelerationSource::CenteredEphemerisVelocity { step_tdb_days }
+                if !step_tdb_days.is_finite() || step_tdb_days <= 0.0 || step_tdb_days > 0.5)
     {
         return Err(AberratedSphericalError::InvalidIntermediate);
     }

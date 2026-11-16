@@ -247,7 +247,7 @@ fn analytic_aberration_composes_with_existing_lighttime_without_timestep() {
     assert_eq!(
         approximated.observer_acceleration_source,
         ObserverAccelerationSource::CenteredEphemerisVelocity {
-            step_tdb_days: 0.02
+            step_tdb_days: (1_016.0_f64 + 0.02) - 1_016.0
         }
     );
     for i in 0..3 {

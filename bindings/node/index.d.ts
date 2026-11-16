@@ -31,6 +31,7 @@ export class Engine {
   /** First solar eclipse (global circumstances); kind bits 4/8/16/32 plus 1 (central) or 2. */
   solarEclipseUt(jdUt: number, backward?: boolean): SolarEclipseResult;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
+  fixstarUt(hip: number, rvKmS: number | null, jdUt: number, flags?: number): CalcResult;
   /**
    * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
    * direction. Azimuth is from the SOUTH toward the west. Pressure 0 is estimated from `geoaltM`.
@@ -160,6 +161,15 @@ export interface SwissShapedError {
   code: string;
 }
 
+/** Independently sourced, caller-owned metadata. Null RV explicitly assumes zero; null magnitude is unavailable. */
+export interface StarCatalogEntry {
+  name: string;
+  aliases: string[];
+  hip: number;
+  radialVelocityKmS: number | null;
+  magnitude: number | null;
+}
+
 export function createSwissShapedFacade(
   engine: Engine | null,
   options?: {
@@ -167,6 +177,9 @@ export function createSwissShapedFacade(
     provenance?: boolean;
     /** Functions of astrological-functions that supply swe_houses / swe_houses_pos. */
     houseMethods?: { calculateHouseSetWithWarnings?: Function; calculatePlacidusHousePosition?: Function };
+    starCatalog?: StarCatalogEntry[];
+    /** Explicitly accepted legacy path; does not change the configured Engine data. */
+    legacyEphePath?: string | null;
   },
 ): Readonly<Record<string, unknown>>;
 export function loadNative(): unknown;

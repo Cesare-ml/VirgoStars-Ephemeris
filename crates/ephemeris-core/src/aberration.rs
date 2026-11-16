@@ -98,7 +98,15 @@ pub fn annual_aberration_icrf(
     if !range.is_finite() {
         return Err(AberrationError::ArithmeticOverflow);
     }
-    let direction = source_position_km.map(|component| component / range);
+    // Modification (2026-11-16): preserve direction ratios when the original
+    // range is subnormal and rounded before normalization.
+    let scale = source_position_km
+        .iter()
+        .map(|component| component.abs())
+        .fold(0.0_f64, f64::max);
+    let scaled = source_position_km.map(|component| component / scale);
+    let scaled_norm = scaled[0].hypot(scaled[1]).hypot(scaled[2]);
+    let direction = scaled.map(|component| component / scaled_norm);
     let beta =
         earth_barycentric_velocity_km_per_day.map(|velocity| velocity / SPEED_OF_LIGHT_KM_PER_DAY);
     let speed = beta[0].hypot(beta[1]).hypot(beta[2]);

@@ -167,6 +167,16 @@ fn invalid_epoch_lighttime_and_target_metadata_are_rejected() {
         spherical_from_aberrated_state(&bad, 0.0),
         Err(AberratedSphericalError::InvalidIntermediate)
     ));
+    for step in [0.0, -0.01, 0.6, f64::NAN, f64::INFINITY] {
+        bad = baseline;
+        bad.observer_acceleration_source = ObserverAccelerationSource::CenteredEphemerisVelocity {
+            step_tdb_days: step,
+        };
+        assert!(matches!(
+            spherical_from_aberrated_state(&bad, 0.0),
+            Err(AberratedSphericalError::InvalidIntermediate)
+        ));
+    }
 }
 
 #[test]

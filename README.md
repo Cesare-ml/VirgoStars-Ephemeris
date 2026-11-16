@@ -2,14 +2,14 @@
 
 **A free and open-source astronomical ephemeris project for astrology applications — licensed under CPAL-1.0.**
 
-**Status: EARLY EXPERIMENTAL IMPLEMENTATION — the Rust core includes a classic JPL DE441 binary reader and synthetic tests, but independent NASA/JPL numerical validation, SPK support, cross-language bindings and production integration remain incomplete.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris.
+**Status: EXPERIMENTAL — the Rust core, a local Node binding and an explicit backend-shaped facade are implemented and locally tested. A limited SPK type-2 geometric comparison against CSPICE passed on DE440s; scientific and provenance review, broader validation and production integration remain open.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris. See the [current MVP integration checkpoint](docs/MVP1_RECONCILIATION_2026-11-16.md).
 
 
 ## Purpose
 
-Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental state reader supports the classic DE441 binary. Rust DAF/SPK **metadata indexing, type-2/3 J2000 direct states and ordered multi-kernel target–center chain composition** are experimental; non-J2000 frames, other SPK types and real-kernel accuracy validation remain open. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
+Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental state reader supports the classic DE441 binary. Rust DAF/SPK **metadata indexing, type-2/3 J2000 direct states and ordered multi-kernel target–center chain composition** are experimental; non-J2000 frames, other SPK types and independent type-3/multi-kernel validation remain open. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
 
-**Language decision:** The canonical astronomical core is written in **Rust**, with thin WebAssembly/TypeScript and PyO3/maturin Python bindings planned so all consumers share the same algorithms. The bindings are not implemented. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).
+**Language decision:** The canonical astronomical core is written in **Rust**. An experimental native Node binding exists; WebAssembly and PyO3/maturin Python bindings are planned. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).
 
 **Separation of responsibilities:** `virgostars-ephemeris` handles time scales, kernel access, coordinates, physical/geometric corrections and eventually astronomical event primitives. `astrological-functions` handles zodiac/house methods, aspects, synodic phases, astrological events and application-facing chart models. VirgoStars production keeps using its current implementation until tested migration gates pass.
 
@@ -19,14 +19,14 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
 
-- [Architecture and boundaries](docs/ARCHITECTURE.md)
+- [Accepted Rust architecture decision (not an exhaustive architecture map)](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [E1 SPK reference-matrix breadth audit (case coverage only)](docs/SPK_E1_REFERENCE_MATRIX_AUDIT_2026-11-13.md)
-- [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
-- [Proposed public contracts](docs/API_CONTRACTS.md)
+- [Kernel provenance and distribution preflight](docs/KERNEL_DATA_DISTRIBUTION_PREFLIGHT_2026-11-14.md)
+- [Backend compatibility planning inventory (not a shipping API contract)](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Contributor and AI-agent rules](AGENTS.md)
-- [Italian overview](docs/README.it.md)
+- [Sintesi italiana della decisione architetturale](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md#sintesi-italiana)
 - [Experimental DE441 reader](docs/DE441.md)
 - [Experimental Rust DAF/SPK metadata index](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [Experimental read-only SPK descriptor coverage inspector (not JPL-validated)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
@@ -41,7 +41,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental same-TDB-epoch batch SPK target/center states (not JPL-validated)](docs/SPK_BATCH_RELATIVE_STATES_2026-11-14.md)
 - [Offline SPK relative target/center pair diagnostics CSV CLI (partial failures retained)](docs/SPK_RELATIVE_PAIR_PROBE_CLI_2026-11-14.md)
 - [Experimental SPK per-pair geometric diagnostic results (not JPL-validated)](docs/SPK_PER_PAIR_DIAGNOSTICS_2026-11-14.md)
-- [Offline NAIF/SPICE SPK validation comparator, SHA-256 preflight and evidence requirements (no real results yet)](docs/RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md)
+- [Offline NAIF/SPICE SPK validation procedure](docs/RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md) and [local DE440s comparison](docs/SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md)
 - [Independent SPICE reference generator and ordered kernel SHA256 verification](scripts/spk_naif_reference.py)
 - [First geometric planet positions for a time and place](docs/FIRST_PLANET_POSITIONS_2026-11-10.md)
 - [Experimental geocentric light-time state](docs/GEOCENTRIC_LIGHT_TIME_2026-11-10.md)
@@ -85,7 +85,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - The optional `python scripts/spk_naif_reference.py run` mode combines local SPICE vector generation, offline Rust comparison, pre/post kernel checks and a **review-pending, unsigned JSON audit receipt** written only after success; no astronomical accuracy certification is implied.
 - The optional `python scripts/spk_naif_reference.py compare` command checks ordered SPK kernel bytes and reference fingerprints, runs the canonical Rust NAIF comparator with Cargo offline, then rechecks the files even on failure. No genuine SPICE/JPL numerical comparison has been recorded.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
-- Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
+- Real NASA/JPL reference-vector validation and broadly validated SPK support remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
 - GitHub Actions `Rust development CI` is present on `dev/ephemeris` and checks Rust formatting, debug/release tests, strict Clippy, Rustdoc, Windows GNU cross-compilation, and native Windows/macOS tests. Passing CI validates these code checks, **not** astronomical accuracy against independent NASA/JPL data.
 

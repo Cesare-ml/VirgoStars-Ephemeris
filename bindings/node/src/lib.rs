@@ -1198,4 +1198,19 @@ impl Engine {
             notes,
         })
     }
+
+    /// Fixed-star position at a UT epoch using the engine's current time policy.
+    #[napi]
+    pub fn fixstar_ut(
+        &mut self,
+        hip: u32,
+        rv_km_s: Option<f64>,
+        jd_ut: f64,
+        flags: i32,
+    ) -> Result<CalcResult> {
+        let (tdb, _, source) = self.epoch_from_ut(jd_ut)?;
+        let mut result = self.fixstar_tdb(hip, rv_km_s, tdb.0, flags)?;
+        result.time_source = source;
+        Ok(result)
+    }
 }

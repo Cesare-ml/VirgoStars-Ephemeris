@@ -111,6 +111,18 @@ fn arbitrary_nonzero_range_does_not_change_an_aberrated_direction() {
 }
 
 #[test]
+fn subnormal_source_retains_direction_before_aberration() {
+    let unit = f64::from_bits(1);
+    let observer_velocity = [0.2 * SPEED_OF_LIGHT_KM_PER_DAY, 0.0, 0.0];
+    let ordinary = annual_aberration_icrf([1.0, 2.0, 3.0], observer_velocity).unwrap();
+    let subnormal =
+        annual_aberration_icrf([unit, 2.0 * unit, 3.0 * unit], observer_velocity).unwrap();
+    for axis in 0..3 {
+        near(subnormal[axis], ordinary[axis], 1e-15);
+    }
+}
+
+#[test]
 fn high_but_sub_luminal_speed_stays_finite_and_normalized() {
     let observer_velocity = [0.999_99 * SPEED_OF_LIGHT_KM_PER_DAY, 0.0, 0.0];
     let result = annual_aberration_icrf([0.0, 1.0, 0.0], observer_velocity).unwrap();

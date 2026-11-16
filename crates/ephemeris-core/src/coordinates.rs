@@ -12,7 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
-//! Spherical projection of geometric ICRF state vectors into fixed axes.
+//! Spherical projection of ICRF state vectors into fixed axes.
 //!
 //! An explicitly supplied fixed rotation is not an ecliptic-of-date model:
 //! no precession, nutation, frame bias or apparent corrections are applied.
@@ -30,7 +30,8 @@ use std::fmt;
 use crate::de441::{Body, JulianDateTdb, StateVector};
 use crate::spk_relative_state::SpkRelativeState;
 
-/// Geometric coordinates and derivatives in the fixed axes described by `tilt_rad`.
+/// Coordinates and derivatives in the fixed axes described by `tilt_rad`.
+/// Applied physical corrections are determined by the input, not this type.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SphericalState {
     pub target: Body,
@@ -179,11 +180,12 @@ fn fixed_spherical_components(
     Ok(result)
 }
 
-/// Project a geometric DE441 ICRF state into fixed axes rotated about +X.
+/// Project a DE441-shaped ICRF state into fixed axes rotated about +X.
 ///
 /// The passive rotation about +X and its angular rates are evaluated with
 /// a constant tilt; this is not a date-frame model. Zero tilt selects ICRF.
-/// All velocity and angular-rate units here remain per TDB day.
+/// All velocity and angular-rate units here remain per TDB day. This
+/// mathematical projection neither adds nor removes physical corrections.
 pub fn project_fixed_axes(
     state: &StateVector,
     tilt_rad: f64,

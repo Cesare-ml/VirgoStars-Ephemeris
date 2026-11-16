@@ -22,8 +22,8 @@
 //! - Nutation, precession, and obliquity strictly require Terrestrial Time (TT).
 //! - Earth Rotation Angle (ERA) and Greenwich Mean Sidereal Time (GMST) strictly
 //!   require Universal Time (UT1); TT is passed separately for the precession term.
-//! - Validated epoch coverage for the 77-term IAU 2000B series is 1900–2100 TT
-//!   (JD 2415020.0 .. 2488070.0).
+//! - The implementation restricts TT to JD 2415020.0 .. 2488070.0;
+//!   the entire interval has not been independently validated.
 //!
 //! Third-party coefficient reference data: see `THIRD_PARTY_NOTICES.md` (ERFA BSD-3).
 
@@ -36,7 +36,7 @@ pub const UNIT_TO_RAD: f64 = ARCSEC_TO_RAD / 1e7;
 pub const MILLIARCSEC_TO_RAD: f64 = ARCSEC_TO_RAD / 1000.0;
 pub const TURN_ARCSEC: f64 = 1_296_000.0;
 
-/// Validated epoch range for experimental IAU 2000B (1900-01-01 to 2100-01-01 TT).
+/// Supported numerical interval for experimental IAU 2000B, in TT JD.
 pub const JD_TT_MIN: f64 = 2_415_020.0;
 pub const JD_TT_MAX: f64 = 2_488_070.0;
 
@@ -131,8 +131,10 @@ impl EclipticNutation {
 pub enum OrientationError {
     /// Non-finite or NaN numeric input.
     NonFinite { field: &'static str },
-    /// Epoch outside validated range 1900–2100 TT.
+    /// TT epoch outside the implementation's supported interval.
     UnsupportedEpoch { epoch_tt_jd: f64 },
+    /// UT1 epoch cannot be represented by the split-Julian-date API.
+    UnsupportedUt1Epoch { epoch_ut1_jd: f64 },
     /// Non-finite or out-of-range obliquity.
     InvalidObliquity,
     /// Singularity in spherical or vector normalization.
@@ -146,8 +148,11 @@ impl fmt::Display for OrientationError {
             Self::UnsupportedEpoch { epoch_tt_jd } => {
                 write!(
                     f,
-                    "epoch {epoch_tt_jd} TT outside validated IAU 2000B range (1900–2100 TT)"
+                    "epoch {epoch_tt_jd} TT outside supported IAU 2000B interval"
                 )
+            }
+            Self::UnsupportedUt1Epoch { epoch_ut1_jd } => {
+                write!(f, "UT1 epoch {epoch_ut1_jd} cannot be represented")
             }
             Self::InvalidObliquity => write!(f, "finite obliquity in radians required"),
             Self::SingularVector => write!(f, "zero or singular vector encountered"),
@@ -490,9 +495,17 @@ pub fn era_iau2000(ut1_jd: f64) -> Result<f64, OrientationError> {
     if !ut1_jd.is_finite() {
         return Err(OrientationError::NonFinite { field: "ut1_jd" });
     }
-    let d_u = ut1_jd - J2000_TT_JD;
-    let theta = TAU * (0.7790572732640 + 1.00273781191135448 * d_u);
-    Ok(theta.rem_euclid(TAU))
+    // The single-f64 input has already lost any finer epoch resolution.
+    // Reuse the split-date implementation to avoid divergent ERA arithmetic.
+    let epoch = crate::calendar::JulianDate::from_f64(ut1_jd, crate::calendar::TimeScale::Ut1)
+        .map_err(|_| OrientationError::UnsupportedUt1Epoch {
+            epoch_ut1_jd: ut1_jd,
+        })?;
+    crate::earth_rotation::earth_rotation_angle(epoch)
+        .map(|value| value.angle_rad)
+        .map_err(|_| OrientationError::UnsupportedUt1Epoch {
+            epoch_ut1_jd: ut1_jd,
+        })
 }
 
 /// Greenwich Mean Sidereal Time (GMST) IAU 2006 in radians [0, 2π), distinguishing `ut1_jd` from `tt_jd`.
@@ -516,7 +529,10 @@ pub fn equation_of_equinoxes(d_psi_rad: f64, mean_obliquity_rad: f64) -> f64 {
     d_psi_rad * mean_obliquity_rad.cos()
 }
 
-/// Greenwich Apparent Sidereal Time (GAST) IAU 2006/2000B in radians [0, 2π).
+/// Approximate apparent sidereal angle in radians [0, 2π).
+///
+/// Uses only dPsi*cos(mean obliquity) for the equation of equinoxes;
+/// complementary terms are omitted, so this is not full IAU 2006 GAST.
 pub fn gast_iau2006(ut1_jd: f64, tt_jd: f64) -> Result<f64, OrientationError> {
     let gmst = gmst_iau2006(ut1_jd, tt_jd)?;
     let nut = iau2000b_nutation(tt_jd)?;

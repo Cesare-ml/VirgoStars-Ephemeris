@@ -283,7 +283,7 @@ fn one_call_through_de441_lighttime_and_aberration_preserves_synthetic_result() 
     assert_eq!(
         output.observer_acceleration_source,
         ObserverAccelerationSource::CenteredEphemerisVelocity {
-            step_tdb_days: 0.02
+            step_tdb_days: (1_016.0_f64 + 0.02) - 1_016.0
         }
     );
 }
@@ -323,5 +323,27 @@ fn explicit_fd_step_and_external_data_bounds_fail_closed() {
         Err(AberratedStateError::LightTime(
             LightTimeError::UndefinedDirection
         ))
+    ));
+}
+
+#[test]
+fn rejects_asymmetric_rounded_sampling_and_subnormal_state_radius() {
+    let mut ephemeris = De441::new(Cursor::new(synthetic_classic_de441())).unwrap();
+    let epoch = 1_024.0_f64;
+    let ulp_above = f64::from_bits(epoch.to_bits() + 1) - epoch;
+    assert!(matches!(
+        geocentric_light_time_annual_aberration(
+            &mut ephemeris,
+            Body::Mercury,
+            JulianDateTdb(epoch),
+            0.51 * ulp_above,
+        ),
+        Err(AberratedStateError::InvalidAccelerationStep)
+    ));
+    let tiny = f64::from_bits(1);
+    let input = state([tiny, 2.0 * tiny, 3.0 * tiny], [0.0; 3]);
+    assert!(matches!(
+        aberrate_light_time_state(&input, [0.0; 3], [0.0; 3]),
+        Err(AberratedStateError::ArithmeticOverflow)
     ));
 }

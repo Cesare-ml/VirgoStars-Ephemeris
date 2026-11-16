@@ -42,6 +42,7 @@ pub enum ObserverAccelerationSource {
     /// interpolation polynomial**, not independently verified physical
     /// acceleration against real JPL reference vectors.
     AnalyticDe441Chebyshev,
+    /// Actual representable symmetric offset, which may differ from the requested step.
     CenteredEphemerisVelocity {
         step_tdb_days: f64,
     },
@@ -85,7 +86,7 @@ impl fmt::Display for AberratedStateError {
             Self::InvalidAccelerationStep => {
                 write!(
                     f,
-                    "acceleration step must be representable and 0 < h <= 0.5 TDB day"
+                    "acceleration step must be symmetric, representable, and 0 < h <= 0.5 TDB day"
                 )
             }
             Self::NonFiniteAcceleration => {
@@ -192,7 +193,8 @@ pub fn aberrate_light_time_state(
     let observed_direction =
         annual_aberration_icrf(state.position_km, earth_barycentric_velocity_km_per_tdb_day)?;
     let radius = norm(state.position_km);
-    if !radius.is_finite() || radius == 0.0 {
+    // Subnormal radius rounding makes r/R non-unit and destabilizes rates.
+    if !radius.is_finite() || radius < f64::MIN_POSITIVE {
         return Err(AberratedStateError::ArithmeticOverflow);
     }
     let n = state.position_km.map(|x| x / radius);
@@ -319,7 +321,8 @@ pub(crate) fn geocentric_light_time_annual_aberration_with_earth<R: Read + Seek>
 /// difference `(v(t+h)-v(t-h))/(2h)` in km/TDB day². The caller chooses
 /// `h`; this method does NOT claim an analytic JPL acceleration or
 /// a validated acceleration error bound. Samples near file coverage edges
-/// fail instead of switching to an unstated one-sided difference.
+/// fail instead of switching to an unstated one-sided difference. Rounded
+/// sample epochs must be symmetric; the actual representable step is recorded.
 ///
 /// The output is a **light-time + annual-aberration** Cartesian ICRF
 /// intermediate with velocities, not a full Swiss apparent-of-date state.
@@ -343,6 +346,14 @@ pub fn geocentric_light_time_annual_aberration<R: Read + Seek>(
         return Err(AberratedStateError::InvalidAccelerationStep);
     }
 
+    // Modification (2026-11-16): use actual representable time offsets.
+    let before = t - h;
+    let after = t + h;
+    let actual_step = after - t;
+    if t - before != actual_step {
+        return Err(AberratedStateError::InvalidAccelerationStep);
+    }
+
     let earth_velocity = ephemeris
         .state(Body::Earth, Body::SolarSystemBarycenter, observation_epoch)?
         .velocity_km_per_day;
@@ -350,24 +361,26 @@ pub fn geocentric_light_time_annual_aberration<R: Read + Seek>(
         .state(
             Body::Earth,
             Body::SolarSystemBarycenter,
-            JulianDateTdb(t - h),
+            JulianDateTdb(before),
         )?
         .velocity_km_per_day;
     let later = ephemeris
         .state(
             Body::Earth,
             Body::SolarSystemBarycenter,
-            JulianDateTdb(t + h),
+            JulianDateTdb(after),
         )?
         .velocity_km_per_day;
-    let acceleration = std::array::from_fn::<_, 3, _>(|i| (later[i] - earlier[i]) / (2.0 * h));
+    let acceleration =
+        std::array::from_fn::<_, 3, _>(|i| (later[i] - earlier[i]) / (2.0 * actual_step));
     if acceleration.iter().any(|value| !value.is_finite()) {
         return Err(AberratedStateError::NonFiniteAcceleration);
     }
 
     let light_time = geocentric_light_time(ephemeris, target, observation_epoch)?;
     let mut result = aberrate_light_time_state(&light_time, earth_velocity, acceleration)?;
-    result.observer_acceleration_source =
-        ObserverAccelerationSource::CenteredEphemerisVelocity { step_tdb_days: h };
+    result.observer_acceleration_source = ObserverAccelerationSource::CenteredEphemerisVelocity {
+        step_tdb_days: actual_step,
+    };
     Ok(result)
 }

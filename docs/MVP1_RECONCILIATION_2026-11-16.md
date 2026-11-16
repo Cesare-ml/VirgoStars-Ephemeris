@@ -1,0 +1,78 @@
+# MVP 1 integration checkpoint — 2026-11-16
+
+**Status: locally tested integration candidate, not an approved production
+replacement or a scientific acceptance.** This checkpoint supersedes older
+snapshot statements about the absence of a Node binding or any real SPK
+comparison; it does not replace the individual model and validation contracts.
+
+## Integrated work
+
+- Started from Claude's `integration/mvp1-apparent-pipeline-20261116`
+  (`01ac627`) and merged `dev/ephemeris` (`af2f6e8`): SPK indexing and
+  chain-safety work, DE441 batch limits and repository data hygiene.
+- Reconciled the previous local Earth rotation, GMST and local sidereal modules,
+  split-UT1 handling, truncated-nutation accuracy labels, and the finite-range,
+  normalization and acceleration hardening with Claude's apparent pipeline.
+- The native Node binding supports fixed stars at UT with the engine's own
+  selected time policy. Its optional `starCatalog` supplies independent
+  `name`, `aliases`, `hip`, `radialVelocityKmS` and `magnitude` fields. Values
+  must be explicit; null RV explicitly assumes zero and null magnitude is an
+  error on lookup. The HIP records must first be loaded separately under the
+  appropriate quality policy. Aliases are case-insensitive and collisions are
+  rejected at construction. No third-party star metadata is bundled.
+- `legacyEphePath` explicitly enables the facade's directory-checking
+  `swe_set_ephe_path`; it cannot change the file already open in the engine.
+  `SEFLG_SWIEPH` still requires explicit `acceptSwiephFlag`; effective flags
+  continue to identify JPL data. This is an opt-in compatibility adapter, not
+  implicit backend activation.
+
+## Local evidence
+
+- `cargo test --workspace --offline --locked` passed; three additional
+  explicitly ignored real-DE441 tests passed (two acceleration comparisons and
+  the star solar-deflection check). `cargo fmt --check` and Clippy with
+  `-D warnings` passed for both the Rust workspace and the standalone Node
+  binding. Repository data-hygiene unit tests: 9 passed.
+- Node suite: 74 passed, no skips on Windows, with caller-supplied classic
+  DE441, HIP2, Chiron SPK, USNO Delta T, an installed Swiss reference, and
+  `astrological-functions` house methods. The actual unchanged backend
+  `func.js` was loaded with a test-only injected facade: one fictional chart
+  exercised its 15 requested bodies, five house systems and a fictional
+  star-name/magnitude mapping. This is a smoke test, not a statistical
+  parallel-run parity study or backend deployment. The house-method source was
+  local branch `feat/houses-reference-validation-20261116`, commit
+  `5b4df7dce4e00fa556fc22500e08295c723ec9f5`, not a released package.
+- Independent SPK comparison: 80 geometric DE440s type-2 cases against
+  CSPICE, including record boundaries and declared coverage endpoints, passed
+  the predeclared diagnostic bounds. Data, unsigned receipts and provenance
+  review remain external; see [the comparison](SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md).
+  It does not validate type 3, multi-kernel priority, other frames or apparent
+  corrections.
+- See the individual model documents for previous Horizons/ERFA/Swiss local
+  comparisons and their tolerances. Passing software tests is not the same as
+  scientific review or CI, staging and production validation.
+
+## Remaining checklist before an accepted MVP 1
+
+1. **[Open — source and product decision]** Review catalog redistribution/use
+   terms and independently identify the required stars, aliases, magnitudes
+   and radial velocities. Approve the quality policy per supported star and
+   decide how missing magnitudes and RV assumptions reach users. No real catalog
+   is supplied by the compatibility API.
+2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
+   independently review kernel/tool provenance and numerical tolerances, and
+   add type-3 and multi-kernel/segment-priority comparisons where these are
+   claimed. Approve explicit error budgets and supported date ranges for each
+   model, including UT1/Delta T data and extrapolation limits.
+3. **[Open — backend integration]** Run a representative parallel comparison
+   against the actual backend over dates, locations, all requested bodies,
+   flags, houses, and error paths; resolve differences and existing backend
+   truthiness/error-handling issues. Version and integrate the external house
+   implementation, establish data provisioning, provenance and rollback.
+4. **[Open — release engineering]** Validate reproducible builds on target
+   platforms, licensing/attribution and data distribution, CI and appropriate
+   packaging; agree on the versioned public contract. Staging and deployment
+   require their own verification and authorization.
+
+These tasks are not an estimate that all remaining work has equal weight. The
+one-chart smoke test and numerical comparison do not establish general parity.
