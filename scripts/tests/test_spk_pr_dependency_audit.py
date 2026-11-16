@@ -132,6 +132,52 @@ class DependencyAuditTests(unittest.TestCase):
                 code = tool.main(["--snapshot", str(filename)])
             self.assertEqual(code, 2)
 
+    def test_duplicate_json_object_keys_fail_closed_at_every_depth(self):
+        canonical = json.dumps(snapshot())
+        cases = (
+            (
+                "top-level PR number",
+                canonical.replace(
+                    '"148": {',
+                    '"148": {"number": 148}, "148": {',
+                    1,
+                ),
+            ),
+            (
+                "nested merged field",
+                canonical.replace(
+                    '"merged": false',
+                    '"merged": true, "merged": false',
+                    1,
+                ),
+            ),
+            (
+                "escaped equivalent nested key",
+                canonical.replace(
+                    '"merged": false',
+                    '"merged": true, "\\u006derged": false',
+                    1,
+                ),
+            ),
+            (
+                "nested base ref",
+                canonical.replace(
+                    '"base": {"ref": "dev/ephemeris"}',
+                    '"base": {"ref": "main", "ref": "dev/ephemeris"}',
+                    1,
+                ),
+            ),
+        )
+        for label, raw in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                filename = Path(directory) / "prs.json"
+                filename.write_text(raw, encoding="utf-8")
+                errors = io.StringIO()
+                with contextlib.redirect_stderr(errors):
+                    code = tool.main(["--snapshot", str(filename)])
+                self.assertEqual(code, 2)
+                self.assertIn("duplicate JSON object key", errors.getvalue())
+
     def test_historical_inversion_fails_after_both_prs_are_merged(self):
         values = snapshot(merged=tool.PR_NUMBERS)
         values["150"]["merged_at"] = "2026-11-14T11:59:00Z"
