@@ -270,7 +270,7 @@ mod tests {
         // recurrence forms 3e308 before cancellation and returns NaN.
         let coefficients = [0.0, -1.0e308, 1.0e308, 1.0e308];
         assert_eq!(evaluate_chebyshev_value(&coefficients, 1.0).unwrap(), 1.0e308);
-        assert_eq!(evaluate_chebyshev_value(&coefficients, -1.0).unwrap(), -1.0e308);
+        assert_eq!(evaluate_chebyshev_value(&coefficients, -1.0).unwrap(), 1.0e308);
         // The derivative at +1 is genuinely outside f64 range; the full
         // evaluator must continue to reject it instead of returning a
         // partially valid sample.
@@ -282,12 +282,12 @@ mod tests {
 
     #[test]
     fn endpoint_full_evaluator_preserves_finite_value_and_derivative() {
-        // At +1: value = 1e308 and derivative = -1e308; at -1, the
-        // derivative is 1e308. All outputs are representable.
-        let coefficients = [0.0, 1.0e308, 1.0e308, -1.0e308];
+        // At +1: value = 1.5e308 and derivative = 0.5e308; at -1
+        // both remain finite. All outputs are representable.
+        let coefficients = [0.0, 1.0e308, 1.0e308, -5.0e307];
         let positive = evaluate_chebyshev(&coefficients, 1.0).unwrap();
-        assert_eq!(positive.value, 1.0e308);
-        assert_eq!(positive.derivative_dx, -1.0e308);
+        assert_eq!(positive.value, 1.5e308);
+        assert_eq!(positive.derivative_dx, 0.5e308);
         let negative = evaluate_chebyshev(&coefficients, -1.0).unwrap();
         assert!(negative.value.is_finite());
         assert!(negative.derivative_dx.is_finite());
