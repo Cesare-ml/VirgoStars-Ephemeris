@@ -257,3 +257,57 @@ fn real_de441_moon_light_time_converges_across_1900_2100() {
         jd += 367.3;
     }
 }
+
+/// Regression baseline produced by this engine itself (not by any other
+/// library): `docs/evidence/mvp1-apparent-baseline-1900-2100.csv`.
+#[test]
+#[ignore = "requires a legally obtained classic DE441 file in DE441_PATH"]
+fn real_de441_matches_committed_engine_baseline() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/evidence/mvp1-apparent-baseline-1900-2100.csv");
+    let text = std::fs::read_to_string(path).expect("baseline CSV");
+    let mut eph = real_kernel();
+    let mut rows = 0;
+    for line in text.lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let target = ALL_TARGETS
+            .iter()
+            .copied()
+            .zip([
+                "Sun",
+                "Moon",
+                "Mercury",
+                "Venus",
+                "MarsBarycenter",
+                "JupiterBarycenter",
+                "SaturnBarycenter",
+                "UranusBarycenter",
+                "NeptuneBarycenter",
+                "PlutoBarycenter",
+            ])
+            .find(|(_, name)| *name == f[0])
+            .expect("known target")
+            .0;
+        let jd: f64 = f[1].parse().unwrap();
+        let v: Vec<f64> = f[2..8].iter().map(|x| x.parse().unwrap()).collect();
+        let got = geocentric_apparent_six_fields(&mut eph, target, JulianDateTdb(jd)).unwrap();
+        let g = got.fields;
+        assert!(wrap_deg(g.longitude_deg - v[0]).abs() < 1e-9, "{line}");
+        assert!((g.latitude_deg - v[1]).abs() < 1e-9, "{line}");
+        assert!((g.distance_au - v[2]).abs() < 1e-12, "{line}");
+        assert!(
+            (g.longitude_speed_deg_per_tdb_day - v[3]).abs() < 1e-9,
+            "{line}"
+        );
+        assert!(
+            (g.latitude_speed_deg_per_tdb_day - v[4]).abs() < 1e-9,
+            "{line}"
+        );
+        assert!(
+            (g.distance_speed_au_per_tdb_day - v[5]).abs() < 1e-12,
+            "{line}"
+        );
+        rows += 1;
+    }
+    assert_eq!(rows, 1990);
+}

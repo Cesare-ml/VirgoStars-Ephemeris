@@ -99,9 +99,13 @@ change.
 1. Planetary light deflection (negligible here, < 0.0002″) and the rate of the
    solar deflection being a finite difference rather than analytic.
 2. Independent JPL Horizons reference comparison of the apparent quantities.
-3. Civil UTC/UT1 → TDB/TT front door for this module (the existing civil adapter
-   still emits fixed-axis fields).
-4. Row 2: `swe_julday`/`swe_revjul`-shaped calendar contract and historical ΔT.
+3. Civil input is done for 1900-01-01 … 2027-06-27 UT (see "Civil front door"
+   below); outside it, and before the first leap-second era with measured
+   UT1−UTC, nothing is extrapolated. Not covered: UT1−UTC (taken as 0 after
+   1972), dates before 1900 and after 2027-06-27.
+4. Row 2 remainder: the Swiss-shaped `swe_julday`/`swe_revjul` return fields in a
+   facade (the arithmetic exists in `calendar_decimal_hours`), and ΔT outside
+   1900–1972.
 5. Row 3: houses (`astrological-functions`) — separate repository.
 6. Row 4: fixed stars (catalog rights review first).
 7. Row 5: Node/WASM binding and load interface. Branches exist
@@ -119,3 +123,39 @@ composes existing stages and adds only the single-term TT−TDB expression above
 and the solar `2GM/c²` constant (1.97412574336e-8 AU, the IAU nominal solar GM).
 No Swiss, SOFA or ERFA code was copied; the deflection formula was written from
 the published equation.
+
+## Civil front door and historical ΔT (added 2026-11-16)
+
+`civil_apparent::geocentric_apparent_six_fields_many_from_civil` takes a civil
+timestamp with an explicit UTC offset, converts it once under a **declared and
+reported** policy and returns the six fields plus `time_source`:
+
+| Instant (UT) | `time_source` | Method |
+|---|---|---|
+| 1972-01-01 … 2027-06-27 | `IersLeapSeconds` | existing TAI−UTC table, TT, TDB series; UT1 taken as UTC (|UT1−UTC| < 0.9 s) |
+| 1900-01-01 … 1972-01-01 | `DeltaTPolynomial { model_id, delta_t_seconds }` | `TT = UT + ΔT`, ΔT from the Espenak–Meeus 2006 polynomials (`delta_t` module), TDB = TT + leading periodic term |
+| anything else | error | no extrapolation, no fallback |
+
+The UTC offset decides the policy, not the local calendar date. Leap-second
+labels and invalid dates are rejected. Checks: the ΔT fits are continuous at
+their joins (< 0.1 s), join the exact 1972 value TT−UTC = 42.184 s within
+0.1 s, and the two policies agree to < 0.1 s across 1972-01-01. The ΔT fits are
+smoothed history: real ΔT differs by a few tenths of a second before about
+1955, which is about 0.2″ for the Moon per 0.4 s. That uncertainty is not
+removed, only reported through `delta_t_seconds`.
+
+## Evidence stored in the repository
+
+- `docs/evidence/mvp1-apparent-local-reference-receipt-2026-11-16.json`: the
+  aggregate residuals of the local comparison above (grid, flags, versions,
+  per-body maxima, what is *not* established). It holds **no** reference-library
+  output rows, code or binaries, so nobody needs to rerun that comparison to
+  read the result, and the project does not redistribute AGPL output.
+- `docs/evidence/mvp1-apparent-baseline-1900-2100.csv`: 1990 rows (199 dates ×
+  10 bodies) produced by **this engine**. The ignored test
+  `real_de441_matches_committed_engine_baseline` recomputes them from a local
+  DE441 and fails on any change above 1e-9° (or 1e-12 AU), so regressions are
+  caught without the reference library.
+
+The test suite itself stays free of external files: everything that needs the
+2.8 GB kernel is `#[ignore]` and selected by `DE441_PATH`.
