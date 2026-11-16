@@ -593,10 +593,17 @@ mod tests {
             put_i32(&mut bytes, 76, 2, order);
             put_i32(&mut bytes, 80, 2, order);
             write_segment(&mut bytes, 2, order, 399, -10.0, 100.0, 513);
-            let index = parse(bytes).expect("record two can be the first summary when no comments are reserved");
+            let index = parse(bytes)
+                .expect("record two can be the first summary when no comments are reserved");
             assert_eq!(index.byte_order, order);
             assert_eq!(index.segments.len(), 1);
-            assert_eq!((index.segments[0].initial_address, index.segments[0].final_address), (513, 516));
+            assert_eq!(
+                (
+                    index.segments[0].initial_address,
+                    index.segments[0].final_address
+                ),
+                (513, 516)
+            );
         }
     }
 
