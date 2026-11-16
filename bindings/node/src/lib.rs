@@ -43,6 +43,7 @@ use virgostars_ephemeris_core::calendar_decimal_hours::{
 };
 use virgostars_ephemeris_core::civil_apparent::{jd_ut_to_tdb_with_policy, CivilTimeSource};
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::fixed_star::{
     calculate_star_with_solar_deflection, StellarSolarDeflection,
 };
@@ -257,6 +258,27 @@ pub fn house_angles_ut(
         longitude_deg_east,
         source_label(&source),
     )
+}
+
+#[napi(object)]
+pub struct EclNut {
+    pub true_obliquity_deg: f64,
+    pub mean_obliquity_deg: f64,
+    pub nutation_longitude_deg: f64,
+    pub nutation_obliquity_deg: f64,
+}
+
+/// Obliquity and nutation at a **TT** Julian date (IAU 2006 mean obliquity,
+/// IAU 2000B nutation); validated 1900-2100 TT.
+#[napi]
+pub fn ecliptic_nutation_tt(tt_jd: f64) -> Result<EclNut> {
+    let n = ecliptic_nutation(tt_jd).map_err(|e| fail("E_RANGE", e))?;
+    Ok(EclNut {
+        true_obliquity_deg: n.true_obliquity_deg(),
+        mean_obliquity_deg: n.mean_obliquity_deg(),
+        nutation_longitude_deg: n.nutation_longitude_deg(),
+        nutation_obliquity_deg: n.nutation_obliquity_deg(),
+    })
 }
 
 #[napi]

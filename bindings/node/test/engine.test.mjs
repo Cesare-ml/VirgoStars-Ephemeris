@@ -75,22 +75,24 @@ test('facade: Swiss-shaped result keys, SWIEPH policy, error objects and callbac
 
   const swe = createSwissShapedFacade(e, { acceptSwiephFlag: true });
   const sun = swe.swe_calc_ut(2451545.0, swe.SE_SUN, swe.SEFLG_SPEED | swe.SEFLG_SWIEPH);
-  for (const key of ['longitude', 'latitude', 'distance', 'longitudeSpeed', 'latitudeSpeed', 'distanceSpeed', 'rflag']) {
-    assert.equal(typeof sun[key], 'number', key);
-  }
+  assert.deepEqual(Object.keys(sun), ['longitude', 'latitude', 'distance', 'longitudeSpeed', 'latitudeSpeed', 'distanceSpeed', 'rflag']);
+  for (const key of Object.keys(sun)) assert.equal(typeof sun[key], 'number', key);
+  const withProvenance = createSwissShapedFacade(e, { acceptSwiephFlag: true, provenance: true }).swe_calc_ut(2451545.0, 0, SPEED);
+  assert.equal(typeof withProvenance.timeSource, 'string');
   assert.equal(sun.rflag & swe.SEFLG_SWIEPH, 0);
   assert.ok(Math.abs(sun.longitude - 280.37) < 0.01);
 
   // Unsupported things return error objects (do not throw), like the Swiss binding.
-  assert.ok(swe.swe_calc_ut(2451545.0, 15, swe.SEFLG_SPEED).error);
+  assert.deepEqual(Object.keys(swe.swe_calc_ut(2451545.0, 15, swe.SEFLG_SPEED)), ['error']);
+  assert.equal(swe.swe_calc_ut(2451545.0, 15, swe.SEFLG_SPEED).code, 'E_UNSUPPORTED_BODY');
   assert.ok(swe.swe_calc_ut(2451545.0, 0, 8).error);
 
   let received;
   const returned = swe.swe_calc_ut(2451545.0, swe.SE_SUN, swe.SEFLG_SPEED, (value) => {
     received = value;
   });
-  assert.equal(returned, undefined);
-  assert.equal(received.longitude, sun.longitude, 'callback variant is synchronous here');
+  assert.equal(returned.longitude, sun.longitude, 'the call also returns the result, like the Swiss binding');
+  assert.equal(received.longitude, sun.longitude, 'callback variant is synchronous');
   assert.equal(swe.swe_get_planet_name(swe.SE_MARS).name, 'Mars');
 });
 

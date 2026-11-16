@@ -66,9 +66,11 @@ Deliberate, visible differences:
   created with `{ acceptSwiephFlag: true }`; `rflag` never carries that bit.
 - A directory of `.se1` files cannot be passed: the load interface takes a DE441
   *file*, and the facade has no `swe_set_ephe_path`.
-- Whether the key names, callback timing and error shape equal those of the
-  installed `swisseph` 0.5.17 package **has not been verified** (the package is
-  not installed here). That check, run against the real package, is still a gate.
+- Key names, value types, error shape, synchronous callback behavior, `swe_julday`
+  leniency and `SE_ECL_NUT` slots were checked against the installed `swisseph`
+  0.5.17 on 2026-11-16 and aligned; see
+  [MVP1_SWISSEPH_SHAPE_2026-11-16.md](MVP1_SWISSEPH_SHAPE_2026-11-16.md) for the
+  table and what still differs.
 
 ## Evidence (2026-11-16, Windows 11, Node 22.18, Rust 1.99.1)
 
@@ -111,7 +113,7 @@ and its aggregate receipt. Core tests: `tests/house_angles.rs` (4); binding test
    `SE_ECL_NUT`, `swe_azalt`, a `swe_houses`-shaped facade over the provider and
    `astrological-functions` (the systems themselves are in that repository), Chiron/nodes/apogees, `swe_fixstar_ut`/`_mag` by
    name (needs the reviewed catalog and names).
-2. Verification of shapes against the installed `swisseph` 0.5.17.
+2. Shapes beyond the listed calls (`swe_houses`, helio/equatorial output, `swe_azalt`, `swe_houses_pos`) against `swisseph` 0.5.17.
 3. A clean-machine consumer test on an offline application, Linux/macOS builds,
    packaging, signed prebuilt binaries and any publication (none authorized).
 4. Callback semantics: synchronous here by assumption.

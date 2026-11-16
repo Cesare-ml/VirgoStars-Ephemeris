@@ -146,39 +146,68 @@ function createHouseAngleProvider() {
 }
 
 /**
+ * Lenient `swe_julday`: month, day and hour overflow arithmetically (month 13 is
+ * January of the next year, day 0 is the day before, hour 25 is 1h of the next
+ * day), year/month/day are truncated to integers and non-finite input gives NaN,
+ * which is what the installed `swisseph` 0.5.17 does (observed, see
+ * docs/MVP1_SWISSEPH_SHAPE_2026-11-16.md). The strict `julday` stays available.
+ */
+function lenientJulday(year, month, day, hour, gregorian) {
+  const nums = [year, month, day, hour];
+  if (!nums.every((v) => typeof v === 'number' && Number.isFinite(v))) return NaN;
+  const y0 = Math.trunc(year);
+  const m0 = Math.trunc(month) - 1;
+  const y = y0 + Math.floor(m0 / 12);
+  const m = ((m0 % 12) + 12) % 12 + 1;
+  const firstOfMonth = julday(y, m, 1, 0, gregorian);
+  return firstOfMonth + (Math.trunc(day) - 1) + hour / 24;
+}
+
+/** Names of the bodies this engine computes, as the Swiss binding prints them. */
+const BODY_NAMES_BY_NUMBER = BODY_NAMES;
+
+/**
  * Swiss-shaped synchronous facade over an Engine, for the call shapes the
- * VirgoStars backend uses: `swe_julday`, `swe_revjul`, `swe_calc_ut`, `swe_calc`.
+ * VirgoStars backend uses: `swe_julday`, `swe_revjul`, `swe_calc_ut`, `swe_calc`
+ * (including `SE_ECL_NUT`) and `swe_get_planet_name`.
+ *
+ * Shape facts verified against the installed `swisseph` 0.5.17 (local probe):
+ * result keys `longitude, latitude, distance, longitudeSpeed, latitudeSpeed,
+ * distanceSpeed, rflag` and nothing else; speeds are 0 without `SEFLG_SPEED`;
+ * failures return an object whose only enumerable key is `error`; a trailing
+ * callback is invoked synchronously, before the call returns, and the call also
+ * returns the result.
  *
  * Differences that are deliberate and visible:
  *  - `SEFLG_SWIEPH` (the flag the backend passes) is REJECTED unless the facade
  *    is created with `{ acceptSwiephFlag: true }`; then it is accepted as "use the
  *    configured DE441 file" and `rflag` never carries the SWIEPH bit.
+ *  - Provenance (`timeSource`, `notes`) is NOT added to results unless the facade
+ *    is created with `{ provenance: true }`, so that results have exactly the
+ *    Swiss keys; the `Engine` methods always return it.
  *  - `SEFLG_MOSEPH`, helio/equatorial/topocentric/sidereal flags and bodies
  *    outside 0..9 return an `error` object; nothing is approximated.
- *  - Mars..Pluto are system barycenters (as in Swiss JPL mode); see `notes`.
- *  - Failures return `{ error, code }` like the Swiss binding; they do not throw.
- *  - A trailing callback receives the same object synchronously.
- *
- * Whether these shapes match the installed `swisseph` 0.5.17 binding exactly
- * has NOT been verified against that package.
+ *  - The error object also carries a non-enumerable `code`.
+ *  - Mars..Pluto are system barycenters (as in Swiss JPL mode).
  */
-function createSwissShapedFacade(engine, { acceptSwiephFlag = false } = {}) {
-  function withCallback(args, compute) {
+function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance = false } = {}) {
+  function deliver(args, result) {
     const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
-    const result = compute();
-    if (callback) {
-      callback(result);
-      return undefined;
-    }
+    if (callback) callback(result);
     return result;
   }
 
   function shape(r) {
-    return {
+    const result = {
       longitude: r.xx[0], latitude: r.xx[1], distance: r.xx[2],
       longitudeSpeed: r.xx[3], latitudeSpeed: r.xx[4], distanceSpeed: r.xx[5],
-      rflag: r.rflag, timeSource: r.timeSource, notes: r.notes,
+      rflag: r.rflag,
     };
+    if (provenance) {
+      result.timeSource = r.timeSource;
+      result.notes = r.notes;
+    }
+    return result;
   }
 
   function normalizeFlags(flags) {
@@ -199,26 +228,42 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false } = {}) {
       return fn();
     } catch (error) {
       const { code, message } = parseError(error);
-      return { error: `${code}: ${message}`, code };
+      const failure = { error: `${code}: ${message}` };
+      Object.defineProperty(failure, 'code', { value: code, enumerable: false });
+      return failure;
     }
+  }
+
+  function eclNut(tjdEt) {
+    const n = loadNative().eclipticNutationTt(tjdEt);
+    // Same slots as the Swiss binding: true obliquity, mean obliquity, nutation in
+    // longitude, nutation in obliquity (all degrees); the other two are zero.
+    return {
+      longitude: n.trueObliquityDeg, latitude: n.meanObliquityDeg, distance: n.nutationLongitudeDeg,
+      longitudeSpeed: n.nutationObliquityDeg, latitudeSpeed: 0, distanceSpeed: 0, rflag: 0,
+    };
   }
 
   return Object.freeze({
     ...constants,
+    SE_ECL_NUT: -1,
     swe_julday: (year, month, day, hour, gregflag = constants.SE_GREG_CAL) =>
-      julday(year, month, day, hour, gregflag === constants.SE_GREG_CAL),
+      lenientJulday(year, month, day, hour, gregflag === constants.SE_GREG_CAL),
     swe_revjul: (jd, gregflag = constants.SE_GREG_CAL) => revjul(jd, gregflag === constants.SE_GREG_CAL),
     swe_calc_ut: (...args) =>
-      withCallback(args, () => guarded(() => shape(engine.calcUt(args[0], args[1], normalizeFlags(args[2] ?? 0))))),
+      deliver(args, guarded(() => shape(engine.calcUt(args[0], args[1], normalizeFlags(args[2] ?? 0))))),
     swe_calc: (...args) =>
-      withCallback(args, () => guarded(() => shape(engine.calcTdb(args[0], args[1], normalizeFlags(args[2] ?? 0))))),
-    swe_get_planet_name: (ipl) => ({ name: BODY_NAMES[ipl] ?? '' }),
+      deliver(args, guarded(() => (args[1] === -1
+        ? eclNut(args[0])
+        : shape(engine.calcTdb(args[0], args[1], normalizeFlags(args[2] ?? 0)))))),
+    swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
   });
 }
 
 module.exports = {
   Engine,
   julday,
+  lenientJulday,
   revjul,
   houseAnglesUt,
   createHouseAngleProvider,
