@@ -2,7 +2,7 @@
 
 **A free and open-source astronomical ephemeris project for astrology applications — licensed under CPAL-1.0.**
 
-**Status: EARLY EXPERIMENTAL IMPLEMENTATION — the Rust core includes a classic JPL DE441 binary reader and synthetic tests, but independent NASA/JPL numerical validation, SPK support, cross-language bindings and production integration remain incomplete.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris.
+**Status: EARLY EXPERIMENTAL IMPLEMENTATION — the Rust core includes a classic JPL DE441 binary reader and experimental NAIF DAF/SPK indexing, type-2/type-3 J2000 geometric state evaluation and multi-kernel target–center chain composition. These features are covered primarily by synthetic tests; independent numerical validation against authentic NASA/JPL kernels, additional SPK types/frames, cross-language bindings and production integration remain incomplete.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris.
 
 
 ## Purpose
