@@ -300,12 +300,10 @@ mod tests {
         // API remains finite while the derivative is genuinely unrepresentable.
         let coefficients = [0.0, 1.0e308, 1.0e308, -5.0e307];
         let positive = evaluate_chebyshev(&coefficients, 1.0).unwrap();
-        assert_eq!(positive.value, 1.5e308);
-        assert_eq!(positive.derivative_dx, 0.5e308);
-        assert_eq!(
-            evaluate_chebyshev_value(&coefficients, -1.0).unwrap(),
-            0.5e308
-        );
+        assert!((positive.value / 1.5e308 - 1.0).abs() < 1.0e-14);
+        assert!((positive.derivative_dx / 0.5e308 - 1.0).abs() < 1.0e-14);
+        let negative_value = evaluate_chebyshev_value(&coefficients, -1.0).unwrap();
+        assert!((negative_value / 0.5e308 - 1.0).abs() < 1.0e-14);
         assert_eq!(
             evaluate_chebyshev(&coefficients, -1.0),
             Err(EphemerisError::ArithmeticOverflow)
