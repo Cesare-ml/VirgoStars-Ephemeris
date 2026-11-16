@@ -282,8 +282,8 @@ mod tests {
 
     #[test]
     fn endpoint_full_evaluator_preserves_finite_value_and_derivative() {
-        // At +1: value = 1.5e308 and derivative = 0.5e308; at -1
-        // both remain finite. All outputs are representable.
+        // At +1, both value and derivative are finite. At -1, the value-only
+        // API remains finite while the derivative is genuinely unrepresentable.
         let coefficients = [0.0, 1.0e308, 1.0e308, -5.0e307];
         let positive = evaluate_chebyshev(&coefficients, 1.0).unwrap();
         assert_eq!(positive.value, 1.5e308);
