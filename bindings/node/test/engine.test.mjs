@@ -29,7 +29,7 @@ test('unsupported flags and bodies are explicit errors, not approximations', opt
   for (const flags of [constants.SEFLG_SWIEPH, constants.SEFLG_MOSEPH, 16, 32, 64, 1024, 16384, 32768, 65536]) {
     assert.throws(() => e.calcTdb(2451545.0, 0, flags), (x) => x.code === 'E_UNSUPPORTED_FLAG', String(flags));
   }
-  for (const ipl of [-1, 10, 12, 15, 99]) {
+  for (const ipl of [-1, 15, 21, 22, 99]) {
     assert.throws(() => e.calcTdb(2451545.0, ipl, SPEED), (x) => x.code === 'E_UNSUPPORTED_BODY', String(ipl));
   }
   assert.throws(() => e.calcTdb(NaN, 0, SPEED), (x) => x.code === 'E_RANGE');
@@ -126,4 +126,30 @@ test('equatorial and heliocentric requests: keys, rflag bits, the Sun-from-the-S
   assert.ok(Math.abs(both.rectAscension - 0.0496) < 0.001 && Math.abs(both.declination + 1.526) < 0.001);
   // Fixed stars do not offer these modes yet and say so.
   assert.equal(typeof swe.swe_get_planet_name(14).name, 'string');
+});
+
+test('lunar points 10..13: Swiss numbers, key sets, nodes on the ecliptic, apogee latitude, heliocentric zeros', opts, () => {
+  const swe = createSwissShapedFacade(new Engine(path), { acceptSwiephFlag: true });
+  const jd = 2451545.0;
+  const mean = swe.swe_calc(jd, swe.SE_MEAN_NODE, SPEED);
+  assert.deepEqual(Object.keys(mean), ['longitude', 'latitude', 'distance', 'longitudeSpeed', 'latitudeSpeed', 'distanceSpeed', 'rflag']);
+  assert.ok(Math.abs(mean.longitude - 125.0407) < 0.001 && mean.latitude === 0 && mean.longitudeSpeed < 0);
+  assert.equal(mean.rflag, 1 | 256);
+  const trueNode = swe.swe_calc(jd, swe.SE_TRUE_NODE, SPEED);
+  assert.ok(Math.abs(trueNode.longitude - 123.954) < 0.01 && trueNode.latitude === 0);
+  const apogee = swe.swe_calc(jd, swe.SE_MEAN_APOG, SPEED);
+  assert.ok(Math.abs(apogee.longitude - 263.4643) < 0.01 && Math.abs(apogee.latitude - 3.4197) < 0.01);
+  assert.ok(Math.abs(apogee.distance * 149597870.7 - 405503.75) < 0.5);
+  const osc = swe.swe_calc(jd, swe.SE_OSCU_APOG, SPEED);
+  assert.ok(Math.abs(osc.longitude - 252.994) < 0.01 && osc.latitude > 3.9 && osc.latitude < 4.2);
+  const equ = swe.swe_calc(jd, swe.SE_TRUE_NODE, SPEED | constants.SEFLG_EQUATORIAL);
+  assert.deepEqual(Object.keys(equ), ['rectAscension', 'declination', 'distance', 'rectAscensionSpeed', 'declinationSpeed', 'distanceSpeed', 'rflag']);
+  assert.equal(equ.rflag, 1 | 256 | 2048);
+  const helio = swe.swe_calc(jd, swe.SE_MEAN_NODE, SPEED | constants.SEFLG_HELCTR);
+  assert.deepEqual([helio.longitude, helio.latitude, helio.distance, helio.longitudeSpeed], [0, 0, 0, 0]);
+  assert.equal(helio.rflag, 1 | 8 | 256 | 512 | 1024);
+  assert.equal(swe.swe_get_planet_name(10).name, 'mean Node');
+  assert.equal(swe.swe_get_planet_name(13).name, 'osc. Apogee');
+  // The UT entry reaches them as well, with the declared time policy.
+  assert.ok(Number.isFinite(swe.swe_calc_ut(jd, swe.SE_TRUE_NODE, SPEED).longitude));
 });

@@ -167,3 +167,29 @@ test('heliocentric output: same keys and rflag; Moon, Earth and the outer planet
     assert.ok(Math.abs(b.latitude - a.latitude) * 3600 < toleranceArcsec, `latitude body ${ipl}`);
   }
 });
+
+test('lunar points: same keys and rflag; positions within the published-series tolerance', opts, () => {
+  setup();
+  for (const jd of [2415100.5, 2433282.5, 2451545.0, 2460000.5, 2480000.5]) {
+    for (const [ipl, tolerance] of [[10, 0.3], [11, 0.02], [12, 0.3], [13, 0.4]]) {
+      for (const extra of [0, 2048]) {
+        const flags = SPEED_JPL | extra;
+        const a = swiss.swe_calc(jd, ipl, flags);
+        const b = ours.swe_calc(jd, ipl, flags);
+        assert.deepEqual(Object.keys(b), Object.keys(a), `keys of ${ipl}`);
+        assert.equal(b.rflag, a.rflag, `rflag of ${ipl}`);
+        const [lon, lat] = extra ? ['rectAscension', 'declination'] : ['longitude', 'latitude'];
+        assert.ok(Math.abs(wrap(b[lon] - a[lon])) * 3600 < tolerance, `${ipl} ${lon} ${jd}`);
+        assert.ok(Math.abs(b[lat] - a[lat]) * 3600 < tolerance, `${ipl} ${lat} ${jd}`);
+        assert.ok(Math.abs(b.distance / a.distance - 1) < 1e-6, `${ipl} distance ${jd}`);
+      }
+    }
+  }
+});
+
+test('Chiron and the interpolated apsides are still not offered and say so', opts, () => {
+  setup();
+  for (const ipl of [15, 21, 22]) {
+    assert.deepEqual(Object.keys(ours.swe_calc(2451545, ipl, SPEED_JPL)), ['error']);
+  }
+});

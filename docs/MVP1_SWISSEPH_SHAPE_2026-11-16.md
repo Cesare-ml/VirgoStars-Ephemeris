@@ -42,8 +42,10 @@ skipped with no data at all.
   including the up-to-0.9″ inner-planet difference in heliocentric light-time.
 - **Flags and bodies not yet computed** (MVP 2): `SEFLG_MOSEPH`, `SEFLG_NOABERR`,
   `SEFLG_TRUEPOS`, `SEFLG_J2000`, `SEFLG_NONUT`, `SEFLG_BARYCTR`, `SEFLG_TOPOCTR`,
-  sidereal modes, Chiron and every body above Pluto, nodes and apogees. They return
-  an `{ error }` object.
+  sidereal modes, Chiron, the interpolated apsides (21, 22) and every body above
+  Pluto except the lunar points. They return an `{ error }` object. Bodies 10–13
+  (nodes and apogees) are offered: see
+  [MVP2_LUNAR_POINTS_2026-11-16.md](MVP2_LUNAR_POINTS_2026-11-16.md).
 - **Moshier fallback.** With a missing flag or missing data files the real package
   silently falls back to its built-in Moshier ephemeris (`rflag 4`) or reports a
   missing `.se1` file. The facade never falls back: out-of-range epochs and

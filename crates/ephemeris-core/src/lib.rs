@@ -50,6 +50,7 @@ pub mod hipparcos;
 pub mod house_angles;
 pub mod light_deflection;
 pub mod light_time;
+pub mod lunar_points;
 pub mod six_field_units;
 pub mod spk_batch;
 pub mod spk_direct_state;

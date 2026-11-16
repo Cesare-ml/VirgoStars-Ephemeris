@@ -54,6 +54,7 @@ use virgostars_ephemeris_core::hipparcos::{
     read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
 };
 use virgostars_ephemeris_core::house_angles::house_angles;
+use virgostars_ephemeris_core::lunar_points::{lunar_point, LunarPoint};
 
 /// Swiss-style flag bits this binding understands (values are the public
 /// constants of the C API: `SEFLG_JPLEPH = 1`, `SEFLG_SPEED = 256`,
@@ -361,6 +362,9 @@ impl Engine {
         time_source: String,
     ) -> Result<CalcResult> {
         check_flags(flags)?;
+        if let Some(point) = LunarPoint::from_swiss_number(ipl) {
+            return self.calc_lunar_point(point, jd_tdb, flags, time_source);
+        }
         let body = body_from_ipl(ipl)?;
         let helio = flags & FLAG_HELCTR != 0;
         if ipl == BODY_EARTH && !helio {
@@ -397,6 +401,42 @@ impl Engine {
                 f.longitude_speed_deg_per_tdb_day,
                 f.latitude_speed_deg_per_tdb_day,
                 f.distance_speed_au_per_tdb_day,
+            ]
+        };
+        Ok(CalcResult {
+            xx: zero_speeds_unless_requested(six, flags),
+            rflag: reported_flags(flags),
+            time_source,
+            notes,
+        })
+    }
+
+    fn calc_lunar_point(
+        &mut self,
+        point: LunarPoint,
+        jd_tdb: JulianDateTdb,
+        flags: i32,
+        time_source: String,
+    ) -> Result<CalcResult> {
+        let opts = options(flags);
+        let mut notes = vec![
+            "mathematical lunar point: no light-time, aberration or deflection".to_string(),
+            "true ecliptic/equator of date (mean position plus IAU 2000B nutation for the mean points)".to_string(),
+        ];
+        let six = if opts.center == ApparentCenter::Heliocentric {
+            // Seen from the Sun a point of the Moon's orbit is undefined: zeros, as the reference.
+            notes.push("heliocentric request: the reference returns the zero vector".into());
+            [0.0; 6]
+        } else {
+            let state = lunar_point(Some(&mut self.ephemeris), point, opts.frame, jd_tdb.0)
+                .map_err(|e| fail("E_CALC", e))?;
+            [
+                state.longitude_deg,
+                state.latitude_deg,
+                state.distance_au,
+                state.longitude_rate_deg_per_day,
+                state.latitude_rate_deg_per_day,
+                state.distance_rate_au_per_day,
             ]
         };
         Ok(CalcResult {

@@ -1,0 +1,91 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.calcTdb for bodies 10..13 (mean node, true node, mean apogee, osculating apogee)",
+  "commit": "8db6768"
+ },
+ "reference": {
+  "name": "installed swisseph 0.5.17 (AGPL), swe_calc with ephemeris time = TDB, JPL mode on the same de441.eph; local only"
+ },
+ "grid": {
+  "dates": 99,
+  "first_jd_tdb": 2415100.5,
+  "step_days": 733.7
+ },
+ "maximum_differences": {
+  "ecliptic": {
+   "mean Node": {
+    "lon_arcsec": 0.20244380339136114,
+    "lat_arcsec": 0,
+    "dist_rel": 4.440892098500626e-16,
+    "rate_lon_arcsec_per_day": 0.00003699824446812272,
+    "rate_lat_arcsec_per_day": 0
+   },
+   "true Node": {
+    "lon_arcsec": 0.005975304884486832,
+    "lat_arcsec": 0,
+    "dist_rel": 6.869908020235016e-8,
+    "rate_lon_arcsec_per_day": 0.000013362750905798748,
+    "rate_lat_arcsec_per_day": 0
+   },
+   "mean Apogee": {
+    "lon_arcsec": 0.21993663312969147,
+    "lat_arcsec": 0.0037836591747719694,
+    "dist_rel": 6.661338147750939e-16,
+    "rate_lon_arcsec_per_day": 0.00003276227289461531,
+    "rate_lat_arcsec_per_day": 0.000010385292625869624
+   },
+   "osc Apogee": {
+    "lon_arcsec": 0.1918721902256948,
+    "lat_arcsec": 0.015316823252931044,
+    "dist_rel": 7.046322503256874e-8,
+    "rate_lon_arcsec_per_day": 0.05183443818168598,
+    "rate_lat_arcsec_per_day": 0.0039051799394229647
+   }
+  },
+  "equatorial": {
+   "mean Node": {
+    "lon_arcsec": 0.2151450240489794,
+    "lat_arcsec": 0.07217872034139816,
+    "dist_rel": 4.440892098500626e-16,
+    "rate_lon_arcsec_per_day": 0.00005408537617768161,
+    "rate_lat_arcsec_per_day": 0.00007662926293505734
+   },
+   "true Node": {
+    "lon_arcsec": 0.006422677097361884,
+    "lat_arcsec": 0.0015587852672638292,
+    "dist_rel": 6.869908020235016e-8,
+    "rate_lon_arcsec_per_day": 0.000016043486539274454,
+    "rate_lat_arcsec_per_day": 0.0000049330139972880716
+   },
+   "mean Apogee": {
+    "lon_arcsec": 0.22411739055314683,
+    "lat_arcsec": 0.08497773625570915,
+    "dist_rel": 6.661338147750939e-16,
+    "rate_lon_arcsec_per_day": 0.00007718881533946842,
+    "rate_lat_arcsec_per_day": 0.00015798690355950384
+   },
+   "osc Apogee": {
+    "lon_arcsec": 0.19798533812718233,
+    "lat_arcsec": 0.062123297937866084,
+    "dist_rel": 7.046322503256874e-8,
+    "rate_lon_arcsec_per_day": 0.055787418204999994,
+    "rate_lat_arcsec_per_day": 0.015703614408835165
+   }
+  }
+ },
+ "reading": {
+  "true_node": "agrees to 0.006 arcsec in longitude and 7e-8 in distance once the Moon state is taken at the light-time retarded epoch (0.013 arcsec without it).",
+  "osculating_apogee": "agrees to 0.19 arcsec in longitude and 0.015 arcsec in latitude (0.34 arcsec without the retarded epoch). Its direction swings by 1.6 deg/day, so 0.19 arcsec is a 0.1 s time offset.",
+  "mean_node_and_apogee": "differ by about 0.2 arcsec (published Simon et al. 1994 series against the reference series); latitude of the mean apogee within 0.004 arcsec.",
+  "rates": "compared with centered differences of the reference positions; the osculating apogee differs by 0.05 arcsec/day because its angular rate is wild."
+ },
+ "not_established": [
+  "interpolated apogee and perigee (bodies 21 and 22): no published definition, not offered",
+  "Chiron: no independent small-body ephemeris available",
+  "bit-for-bit reproduction of the reference mean series"
+ ]
+}

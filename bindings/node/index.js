@@ -23,6 +23,7 @@ function loadNative() {
 const constants = Object.freeze({
   SE_SUN: 0, SE_MOON: 1, SE_MERCURY: 2, SE_VENUS: 3, SE_MARS: 4,
   SE_JUPITER: 5, SE_SATURN: 6, SE_URANUS: 7, SE_NEPTUNE: 8, SE_PLUTO: 9,
+  SE_MEAN_NODE: 10, SE_TRUE_NODE: 11, SE_MEAN_APOG: 12, SE_OSCU_APOG: 13,
   SE_GREG_CAL: 1, SE_JUL_CAL: 0,
   SE_EARTH: 14,
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
@@ -30,6 +31,10 @@ const constants = Object.freeze({
 });
 
 const BODY_NAMES = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
+BODY_NAMES[10] = 'mean Node';
+BODY_NAMES[11] = 'true Node';
+BODY_NAMES[12] = 'mean Apogee';
+BODY_NAMES[13] = 'osc. Apogee';
 BODY_NAMES[14] = 'Earth';
 
 function parseError(error) {
