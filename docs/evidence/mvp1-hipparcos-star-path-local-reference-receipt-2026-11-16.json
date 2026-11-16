@@ -1,0 +1,141 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows or catalog rows are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "crate": "virgostars-ephemeris-core",
+  "modules": [
+   "hipparcos",
+   "fixed_star"
+  ],
+  "commit": "d95fa3c"
+ },
+ "purpose": "End-to-end check of the Hipparcos hip2 data path: the subject used the genuine hip2.dat astrometry (epoch J1991.25) while the local-only reference used its own catalog values. Differences therefore combine catalog differences and algorithm differences.",
+ "radial_velocity": "taken from the reference library own catalog for BOTH engines (hip2 has none); not stored here",
+ "grid": {
+  "start_jd_tdb": 2415100.5,
+  "step_days": 1800.3,
+  "dates": 41
+ },
+ "solar_deflection": "on in both; reference flags JPLEPH|SPEED",
+ "stars": {
+  "Aldebaran": {
+   "hip": 21421,
+   "longitude_max_abs_diff_arcsec": 0.0005563046215684153,
+   "latitude_max_abs_diff_arcsec": 0.0014345820019912026,
+   "distance_max_relative_diff": 0.000023769484026603394,
+   "rejected_by_strict_quality_policy": "Sn=1"
+  },
+  "Algol": {
+   "hip": 14576,
+   "longitude_max_abs_diff_arcsec": 0.0005778720606031129,
+   "latitude_max_abs_diff_arcsec": 0.0004506371979573487,
+   "distance_max_relative_diff": 0.0000012983340349492778,
+   "rejected_by_strict_quality_policy": "Sn=75"
+  },
+  "Antares": {
+   "hip": 80763,
+   "longitude_max_abs_diff_arcsec": 0.0005135618266649544,
+   "latitude_max_abs_diff_arcsec": 0.0005049863982975467,
+   "distance_max_relative_diff": 1.8449598071512696e-7,
+   "rejected_by_strict_quality_policy": "Sn=1"
+  },
+  "Regulus": {
+   "hip": 49669,
+   "longitude_max_abs_diff_arcsec": 0.0006030722033756319,
+   "latitude_max_abs_diff_arcsec": 0.000300268800024206,
+   "distance_max_relative_diff": 0.0000021727503356494537,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Spica": {
+   "hip": 65474,
+   "longitude_max_abs_diff_arcsec": 0.00048511083150515333,
+   "latitude_max_abs_diff_arcsec": 0.00015821639998137016,
+   "distance_max_relative_diff": 1.1692456802769868e-7,
+   "rejected_by_strict_quality_policy": "Sn=7"
+  },
+  "Polaris": {
+   "hip": 11767,
+   "longitude_max_abs_diff_arcsec": 0.0018028655176749453,
+   "latitude_max_abs_diff_arcsec": 0.0003197735964022286,
+   "distance_max_relative_diff": 0.0000011079697519456033,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Deneb": {
+   "hip": 102098,
+   "longitude_max_abs_diff_arcsec": 0.0011591820111789275,
+   "latitude_max_abs_diff_arcsec": 0.000253519189641338,
+   "distance_max_relative_diff": 1.0129333072317337e-7,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Altair": {
+   "hip": 97649,
+   "longitude_max_abs_diff_arcsec": 0.007211149386421312,
+   "latitude_max_abs_diff_arcsec": 0.002302974003498548,
+   "distance_max_relative_diff": 0.00004641886527434469,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Capella": {
+   "hip": 24608,
+   "longitude_max_abs_diff_arcsec": 0.0007128288871172117,
+   "latitude_max_abs_diff_arcsec": 0.0021852755892837195,
+   "distance_max_relative_diff": 0.000019905804450326414,
+   "rejected_by_strict_quality_policy": "Sn=75"
+  },
+  "Arcturus": {
+   "hip": 69673,
+   "longitude_max_abs_diff_arcsec": 0.0045151306949264836,
+   "latitude_max_abs_diff_arcsec": 0.0024744060112880106,
+   "distance_max_relative_diff": 0.000004227458771821624,
+   "rejected_by_strict_quality_policy": "Sn=55,Nc=2"
+  },
+  "Canopus": {
+   "hip": 30438,
+   "longitude_max_abs_diff_arcsec": 0.0007934723726066295,
+   "latitude_max_abs_diff_arcsec": 0.0005072039812148432,
+   "distance_max_relative_diff": 0.000001916577599736513,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Procyon": {
+   "hip": 37279,
+   "longitude_max_abs_diff_arcsec": 0.0009173014859698014,
+   "latitude_max_abs_diff_arcsec": 0.0019865555984210914,
+   "distance_max_relative_diff": 0.00000817920183915355,
+   "rejected_by_strict_quality_policy": "Sn=75"
+  },
+  "Pollux": {
+   "hip": 37826,
+   "longitude_max_abs_diff_arcsec": 0.0010367890354245901,
+   "latitude_max_abs_diff_arcsec": 0.0007862292001448168,
+   "distance_max_relative_diff": 0.0000027985322312851224,
+   "rejected_by_strict_quality_policy": null
+  },
+  "Vega": {
+   "hip": 91262,
+   "longitude_max_abs_diff_arcsec": 0.003339428394610877,
+   "latitude_max_abs_diff_arcsec": 0.0011746224089392854,
+   "distance_max_relative_diff": 0.000024010361319715123,
+   "rejected_by_strict_quality_policy": "Sn=1"
+  },
+  "Betelgeuse": {
+   "hip": 27989,
+   "longitude_max_abs_diff_arcsec": 0.0004625963356374996,
+   "latitude_max_abs_diff_arcsec": 0.0005579243946840506,
+   "distance_max_relative_diff": 0.0000012842711902827375,
+   "rejected_by_strict_quality_policy": "Sn=1"
+  },
+  "Fomalhaut": {
+   "hip": 113368,
+   "longitude_max_abs_diff_arcsec": 0.00046081804612185806,
+   "latitude_max_abs_diff_arcsec": 0.000554011198516946,
+   "distance_max_relative_diff": 0.000007552634106788858,
+   "rejected_by_strict_quality_policy": null
+  }
+ },
+ "reading": "Maximum position differences are at the milliarcsecond level (worst: Altair 0.007 arcsec). That is far below 1 arcsecond and consistent with catalog-value differences; it is NOT a statement about the absolute accuracy of the catalog.",
+ "not_established": [
+  "redistribution rights of derived catalog data",
+  "photometry and radial velocities",
+  "accuracy for companions/variables"
+ ]
+}

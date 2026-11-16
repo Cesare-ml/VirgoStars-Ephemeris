@@ -1,0 +1,13 @@
+{
+ "schema": "virgostars-ephemeris/data-provenance/1",
+ "note": "Provenance only. The catalog itself is NOT stored in this repository; redistribution terms were not reviewed.",
+ "date_downloaded": "2026-11-16",
+ "authorized_by": "maintainer, in chat, for this single file",
+ "source_url": "https://vizier.cfa.harvard.edu/ftp/cats/I/311/hip2.dat.gz",
+ "catalog": "Hipparcos, the New Reduction of the Raw Data (F. van Leeuwen, 2007), CDS I/311/hip2, ICRS epoch J1991.25",
+ "server_last_modified": "Mon, 15 Sep 2008 17:55:19 GMT",
+ "archive": { "bytes": 8977907, "sha256": "8e624f843d4254a9b7c2e8dda8e3158dbe825bf98f6bf3dbbae7f0d0b73d6858" },
+ "extracted": { "name": "hip2.dat", "bytes": 32673535, "sha256": "c45d6325bd59dd691764af173a9702e543804a2b6c1d9fea59210e8332e50a4a", "records": 117955, "record_length": 276 },
+ "checks_performed": ["gzip integrity", "117955 records, all 276 bytes", "unique HIP numbers (by the Rust reader)", "documented columns match the sample records"],
+ "not_authenticated": "The hashes pin the bytes checked here; they do not authenticate the publisher independently."
+}

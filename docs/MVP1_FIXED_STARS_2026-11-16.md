@@ -1,8 +1,9 @@
-# MVP 1, row 4 — fixed stars: calculation engine (no catalog yet)
+# MVP 1, row 4 — fixed stars: calculation engine and Hipparcos reader
 
-**Status: Locally tested algorithm; NO star catalog is bundled or approved.**
-The calculation is ready; the data gate (real catalog, rights, identification)
-is open. Branch: `integration/mvp1-apparent-pipeline-20261116`.
+**Status: Locally tested algorithm and data path; NO star catalog is bundled or
+approved for redistribution.** The calculation and the reader for the genuine
+Hipparcos file work; the remaining data gates (rights, radial velocity,
+magnitude, names, quality policy) are open. Branch: `integration/mvp1-apparent-pipeline-20261116`.
 
 ## What exists
 
@@ -54,23 +55,52 @@ because it depends only on modules that already exist on this branch.
   No reference-library output rows, catalog values or code are stored. The
   comparison is for the maintainer's local use only.
 
-## Not done — the data gate
+## Hipparcos reader (added the same day)
 
-1. **No catalog is bundled.** The reference library's own star file must not be
-   used as a source (rights); the 81-star target list in the star branch lists
-   names and HIP numbers only.
-2. **Real data**: the planned source is the Hipparcos new reduction, CDS
-   I/311/hip2 (van Leeuwen 2007; ICRS, epoch J1991.25 = JD 2448349.0625). It has
-   to be downloaded by the maintainer or with explicit permission, its terms of
-   reuse reviewed, and checksummed. The existing Node importer
-   (`scripts/import-hipparcos-2007.mjs`) is JavaScript and was **not** reviewed or
-   merged here; the long-term importer belongs in Rust.
-3. **Not in Hipparcos**: V magnitude and barycentric radial velocity need
-   separate, cited sources per star; companions, binaries and variables need
-   special treatment (the importer's single-star solution filter helps).
-4. **Names and aliases** must be cross-identified by HIP number from independent
-   sources, never from the reference library's list.
+`hipparcos` parses the CDS I/311 `hip2.dat` fixed-width records (276 bytes,
+117,955 records) strictly: wrong length, non-ASCII, blank/non-finite fields,
+out-of-range RA/Dec, duplicate HIP numbers and a wrong record count are all
+errors. `Hip2Record::to_catalog_entry(RadialVelocity)` converts a record to the
+engine's entry at epoch J1991.25 (JD 2448349.0625); the catalog contains **no
+radial velocity**, so the caller must pass `Measured(km/s)` or an explicit
+`AssumedZero` (never a silent default). Zero or negative parallaxes never become
+a distance. CLI: `hip_star_at`.
+
+The maintainer authorized downloading `hip2.dat.gz` (8,977,907 bytes) on
+2026-11-16; it is kept **outside** the repository. Provenance (URL, sizes,
+SHA-256 of the archive and of the extracted file, checks done) is in
+`docs/evidence/hip2-source-provenance-2026-11-16.json`. The ignored test
+`genuine_hip2_validates_and_known_stars_have_sane_values` (`HIP2_PATH`) reads the
+whole file and checks Regulus' parallax and declination.
+
+**End-to-end check with the genuine catalog (local reference, aggregates only,
+`docs/evidence/mvp1-hipparcos-star-path-local-reference-receipt-2026-11-16.json`).**
+For 16 bright stars on 41 dates (1900–2100) the engine fed with the genuine
+hip2 astrometry differs from the local reference, which uses its own catalog
+values, by at most 0.007″ (Altair); most stars stay below 0.002″ in longitude.
+This mixes catalog-value and algorithm differences and says nothing about the
+absolute accuracy of the catalog.
+
+**Quality policy needs a maintainer decision.** The default `STRICT` policy
+(single star, `Sn = 5`, parallax S/N ≥ 5) rejects nine of those 16 familiar
+stars: Aldebaran, Antares, Vega and Betelgeuse (`Sn = 1`, stochastic
+solution), Spica (`Sn = 7`), Algol, Capella and Procyon (`Sn = 75`), and
+Arcturus (`Sn = 55`, two components). Their linear-motion positions still agree
+with the reference to a few milliarcseconds, far below what a chart needs, but
+the catalog flags them as less reliable, so accepting them is a choice, not a
+default.
+
+## Not done — remaining data gates
+
+1. **Redistribution terms** of the Hipparcos data have not been reviewed, so no
+   derived catalog (curated list, names, magnitudes) is committed.
+2. **Radial velocities and V magnitudes** are not in hip2 and need cited sources
+   per star. The reference library's catalog must not be the source (rights).
+3. **Names and aliases** must be cross-identified by HIP number from
+   independent sources; the 81-name HIP target list on the star branch is a
+   starting point, unreviewed.
+4. **Quality policy** for the stars above (see previous section).
 5. `swe_fixstar_ut`/`swe_fixstar_mag`-shaped facade, magnitude lookup and
    missing-star errors belong to the Node/WASM binding (row 5).
-6. No JPL Horizons or SOFA/NOVAS comparison beyond the ERFA fixtures; stars
+6. No JPL Horizons or SOFA/NOVAS comparison beyond the ERFA fixtures; rays
    closer to the Sun than the deflection model's 1000× rule are rejected.
