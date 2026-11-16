@@ -288,9 +288,19 @@ mod tests {
         let positive = evaluate_chebyshev(&coefficients, 1.0).unwrap();
         assert_eq!(positive.value, 1.5e308);
         assert_eq!(positive.derivative_dx, 0.5e308);
-        let negative = evaluate_chebyshev(&coefficients, -1.0).unwrap();
-        assert!(negative.value.is_finite());
-        assert!(negative.derivative_dx.is_finite());
+        assert_eq!(evaluate_chebyshev_value(&coefficients, -1.0).unwrap(), 0.5e308);
+        assert_eq!(
+            evaluate_chebyshev(&coefficients, -1.0),
+            Err(EphemerisError::ArithmeticOverflow)
+        );
+    }
+
+    #[test]
+    fn endpoint_value_rejects_genuine_overflow() {
+        assert_eq!(
+            evaluate_chebyshev_value(&[1.0e308, 1.0e308], 1.0),
+            Err(EphemerisError::ArithmeticOverflow)
+        );
     }
 
     #[test]
