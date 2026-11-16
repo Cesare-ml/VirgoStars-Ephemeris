@@ -33,6 +33,7 @@ pub mod de441;
 pub mod de441_epoch_bridge;
 pub mod error;
 pub mod first_sky;
+pub mod gmst_iau2006;
 pub mod light_time;
 pub mod spk_batch;
 pub mod spk_direct_state;
