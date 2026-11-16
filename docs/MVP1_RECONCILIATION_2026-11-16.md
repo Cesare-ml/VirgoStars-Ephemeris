@@ -84,6 +84,8 @@ comparison; it does not replace the individual model and validation contracts.
    A subsequent [78-case real type-3 and multi-kernel comparison](SPK_NAIF_TYPE3_MULTI_KERNEL_2026-11-16.md)
    and 220 synthetic CSPICE-generated precedence and branching cases passed locally; these
    limited matrices are not general scientific approval.
+   A further 196 real-kernel comparisons cover cross-body and reverse target/
+   observer chains under both file orders; independent review remains open.
 3. **[Open — backend integration]** Run a representative parallel comparison
    against the actual backend over dates, locations, all requested bodies,
    flags, houses, and error paths; resolve differences and existing backend

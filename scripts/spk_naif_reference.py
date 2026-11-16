@@ -15,6 +15,7 @@
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-14): detect file edits and path swaps during each NAIF kernel hash.
+# Modification (2026-11-16): audit reverse-pair symmetry in reference CSVs.
 
 """Validation-only independent NAIF/SPICE reference producer and SPK SHA256 verifier.
 
@@ -25,6 +26,7 @@ generating actual NAIF vectors; synthetic mocked tests are not proof of parity.
 from __future__ import annotations
 
 import argparse
+import csv
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -207,7 +209,58 @@ def metadata_from_csv(content: str) -> dict[str, str]:
     return metadata
 
 
-def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
+def audit_reciprocity(content: str, position_limit: float, velocity_limit: float) -> dict[str, Any]:
+    """Check complete reverse pairs at the same ET; does not certify astronomy."""
+    if not all(math.isfinite(x) and x >= 0 for x in (position_limit, velocity_limit)):
+        raise ValueError("reciprocity limits must be finite and nonnegative")
+    metadata = metadata_from_csv(content)
+    for key, expected in (("provider", "NAIF_SPICE"), ("method", "spkezr"),
+                          ("time_scale", "TDB"), ("frame", "J2000"),
+                          ("corrections", "NONE"), ("units", "KM-S")):
+        if metadata.get(key) != expected:
+            raise ValueError(f"unexpected reference {key}")
+    lines = [line for line in content.splitlines() if line.strip() and not line.startswith("#")]
+    reader = csv.reader(lines, strict=True)
+    if next(reader, None) != COLUMNS.split(","):
+        raise ValueError("unexpected reference columns")
+    states: dict[tuple[int, int, float], tuple[float, ...]] = {}
+    for row in reader:
+        if len(row) != 9:
+            raise ValueError("invalid reference row")
+        target, center, et = case_spec(f"{row[1]}:{row[2]}:{row[0]}")
+        key = (target, center, et)
+        if key in states:
+            raise ValueError("duplicate target/center/ET case")
+        try:
+            state = tuple(float(item) for item in row[3:])
+        except ValueError as error:
+            raise ValueError("invalid reference component") from error
+        if not all(map(math.isfinite, state)):
+            raise ValueError("reference components must be finite")
+        states[key] = state
+    if not states:
+        raise ValueError("at least one reverse pair is required")
+    max_position = max_velocity = 0.0
+    compared = 0
+    for (target, center, et), state in states.items():
+        reverse = states.get((center, target, et))
+        if reverse is None:
+            raise ValueError("reference is missing a reverse target/center at the same ET")
+        if target > center:
+            continue
+        difference = [abs(a + b) for a, b in zip(state, reverse)]
+        max_position = max(max_position, *difference[:3])
+        max_velocity = max(max_velocity, *difference[3:])
+        compared += 1
+    if max_position > position_limit or max_velocity > velocity_limit:
+        raise ValueError("reverse-pair component tolerance exceeded")
+    return {"rows": len(states), "reverse_pairs": compared,
+            "max_position_antisymmetry_km": max_position,
+            "max_velocity_antisymmetry_km_s": max_velocity,
+            "scientific_accuracy_certified": False}
+
+
+def verify_reference_hashes(content: str, paths: Sequence[Path], *, generator_source: Path | None = None) -> None:
     """Fail if current kernel name, size, digest or load order differs from CSV."""
     metadata = metadata_from_csv(content)
     for key in (
@@ -225,7 +278,7 @@ def verify_reference_hashes(content: str, paths: Sequence[Path]) -> None:
         raise ValueError("kernel path/order/count mismatch")
     if not HEX_SHA256_PATTERN.fullmatch(metadata["generator_sha256"]):
         raise ValueError("invalid generator digest declaration")
-    actual_generator = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    actual_generator = hashlib.sha256((generator_source or Path(__file__)).read_bytes()).hexdigest()
     if not hmac.compare_digest(actual_generator, metadata["generator_sha256"].lower()):
         raise ValueError("reference generator SHA256 mismatch")
     actual = kernel_manifest(paths)
@@ -435,6 +488,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     compare.add_argument("--kernel", action="append", required=True, type=Path)
     compare.add_argument("--position-limit-km", required=True)
     compare.add_argument("--velocity-limit-km-s", required=True)
+    reciprocity = subparsers.add_parser("audit-reciprocity", help="Audit reverse pairs in an existing reference CSV")
+    reciprocity.add_argument("--reference", required=True, type=Path)
+    reciprocity.add_argument("--kernel", action="append", required=True, type=Path)
+    reciprocity.add_argument("--generator-source", type=Path,
+                             help="Original generator source bytes, for references created by another version")
+    reciprocity.add_argument("--position-limit-km", required=True, type=float)
+    reciprocity.add_argument("--velocity-limit-km-s", required=True, type=float)
     audit = subparsers.add_parser("run", help="Generate, verify and compare locally in one command")
     audit.add_argument("--kernel", action="append", required=True, type=Path)
     audit.add_argument("--case", action="append", required=True)
@@ -444,6 +504,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     audit.add_argument("--max-velocity-km-s", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.action == "audit-reciprocity":
+            original = args.reference.read_bytes()
+            document = original.decode("utf-8")
+            verify_reference_hashes(document, args.kernel, generator_source=args.generator_source)
+            result = audit_reciprocity(document, args.position_limit_km, args.velocity_limit_km_s)
+            if args.reference.read_bytes() != original:
+                raise ValueError("reference CSV bytes changed during reciprocity audit")
+            verify_reference_hashes(document, args.kernel, generator_source=args.generator_source)
+            print(json.dumps(result, sort_keys=True))
+            return 0
         if args.action == "verify":
             verify_reference_hashes(args.reference.read_text(encoding="utf-8"), args.kernel)
             print(f"Verified {len(args.kernel)} ordered kernel SHA256 hashes, names and sizes.")
@@ -494,14 +564,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             ) from error
         generator_digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-        csv = generate_reference(
+        csv_document = generate_reference(
             args.kernel, cases, spice, generated_utc=utc, generator_digest=generator_digest
         )
-        verify_reference_hashes(csv, args.kernel)
-        args.output.write_text(csv, encoding="utf-8", newline="\n")
+        verify_reference_hashes(csv_document, args.kernel)
+        args.output.write_text(csv_document, encoding="utf-8", newline="\n")
         print(f"Wrote {len(cases)} NAIF reference cases to {args.output}.")
         return 0
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, csv.Error) as error:
         print(f"SPK reference {args.action} failed: {error}", file=sys.stderr)
         return 1
 

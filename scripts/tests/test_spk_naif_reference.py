@@ -14,6 +14,7 @@
 # 
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-16): exercise reverse-pair reference auditing.
 
 """Offline, synthetic tests for the SPK reference producer, never JPL parity."""
 
@@ -80,6 +81,66 @@ class SpkReferenceTests(unittest.TestCase):
             generated_utc="2026-11-13T12:00:00Z",
             generator_digest=hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest(),
         )
+
+    def reciprocal_reference(self):
+        header = self.reference().split(REFERENCE.COLUMNS + "\n", 1)[0]
+        return (header + REFERENCE.COLUMNS + "\n"
+                + "0,301,399,1,-2,3,0.1,-0.2,0.3\n"
+                + "0,399,301,-1,2,-3,-0.1,0.2,-0.3\n")
+
+    def test_reciprocity_checks_reverse_pairs_at_exact_epoch(self):
+        doc = self.reciprocal_reference()
+        result = REFERENCE.audit_reciprocity(doc, 0.0, 0.0)
+        self.assertEqual(result['rows'], 2)
+        self.assertEqual(result['reverse_pairs'], 1)
+        self.assertFalse(result['scientific_accuracy_certified'])
+        for invalid in (
+            doc.rsplit('\n', 2)[0] + '\n',
+            doc.replace('0,399,301', '1,399,301'),
+            doc + '0,301,399,1,-2,3,0.1,-0.2,0.3\n',
+            doc.replace('-1,2,-3,-0.1', '-1,2,-3,nan'),
+            doc.replace('# frame=J2000', '# frame=ECLIPJ2000'),
+        ):
+            with self.subTest(invalid=invalid[-80:]), self.assertRaises(ValueError):
+                REFERENCE.audit_reciprocity(invalid, 0, 0)
+        with self.assertRaisesRegex(ValueError, 'tolerance exceeded'):
+            REFERENCE.audit_reciprocity(doc.replace('-1,2,-3,-0.1', '-1.01,2,-3,-0.1'), 0.001, 0)
+        with self.assertRaises(ValueError):
+            REFERENCE.audit_reciprocity(doc, float('nan'), 0)
+
+    def test_reciprocity_cli_verifies_ordered_kernel_hashes(self):
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+        reference = self.first.parent / 'reciprocal.csv'
+        reference.write_text(self.reciprocal_reference(), encoding='utf-8')
+        args = ['audit-reciprocity', '--reference', str(reference), '--kernel', str(self.first),
+                '--kernel', str(self.second), '--position-limit-km', '0', '--velocity-limit-km-s', '0']
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(REFERENCE.main(args), 0)
+        self.assertEqual(json.loads(output.getvalue())['reverse_pairs'], 1)
+        self.second.write_bytes(self.second.read_bytes() + b'!')
+        with redirect_stderr(StringIO()):
+            self.assertEqual(REFERENCE.main(args), 1)
+
+    def test_reciprocity_can_verify_explicit_historical_generator_bytes(self):
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+        generator = self.first.parent / 'old-generator.py'
+        generator.write_bytes(b'old generator bytes, never executed')
+        old_hash = hashlib.sha256(generator.read_bytes()).hexdigest()
+        current_hash = hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest()
+        reference = self.first.parent / 'historical.csv'
+        reference.write_text(self.reciprocal_reference().replace(current_hash, old_hash), encoding='utf-8')
+        args = ['audit-reciprocity', '--reference', str(reference), '--kernel', str(self.first),
+                '--kernel', str(self.second), '--position-limit-km', '0', '--velocity-limit-km-s', '0']
+        with redirect_stderr(StringIO()):
+            self.assertEqual(REFERENCE.main(args), 1)
+        with redirect_stdout(StringIO()):
+            self.assertEqual(REFERENCE.main(args + ['--generator-source', str(generator)]), 0)
+        generator.write_bytes(b'different bytes')
+        with redirect_stderr(StringIO()):
+            self.assertEqual(REFERENCE.main(args + ['--generator-source', str(generator)]), 1)
 
     def test_parses_explicit_et_without_converting_time_or_body_ids(self):
         self.assertEqual(REFERENCE.case_spec("301:399:0"), (301, 399, 0.0))
