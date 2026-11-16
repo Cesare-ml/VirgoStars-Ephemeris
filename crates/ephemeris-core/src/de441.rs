@@ -33,6 +33,9 @@ const SERIES_COUNT: usize = 13;
 // 2026-11-14: Bound a caller-controlled record cache allocation. Real classic
 // DE441 records are far smaller; this is a defensive implementation limit.
 const MAX_CLASSIC_RECORD_BYTES: usize = 16 * 1024 * 1024;
+// 2026-11-16: Bound materialized DE441 batch results before evaluation/allocation.
+// The byte budget measures Vec<StateVector> element storage, not allocator metadata.
+pub const MAX_DE441_BATCH_OUTPUT_BYTES: usize = 1024 * 1024;
 
 /// Julian date in Barycentric Dynamical Time. No UTC/TT conversion is performed.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -76,6 +79,10 @@ pub enum De441Error {
         end: JulianDateTdb,
     },
     MissingSeries(&'static str),
+    BatchOutputTooLarge {
+        requested_states: usize,
+        max_states: usize,
+    },
 }
 
 impl fmt::Display for De441Error {
@@ -89,6 +96,11 @@ impl fmt::Display for De441Error {
                 epoch.0, start.0, end.0
             ),
             Self::MissingSeries(name) => write!(f, "DE441 series not present: {name}"),
+            Self::BatchOutputTooLarge { requested_states, max_states } => write!(
+                f,
+                "DE441 batch requests {requested_states} states; maximum is {max_states} ({}-byte output budget)",
+                MAX_DE441_BATCH_OUTPUT_BYTES
+            ),
         }
     }
 }
@@ -427,23 +439,41 @@ impl<R: Read + Seek> De441<R> {
     /// returns an error rather than exposing a partial vector. An empty
     /// target list still validates the epoch but does not read coefficients.
     ///
-    /// Modified 2026-11-11: add a bounded-by-input batch state convenience
-    /// interface for future language bindings and interactive charts.
+    /// The returned `Vec<StateVector>` payload is capped at
+    /// [`MAX_DE441_BATCH_OUTPUT_BYTES`] bytes. This is checked with overflow-safe
+    /// multiplication before state evaluation, coefficient I/O or allocation.
+    /// Requests over the derived state-count limit return
+    /// [`De441Error::BatchOutputTooLarge`]; results are never truncated.
+    ///
+    /// Modified 2026-11-11: add batch state convenience interface.
+    /// Modified 2026-11-16: bound the materialized result to 1 MiB.
     pub fn states_at(
         &mut self,
         targets: &[Body],
         center: Body,
         epoch: JulianDateTdb,
     ) -> Result<Vec<StateVector>, De441Error> {
+        let state_bytes = std::mem::size_of::<StateVector>();
+        let max_states = MAX_DE441_BATCH_OUTPUT_BYTES / state_bytes;
+        let requested_bytes = targets.len().checked_mul(state_bytes);
+        if match requested_bytes {
+            None => true,
+            Some(bytes) => bytes > MAX_DE441_BATCH_OUTPUT_BYTES,
+        } {
+            return Err(De441Error::BatchOutputTooLarge {
+                requested_states: targets.len(),
+                max_states,
+            });
+        }
         if targets.is_empty() {
             self.state(center, center, epoch)?;
             return Ok(Vec::new());
         }
-        targets
-            .iter()
-            .copied()
-            .map(|target| self.state(target, center, epoch))
-            .collect()
+        let mut states = Vec::with_capacity(targets.len());
+        for target in targets.iter().copied() {
+            states.push(self.state(target, center, epoch)?);
+        }
+        Ok(states)
     }
 
     fn barycentric(
