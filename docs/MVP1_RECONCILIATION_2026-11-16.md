@@ -51,6 +51,8 @@ comparison; it does not replace the individual model and validation contracts.
   78/78 with no skips, including the actual backend smoke test.
 - After adding explicit polar-house diagnostics and a specific unavailable
   position error, the Node suite passed 81/81 with no skips.
+- After adding the optional serialized house-diagnostics session, the Node
+  suite passed 85/85 with no skips, including an unchanged-backend polar test.
 - Independent SPK comparison: 80 geometric DE440s type-2 cases against
   CSPICE, including record boundaries and declared coverage endpoints, passed
   the predeclared diagnostic bounds. Data, unsigned receipts and provenance
@@ -90,6 +92,9 @@ comparison; it does not replace the individual model and validation contracts.
    A [15-chart local diagnostic](MVP1_BACKEND_CHART_DIAGNOSTIC_2026-11-16.md)
    identifies polar fallback and unavailable Placidus positions that still
    need explicit handling in serialized backend responses.
+   An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
+   now serializes these warnings separately in a local backend test; application
+   wiring, product contract and rollout remain open.
 4. **[Open — release engineering]** Validate reproducible builds on target
    platforms, licensing/attribution and data distribution, CI and appropriate
    packaging; agree on the versioned public contract. Staging and deployment

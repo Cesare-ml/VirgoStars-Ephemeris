@@ -208,6 +208,21 @@ export function prepareStarCatalog(manifest: StarCatalogManifest): {
   reviewer: string; astrometrySource: string; dataUseDecision: string;
 };
 
+export interface HouseDiagnosticEvent {
+  operation: 'swe_houses' | 'swe_houses_pos';
+  code: string;
+  system: 'V' | 'P' | 'K' | 'R' | 'O' | 'ALL' | 'OTHER';
+  count: number;
+}
+
+/** Opt-in synchronous scope; diagnostics contain no dates, coordinates or messages. */
+export function createHouseDiagnosticSession<TFacade extends Readonly<Record<string, unknown>>>(facade: TFacade): {
+  facade: TFacade;
+  run<T>(calculate: () => T): { result: T; diagnostics: {
+    schema: 'virgostars-house-diagnostics/1'; events: HouseDiagnosticEvent[];
+  } };
+};
+
 export function createSwissShapedFacade(
   engine: Engine | null,
   options?: {

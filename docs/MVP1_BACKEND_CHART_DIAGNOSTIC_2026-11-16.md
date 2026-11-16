@@ -61,6 +61,9 @@ unchanged backend does not yet surface them to product users. Enabling
 enumerable provenance directly is not a safe drop-in for its existing loop.
 An explicit backend integration is still needed to propagate fallback and
 unavailable-position warnings in serialized responses.
+An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
+now produces a separate JSON-safe envelope locally, without changing the
+legacy chart's enumerable keys. It is not yet wired into a production response.
 
 ## Reproduction and limits
 

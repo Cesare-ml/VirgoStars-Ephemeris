@@ -5,6 +5,7 @@
 
 const path = require('node:path');
 const { prepareStarCatalog } = require('./star-catalog.js');
+const { createHouseDiagnosticSession } = require('./house-diagnostics.js');
 
 let native;
 function loadNative() {
@@ -685,6 +686,7 @@ module.exports = {
   createHouseAngleProvider,
   constants,
   createSwissShapedFacade,
+  createHouseDiagnosticSession,
   prepareStarCatalog,
   inspectHipparcosQuality,
   loadNative,
