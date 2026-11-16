@@ -44,7 +44,55 @@ the page also distinguishes a component of Algieba, illustrating why a label
 alone does not settle component or photometric identity. No magnitude or radial
 velocity from that page is imported. The existing genuine-HIP2 strict-policy
 test covers HIP 49669 only; it does not establish quality for the other three.
-The remaining backend names have not yet been individually resolved.
+The remaining backend names have not yet been individually reviewed.
+
+## Reproducible candidate and quality screening
+
+The historical 2022-04-04 IAU-CSN snapshot obtained from a
+[public mirror](https://github.com/mirandadam/iau-starnames/blob/master/catalog_data/IAU-CSN.txt)
+contains 451 records and has SHA-256
+`84fac0c90f1b19abc491c2793469e0caa7b003ad1bc93a790ca41147010d0eb0`.
+The IAU WGSN [currently describes its catalog](https://exopla.net/iau-wgsn-catalogs/)
+as a living document: this mirror is a **historical snapshot**, not evidence
+of the current catalog. Its header asserts Creative Commons attribution for IAU
+products, but the mirror's exact provenance, applicable license version,
+component identities and distribution conditions still require review.
+
+On the local backend's 106 distinct input names, an exact case-insensitive
+match to the snapshot produced **77 provisional matches with HIP numbers** and
+29 unmatched names. All 77 snapshot entries list band V; that label alone does
+not establish suitable magnitude or identity, especially for blended or
+variable objects. No fuzzy matching, spelling correction or cluster-to-star
+guess was applied. `inspectHipparcosQuality` screened the 77 HIP2 records
+using the Rust core's existing filters: **40 pass strict, 63 pass traditional**.
+These are overlapping counts, not 103 accepted objects; 14 fail both filters.
+Passing the traditional filter does not extend the owner's earlier decision
+for 16 named stars to other objects. Matching strings and numerical eligibility
+do not approve any record, alias, magnitude, radial velocity or data rights.
+
+The caller's source snapshot, requested-name input and generated reports are
+kept outside Git and build output under `VirgoStarsData/star-catalog-review/2026-11-16`;
+the HIP2 file remains separate. Four copied files were checked by SHA-256.
+The reports can contain application identifiers and derived third-party data;
+their distribution has not been approved.
+
+Reproduce using a caller-supplied UTF-8 IAU-CSN file and a JSON array of names.
+Both commands are offline and refuse to overwrite their output. The first
+reports names with no match and flags names sharing an HIP among the requested
+set; it does not validate the catalog source or automatically resolve aliases.
+The second calls the Rust HIP2 reader and checks input hashes before and after.
+The file paths below are illustrative and must be replaced:
+
+```powershell
+node scripts/iau_star_candidates.mjs <iau-csn.txt> <requested-names.json> <https-source-url> <new-candidates.json>
+node bindings/node/scripts/audit-star-quality.mjs <new-candidates.json> <hip2.dat> <new-quality.json>
+```
+
+The quality audit leaves ambiguous or missing-HIP entries for review; it
+requires unique selected HIPs and fails rather than silently choosing between
+duplicates. File hashes detect changed bytes but do not prove provenance or
+provide an atomic snapshot. The candidate parser's fictional tests and the
+real-file HIP2 binding check are software checks, not scientific validation.
 
 ## Caller-reviewed manifest
 

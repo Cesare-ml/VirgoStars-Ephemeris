@@ -211,6 +211,20 @@ function revjul(jd, gregorian = true) {
   }
 }
 
+/** Diagnostic filtering only: passing a policy is not scientific approval. */
+function inspectHipparcosQuality(hip2Path, hips) {
+  try {
+    if (!Array.isArray(hips) || hips.length === 0 || hips.length > 10000
+      || hips.some((hip) => !Number.isSafeInteger(hip) || hip <= 0 || hip > 0xffffffff)
+      || new Set(hips).size !== hips.length) {
+      throw coded('E_RANGE', 'HIP list must contain 1 to 10000 unique positive u32 IDs');
+    }
+    return loadNative().inspectHipparcosQuality(hip2Path, hips);
+  } catch (error) {
+    throw Engine._wrap(error);
+  }
+}
+
 /** House astronomy (ARMC, true obliquity, ASC, MC) from a UT Julian date. */
 function houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast) {
   try {
@@ -660,5 +674,6 @@ module.exports = {
   constants,
   createSwissShapedFacade,
   prepareStarCatalog,
+  inspectHipparcosQuality,
   loadNative,
 };

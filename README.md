@@ -2,12 +2,12 @@
 
 **A free and open-source astronomical ephemeris project for astrology applications — licensed under CPAL-1.0.**
 
-**Status: EXPERIMENTAL — the Rust core, a local Node binding and an explicit backend-shaped facade are implemented and locally tested. A limited SPK type-2 geometric comparison against CSPICE passed on DE440s; scientific and provenance review, broader validation and production integration remain open.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris. See the [current MVP integration checkpoint](docs/MVP1_RECONCILIATION_2026-11-16.md).
+**Status: EXPERIMENTAL — the Rust core, a local Node binding and an explicit backend-shaped facade are implemented and locally tested. Limited SPK type-2 and type-3 geometric comparisons against CSPICE passed with real kernels; scientific and provenance review, broader validation and production integration remain open.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris. See the [current MVP integration checkpoint](docs/MVP1_RECONCILIATION_2026-11-16.md).
 
 
 ## Purpose
 
-Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental state reader supports the classic DE441 binary. Rust DAF/SPK **metadata indexing, type-2/3 J2000 direct states and ordered multi-kernel target–center chain composition** are experimental; non-J2000 frames, other SPK types and independent type-3/multi-kernel validation remain open. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
+Provide verifiable astronomical quantities to [Astrological Functions](https://github.com/Cesare-ml/astrological-functions) and other clients, using NASA/JPL ephemerides with documented algorithms. The current experimental state reader supports the classic DE441 binary. Rust DAF/SPK **metadata indexing, type-2/3 J2000 direct states and ordered multi-kernel target–center chain composition** are experimental; non-J2000 frames, other SPK types and broader type-3/multi-kernel validation remain open. No login, database, Angular, artwork, interpretation texts, or VirgoStars application data belong here.
 
 **Language decision:** The canonical astronomical core is written in **Rust**. An experimental native Node binding exists; WebAssembly and PyO3/maturin Python bindings are planned. See [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md).
 

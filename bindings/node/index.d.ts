@@ -188,6 +188,17 @@ export interface StarCatalogManifest {
   stars: ReviewedStarCatalogEntry[];
 }
 
+/** Numerical policy eligibility only, not scientific or data-use approval. */
+export interface HipparcosQualityResult {
+  hip: number;
+  solutionType: number;
+  components: number;
+  strictEligible: boolean;
+  traditionalEligible: boolean;
+}
+
+export function inspectHipparcosQuality(hip2Path: string, hips: number[]): HipparcosQualityResult[];
+
 /** Validates caller assertions; does not itself verify scientific identity or data rights. */
 export function prepareStarCatalog(manifest: StarCatalogManifest): {
   stars: StarCatalogEntry[]; hips: number[]; qualityPolicy: 'strict' | 'traditional';

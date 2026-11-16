@@ -90,5 +90,19 @@ python scripts/spk_naif_reference.py run --kernel <de440s> --kernel <jup120> @ca
 # Repeat with the kernel order reversed and different output paths.
 ```
 
+## Additional synthetic precedence regression
+
+With independently installed SpiceyPy, the optional
+`scripts/tests/test_spice_synthetic_priority.py` asks CSPICE to write two
+temporary fictional type-3 kernels. One has overlapping segments for the same
+target and a second target/center chain; the other overlays that target. It
+asserts CSPICE selects the later segment/file, reverses file order, and compares
+22 target/epoch cases per order against Rust, including exactly at and one
+representable f64 step around segment boundaries. All **44 comparisons passed**
+locally with diagnostic bounds `1e-9 km`, `1e-11 km/s`. Independent position
+and velocity coefficients are deliberately used. This is a synthetic format
+and precedence regression, not real orbit accuracy evidence. Temporary kernels
+and generated references are not distributed or retained.
+
 **Modification record:** documented a local independent comparison; no SPICE
 code, third-party kernel or reference table was added to the repository.

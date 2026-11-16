@@ -26,7 +26,7 @@
 //! Experimental. Not a drop-in `swisseph` replacement; see
 //! `docs/MVP1_NODE_BINDING_2026-11-16.md`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -103,6 +103,44 @@ pub struct CalcResult {
     pub time_source: String,
     /// Corrections applied, plus any assumption the caller must know about.
     pub notes: Vec<String>,
+}
+
+/// Diagnostic flags only; passing a numerical filter is not a review decision.
+#[napi(object)]
+pub struct HipparcosQualityResult {
+    pub hip: u32,
+    pub solution_type: u32,
+    pub components: u32,
+    pub strict_eligible: bool,
+    pub traditional_eligible: bool,
+}
+
+/// Inspect selected external HIP2 records without modifying any Engine.
+#[napi]
+pub fn inspect_hipparcos_quality(
+    hip2_path: String,
+    hips: Vec<u32>,
+) -> Result<Vec<HipparcosQualityResult>> {
+    let unique: HashSet<u32> = hips.iter().copied().collect();
+    if hips.is_empty() || hips.len() > 10_000 || unique.len() != hips.len() || unique.contains(&0) {
+        return Err(fail(
+            "E_RANGE",
+            "HIP list must contain 1 to 10000 unique positive IDs",
+        ));
+    }
+    let file = File::open(&hip2_path).map_err(|e| fail("E_CATALOG_FILE", e))?;
+    let records =
+        read_hip2_selected(BufReader::new(file), &hips).map_err(|e| fail("E_CATALOG_FILE", e))?;
+    Ok(records
+        .into_iter()
+        .map(|record| HipparcosQualityResult {
+            hip: record.hip,
+            solution_type: u32::from(record.solution_type),
+            components: u32::from(record.components),
+            strict_eligible: Hip2QualityPolicy::STRICT.accepts(&record),
+            traditional_eligible: Hip2QualityPolicy::TRADITIONAL_STARS.accepts(&record),
+        })
+        .collect())
 }
 
 #[napi(object)]

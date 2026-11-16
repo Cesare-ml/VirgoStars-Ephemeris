@@ -5,10 +5,21 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { Engine, constants, createSwissShapedFacade } = require('../index.js');
+const { Engine, constants, createSwissShapedFacade, inspectHipparcosQuality } = require('../index.js');
 const de441 = process.env.DE441_PATH;
 const hip2 = process.env.HIP2_PATH;
 const opts = { skip: de441 && hip2 ? false : 'DE441_PATH and HIP2_PATH are required' };
+
+test('HIP2 quality inspection reports numerical eligibility without changing an engine', { skip: hip2 ? false : 'HIP2_PATH is required' }, () => {
+  const rows = inspectHipparcosQuality(hip2, [49669, 21421]);
+  assert.deepEqual(rows.map((r) => r.hip), [49669, 21421]);
+  assert.equal(rows[0].strictEligible, true);
+  assert.equal(rows[1].strictEligible, false);
+  assert.equal(rows[1].traditionalEligible, true);
+  assert.throws(() => inspectHipparcosQuality(hip2, [49669, 49669]), (e) => e.code === 'E_RANGE');
+  assert.throws(() => inspectHipparcosQuality(hip2, [-1]), (e) => e.code === 'E_RANGE');
+  assert.throws(() => inspectHipparcosQuality(hip2, [0xffffffff]), (e) => e.code === 'E_CATALOG_FILE');
+});
 
 test('traditional stars load under their policy; strict rejects a stochastic solution', opts, () => {
   const e = new Engine(de441);
