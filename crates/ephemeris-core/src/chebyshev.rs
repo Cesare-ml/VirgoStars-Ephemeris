@@ -92,9 +92,6 @@ fn endpoint_value(coefficients: &[f64], x: f64) -> Result<f64> {
     ));
     let value = normalized * scale;
     if !value.is_finite() {
-        if x == -1.0 || x == 1.0 {
-            return endpoint_value(coefficients, x);
-        }
         return Err(EphemerisError::ArithmeticOverflow);
     }
     Ok(value)
@@ -194,6 +191,9 @@ pub(crate) fn evaluate_chebyshev_value(coefficients: &[f64], x: f64) -> Result<f
     }
     let value = coefficients[0] + x * b1 - b2;
     if !value.is_finite() {
+        if x == -1.0 || x == 1.0 {
+            return endpoint_value(coefficients, x);
+        }
         return Err(EphemerisError::ArithmeticOverflow);
     }
     Ok(value)
