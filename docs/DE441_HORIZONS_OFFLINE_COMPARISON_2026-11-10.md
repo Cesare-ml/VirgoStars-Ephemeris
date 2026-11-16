@@ -184,3 +184,99 @@ project)**. The executable source has the existing CPAL-1.0 Exhibit A notice.
 No changes to the `LICENSE`, `NOTICE`, required **Powered by VirgoStars**
 attribution (https://www.virgostars.it/), astronomical computation,
 external dependencies or dataset redistribution.
+
+
+## Horizons provenance metadata syntax checks — 2026-11-14
+
+The offline Rust `validate_horizons` example now **rejects malformed
+provenance metadata before comparing any vectors**. The curated reference
+CSV must supply both of the following:
+
+- `query_url`: an HTTPS request URL at exactly
+  `https://ssd.jpl.nasa.gov/api/horizons.api?...` or
+  `https://ssd-api.jpl.nasa.gov/api/horizons.api?...`, with a nonempty
+  query and no raw whitespace, control characters or URL fragment.
+  Non-JPL hosts, lookalike suffix domains, unencrypted HTTP, local files,
+  empty query strings and embedded URL fragments fail closed.
+- `retrieved_utc`: Gregorian calendar timestamp in
+  `YYYY-MM-DDTHH:MM:SSZ` or the same format with 1–9 fractional-second
+  digits before `Z`. Invalid Gregorian days/leap days, local timestamps,
+  numeric offsets, missing `Z` and invalid clock fields are rejected.
+  The timestamp is a **record of retrieval**, not the ephemeris epoch and
+  is never converted to TDB. Leap-second textual `23:59:60Z` is not
+  accepted by this normal-second timestamp contract.
+
+The checks reject references that are *syntactically unauditable*; they
+**do not authenticate** Horizons responses or prove that the API returned
+DE441 rather than a different solution. A valid-looking official URL
+could still carry incorrect target, center, time, units or correction
+settings. Independently inspect the saved original response, the actual
+Horizons solution line and the full request parameters. The SHA-pinned
+offline preflight proposed separately in PR #212 remains complementary,
+not replaced by these checks.
+
+Two new Rust example tests (using synthetic metadata only) cover host
+spoofing, unencrypted and malformed URLs, Gregorian leap dates, time
+zones and fractional seconds. These run under the existing read-only CI
+invocation `cargo test --workspace --example validate_horizons --locked`.
+No real DE441 kernel, JPL dataset, new dependency or network request is
+introduced; no numerical accuracy result is claimed.
+
+Modification record: 2026-11-14,
+`crates/ephemeris-core/examples/validate_horizons.rs` and this
+documentation, under the existing original CPAL-1.0 Exhibit A notice
+and VirgoStars attribution.
+
+
+## Cross-check recorded query modes against the scientific reference contract — 2026-11-14
+
+The metadata `query_url` must not only point to an official Horizons HTTPS API
+host: its **recorded query options** must also be consistent with the curated
+reference's scientific contract. Without this check, a real official URL could
+silently refer to *ecliptic*, *corrected*, *km/s*, or *non-TDB* vectors despite
+declared ICRF/GEOMETRIC/km/day metadata.
+
+The offline Rust validator therefore requires the URL query to contain
+exactly one nonempty value for each of these settings, with the indicated
+values (case-insensitive values; either unquoted, single-quoted, or
+`%27`-quoted):
+
+| URL option | Required value | Scientific role |
+|---|---|---|
+| `EPHEM_TYPE` | `VECTORS` | Cartesian vector ephemeris |
+| `VEC_TABLE` | `2` | XYZ and VX/VY/VZ, no additional output quantities |
+| `TIME_TYPE` | `TDB` | Julian-date dynamical timescale |
+| `REF_SYSTEM` | `ICRF` | Inertial equatorial reference frame |
+| `REF_PLANE` | `FRAME` | Equatorial frame rather than ecliptic plane |
+| `VEC_CORR` | `NONE` | Geometric vectors (no light time/aberration) |
+| `OUT_UNITS` | `KM-D` | Kilometers and kilometers per TDB day |
+
+`COMMAND` and `CENTER` must be present and nonempty. For discrete epoch
+queries using `TLIST`, the URL must also specify `TLIST_TYPE=JD`;
+for range queries without `TLIST`, it must specify `START_TIME`,
+`STOP_TIME` and `STEP_SIZE`. The two epoch-selection approaches must
+not be mixed. Duplicate keys, empty query assignments and unparsed
+query components are rejected instead of silently resolving to one
+of several possible scientific configurations.
+
+JPL documents these API settings at
+https://ssd-api.jpl.nasa.gov/doc/horizons.html. They are explicit
+provenance requirements for this **strict verifier**, rather than claims
+that JPL itself rejects all other query forms. The validator does not
+decode arbitrary percent-encoded parameter names or automatically map
+`COMMAND`/`CENTER` numeric IDs to Rust body names; independent
+human review of the saved **actual** Horizons API response remains
+mandatory. The URL could be forged or edited, and even a fully
+matching URL does not prove that the referenced response actually
+used DE441. This rejects obvious contradictions, **not** counterfeit
+datasets or scientific disagreements.
+
+The existing synthetic test reference now records explicit JPL-style
+Moon-relative-to-Earth VECTORS options instead of a placeholder query.
+A new example-level Rust regression checks mismatched values,
+missing and repeated parameters, mixed time-selection modes and both
+supported Horizons hosts. No external kernel, API call, dependency,
+actual reference vector or accuracy measurement was introduced.
+
+Modification record: 2026-11-14; same CPAL-1.0 source and project
+attribution requirements as the preceding update.
