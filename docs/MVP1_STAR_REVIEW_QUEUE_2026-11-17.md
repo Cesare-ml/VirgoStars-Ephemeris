@@ -128,6 +128,11 @@ do not change that earlier measurement. All decisions remain null. Deterministic
 reconstruction and refusal to overwrite were verified against the local files;
 the report and source-claim document remain unapproved for redistribution.
 
+Subsequent work adds Alsuhail and separate hypotheses for extended objects;
+see [the extended-object checkpoint](MVP1_EXTENDED_STAR_OBJECTS_2026-11-17.md)
+for the latest 13-name machine-recorded gap and its limitations. The counts
+above remain the historical v2 snapshot.
+
 ## Next decisions
 
 1. Resolve each object and component, including ambiguous/multiple objects and

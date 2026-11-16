@@ -84,6 +84,10 @@ comparison; it does not replace the individual model and validation contracts.
    additional IAU-sourced spelling leads documented for manual follow-up.
    Five additional historical spelling leads are now recorded in a separate
    v2 queue; 18 names still lack any recorded lead and all decisions remain open.
+   The [extended-object follow-up](MVP1_EXTENDED_STAR_OBJECTS_2026-11-17.md)
+   records Alsuhail and five cluster/nebula/group names as unapproved hypotheses;
+   13 names lack machine-recorded leads. Extended-object calculations and all
+   data/quality decisions remain open.
 2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
    independently review kernel/tool provenance and numerical tolerances, and
    add type-3 and multi-kernel/segment-priority comparisons where these are

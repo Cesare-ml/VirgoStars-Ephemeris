@@ -100,3 +100,28 @@ test('real research supplement is reproducible and refuses overwriting',
       rmdirSync(directory);
     }
   });
+
+const { STAR_RESEARCH_V2, STAR_STELLAR_QUEUE } = process.env;
+test('expanded stellar research preserves prior leads and reproduces the local queue',
+  { skip: STAR_REVIEW_V1 && STAR_RESEARCH_LEADS && STAR_RESEARCH_V2 && STAR_STELLAR_QUEUE && STAR_IAU_SNAPSHOT && HIP2_PATH
+    ? false : 'local research snapshots and HIP2 required' }, () => {
+    const older = JSON.parse(readFileSync(STAR_RESEARCH_LEADS));
+    const newer = JSON.parse(readFileSync(STAR_RESEARCH_V2));
+    assert.deepEqual(newer.leads.slice(0, older.leads.length), older.leads);
+    const directory = mkdtempSync(join(tmpdir(), 'virgostars-expanded-research-'));
+    const output = join(directory, 'queue.json');
+    const script = fileURLToPath(new URL('../attach_star_research_leads.mjs', import.meta.url));
+    try {
+      const run = spawnSync(process.execPath, [script, STAR_REVIEW_V1, STAR_RESEARCH_V2, STAR_IAU_SNAPSHOT, HIP2_PATH, output], { encoding: 'utf8' });
+      assert.equal(run.status, 0, run.stderr);
+      const result = readFileSync(output);
+      assert.deepEqual(result, readFileSync(STAR_STELLAR_QUEUE));
+      const queue = JSON.parse(result);
+      assert.equal(queue.counts.namesWithResearchLeads, 8);
+      assert.equal(queue.counts.noRecordedLead, 17);
+      assert.ok(queue.entries.every((entry) => Object.values(entry.decisions).every((value) => value === null)));
+    } finally {
+      rmSync(output, { force: true });
+      rmdirSync(directory);
+    }
+  });
