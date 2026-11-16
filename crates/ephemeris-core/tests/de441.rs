@@ -384,7 +384,6 @@ fn relative_states_close_triangle_for_position_and_velocity_across_granules() {
     }
 }
 
-
 #[test]
 fn states_at_caps_result_payload_and_preserves_large_repeated_batches() {
     let max_states = MAX_DE441_BATCH_OUTPUT_BYTES
