@@ -53,8 +53,17 @@ use virgostars_ephemeris_core::fixed_star::{
 use virgostars_ephemeris_core::hipparcos::{
     read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
 };
+use virgostars_ephemeris_core::horizon::{
+    ecliptic_to_equatorial, equatorial_to_horizontal, estimated_pressure_hpa,
+    extended_apparent_to_true, extended_true_to_apparent, horizontal_to_equatorial,
+    local_apparent_sidereal_deg, plain_apparent_to_true, plain_true_to_apparent,
+    STANDARD_LAPSE_RATE,
+};
 use virgostars_ephemeris_core::house_angles::house_angles;
 use virgostars_ephemeris_core::lunar_points::{lunar_point, LunarPoint};
+use virgostars_ephemeris_core::rise_transit::{
+    find_event, Atmosphere, Disc, Event, Limb, Request, RiseError, Site, SkyPosition,
+};
 use virgostars_ephemeris_core::spk_type21::SmallBodySpk;
 
 /// Swiss-style flag bits this binding understands (values are the public
@@ -327,6 +336,113 @@ pub fn ecliptic_nutation_tt(tt_jd: f64) -> Result<EclNut> {
     })
 }
 
+#[napi(object)]
+pub struct RefractionResult {
+    pub true_altitude_deg: f64,
+    pub apparent_altitude_deg: f64,
+    /// Horizon dip of the observer's height (degrees, 0 or negative).
+    pub dip_deg: f64,
+}
+
+/// `swe_refrac`-shaped (plain model): altitude after refraction, in degrees.
+/// `to_apparent` selects true -> apparent; otherwise apparent -> true (the exact
+/// numerical inverse, which differs slightly from the reference's own inverse).
+#[napi]
+pub fn refrac(altitude_deg: f64, pressure_hpa: f64, temperature_c: f64, to_apparent: bool) -> f64 {
+    if to_apparent {
+        plain_true_to_apparent(altitude_deg, pressure_hpa, temperature_c)
+    } else {
+        plain_apparent_to_true(altitude_deg, pressure_hpa, temperature_c)
+    }
+}
+
+/// `swe_refrac_extended`-shaped (the model used by azalt and rise/set): both
+/// altitudes and the horizon dip for an observer `height_m` above the surface.
+#[napi]
+pub fn refrac_extended(
+    altitude_deg: f64,
+    height_m: f64,
+    pressure_hpa: f64,
+    temperature_c: f64,
+    lapse_rate: f64,
+    to_apparent: bool,
+) -> RefractionResult {
+    let r = if to_apparent {
+        extended_true_to_apparent(
+            altitude_deg,
+            height_m,
+            pressure_hpa,
+            temperature_c,
+            lapse_rate,
+        )
+    } else {
+        extended_apparent_to_true(
+            altitude_deg,
+            height_m,
+            pressure_hpa,
+            temperature_c,
+            lapse_rate,
+        )
+    };
+    RefractionResult {
+        true_altitude_deg: r.true_altitude_deg,
+        apparent_altitude_deg: r.apparent_altitude_deg,
+        dip_deg: r.dip_deg,
+    }
+}
+
+#[napi(object)]
+pub struct AzaltResult {
+    /// Azimuth measured from the **south** toward the west (the reference convention).
+    pub azimuth_south_deg: f64,
+    pub true_altitude_deg: f64,
+    pub apparent_altitude_deg: f64,
+    pub time_source: String,
+}
+
+#[napi(object)]
+pub struct AzaltRevResult {
+    /// Ecliptic longitude or right ascension, degrees.
+    pub x0_deg: f64,
+    /// Ecliptic latitude or declination, degrees.
+    pub x1_deg: f64,
+    pub time_source: String,
+}
+
+/// Body radius in km used for the semi-diameter in rise/set (Sun 696000, Moon
+/// 1737.5, then the planets); `None` for points.
+fn body_radius_km(ipl: i32) -> Option<f64> {
+    Some(match ipl {
+        0 => 696_000.0,
+        1 => 1_737.5,
+        2 => 2_440.0,
+        3 => 6_052.0,
+        4 => 3_389.5,
+        5 => 69_911.0,
+        6 => 58_232.0,
+        7 => 25_362.0,
+        8 => 24_622.0,
+        9 => 1_188.3,
+        _ => return None,
+    })
+}
+
+const RISE: i32 = 1;
+const SET: i32 = 2;
+const MTRANSIT: i32 = 4;
+const ITRANSIT: i32 = 8;
+const BIT_GEOCTR_NO_ECL_LAT: i32 = 128;
+const BIT_DISC_CENTER: i32 = 256;
+const BIT_NO_REFRACTION: i32 = 512;
+const BIT_CIVIL_TWILIGHT: i32 = 1024;
+const BIT_NAUTIC_TWILIGHT: i32 = 2048;
+const BIT_ASTRO_TWILIGHT: i32 = 4096;
+const BIT_DISC_BOTTOM: i32 = 8192;
+const BIT_FIXED_DISC_SIZE: i32 = 16384;
+const BIT_FORCE_SLOW_METHOD: i32 = 32768;
+const AU_KM: f64 = 149_597_870.7;
+const MEAN_MOON_DISTANCE_KM: f64 = 384_400.0;
+
 #[napi]
 pub fn core_version() -> String {
     format!(
@@ -572,6 +688,258 @@ impl Engine {
         }
         .map_err(|e| fail("E_RANGE", e))?;
         self.calc(tdb, ipl, flags, source_label(&source))
+    }
+
+    /// UT -> (TDB, TT, label) under the engine's current time policy.
+    fn epoch_from_ut(&self, jd_ut: f64) -> Result<(JulianDateTdb, f64, String)> {
+        let (tdb, source) = match &self.delta_t {
+            Some(table) => jd_ut_to_tdb_with_table(jd_ut, table),
+            None => jd_ut_to_tdb_with_policy(jd_ut),
+        }
+        .map_err(|e| fail("E_RANGE", e))?;
+        let tt = tdb_to_tt_jd(tdb.0).map_err(|e| fail("E_RANGE", e))?;
+        Ok((tdb, tt, source_label(&source)))
+    }
+
+    /// `swe_azalt`-shaped. `equatorial_input` false: `x0, x1` are true ecliptic
+    /// longitude/latitude of date; true: right ascension/declination of date.
+    /// A pressure of 0 is estimated from `geoalt`; a temperature of 0 is 0 degrees C.
+    #[napi]
+    #[allow(clippy::too_many_arguments)]
+    pub fn azalt_ut(
+        &self,
+        jd_ut: f64,
+        equatorial_input: bool,
+        longitude_deg_east: f64,
+        latitude_deg: f64,
+        geoalt_m: f64,
+        pressure_hpa: f64,
+        temperature_c: f64,
+        x0_deg: f64,
+        x1_deg: f64,
+    ) -> Result<AzaltResult> {
+        let (_, tt, time_source) = self.epoch_from_ut(jd_ut)?;
+        let (ra, dec) = if equatorial_input {
+            (x0_deg, x1_deg)
+        } else {
+            ecliptic_to_equatorial(tt, x0_deg, x1_deg).map_err(|e| fail("E_RANGE", e))?
+        };
+        let armc = local_apparent_sidereal_deg(jd_ut, tt, longitude_deg_east)
+            .map_err(|e| fail("E_RANGE", e))?;
+        let h = equatorial_to_horizontal(ra, dec, armc, latitude_deg)
+            .map_err(|e| fail("E_RANGE", e))?;
+        let pressure = if pressure_hpa == 0.0 {
+            estimated_pressure_hpa(geoalt_m)
+        } else {
+            pressure_hpa
+        };
+        let refracted = extended_true_to_apparent(
+            h.true_altitude_deg,
+            geoalt_m,
+            pressure,
+            temperature_c,
+            STANDARD_LAPSE_RATE,
+        );
+        Ok(AzaltResult {
+            azimuth_south_deg: (h.azimuth_north_east_deg + 180.0).rem_euclid(360.0),
+            true_altitude_deg: h.true_altitude_deg,
+            apparent_altitude_deg: refracted.apparent_altitude_deg,
+            time_source,
+        })
+    }
+
+    /// `swe_azalt_rev`-shaped: azimuth from the south and TRUE altitude to ecliptic
+    /// longitude/latitude (`equatorial_output` false) or right ascension/declination.
+    #[napi]
+    pub fn azalt_rev_ut(
+        &self,
+        jd_ut: f64,
+        equatorial_output: bool,
+        longitude_deg_east: f64,
+        latitude_deg: f64,
+        azimuth_south_deg: f64,
+        true_altitude_deg: f64,
+    ) -> Result<AzaltRevResult> {
+        let (_, tt, time_source) = self.epoch_from_ut(jd_ut)?;
+        let armc = local_apparent_sidereal_deg(jd_ut, tt, longitude_deg_east)
+            .map_err(|e| fail("E_RANGE", e))?;
+        let north_east = (azimuth_south_deg - 180.0).rem_euclid(360.0);
+        let (ra, dec) = horizontal_to_equatorial(north_east, true_altitude_deg, armc, latitude_deg)
+            .map_err(|e| fail("E_RANGE", e))?;
+        let (x0, x1) = if equatorial_output {
+            (ra, dec)
+        } else {
+            let eps = ecliptic_nutation(tt)
+                .map_err(|e| fail("E_RANGE", e))?
+                .true_obliquity_rad;
+            let (a, d) = (ra.to_radians(), dec.to_radians());
+            let (x, y, z) = (d.cos() * a.cos(), d.cos() * a.sin(), d.sin());
+            let ye = y * eps.cos() + z * eps.sin();
+            let ze = -y * eps.sin() + z * eps.cos();
+            (
+                ye.atan2(x).to_degrees().rem_euclid(360.0),
+                ze.atan2(x.hypot(ye)).to_degrees(),
+            )
+        };
+        Ok(AzaltRevResult {
+            x0_deg: x0,
+            x1_deg: x1,
+            time_source,
+        })
+    }
+
+    /// Apparent geocentric equatorial-of-date position of a body at a UT instant.
+    fn sky_position(&mut self, jd_ut: f64, ipl: i32) -> Result<SkyPosition> {
+        let (tdb, tt, _) = self.epoch_from_ut(jd_ut)?;
+        let opts = options(FLAG_EQUATORIAL);
+        let f = if ipl == BODY_CHIRON {
+            let spk = self.chiron.as_ref().ok_or_else(|| {
+                fail(
+                    "E_UNSUPPORTED_BODY",
+                    "Chiron needs a small-body SPK: call loadChiron(path) first",
+                )
+            })?;
+            small_body_apparent_six_fields(&mut self.ephemeris, spk, tdb, opts)
+                .map_err(|e| fail("E_CALC", e))?
+                .fields
+        } else {
+            if ipl == BODY_EARTH {
+                return Err(fail("E_UNSUPPORTED_BODY", "the Earth has no rise or set"));
+            }
+            let body = body_from_ipl(ipl)?;
+            geocentric_apparent_six_fields_many_with_options(
+                &mut self.ephemeris,
+                &[body],
+                tdb,
+                opts,
+            )
+            .map_err(|e| fail("E_CALC", e))?[0]
+                .fields
+        };
+        Ok(SkyPosition {
+            tt_jd: tt,
+            right_ascension_deg: f.longitude_deg,
+            declination_deg: f.latitude_deg,
+            distance_au: f.distance_au,
+        })
+    }
+
+    /// `swe_rise_trans`-shaped for the Sun, Moon, planets and Chiron: the first
+    /// rise, set, upper or lower transit strictly after `jd_ut` (`rsmi` carries the
+    /// Swiss event and option bits). `None` means no event within the search window
+    /// (polar day or night, circumpolar) in the next `search_days` days (at most 31).
+    /// Pressure 0 is estimated from `geoalt`.
+    #[napi]
+    #[allow(clippy::too_many_arguments)]
+    pub fn rise_trans_ut(
+        &mut self,
+        jd_ut: f64,
+        ipl: i32,
+        rsmi: i32,
+        longitude_deg_east: f64,
+        latitude_deg: f64,
+        geoalt_m: f64,
+        pressure_hpa: f64,
+        temperature_c: f64,
+        search_days: f64,
+    ) -> Result<Option<f64>> {
+        let event = match rsmi & 15 {
+            RISE => Event::Rise,
+            SET => Event::Set,
+            MTRANSIT => Event::UpperTransit,
+            ITRANSIT => Event::LowerTransit,
+            _ => {
+                return Err(fail(
+                    "E_RANGE",
+                    "rsmi must carry exactly one of RISE(1), SET(2), MTRANSIT(4), ITRANSIT(8)",
+                ))
+            }
+        };
+        let known = 15
+            | BIT_DISC_CENTER
+            | BIT_NO_REFRACTION
+            | BIT_CIVIL_TWILIGHT
+            | BIT_NAUTIC_TWILIGHT
+            | BIT_ASTRO_TWILIGHT
+            | BIT_DISC_BOTTOM
+            | BIT_FIXED_DISC_SIZE
+            | BIT_FORCE_SLOW_METHOD;
+        if rsmi & BIT_GEOCTR_NO_ECL_LAT != 0 || rsmi & !known != 0 {
+            return Err(fail(
+                "E_UNSUPPORTED_FLAG",
+                format!(
+                    "rise/transit bits {:#x} are not supported (HINDU_RISING and GEOCTR_NO_ECL_LAT need a geocentric ecliptic latitude convention)",
+                    rsmi & (BIT_GEOCTR_NO_ECL_LAT | !known)
+                ),
+            ));
+        }
+        if ipl != BODY_CHIRON {
+            body_from_ipl(ipl)?;
+        }
+        let twilight_centre = if rsmi & BIT_CIVIL_TWILIGHT != 0 {
+            Some(-6.0)
+        } else if rsmi & BIT_NAUTIC_TWILIGHT != 0 {
+            Some(-12.0)
+        } else if rsmi & BIT_ASTRO_TWILIGHT != 0 {
+            Some(-18.0)
+        } else {
+            None
+        };
+        let limb = if rsmi & BIT_DISC_CENTER != 0 {
+            Limb::Center
+        } else if rsmi & BIT_DISC_BOTTOM != 0 {
+            Limb::Lower
+        } else {
+            Limb::Upper
+        };
+        let disc = match body_radius_km(ipl) {
+            None => Disc::Point,
+            Some(km) if rsmi & BIT_FIXED_DISC_SIZE != 0 && (ipl == 0 || ipl == 1) => {
+                let mean_distance_km = if ipl == 0 {
+                    AU_KM
+                } else {
+                    MEAN_MOON_DISTANCE_KM
+                };
+                Disc::FixedSemiDiameter {
+                    degrees: (km / mean_distance_km).asin().to_degrees(),
+                    limb,
+                }
+            }
+            Some(km) => Disc::Radius { km, limb },
+        };
+        let request = Request {
+            event,
+            disc,
+            refraction: rsmi & BIT_NO_REFRACTION == 0 && twilight_centre.is_none(),
+            topocentric: true,
+            fixed_centre_altitude_deg: twilight_centre,
+            search_days,
+        };
+        let site = Site {
+            latitude_deg,
+            longitude_deg_east,
+            height_m: geoalt_m,
+        };
+        let atmosphere = Atmosphere {
+            pressure_hpa: if pressure_hpa == 0.0 {
+                estimated_pressure_hpa(geoalt_m)
+            } else {
+                pressure_hpa
+            },
+            temperature_c,
+        };
+        find_event(
+            |ut| self.sky_position(ut, ipl),
+            &site,
+            &atmosphere,
+            &request,
+            jd_ut,
+        )
+        .map_err(|e| match e {
+            RiseError::Position(inner) => inner,
+            RiseError::Site(site_error) => fail("E_RANGE", site_error),
+            RiseError::InvalidRequest(message) => fail("E_RANGE", message),
+        })
     }
 
     /// Load and validate Hipparcos records for the given HIP numbers from a

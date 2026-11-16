@@ -28,6 +28,12 @@ const constants = Object.freeze({
   SE_EARTH: 14,
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
   SEFLG_NOGDEFL: 512, SEFLG_NOABERR: 1024, SEFLG_EQUATORIAL: 2048,
+  SE_ECL2HOR: 0, SE_EQU2HOR: 1, SE_HOR2ECL: 0, SE_HOR2EQU: 1,
+  SE_TRUE_TO_APP: 0, SE_APP_TO_TRUE: 1,
+  SE_CALC_RISE: 1, SE_CALC_SET: 2, SE_CALC_MTRANSIT: 4, SE_CALC_ITRANSIT: 8,
+  SE_BIT_DISC_CENTER: 256, SE_BIT_NO_REFRACTION: 512, SE_BIT_CIVIL_TWILIGHT: 1024,
+  SE_BIT_NAUTIC_TWILIGHT: 2048, SE_BIT_ASTRO_TWILIGHT: 4096, SE_BIT_DISC_BOTTOM: 8192,
+  SE_BIT_FIXED_DISC_SIZE: 16384, SE_BIT_FORCE_SLOW_METHOD: 32768,
 });
 
 const BODY_NAMES = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
@@ -104,6 +110,38 @@ class Engine {
    */
   loadChiron(spkPath) {
     return this._call(() => this._native.loadChiron(spkPath));
+  }
+
+  /**
+   * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
+   * direction. Azimuth is measured from the SOUTH toward the west. Pressure 0 is
+   * estimated from `geoaltM`.
+   */
+  azaltUt(jdUt, equatorialInput, lonDegEast, latDeg, geoaltM, pressureHpa, temperatureC, x0, x1) {
+    const r = this._call(() => this._native.azaltUt(
+      jdUt, Boolean(equatorialInput), lonDegEast, latDeg, geoaltM, pressureHpa, temperatureC, x0, x1));
+    return {
+      azimuthSouthDeg: r.azimuthSouthDeg, trueAltitudeDeg: r.trueAltitudeDeg,
+      apparentAltitudeDeg: r.apparentAltitudeDeg, timeSource: r.timeSource,
+    };
+  }
+
+  /** Inverse of `azaltUt` for a TRUE altitude: ecliptic lon/lat or RA/Dec of date. */
+  azaltRevUt(jdUt, equatorialOutput, lonDegEast, latDeg, azimuthSouthDeg, trueAltitudeDeg) {
+    const r = this._call(() => this._native.azaltRevUt(
+      jdUt, Boolean(equatorialOutput), lonDegEast, latDeg, azimuthSouthDeg, trueAltitudeDeg));
+    return { x0Deg: r.x0Deg, x1Deg: r.x1Deg, timeSource: r.timeSource };
+  }
+
+  /**
+   * First rise/set/transit after `jdUt` for bodies 0..9 and Chiron (when loaded).
+   * `rsmi` carries the Swiss event and option bits. Returns the UT Julian date, or
+   * `null` when there is no event within `searchDays` days (default 2; at most 31).
+   */
+  riseTransUt(jdUt, ipl, rsmi, lonDegEast, latDeg, geoaltM, pressureHpa, temperatureC, searchDays = 2) {
+    const r = this._call(() => this._native.riseTransUt(
+      jdUt, ipl, rsmi, lonDegEast, latDeg, geoaltM, pressureHpa, temperatureC, searchDays));
+    return r === undefined ? null : r;
   }
 
   /** policy: 'strict' | 'traditional'. Returns the number of stars loaded. */
@@ -187,6 +225,16 @@ function lenientJulday(year, month, day, hour, gregorian) {
   const m = ((m0 % 12) + 12) % 12 + 1;
   const firstOfMonth = julday(y, m, 1, 0, gregorian);
   return firstOfMonth + (Math.trunc(day) - 1) + hour / 24;
+}
+
+// The reference reports -2 ("no event") when the first event is more than about
+// 26 hours after the start (measured: found at 1.0811 d, missed at 1.0855 d).
+const SWISS_EVENT_WINDOW_DAYS = 26 / 24;
+
+function coded(code, message) {
+  const e = new Error(`${code}: ${message}`);
+  e.code = code;
+  return e;
 }
 
 /** Names of the bodies this engine computes, as the Swiss binding prints them. */
@@ -295,11 +343,92 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
         return shape(engine.calcTdb(args[0], args[1], flags), flags);
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
+    // swe_azalt(tjd_ut, calc_flag, geolon, geolat, geoalt, atpress, attemp, x0, x1, x2[, cb])
+    swe_azalt: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, flag, lon, lat, alt, pressure, temperature, x0, x1] = args;
+        if (flag !== constants.SE_ECL2HOR && flag !== constants.SE_EQU2HOR) {
+          throw coded('E_RANGE', `calc_flag must be SE_ECL2HOR (0) or SE_EQU2HOR (1), got ${flag}`);
+        }
+        const r = engine.azaltUt(jd, flag === constants.SE_EQU2HOR, lon, lat, alt ?? 0, pressure ?? 0, temperature ?? 0, x0, x1);
+        const result = {
+          azimuth: r.azimuthSouthDeg, trueAltitude: r.trueAltitudeDeg, apparentAltitude: r.apparentAltitudeDeg,
+        };
+        if (provenance) result.timeSource = r.timeSource;
+        return result;
+      })),
+    // swe_azalt_rev(tjd_ut, calc_flag, geolon, geolat, geoalt, azimuth(south), trueAltitude[, cb])
+    swe_azalt_rev: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, flag, lon, lat, , azimuth, altitude] = args;
+        if (flag !== constants.SE_HOR2ECL && flag !== constants.SE_HOR2EQU) {
+          throw coded('E_RANGE', `calc_flag must be SE_HOR2ECL (0) or SE_HOR2EQU (1), got ${flag}`);
+        }
+        const r = engine.azaltRevUt(jd, flag === constants.SE_HOR2EQU, lon, lat, azimuth, altitude);
+        // The reference binding names its two outputs azimuth/trueAltitude even for ecliptic/equatorial results.
+        const result = { azimuth: r.x0Deg, trueAltitude: r.x1Deg };
+        if (provenance) result.timeSource = r.timeSource;
+        return result;
+      })),
+    swe_refrac: (...args) =>
+      deliver(args, guarded(() => {
+        const [altitude, pressure, temperature, flag] = args;
+        return { refraction: refrac(altitude, pressure, temperature, flag !== constants.SE_APP_TO_TRUE) };
+      })),
+    swe_refrac_extended: (...args) =>
+      deliver(args, guarded(() => {
+        const [altitude, geoalt, pressure, temperature, lapse, flag] = args;
+        const toApparent = flag !== constants.SE_APP_TO_TRUE;
+        const r = refracExtended(altitude, geoalt, pressure, temperature, lapse, toApparent);
+        return {
+          refraction: toApparent ? r.apparentAltitudeDeg : r.trueAltitudeDeg,
+          trueAltitude: r.trueAltitudeDeg, apparentAltitude: r.apparentAltitudeDeg, horizonDip: r.dipDeg,
+        };
+      })),
+    // swe_rise_trans(tjd_ut, ipl, starname, epheflag, rsmi, geolon, geolat, geoalt, atpress, attemp[, cb])
+    swe_rise_trans: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, ipl, starname, epheflag, rsmi, lon, lat, alt, pressure, temperature] = args;
+        if (typeof starname !== 'string' || typeof epheflag !== 'number' || typeof rsmi !== 'number') {
+          throw coded('E_RANGE', 'swe_rise_trans expects (tjd_ut, ipl, starname, epheflag, rsmi, geolon, geolat, geoalt, atpress, attemp); this call has a different shape');
+        }
+        if (starname !== '') {
+          throw coded('E_UNSUPPORTED_BODY', 'rise/set of fixed stars is not implemented');
+        }
+        const eflag = normalizeFlags(epheflag);
+        if ((eflag & ~constants.SEFLG_JPLEPH) !== 0) {
+          throw coded('E_UNSUPPORTED_FLAG', `ephemeris flags ${eflag} are not supported by swe_rise_trans`);
+        }
+        const t = engine.riseTransUt(jd, ipl, rsmi, lon, lat, alt ?? 0, pressure ?? 0, temperature ?? 0, SWISS_EVENT_WINDOW_DAYS);
+        return { name: '', transitTime: t === null ? -2 : t };
+      })),
   });
+}
+
+/** Plain-model refraction (`swe_refrac`): altitude after refraction, degrees. */
+function refrac(altitudeDeg, pressureHpa, temperatureC, toApparent = true) {
+  try {
+    return loadNative().refrac(altitudeDeg, pressureHpa, temperatureC, Boolean(toApparent));
+  } catch (error) {
+    throw Engine._wrap(error);
+  }
+}
+
+/** Extended-model refraction (`swe_refrac_extended`, used by azalt and rise/set). */
+function refracExtended(altitudeDeg, heightM, pressureHpa, temperatureC, lapseRate, toApparent = true) {
+  try {
+    const r = loadNative().refracExtended(
+      altitudeDeg, heightM, pressureHpa, temperatureC, lapseRate, Boolean(toApparent));
+    return { trueAltitudeDeg: r.trueAltitudeDeg, apparentAltitudeDeg: r.apparentAltitudeDeg, dipDeg: r.dipDeg };
+  } catch (error) {
+    throw Engine._wrap(error);
+  }
 }
 
 module.exports = {
   Engine,
+  refrac,
+  refracExtended,
   julday,
   lenientJulday,
   revjul,

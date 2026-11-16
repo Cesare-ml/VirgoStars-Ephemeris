@@ -1,0 +1,150 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "calls": "Engine.azaltUt, azaltRevUt, riseTransUt, refrac, refracExtended and the Swiss-shaped swe_azalt, swe_azalt_rev, swe_refrac, swe_refrac_extended, swe_rise_trans",
+  "commit": "working tree on top of f4762df"
+ },
+ "against_installed_swisseph_0_5_17": {
+  "note": "JPL DE441 mode for the reference; the engine uses the declared UT policy (leap seconds), the reference its own DeltaT; years 1950-2026 for azalt, 1990-2025 for rise/set",
+  "azalt_and_refraction": {
+   "random_cases": 3000,
+   "sites": "geodetic latitude -89..89, any longitude, height 0 or up to 4000 m; pressure 0 (estimated), 850, 1013.25, 1030 hPa; temperature 0, 15, -20, 35 C",
+   "results": {
+    "azalt-ecl azimuth(arcsec,cos-alt-weighted)": {
+     "samples": 2966,
+     "rms_arcsec": 0.00114,
+     "max_arcsec": 0.00282
+    },
+    "azalt-ecl trueAltitude(arcsec)": {
+     "samples": 3000,
+     "rms_arcsec": 0.00091,
+     "max_arcsec": 0.00273
+    },
+    "azalt-ecl apparentAltitude(arcsec)": {
+     "samples": 3000,
+     "rms_arcsec": 0.00128,
+     "max_arcsec": 0.03532
+    },
+    "azalt_rev-ecl lon/RA(arcsec)": {
+     "samples": 2966,
+     "rms_arcsec": 0.00134,
+     "max_arcsec": 0.00282
+    },
+    "azalt_rev-ecl lat/Dec(arcsec)": {
+     "samples": 2966,
+     "rms_arcsec": 0.00059,
+     "max_arcsec": 0.00119
+    },
+    "azalt-equ azimuth(arcsec,cos-alt-weighted)": {
+     "samples": 2966,
+     "rms_arcsec": 0.00101,
+     "max_arcsec": 0.00275
+    },
+    "azalt-equ trueAltitude(arcsec)": {
+     "samples": 3000,
+     "rms_arcsec": 0.00082,
+     "max_arcsec": 0.00275
+    },
+    "azalt-equ apparentAltitude(arcsec)": {
+     "samples": 3000,
+     "rms_arcsec": 0.00082,
+     "max_arcsec": 0.00278
+    },
+    "azalt_rev-equ lon/RA(arcsec)": {
+     "samples": 2966,
+     "rms_arcsec": 0.00131,
+     "max_arcsec": 0.00281
+    },
+    "azalt_rev-equ lat/Dec(arcsec)": {
+     "samples": 2966,
+     "rms_arcsec": 0.0,
+     "max_arcsec": 0.0
+    },
+    "refrac true->app (arcsec)": {
+     "samples": 1845,
+     "rms_arcsec": 0.0,
+     "max_arcsec": 0.0
+    },
+    "refrac_ext true->app (arcsec)": {
+     "samples": 3690,
+     "rms_arcsec": 0.00085,
+     "max_arcsec": 0.03268
+    },
+    "refrac_ext dip (arcsec)": {
+     "samples": 3690,
+     "rms_arcsec": 0.03331,
+     "max_arcsec": 0.06224
+    },
+    "refrac_ext app->true (arcsec)": {
+     "samples": 3690,
+     "rms_arcsec": 0,
+     "max_arcsec": 0
+    },
+    "refrac app->true (arcsec)": {
+     "samples": 1765,
+     "rms_arcsec": 3.26716,
+     "max_arcsec": 20.83799
+    }
+   },
+   "reading": "azalt and azalt_rev (ecliptic and equatorial) agree with the reference to a few milli-arcseconds; the extended refraction (the model azalt and rise/set use) agrees to 0.03 arcsec for true->apparent and exactly for apparent->true; the plain swe_refrac true->apparent is exact, its apparent->true inverse differs by up to 21 arcsec at 700 hPa because the reference uses another inverse formula (the engine returns the exact numerical inverse)"
+  },
+  "rise_set_transit": {
+   "random_cases": 42976,
+   "sites": "Rome, Sydney (58 m), Reykjavik, Quito (2850 m), Tromso, La Paz (3640 m), Murmansk, Singapore, New York, Ushuaia",
+   "bodies": "Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Pluto",
+   "options": "default, DISC_CENTER, NO_REFRACTION, both, DISC_BOTTOM, FIXED_DISC_SIZE, civil/nautical/astronomical twilight (Sun); pressure/temperature 0/0, 1013.25/15, 950/-5",
+   "search_window": "the facade searches 26 hours ahead like the reference (found at 1.0811 d, missed at 1.0855 d in the reference); the engine default is 2 days",
+   "groups": {
+    "planets_rise_set": {
+     "cases": 19988,
+     "compared": 18904,
+     "both_report_no_event": 1084,
+     "event_only_in_engine": 0,
+     "event_only_in_reference": 0,
+     "rms_seconds": 0.0535,
+     "max_seconds": 2.8419
+    },
+    "moon_rise_set": {
+     "cases": 3000,
+     "compared": 2825,
+     "both_report_no_event": 175,
+     "event_only_in_engine": 0,
+     "event_only_in_reference": 0,
+     "rms_seconds": 0.1697,
+     "max_seconds": 5.5684
+    },
+    "transits_all_bodies": {
+     "cases": 22988,
+     "compared": 22988,
+     "both_report_no_event": 0,
+     "event_only_in_engine": 0,
+     "event_only_in_reference": 0,
+     "rms_seconds": 0.0667,
+     "max_seconds": 0.9128
+    },
+    "sun_rise_set": {
+     "cases": 3000,
+     "compared": 2771,
+     "both_report_no_event": 229,
+     "event_only_in_engine": 0,
+     "event_only_in_reference": 0,
+     "rms_seconds": 0.0677,
+     "max_seconds": 1.4004
+    },
+    "twilight": {
+     "cases": 1012,
+     "compared": 897,
+     "both_report_no_event": 115,
+     "event_only_in_engine": 0,
+     "event_only_in_reference": 0,
+     "rms_seconds": 0.0063,
+     "max_seconds": 0.0245
+    }
+   },
+   "reading": "transits agree to 0.9 s (Moon) and 0.04 s (others); rise/set to a few hundredths of a second except near-grazing polar passages, where the time is extremely sensitive to altitude (Moon 5.6 s for a passage of eleven minutes, Sun 1.4 s at Reykjavik near the midnight sun); events present or absent coincide in every case, including all polar cases"
+  }
+ }
+}

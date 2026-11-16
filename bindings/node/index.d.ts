@@ -25,7 +25,50 @@ export class Engine {
   loadChiron(spkPath: string): void;
   loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
+  /**
+   * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
+   * direction. Azimuth is from the SOUTH toward the west. Pressure 0 is estimated from `geoaltM`.
+   */
+  azaltUt(
+    jdUt: number, equatorialInput: boolean, lonDegEast: number, latDeg: number, geoaltM: number,
+    pressureHpa: number, temperatureC: number, x0: number, x1: number,
+  ): AzaltResult;
+  /** Inverse of `azaltUt` for a TRUE altitude: ecliptic lon/lat or RA/Dec of date. */
+  azaltRevUt(
+    jdUt: number, equatorialOutput: boolean, lonDegEast: number, latDeg: number,
+    azimuthSouthDeg: number, trueAltitudeDeg: number,
+  ): { x0Deg: number; x1Deg: number; timeSource: string };
+  /**
+   * First rise/set/transit after `jdUt` for bodies 0..9 and Chiron (when loaded); `rsmi` carries the
+   * Swiss event and option bits. UT Julian date, or `null` when none within `searchDays` (default 2, max 31).
+   */
+  riseTransUt(
+    jdUt: number, ipl: number, rsmi: number, lonDegEast: number, latDeg: number, geoaltM: number,
+    pressureHpa: number, temperatureC: number, searchDays?: number,
+  ): number | null;
 }
+
+export interface AzaltResult {
+  azimuthSouthDeg: number;
+  trueAltitudeDeg: number;
+  apparentAltitudeDeg: number;
+  timeSource: string;
+}
+
+export interface ExtendedRefractionResult {
+  trueAltitudeDeg: number;
+  apparentAltitudeDeg: number;
+  /** Horizon dip of the observer's height, degrees (0 or negative). */
+  dipDeg: number;
+}
+
+/** Plain-model refraction (`swe_refrac`): the altitude after refraction, degrees. */
+export function refrac(altitudeDeg: number, pressureHpa: number, temperatureC: number, toApparent?: boolean): number;
+/** Extended-model refraction (`swe_refrac_extended`, the model of azalt and rise/set). */
+export function refracExtended(
+  altitudeDeg: number, heightM: number, pressureHpa: number, temperatureC: number, lapseRate: number,
+  toApparent?: boolean,
+): ExtendedRefractionResult;
 
 export function julday(year: number, month: number, day: number, hour: number, gregorian?: boolean): number;
 export function revjul(jd: number, gregorian?: boolean): RevJul;
