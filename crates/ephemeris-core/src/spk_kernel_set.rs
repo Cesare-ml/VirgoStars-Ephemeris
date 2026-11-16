@@ -26,10 +26,11 @@ SPDX-License-Identifier: CPAL-1.0
 //!
 //! NAIF precedence: <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html>
 
+use std::collections::HashMap;
 use std::io::{Read, Seek};
 
 use crate::spk_direct_state::{
-    direct_spk_state, select_covering_segment, SpkDirectState, SpkStateError,
+    direct_spk_state, segment_covers_at, select_covering_segment, SpkDirectState, SpkStateError,
 };
 use crate::spk_index::{inspect_spk, SpkIndex, SpkIndexError, SpkSegmentDescriptor};
 use crate::spk_relative_state::{
@@ -387,6 +388,46 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         }))
     }
 
+    /// Select one winning descriptor per covered target with a single
+    /// precedence-ordered pass over the loaded indexes.
+    ///
+    /// The callback is an internal test hook for a deterministic complexity
+    /// assertion; it is a no-op in production.
+    fn select_covering_segments_at<F>(
+        &self,
+        et: f64,
+        visit_descriptor: &mut F,
+    ) -> Vec<(i32, usize, SpkSegmentDescriptor)>
+    where
+        F: FnMut(),
+    {
+        let descriptor_count = self.loaded.iter().map(|entry| entry.index.segments.len()).sum();
+        let mut selected = HashMap::with_capacity(descriptor_count);
+
+        // Newest kernels and last descriptors have precedence. The first
+        // covering descriptor encountered for each target is the same
+        // winner as selected_segment, including unsupported winners.
+        for (kernel_index, entry) in self.loaded.iter().enumerate().rev() {
+            for segment in entry.index.segments.iter().rev() {
+                if selected.contains_key(&segment.target_id) {
+                    continue;
+                }
+                visit_descriptor();
+                if segment_covers_at(segment, et) {
+                    selected.insert(segment.target_id, (kernel_index, *segment));
+                }
+            }
+        }
+
+        let mut results: Vec<_> = selected
+            .into_iter()
+            .map(|(target_id, (kernel_index, descriptor))| {
+                (target_id, kernel_index, descriptor)
+            })
+            .collect();
+        results.sort_unstable_by_key(|(target_id, _, _)| *target_id);
+        results
+    }
     /// Evaluate every declared target covered at one TDB/ET instant.
     ///
     /// Results are sorted by signed NAIF target ID, with one entry per
@@ -403,8 +444,8 @@ impl<R: Read + Seek> SpkKernelSet<R> {
     /// target-center chain connectivity, or real JPL/NAIF numerical parity.
     /// Units: TDB seconds past J2000; geometric frame 1 state km and km/s.
     ///
-    /// Modification (2026-11-14): compose existing canonical inventory
-    /// and single-target probes without a parallel segment-selection path.
+    /// Modification (2026-11-16): select all per-target winners in one
+    /// precedence-ordered descriptor pass before evaluating their states.
     pub fn probe_direct_states_at(
         &mut self,
         et: f64,
@@ -412,11 +453,21 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         if !et.is_finite() {
             return Err(SpkStateError::InvalidEpoch);
         }
-        let mut results = Vec::new();
-        for target_id in self.declared_target_ids() {
-            if let Some(probe) = self.probe_direct_state(target_id, et)? {
-                results.push((target_id, probe));
-            }
+        let selected = self.select_covering_segments_at(et, &mut || {});
+        let mut results = Vec::with_capacity(selected.len());
+        for (target_id, kernel_index, descriptor) in selected {
+            let evaluation = {
+                let entry = &mut self.loaded[kernel_index];
+                direct_spk_state(&mut entry.source, &entry.index, target_id, et)
+            };
+            results.push((
+                target_id,
+                SpkDirectStateProbe {
+                    kernel_index,
+                    descriptor,
+                    evaluation,
+                },
+            ));
         }
         Ok(results)
     }
@@ -1343,6 +1394,73 @@ mod tests {
         );
     }
 
+    #[test]
+    fn all_target_probe_matches_single_target_precedence_with_linear_descriptor_work() {
+        let older = vec![
+            seg(399, 3, 2, [10.0, 0.0], [1.0, 0.0]),
+            seg(-7, 0, 2, [7.0, 0.0], [0.0, 0.0]),
+            seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0]),
+            seg(55, 0, 2, [5.0, 0.0], [0.0, 0.0]),
+        ];
+        let newer = vec![
+            seg(301, 4, 3, [3.0, 0.0], [0.5, 0.0]),
+            seg(301, 399, 2, [99.0, 0.0], [0.0, 0.0]),
+            seg(55, 0, 9, [9.0, 0.0], [0.0, 0.0]),
+            seg(88, 0, 2, [8.0, 0.0], [0.0, 0.0]),
+        ];
+        let mut set = with_kernels(&[
+            (SpkByteOrder::LittleEndian, older),
+            (SpkByteOrder::BigEndian, newer),
+        ]);
+
+        let total_descriptors: usize = set
+            .loaded
+            .iter()
+            .map(|entry| entry.index.segments.len())
+            .sum();
+        let mut inspected = 0;
+        let selected = set.select_covering_segments_at(5.0, &mut || inspected += 1);
+        assert_eq!(inspected, total_descriptors);
+        assert_eq!(
+            selected.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+            vec![-7, 55, 88, 301, 399]
+        );
+
+        // The one-pass winners must agree with the public single-target API,
+        // including the winning descriptor for unsupported segments.
+        for (target_id, kernel_index, descriptor) in &selected {
+            assert_eq!(
+                set.selected_segment(*target_id, 5.0).unwrap(),
+                Some((*kernel_index, *descriptor))
+            );
+        }
+
+        let batch = set.probe_direct_states_at(5.0).unwrap();
+        assert_eq!(
+            batch.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            vec![-7, 55, 88, 301, 399]
+        );
+        let unsupported = batch.iter().find(|(id, _)| *id == 55).unwrap();
+        assert_eq!(unsupported.1.kernel_index, 1);
+        assert_eq!(unsupported.1.descriptor.spk_type, 9);
+        assert!(matches!(
+            unsupported.1.evaluation,
+            Err(SpkStateError::UnsupportedType(9))
+        ));
+
+        // Compare batch and individual evaluation outcomes. A target with
+        // no covering segment is naturally omitted from both paths.
+        for (target_id, probe) in &batch {
+            let single = set.probe_direct_state(*target_id, 5.0).unwrap().unwrap();
+            assert_eq!(probe.kernel_index, single.kernel_index);
+            assert_eq!(probe.descriptor, single.descriptor);
+            match (&probe.evaluation, &single.evaluation) {
+                (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
+                (Err(actual), Err(expected)) => assert_eq!(actual.to_string(), expected.to_string()),
+                _ => panic!("batch and single-target evaluation outcomes differ"),
+            }
+        }
+    }
     #[test]
     fn selected_segment_reports_latest_file_and_last_covering_descriptor() {
         let earlier = vec![seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])];
