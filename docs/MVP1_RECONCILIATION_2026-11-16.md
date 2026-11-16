@@ -42,11 +42,13 @@ comparison; it does not replace the individual model and validation contracts.
   parallel-run parity study or backend deployment. The house-method source was
   local branch `feat/houses-reference-validation-20261116`, commit
   `5b4df7dce4e00fa556fc22500e08295c723ec9f5`, not a released package.
+- After adding catalog-manifest validation, the same Node suite passed 76/76
+  with no skips, including the backend smoke test using a fictional manifest.
 - Independent SPK comparison: 80 geometric DE440s type-2 cases against
   CSPICE, including record boundaries and declared coverage endpoints, passed
   the predeclared diagnostic bounds. Data, unsigned receipts and provenance
   review remain external; see [the comparison](SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md).
-  It does not validate type 3, multi-kernel priority, other frames or apparent
+  That earlier comparison does not validate type 3, multi-kernel priority, other frames or apparent
   corrections.
 - See the individual model documents for previous Horizons/ERFA/Swiss local
   comparisons and their tolerances. Passing software tests is not the same as
@@ -59,11 +61,14 @@ comparison; it does not replace the individual model and validation contracts.
    and radial velocities. Approve the quality policy per supported star and
    decide how missing magnitudes and RV assumptions reach users. No real catalog
    is supplied by the compatibility API.
+   [Inventory and caller-reviewed manifest](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md).
 2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
    independently review kernel/tool provenance and numerical tolerances, and
    add type-3 and multi-kernel/segment-priority comparisons where these are
    claimed. Approve explicit error budgets and supported date ranges for each
    model, including UT1/Delta T data and extrapolation limits.
+   A subsequent [78-case real type-3 and multi-kernel comparison](SPK_NAIF_TYPE3_MULTI_KERNEL_2026-11-16.md)
+   passed locally; its limited matrix is not general scientific approval.
 3. **[Open — backend integration]** Run a representative parallel comparison
    against the actual backend over dates, locations, all requested bodies,
    flags, houses, and error paths; resolve differences and existing backend

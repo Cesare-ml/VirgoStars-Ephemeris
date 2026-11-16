@@ -170,6 +170,30 @@ export interface StarCatalogEntry {
   magnitude: number | null;
 }
 
+export interface ReviewedStarCatalogEntry extends StarCatalogEntry {
+  identitySource: string;
+  qualityDecision: string;
+  magnitudeSource?: string;
+  magnitudeMissingReason?: string;
+  radialVelocitySource?: string;
+  radialVelocityMissingReason?: string;
+}
+
+export interface StarCatalogManifest {
+  schema: 'virgostars-star-manifest/1';
+  reviewer: string;
+  astrometrySource: string;
+  dataUseDecision: string;
+  qualityPolicy: 'strict' | 'traditional';
+  stars: ReviewedStarCatalogEntry[];
+}
+
+/** Validates caller assertions; does not itself verify scientific identity or data rights. */
+export function prepareStarCatalog(manifest: StarCatalogManifest): {
+  stars: StarCatalogEntry[]; hips: number[]; qualityPolicy: 'strict' | 'traditional';
+  reviewer: string; astrometrySource: string; dataUseDecision: string;
+};
+
 export function createSwissShapedFacade(
   engine: Engine | null,
   options?: {

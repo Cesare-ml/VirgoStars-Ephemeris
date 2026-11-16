@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const Module = require('node:module');
-const { Engine, createSwissShapedFacade } = require('../index.js');
+const { Engine, createSwissShapedFacade, prepareStarCatalog } = require('../index.js');
 const { DE441_PATH: de441, HIP2_PATH: hip2, CHIRON_SPK_PATH: chiron,
   ASTROLOGICAL_FUNCTIONS_SRC: afSrc, BACKEND_ASTROLOGY_FUNC: backendPath } = process.env;
 const needs = { skip: de441 && hip2 && chiron && afSrc && backendPath ? false : 'local kernel, catalog, Chiron, house methods and backend module required' };
@@ -18,13 +18,20 @@ test('unchanged backend builds a fictional chart and star via the explicit adapt
   const b = await import(pathToFileURL(join(afSrc, 'placidus-position.mjs')).href);
   const engine = new Engine(de441);
   engine.loadChiron(chiron);
-  engine.loadHipparcos(hip2, [49669], 'strict');
+  const catalog = prepareStarCatalog({
+    schema: 'virgostars-star-manifest/1', reviewer: 'test',
+    astrometrySource: 'Caller-provided HIP2 file', dataUseDecision: 'Local test only', qualityPolicy: 'strict',
+    // A deliberately fictional name and magnitude; this is not a catalog source.
+    stars: [{ name: 'Test star', aliases: [], hip: 49669, radialVelocityKmS: null, magnitude: 1.23,
+      identitySource: 'Fictional test mapping', qualityDecision: 'Test of strict policy',
+      magnitudeSource: 'Fictional test magnitude', radialVelocityMissingReason: 'Test assumption' }],
+  });
+  engine.loadHipparcos(hip2, catalog.hips, catalog.qualityPolicy);
   const directory = dirname(de441);
   const facade = createSwissShapedFacade(engine, {
     acceptSwiephFlag: true, legacyEphePath: directory,
     houseMethods: { calculateHouseSetWithWarnings: a.calculateHouseSetWithWarnings, calculatePlacidusHousePosition: b.calculatePlacidusHousePosition },
-    // A deliberately fictional name and magnitude; this is not a catalog source.
-    starCatalog: [{ name: 'Test star', aliases: [], hip: 49669, radialVelocityKmS: null, magnitude: 1.23 }],
+    starCatalog: catalog.stars,
   });
   assert.throws(() => facade.swe_set_ephe_path(join(directory, 'other')), (e) => e.code === 'E_EPHEMERIS_FILE');
   process.env.ASTRODIENST_EPHE_PATH = directory;

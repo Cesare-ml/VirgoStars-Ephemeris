@@ -4,6 +4,7 @@
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 
 const path = require('node:path');
+const { prepareStarCatalog } = require('./star-catalog.js');
 
 let native;
 function loadNative() {
@@ -658,5 +659,6 @@ module.exports = {
   createHouseAngleProvider,
   constants,
   createSwissShapedFacade,
+  prepareStarCatalog,
   loadNative,
 };
