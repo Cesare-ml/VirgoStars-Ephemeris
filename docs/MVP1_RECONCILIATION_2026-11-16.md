@@ -100,6 +100,9 @@ comparison; it does not replace the individual model and validation contracts.
    The legacy star path truncates seconds and rejects a zero longitude; an
    isolated backend branch corrects both, as recorded in [the local diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md).
    Production and the separate Astrolabio copy remain unchanged.
+   A subsequent 360-case, three-site seconds check against the same facade
+   passed for the corrected backend and identified 360 inconsistencies in the
+   original local checkout; this is wiring evidence, not scientific validation.
    An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
    now serializes these warnings separately. A separate local backend branch
    `codex/ephemeris-house-diagnostics-20261116` adds explicit provider injection,

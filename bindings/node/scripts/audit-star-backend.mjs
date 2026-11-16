@@ -15,9 +15,11 @@ const circular = (a, b) => Math.abs(signedCircular(a, b));
 
 function main() {
   const [candidatePath, qualityPath, hip2Path, de441Path, swissPath, backendPath, ...extra] = process.argv.slice(2);
-  if (!candidatePath || !qualityPath || !hip2Path || !de441Path || !swissPath || !backendPath || extra.length) {
-    throw new Error('usage: node audit-star-backend.mjs <candidates.json> <quality.json> <hip2.dat> <de441.eph> <local-swisseph> <backend-func.js>');
+  if (!candidatePath || !qualityPath || !hip2Path || !de441Path || !swissPath || !backendPath
+      || (extra.length && (extra.length !== 1 || extra[0] !== '--seconds'))) {
+    throw new Error('usage: node audit-star-backend.mjs <candidates.json> <quality.json> <hip2.dat> <de441.eph> <local-swisseph> <backend-func.js> [--seconds]');
   }
+  const checkSeconds = extra[0] === '--seconds';
   const candidateBytes = readFileSync(candidatePath);
   const qualityBytes = readFileSync(qualityPath);
   const candidates = JSON.parse(candidateBytes.toString('utf8'));
@@ -60,7 +62,11 @@ function main() {
     Module._load = originalLoad;
   }
   process.env.ASTRODIENST_EPHE_PATH = dir;
-  const dates = [
+  const dates = checkSeconds ? [
+    ['1950-05-15 12:34:59', 1950, 5, 15, 12 + 34 / 60 + 59 / 3600],
+    ['2000-01-01 00:00:01', 2000, 1, 1, 1 / 3600],
+    ['2024-03-20 23:59:58', 2024, 3, 20, 23 + 59 / 60 + 58 / 3600],
+  ] : [
     ['1950-05-15 12:00:00', 1950, 5, 15],
     ['2000-01-01 12:00:00', 2000, 1, 1],
     ['2024-03-20 12:00:00', 2024, 3, 20],
@@ -71,8 +77,15 @@ function main() {
     maxLatitudeRateArcsecPerDay: 0, magnitudeComparisons: 0, magnitudeReferenceErrors: 0, maxMagnitudeDifference: 0,
     maxOurLongitudeRateVsReferencePositions: 0, maxOurLatitudeRateVsReferencePositions: 0,
     maxReferenceLongitudeRateVsReferencePositions: 0, maxReferenceLatitudeRateVsReferencePositions: 0 };
-  for (const [date, year, month, day] of dates) {
-    const jd = facade.swe_julday(year, month, day, 12, facade.SE_GREG_CAL);
+  const sites = checkSeconds ? [
+    { longitude: 12.5, latitude: 41.9, inversion: false },
+    { longitude: 144.96, latitude: -37.81, inversion: true },
+    { longitude: 18.96, latitude: 69.65, inversion: false },
+  ] : [{ longitude: 12.5, latitude: 41.9, inversion: false }];
+  if (checkSeconds) stats.backendEpochCheck = { sites: sites.length, toleranceDegrees: 1e-10,
+    mismatches: 0, maxPositionDifferenceDegrees: 0, maxHorizonDifferenceDegrees: 0 };
+  for (const [date, year, month, day, hour = 12] of dates) {
+    const jd = facade.swe_julday(year, month, day, hour, facade.SE_GREG_CAL);
     for (const entry of entries) {
       const ours = facade.swe_fixstar_ut(entry.name, jd, facade.SEFLG_SPEED);
       if (ours.error) { stats.engineErrors++; continue; }
@@ -105,21 +118,37 @@ function main() {
         stats.magnitudeComparisons++;
         stats.maxMagnitudeDifference = Math.max(stats.maxMagnitudeDifference, Math.abs(entry.magnitude - magnitude.magnitude));
       } else stats.magnitudeReferenceErrors++;
-      const originalLog = console.log;
-      let star;
-      try {
-        console.log = () => {};
-        star = backend.getStella(date, 12.5, 41.9, entry.name, false);
-      } catch {
-        stats.backendErrors++;
-        continue;
-      } finally {
-        console.log = originalLog;
-      }
-      if (!star || !Number.isFinite(star.latlng?.longitude) || !Number.isFinite(star.azalt?.azimuth) || star.magnitude !== entry.magnitude) stats.backendErrors++;
-      else {
-        stats.backendComparisons++;
-        if (star.name !== ref.name) stats.backendNameDifferences++;
+      for (const site of sites) {
+        const originalLog = console.log;
+        let star;
+        try {
+          console.log = () => {};
+          star = backend.getStella(date, site.longitude, site.latitude, entry.name, site.inversion);
+        } catch {
+          stats.backendErrors++;
+          continue;
+        } finally {
+          console.log = originalLog;
+        }
+        if (!star || !Number.isFinite(star.latlng?.longitude) || !Number.isFinite(star.azalt?.azimuth) || star.magnitude !== entry.magnitude) stats.backendErrors++;
+        else {
+          stats.backendComparisons++;
+          if (star.name !== ref.name) stats.backendNameDifferences++;
+          if (checkSeconds) {
+            const expectedLongitude = site.inversion && site.latitude < 0 ? (ours.longitude + 180) % 360 : ours.longitude;
+            const horizon = facade.swe_azalt(jd, facade.SE_ECL2HOR, site.longitude, site.latitude,
+              0, 0, 0, ours.longitude, ours.latitude, 0);
+            if (![star.latlng.latitude, star.azalt.trueAltitude, horizon.azimuth, horizon.trueAltitude].every(Number.isFinite)) {
+              stats.backendErrors++;
+              continue;
+            }
+            const positionDiff = Math.max(circular(star.latlng.longitude, expectedLongitude), Math.abs(star.latlng.latitude - ours.latitude));
+            const horizonDiff = Math.max(circular(star.azalt.azimuth, (horizon.azimuth + 180) % 360), Math.abs(star.azalt.trueAltitude - horizon.trueAltitude));
+            stats.backendEpochCheck.maxPositionDifferenceDegrees = Math.max(stats.backendEpochCheck.maxPositionDifferenceDegrees, positionDiff);
+            stats.backendEpochCheck.maxHorizonDifferenceDegrees = Math.max(stats.backendEpochCheck.maxHorizonDifferenceDegrees, horizonDiff);
+            if (positionDiff > stats.backendEpochCheck.toleranceDegrees || horizonDiff > stats.backendEpochCheck.toleranceDegrees) stats.backendEpochCheck.mismatches++;
+          }
+        }
       }
     }
   }
@@ -128,7 +157,8 @@ function main() {
   console.log(JSON.stringify({ status: 'DIAGNOSTIC_ONLY_NOT_APPROVED', timePolicy: 'engine default UT policy',
     note: 'Distinct star catalogs and assumed zero radial velocities; maxima are not accuracy claims.', ...stats }, null, 2));
   if (stats.engineErrors || stats.referenceErrors || stats.backendErrors || stats.magnitudeReferenceErrors
-    || stats.comparisons !== entries.length * dates.length || stats.backendComparisons !== stats.comparisons
+    || stats.comparisons !== entries.length * dates.length || stats.backendComparisons !== stats.comparisons * sites.length
+    || (checkSeconds && stats.backendEpochCheck.mismatches)
     || stats.magnitudeComparisons !== stats.comparisons) process.exitCode = 1;
 }
 

@@ -67,6 +67,56 @@ corrects those two cases and passes local regression tests, including one with
 the real Ephemeris/HIP2 path. The production checkout and separate Astrolabio
 copy have not acquired that change; wider consumer validation remains open.
 
+## Seconds and horizon comparison — 2026-11-17
+
+The same 40 unapproved, strict-filter candidate identities were exercised at
+three fictional UT instants: `1950-05-15 12:34:59`, `2000-01-01 00:00:01`
+and `2024-03-20 23:59:58`. Each used Rome (12.5° E, 41.9° N, inversion off),
+Melbourne (144.96° E, 37.81° S, inversion on), and Tromsø (18.96° E, 69.65° N,
+inversion off): **360 backend calls** for each backend version. Planetary kernel,
+HIP2, adopted metadata and default UT policy match the experiment above. The
+120 candidate/date direct position comparisons were repeated at the exact
+seconds; their Swiss reference still uses its own star metadata and is not an
+absolute truth or proof of catalog accuracy.
+
+For the backend check, the direct Ephemeris facade was evaluated at the same
+UT epoch and site. Its ecliptic longitude/latitude and horizon azimuth/true
+altitude were compared to `getStella`; the direct horizon values use the
+backend's 180° azimuth convention, and the longitude comparison also applies
+the requested southern inversion. The internal consistency tolerance was
+predeclared as `1e-10 degrees` per compared field, not a physical error budget.
+
+| Backend | Calls | Inconsistencies | Maximum position component | Maximum horizon component |
+|---|---:|---:|---:|---:|
+| Original local checkout | 360 | 360 | 2.433969258e-7° | 1.199204038° |
+| Corrected isolated branch | 360 | 0 | 0° | 0° |
+
+All these calls produced finite backend coordinates. The original path rounded
+each input down to the minute; the horizon discrepancy is the largest among
+these selected coordinates and is not a general error bound. This compares the
+backend to the **same facade** and therefore verifies wiring and epoch handling,
+not independently the physical accuracy of the engine. The separate Swiss
+comparisons, catalog assumptions and unresolved rights remain subject to the
+limitations above. A test-only negative control deliberately removes seconds
+and causes the audit to fail; the ordinary no-option diagnostic reproduces the
+previous aggregate unchanged.
+
+The two aggregate reports and an unsigned receipt are retained outside Git in
+`VirgoStarsData/star-catalog-review/2026-11-17/backend-seconds-comparison`:
+
+```text
+original.json   908da8dac46b7969b1391803c0243f0bc6efb565f5f3def3d9e2537ce5f83957
+corrected.json  38e152b7bf7be45cc73923ca92ea33d23ea15e3f7f42d88cc4c5bd6a453c4e91
+receipt.json    4b8925244574d223804005cae58af60fb6928334979c6e9a94629cb437632771
+```
+
+The receipt records hashes of candidate/quality reports, HIP2, DE441, both
+backend modules, facade, native addons and the audit script before and after
+the run. Byte-verified copies of the audit and the two backend modules were
+retained beside the receipt. Hash checks are not signatures or a locked filesystem snapshot;
+the Swiss star catalog itself was not authenticated. No raw third-party
+catalog rows or individual results were committed.
+
 ## Reproduction and evidence
 
 `bindings/node/scripts/audit-star-backend.mjs` is a local-only diagnostic. It
@@ -80,6 +130,7 @@ replaced by caller paths; it makes no network request:
 
 ```powershell
 node bindings/node/scripts/audit-star-backend.mjs <candidates.json> <quality.json> <hip2.dat> <de441.eph> <local-swisseph-dir> <backend-func.js>
+# Add --seconds to select the three-epoch/three-site internal consistency audit.
 ```
 
 The aggregate output was retained locally under
@@ -92,3 +143,6 @@ endings), not the provenance of the source data. A production migration still
 requires all requested objects, source and rights review, component-specific
 policy, agreed tolerances, independent scientific checks and a representative
 backend parity study.
+
+**Modification record (2026-11-17):** added an opt-in seconds/horizon audit
+and its local regression test; the original diagnostic mode is unchanged.
