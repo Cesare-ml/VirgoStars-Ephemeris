@@ -105,9 +105,9 @@ fn endpoint_derivative(coefficients: &[f64], x: f64) -> Result<f64> {
     if degree == 0 {
         return Ok(0.0);
     }
-    let scale = coefficients
-        .iter()
-        .fold(0.0_f64, |largest, coefficient| largest.max(coefficient.abs()));
+    let scale = coefficients.iter().fold(0.0_f64, |largest, coefficient| {
+        largest.max(coefficient.abs())
+    });
     if scale == 0.0 {
         return Ok(0.0);
     }
