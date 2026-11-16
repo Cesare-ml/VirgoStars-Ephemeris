@@ -584,6 +584,22 @@ mod tests {
         }
     }
 
+    // Modification (2026-11-16): a first summary at record 2 means no
+    // reserved comment records; the first legal data word remains 129.
+    #[test]
+    fn accepts_daf_with_first_summary_in_record_two_and_no_comment_area() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            let mut bytes = file(order, false);
+            put_i32(&mut bytes, 76, 2, order);
+            put_i32(&mut bytes, 80, 2, order);
+            write_segment(&mut bytes, 2, order, 399, -10.0, 100.0, 513);
+            let index = parse(bytes).expect("record two can be the first summary when no comments are reserved");
+            assert_eq!(index.byte_order, order);
+            assert_eq!(index.segments.len(), 1);
+            assert_eq!((index.segments[0].initial_address, index.segments[0].final_address), (513, 516));
+        }
+    }
+
     #[test]
     fn rejects_segment_data_overlapping_primary_summary_or_name_record() {
         for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
