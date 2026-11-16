@@ -58,6 +58,12 @@ test('unchanged backend builds a fictional chart and star via the explicit adapt
     assert.equal(chart.houses[name].house.length, 12, name);
     assert.ok(chart.houses[name].house.every(Number.isFinite), name);
   }
+  const polar = backend.getPianetiCase('2024-03-20 12:00:00', 18.96, 69.65, [], true, false);
+  assert.equal(polar.houses.placido.status, 'FALLBACK_PORPHYRY');
+  assert.ok(polar.houses.placido.warnings.some((w) => w.code === 'SYSTEM_FALLBACK_PORPHYRY'));
+  const south = backend.getPianetiCase('2024-03-20 12:00:00', 144.96, -37.81, [], true, true);
+  assert.equal(south.houses.placido.status, 'OK');
+  assert.ok(south.houses.placido.house.every(Number.isFinite));
   const star = backend.getStella('2024-03-20 12:00:00', 12.5, 41.9, 'Test star');
   assert.equal(star.name, 'Test star,example');
   assert.equal(star.magnitude, 1.23);

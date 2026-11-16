@@ -77,6 +77,12 @@ test('polar latitudes return values; provenance adds warnings, never default key
   const r = plain.swe_houses(JD, 69.65, 18.96, 'P');
   assert.deepEqual(Object.keys(r), KEYS, 'the backend loops over every key: no extra ones by default');
   assert.equal(r.house.length, 12);
+  assert.equal(r.status, 'FALLBACK_PORPHYRY', 'fallback remains available as non-enumerable metadata');
+  assert.ok(r.warnings.some((x) => x.code === 'SYSTEM_FALLBACK_PORPHYRY'));
+  assert.equal(Object.prototype.propertyIsEnumerable.call(r, 'warnings'), false);
+  assert.equal(Object.prototype.propertyIsEnumerable.call(r, 'status'), false);
+  assert.equal(Object.prototype.propertyIsEnumerable.call(r, 'timeSource'), false);
+  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(r)), 'warnings'), false);
   const w = loud.swe_houses(JD, 69.65, 18.96, 'P');
   assert.equal(w.status, 'FALLBACK_PORPHYRY');
   assert.ok(w.warnings.some((x) => x.code === 'SYSTEM_FALLBACK_PORPHYRY'));
@@ -98,6 +104,33 @@ test('swe_houses_pos (Placidus) is a house position between 1 and 13', needs, as
   const r = facade.swe_houses_pos(100, 41.9, 23.44, 'P', 120, 1);
   assert.deepEqual(Object.keys(r), ['housePosition']);
   assert.ok(Math.abs(r.housePosition - 10.6095501398) < 1e-6, String(r.housePosition));
+});
+
+test('a circumpolar Placidus position is a specific error rather than a fabricated number', () => {
+  const facade = createSwissShapedFacade(null, { houseMethods: {
+    calculatePlacidusHousePosition() {
+      const error = new Error('No distinct rising and setting semi-arcs');
+      error.code = 'CIRCUMPOLAR_POSITION_UNAVAILABLE';
+      throw error;
+    },
+  } });
+  const result = facade.swe_houses_pos(100, 69.65, 23.44, 'P', 120, 1);
+  assert.equal(result.code, 'E_POSITION_UNAVAILABLE');
+  assert.equal(result.housePosition, undefined);
+});
+
+test('the real house method reports an unavailable circumpolar position explicitly', needs, async () => {
+  const facade = createSwissShapedFacade(new Engine(de441), { houseMethods: await load() });
+  const result = facade.swe_houses_pos(100, 69.65, 23.44, 'P', 90, 0);
+  assert.equal(result.code, 'E_POSITION_UNAVAILABLE');
+  assert.equal(result.housePosition, undefined);
+});
+
+test('invalid injected house positions fail explicitly', () => {
+  for (const value of [undefined, NaN, Infinity, 0, 13]) {
+    const facade = createSwissShapedFacade(null, { houseMethods: { calculatePlacidusHousePosition: () => ({ housePosition: value }) } });
+    assert.equal(facade.swe_houses_pos(100, 30, 23.44, 'P', 90, 0).code, 'E_CALC');
+  }
 });
 
 test('agreement with the installed swisseph: cusps, angles and extra points', needsReference, async () => {

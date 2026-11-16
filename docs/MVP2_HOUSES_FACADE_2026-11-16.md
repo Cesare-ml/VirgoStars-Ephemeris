@@ -47,10 +47,12 @@ ARMC + 90°).
 
 ## Behaviour that matters to the backend
 
-- **Exactly the reference keys by default.** The backend loops over every property of the
-  result and mirrors it for southern latitudes, so an extra key (a `warnings` array) would
-  break it. `{ provenance: true }` adds `warnings`, `status` (`OK`/`FALLBACK_PORPHYRY`) and
-  `timeSource`; the default does not.
+- **Exactly the reference enumerable keys by default.** The backend loops over every
+  enumerable property and mirrors it for southern latitudes. `warnings`, `status`
+  (`OK`/`FALLBACK_PORPHYRY`) and `timeSource` are accessible as non-enumerable
+  properties by default; `{ provenance: true }` makes them enumerable. JSON
+  serialization of the default form omits them, so the unchanged backend still
+  needs an explicit integration to surface warnings to its clients.
 - **Polar latitudes return values.** The reference answers `{ error: "Can't calculate
   houses." }` for Placidus and Koch beyond the polar circle (948 of the 4,000 compared
   latitudes). The facade returns Porphyry cusps from the same angles and says so in the
@@ -60,6 +62,10 @@ ARMC + 90°).
 - **Time:** `tjd_ut` is taken as UT1; TT follows the engine's time policy, so a loaded
   measured-ΔT table is used.
 - `swe_houses_pos` supports `'P'` only (the backend's use). Other letters are errors.
+  Circumpolar directions without distinct rise/set semi-arcs return
+  `E_POSITION_UNAVAILABLE`; cusp fallback does not create a Placidus position.
+  The unchanged backend currently discards this error; see the
+  [local chart diagnostic](MVP1_BACKEND_CHART_DIAGNOSTIC_2026-11-16.md).
 
 ## Evidence
 

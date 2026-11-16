@@ -511,11 +511,10 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
           munkaseyCoAscendant: angles.munkaseyCoAscendantDeg,
           munkaseyPolarAscendant: angles.munkaseyPolarAscendantDeg,
         };
-        if (provenance) {
-          result.warnings = [...set.warnings];
-          result.status = system.status;
-          result.timeSource = angles.timeSource;
-        }
+        const metadata = { warnings: [...set.warnings], status: system.status, timeSource: angles.timeSource };
+        if (provenance) Object.assign(result, metadata);
+        else Object.defineProperties(result, Object.fromEntries(Object.entries(metadata).map(([name, value]) =>
+          [name, { value, enumerable: false, writable: false, configurable: false }])));
         return result;
       })),
     // swe_houses_pos(armc, geolat, eps, hsys, lon, lat): Placidus only.
@@ -527,17 +526,29 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
           throw coded('E_UNSUPPORTED_BODY', 'swe_houses_pos needs houseMethods.calculatePlacidusHousePosition from astrological-functions');
         }
         if (hsys !== 'P') throw coded('E_UNSUPPORTED_FLAG', `house system ${JSON.stringify(hsys)} has no position method here (only 'P')`);
-        const r = method({
-          armcDeg: armc, latitudeDeg: lat, trueObliquityDeg: eps,
-          eclipticLongitudeDeg: lon, eclipticLatitudeDeg: eclLat ?? 0,
-          frame: 'ECLIPTIC_OF_DATE', zodiac: 'TROPICAL', birthTimeKnown: true,
-          // Required by the contract, not used by the position and not part of the result.
-          datetimeUtc: '2000-01-01T12:00:00Z',
-          source: {
-            engineVersion: 'virgostars-ephemeris-node', kernelSetId: 'not-applicable', timeModel: 'NOT_USED',
-            corrections: 'CALLER_SUPPLIED', center: 'EARTH', observerLongitudeDegEast: 0,
-          },
-        });
+        let r;
+        try {
+          r = method({
+            armcDeg: armc, latitudeDeg: lat, trueObliquityDeg: eps,
+            eclipticLongitudeDeg: lon, eclipticLatitudeDeg: eclLat ?? 0,
+            frame: 'ECLIPTIC_OF_DATE', zodiac: 'TROPICAL', birthTimeKnown: true,
+            // Required by the contract, not used by the position and not part of the result.
+            datetimeUtc: '2000-01-01T12:00:00Z',
+            source: {
+              engineVersion: 'virgostars-ephemeris-node', kernelSetId: 'not-applicable', timeModel: 'NOT_USED',
+              corrections: 'CALLER_SUPPLIED', center: 'EARTH', observerLongitudeDegEast: 0,
+            },
+          });
+        } catch (error) {
+          if (error && error.code === 'CIRCUMPOLAR_POSITION_UNAVAILABLE') {
+            throw coded('E_POSITION_UNAVAILABLE', 'Placidus position has no distinct rising and setting semi-arcs');
+          }
+          throw error;
+        }
+        if (!r || typeof r.housePosition !== 'number' || !Number.isFinite(r.housePosition)
+          || r.housePosition < 1 || r.housePosition >= 13) {
+          throw coded('E_CALC', 'house method returned an invalid Placidus position');
+        }
         return { housePosition: r.housePosition };
       })),
     // swe_sol_eclipse_when_glob(tjd_ut, ifl, ifltype, backward[, cb])
