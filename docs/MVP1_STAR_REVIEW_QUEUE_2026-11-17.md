@@ -71,6 +71,63 @@ are evidence-backed leads within the 25 that lacked an **exact** IAU/SIMBAD
 match; they do not change the queue's exact-match counts or establish a
 production mapping.
 
+## Additional historical-name research and supplemental queue
+
+Five further leads were checked against historical nomenclature and the
+snapshot's exact standardized-name records. The 1936
+[Publications of the Astronomical Society of the Pacific list](https://articles.adsabs.harvard.edu/pdf/1936PASP...48..139R)
+associates Adara with Adhara and Etamin with Eltanin. The
+[Observatoire de Paris dictionary](https://dictionary.obspm.fr/terms/eltanin-gamma-draconis/)
+also records Etamin as a variant of Eltanin. The
+[RASC World Asterisms Project handbook](https://www.rasc.ca/sites/default/files/World%20Asterisms%20Project%20Handbook%20V%202025.14.pdf)
+records the historical Shedir spelling and distinguishes the two Gienah names;
+the [IAU WGSN announcement](https://iauarchive.eso.org/news/pressreleases/detail/iau1707/)
+distinguishes γ Corvi (Gienah) from ε Cygni (Aljanah).
+
+| Requested name | Snapshot candidate | HIP candidate | Local HIP2 screen |
+|---|---|---:|---|
+| Adara | Adhara, component A | 33579 | strict and traditional eligible |
+| Etamin | Eltanin, component unspecified | 87833 | strict and traditional eligible |
+| Shedir | Schedar, component unspecified | 3179 | strict and traditional eligible |
+| Gienah cygni | Aljanah, component Aa | 102488 | strict and traditional eligible |
+| Gienah Ghurab | Gienah, component unspecified | 59803 | strict and traditional eligible |
+
+The matching snapshot uses `_` for the three unspecified components; it does
+not establish that a component was selected. The cited historical-name evidence
+and SIMBAD cross-identifications support review leads, not a determination of
+what the backend's historical catalog intended. Keep the two Gienah objects
+distinct. No photometric, RV, rights or component decision is implied.
+
+`scripts/attach_star_research_leads.mjs` adds the two previously documented and
+five new leads to a **separate** queue, preserving the exact-match counts and all
+null decisions. It binds the caller's research document to the first queue's
+SHA-256, checks each standardized name and claimed HIP against the original IAU
+snapshot, re-runs the HIP2 filters and flags shared HIPs across names. Multiple
+hypotheses for one input remain separate. Source URLs and rationale are
+caller assertions: the tool checks URL syntax but does not visit URLs or
+authenticate the scholarly claim. It refuses stale hashes, decided rows,
+unknown names, inconsistent identities and output overwrite.
+
+```powershell
+node scripts/attach_star_research_leads.mjs <queue-v1.json> <research-leads.json> `
+  <iau-snapshot.txt> <hip2.dat> <new-queue-v2.json>
+```
+
+The local source-claim document and v2 queue are retained outside Git in
+`VirgoStarsData/star-catalog-review/2026-11-17`:
+
+```text
+research-leads-v1.json     4a6c931382e9ad5c3f49cc1961dc629a2b88cb9444aa3771308ff9c03b0933c8
+star-review-queue-v2.json  03d88145748fe470a74627ed4182dbcb3cf5c800f9c9447adb9ce450c778ce9e
+```
+
+The v2 report has 106 requests, 77 original IAU leads, four original SIMBAD
+leads, seven separately researched names and **18 without a recorded lead**.
+The original 25 without an *exact* lead remain 25: the seven later hypotheses
+do not change that earlier measurement. All decisions remain null. Deterministic
+reconstruction and refusal to overwrite were verified against the local files;
+the report and source-claim document remain unapproved for redistribution.
+
 ## Next decisions
 
 1. Resolve each object and component, including ambiguous/multiple objects and
