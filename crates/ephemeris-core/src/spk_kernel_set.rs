@@ -409,10 +409,10 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         // winner as selected_segment, including unsupported winners.
         for (kernel_index, entry) in self.loaded.iter().enumerate().rev() {
             for segment in entry.index.segments.iter().rev() {
+                visit_descriptor();
                 if selected.contains_key(&segment.target_id) {
                     continue;
                 }
-                visit_descriptor();
                 if segment_covers_at(segment, et) {
                     selected.insert(segment.target_id, (kernel_index, *segment));
                 }
@@ -1444,7 +1444,7 @@ mod tests {
         assert_eq!(unsupported.1.kernel_index, 1);
         assert_eq!(unsupported.1.descriptor.spk_type, 9);
         assert!(matches!(
-            unsupported.1.evaluation,
+            &unsupported.1.evaluation,
             Err(SpkStateError::UnsupportedType(9))
         ));
 
