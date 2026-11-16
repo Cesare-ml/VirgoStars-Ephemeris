@@ -104,6 +104,21 @@ pub fn geocentric_light_time<R: Read + Seek>(
     })
 }
 
+/// One-way light-time from `observer` to `target` with a caller-supplied state
+/// provider (barycentric ICRF states). It lets a target that DE441 does not hold,
+/// such as a small body from an SPK, use the same solver.
+pub fn light_time_with_states<F>(
+    observer: Body,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+    states: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from(observer, target, observation_epoch, states)
+}
+
 /// One-way reception correction for a target observed from the **Sun's center**
 /// (heliocentric): the photon leaves the target at the iterated emission epoch and
 /// arrives at the Sun at the observation epoch. The returned vector is

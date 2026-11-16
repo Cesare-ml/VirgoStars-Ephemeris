@@ -59,6 +59,7 @@ pub mod spk_index;
 pub mod spk_kernel_set;
 pub mod spk_pair_diagnostics;
 pub mod spk_relative_state;
+pub mod spk_type21;
 pub mod state;
 pub mod time;
 pub mod wgs84_ecef;

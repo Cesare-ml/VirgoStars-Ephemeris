@@ -187,7 +187,7 @@ test('lunar points: same keys and rflag; positions within the published-series t
   }
 });
 
-test('Chiron and the interpolated apsides are still not offered and say so', opts, () => {
+test('Chiron without a small-body file, and the interpolated apsides, are not offered and say so', opts, () => {
   setup();
   for (const ipl of [15, 21, 22]) {
     assert.deepEqual(Object.keys(ours.swe_calc(2451545, ipl, SPEED_JPL)), ['error']);

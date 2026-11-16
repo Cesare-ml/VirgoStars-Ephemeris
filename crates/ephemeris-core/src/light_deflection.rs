@@ -51,8 +51,8 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::de441::{Body, De441, De441Error, JulianDateTdb};
-use crate::light_time::{geocentric_light_time, GeocentricLightTimeState, LightTimeError};
+use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
+use crate::light_time::{light_time_with_states, GeocentricLightTimeState, LightTimeError};
 
 /// `2GM_sun/c²` in astronomical units (IAU 2015 nominal solar `GM`).
 pub const SUN_SCHWARZSCHILD_RADIUS_AU: f64 = 1.974_125_743_36e-8;
@@ -142,17 +142,20 @@ pub fn solar_deflection_delta(
 }
 
 /// `δ` for `target` seen at `observation_epoch`, from a full light-time solution.
-fn delta_at<R: Read + Seek>(
-    ephemeris: &mut De441<R>,
+fn delta_at<F>(
+    states: &mut F,
     target: Body,
     observation_epoch: JulianDateTdb,
     state: &GeocentricLightTimeState,
-) -> Result<[f64; 3], DeflectionError> {
+) -> Result<[f64; 3], DeflectionError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
     let p = unit(state.position_km)?;
-    let earth = ephemeris.state(Body::Earth, Body::SolarSystemBarycenter, observation_epoch)?;
-    let sun_obs = ephemeris.state(Body::Sun, Body::SolarSystemBarycenter, observation_epoch)?;
-    let body_emit = ephemeris.state(target, Body::SolarSystemBarycenter, state.emission_epoch)?;
-    let sun_emit = ephemeris.state(Body::Sun, Body::SolarSystemBarycenter, state.emission_epoch)?;
+    let earth = states(Body::Earth, observation_epoch)?;
+    let sun_obs = states(Body::Sun, observation_epoch)?;
+    let body_emit = states(target, state.emission_epoch)?;
+    let sun_emit = states(Body::Sun, state.emission_epoch)?;
     let sun_to_observer: [f64; 3] =
         std::array::from_fn(|i| earth.position_km[i] - sun_obs.position_km[i]);
     let sun_to_source: [f64; 3] =
@@ -174,17 +177,32 @@ pub fn deflect_light_time_state_by_sun<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     state: &GeocentricLightTimeState,
 ) -> Result<GeocentricLightTimeState, DeflectionError> {
+    deflect_light_time_state_by_sun_with(
+        &mut |body, epoch| ephemeris.state(body, Body::SolarSystemBarycenter, epoch),
+        state,
+    )
+}
+
+/// As [`deflect_light_time_state_by_sun`] with a caller-supplied provider of
+/// barycentric ICRF states (needed for targets that DE441 does not hold).
+pub fn deflect_light_time_state_by_sun_with<F>(
+    states: &mut F,
+    state: &GeocentricLightTimeState,
+) -> Result<GeocentricLightTimeState, DeflectionError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
     if state.target == Body::Sun {
         return Ok(*state);
     }
     let t = state.observation_epoch;
     let h = DEFLECTION_RATE_HALF_STEP_DAYS;
-    let delta = delta_at(ephemeris, state.target, t, state)?;
+    let delta = delta_at(states, state.target, t, state)?;
     let mut rates = [[0.0; 3]; 2];
     for (slot, step) in rates.iter_mut().zip([-h, h]) {
         let epoch = JulianDateTdb(t.0 + step);
-        let lt = geocentric_light_time(ephemeris, state.target, epoch)?;
-        *slot = delta_at(ephemeris, state.target, epoch, &lt)?;
+        let lt = light_time_with_states(Body::Earth, state.target, epoch, &mut *states)?;
+        *slot = delta_at(states, state.target, epoch, &lt)?;
     }
     let delta_rate: [f64; 3] = std::array::from_fn(|i| (rates[1][i] - rates[0][i]) / (2.0 * h));
 

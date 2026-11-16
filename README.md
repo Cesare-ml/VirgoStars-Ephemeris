@@ -57,6 +57,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [MVP-1 measured ΔT (USNO files supplied by the caller) for UT inputs; Moon within 0.02″ of the reference 1972–2018](docs/MVP1_DELTA_T_MEASURED_2026-11-16.md)
 - [Heliocentric and equatorial output compared with swisseph 0.5.17](docs/MVP1_HELIOCENTRIC_EQUATORIAL_2026-11-16.md)
 - [Lunar nodes and apogees (bodies 10-13) compared with swisseph 0.5.17](docs/MVP2_LUNAR_POINTS_2026-11-16.md)
+- [Chiron from a JPL small-body SPK (new type 21 reader), compared with Horizons and swisseph](docs/MVP2_CHIRON_2026-11-16.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)

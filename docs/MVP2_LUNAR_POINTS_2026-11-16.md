@@ -1,6 +1,6 @@
 # MVP 2 — lunar nodes and apogees (2026-11-16)
 
-**Status: Locally tested against the installed `swisseph` 0.5.17. Chiron and the
+**Status: Locally tested against the installed `swisseph` 0.5.17. The
 "interpolated" apsides are NOT included. Not integrated.** Bodies 10–13 of the
 backend's default chart array: mean node, true node, mean apogee ("mean Lilith") and
 osculating apogee.
@@ -60,10 +60,6 @@ by the true obliquity (`rflag 2305` family). `SEFLG_NOGDEFL` has no effect on th
 
 ## Not done
 
-- **Chiron (15).** It is not in DE441 and needs an independent small-body
-  ephemeris. Options: a JPL SPK for 2060 Chiron fetched from Horizons/SBDB (a small
-  file; those use SPK type 21, which the core's SPK reader does not read yet) or
-  numerical integration from osculating elements (less accurate). It needs a data
-  download decision. Until then body 15 returns `E_UNSUPPORTED_BODY`.
+- **Chiron (15)** is not part of this document: see [MVP2_CHIRON_2026-11-16.md](MVP2_CHIRON_2026-11-16.md).
 - **Interpolated apogee and perigee (21, 22).** No published definition; not offered.
 - Other flags for these points (`NONUT`, `TRUEPOS`, `J2000`).

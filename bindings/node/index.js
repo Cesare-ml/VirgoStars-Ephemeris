@@ -23,7 +23,7 @@ function loadNative() {
 const constants = Object.freeze({
   SE_SUN: 0, SE_MOON: 1, SE_MERCURY: 2, SE_VENUS: 3, SE_MARS: 4,
   SE_JUPITER: 5, SE_SATURN: 6, SE_URANUS: 7, SE_NEPTUNE: 8, SE_PLUTO: 9,
-  SE_MEAN_NODE: 10, SE_TRUE_NODE: 11, SE_MEAN_APOG: 12, SE_OSCU_APOG: 13,
+  SE_MEAN_NODE: 10, SE_TRUE_NODE: 11, SE_MEAN_APOG: 12, SE_OSCU_APOG: 13, SE_CHIRON: 15,
   SE_GREG_CAL: 1, SE_JUL_CAL: 0,
   SE_EARTH: 14,
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
@@ -36,6 +36,7 @@ BODY_NAMES[11] = 'true Node';
 BODY_NAMES[12] = 'mean Apogee';
 BODY_NAMES[13] = 'osc. Apogee';
 BODY_NAMES[14] = 'Earth';
+BODY_NAMES[15] = 'Chiron';
 
 function parseError(error) {
   const text = String(error && error.message ? error.message : error);
@@ -95,6 +96,14 @@ class Engine {
    */
   loadDeltaT(deltatDataPath, historicDeltatPath, deltatPredsPath = null) {
     return this._call(() => this._native.loadDeltaT(deltatDataPath, historicDeltatPath, deltatPredsPath));
+  }
+
+  /**
+   * Load a JPL small-body SPK (type 21, Sun-centered) for 2060 Chiron from a caller
+   * supplied file; afterwards body 15 (SE_CHIRON) is available like the planets.
+   */
+  loadChiron(spkPath) {
+    return this._call(() => this._native.loadChiron(spkPath));
   }
 
   /** policy: 'strict' | 'traditional'. Returns the number of stars loaded. */

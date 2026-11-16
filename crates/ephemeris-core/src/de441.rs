@@ -54,6 +54,9 @@ pub enum Body {
     NeptuneBarycenter,
     PlutoBarycenter,
     Sun,
+    /// A small body (asteroid, comet) identified by its NAIF id, supplied by a
+    /// separate SPK; it is never in DE441.
+    SmallBody(i32),
 }
 
 /// Geometric position and velocity of `target` relative to `center` in ICRF axes.
@@ -528,6 +531,9 @@ impl<R: Read + Seek> De441<R> {
             Body::NeptuneBarycenter => 7,
             Body::PlutoBarycenter => 8,
             Body::Sun => 10,
+            Body::SmallBody(_) => {
+                return Err(De441Error::MissingSeries("small bodies are not in DE441"))
+            }
             Body::Earth | Body::Moon => {
                 let emb = self.series(2, jd, record_start, record, with_acceleration)?;
                 let moon_geo = self.series(9, jd, record_start, record, with_acceleration)?;

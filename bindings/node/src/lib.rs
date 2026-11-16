@@ -34,8 +34,8 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    applied_corrections, geocentric_apparent_six_fields_many_with_options, tdb_to_tt_jd,
-    ApparentCenter, ApparentFrame, ApparentOptions,
+    applied_corrections, geocentric_apparent_six_fields_many_with_options,
+    small_body_apparent_six_fields, tdb_to_tt_jd, ApparentCenter, ApparentFrame, ApparentOptions,
 };
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{
@@ -55,6 +55,7 @@ use virgostars_ephemeris_core::hipparcos::{
 };
 use virgostars_ephemeris_core::house_angles::house_angles;
 use virgostars_ephemeris_core::lunar_points::{lunar_point, LunarPoint};
+use virgostars_ephemeris_core::spk_type21::SmallBodySpk;
 
 /// Swiss-style flag bits this binding understands (values are the public
 /// constants of the C API: `SEFLG_JPLEPH = 1`, `SEFLG_SPEED = 256`,
@@ -69,6 +70,10 @@ const SUPPORTED_FLAGS: i32 =
     FLAG_JPLEPH | FLAG_HELCTR | FLAG_SPEED | FLAG_NOGDEFL | FLAG_EQUATORIAL;
 /// Swiss body number of the Earth; computable only as a heliocentric target.
 const BODY_EARTH: i32 = 14;
+/// Swiss body number of Chiron; computable only after `load_chiron`.
+const BODY_CHIRON: i32 = 15;
+/// NAIF id JPL uses for 2060 Chiron in its small-body SPK files.
+const CHIRON_NAIF_ID: i32 = 20_002_060;
 
 fn fail(code: &str, detail: impl std::fmt::Display) -> Error {
     Error::new(Status::GenericFailure, format!("{code}: {detail}"))
@@ -337,6 +342,7 @@ pub struct Engine {
     ephemeris: De441<File>,
     stars: HashMap<u32, Hip2Record>,
     delta_t: Option<DeltaTTable>,
+    chiron: Option<SmallBodySpk>,
 }
 
 #[napi]
@@ -351,6 +357,7 @@ impl Engine {
             ephemeris,
             stars: HashMap::new(),
             delta_t: None,
+            chiron: None,
         })
     }
 
@@ -364,6 +371,9 @@ impl Engine {
         check_flags(flags)?;
         if let Some(point) = LunarPoint::from_swiss_number(ipl) {
             return self.calc_lunar_point(point, jd_tdb, flags, time_source);
+        }
+        if ipl == BODY_CHIRON {
+            return self.calc_chiron(jd_tdb, flags, time_source);
         }
         let body = body_from_ipl(ipl)?;
         let helio = flags & FLAG_HELCTR != 0;
@@ -409,6 +419,70 @@ impl Engine {
             time_source,
             notes,
         })
+    }
+
+    fn calc_chiron(
+        &mut self,
+        jd_tdb: JulianDateTdb,
+        flags: i32,
+        time_source: String,
+    ) -> Result<CalcResult> {
+        let spk = self.chiron.as_ref().ok_or_else(|| {
+            fail(
+                "E_UNSUPPORTED_BODY",
+                "Chiron needs a small-body SPK: call loadChiron(path) first",
+            )
+        })?;
+        let opts = options(flags);
+        let f = small_body_apparent_six_fields(&mut self.ephemeris, spk, jd_tdb, opts)
+            .map_err(|e| fail("E_CALC", e))?
+            .fields;
+        let mut notes: Vec<String> = applied_corrections(opts)
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        notes.push(
+            "Chiron from the caller-supplied JPL small-body SPK (type 21) plus DE441 Sun".into(),
+        );
+        Ok(CalcResult {
+            xx: zero_speeds_unless_requested(
+                [
+                    f.longitude_deg,
+                    f.latitude_deg,
+                    f.distance_au,
+                    f.longitude_speed_deg_per_tdb_day,
+                    f.latitude_speed_deg_per_tdb_day,
+                    f.distance_speed_au_per_tdb_day,
+                ],
+                flags,
+            ),
+            rflag: reported_flags(flags),
+            time_source,
+            notes,
+        })
+    }
+
+    /// Load a JPL small-body SPK (segment type 21, Sun-centered) for 2060 Chiron
+    /// from a caller-supplied file. Body 15 then works through the same apparent
+    /// pipeline as the planets; a failed load keeps the previous file. Nothing is
+    /// downloaded or bundled.
+    #[napi]
+    pub fn load_chiron(&mut self, spk_path: String) -> Result<()> {
+        let bytes =
+            std::fs::read(&spk_path).map_err(|e| fail("E_SPK_FILE", format!("{spk_path}: {e}")))?;
+        let spk = SmallBodySpk::from_bytes(bytes).map_err(|e| fail("E_SPK_FILE", e))?;
+        if spk.target_id() != CHIRON_NAIF_ID || spk.center_id() != 10 {
+            return Err(fail(
+                "E_SPK_FILE",
+                format!(
+                    "expected 2060 Chiron ({CHIRON_NAIF_ID}) relative to the Sun, got {} relative to {}",
+                    spk.target_id(),
+                    spk.center_id()
+                ),
+            ));
+        }
+        self.chiron = Some(spk);
+        Ok(())
     }
 
     fn calc_lunar_point(

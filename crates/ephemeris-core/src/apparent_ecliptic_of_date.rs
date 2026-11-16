@@ -65,16 +65,21 @@ use crate::aberration_state::{
     ObserverAccelerationSource,
 };
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
-use crate::de441::{Body, De441, JulianDateTdb, StateVector, StateVectorWithAcceleration};
+use crate::de441::{
+    Body, De441, De441Error, JulianDateTdb, StateVector, StateVectorWithAcceleration,
+};
 use crate::earth_orientation::{
     matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, Matrix3x3,
     OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
 };
-use crate::light_deflection::{deflect_light_time_state_by_sun, DeflectionError};
-use crate::light_time::{geocentric_light_time, heliocentric_light_time};
+use crate::light_deflection::{
+    deflect_light_time_state_by_sun, deflect_light_time_state_by_sun_with, DeflectionError,
+};
+use crate::light_time::{geocentric_light_time, heliocentric_light_time, light_time_with_states};
 use crate::six_field_units::{
     fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
 };
+use crate::spk_type21::SmallBodySpk;
 
 /// Half-step, in TT days, of the central difference used for `dM/dt`.
 pub const MATRIX_RATE_HALF_STEP_DAYS: f64 = 0.01;
@@ -558,4 +563,100 @@ pub fn geocentric_apparent_six_fields_many_with_options<R: Read + Seek>(
             apparent_to_degrees_au(&apparent)
         })
         .collect()
+}
+
+/// Apparent position of a **small body** (asteroid or comet) whose ephemeris is a
+/// type 21 SPK relative to the Sun, observed from the Earth's or the Sun's center
+/// exactly as the DE441 bodies are: the same light-time solver, solar deflection
+/// (geocentric), annual aberration (geocentric), IAU 2006/2000B frame and rates.
+///
+/// The barycentric state of the body is the DE441 Sun plus the SPK state, so the
+/// accuracy of the result is that of the supplied SPK plus DE441. Only SPKs centered
+/// on the Sun (NAIF 10) are accepted; the epoch must lie inside the SPK coverage.
+pub fn small_body_apparent_six_fields<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    small_body: &SmallBodySpk,
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
+) -> Result<ApparentSixFieldsDegreesAu, ApparentError> {
+    if !reception_epoch.0.is_finite() || small_body.center_id() != 10 {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    let target = Body::SmallBody(small_body.target_id());
+    let earth = if options.center == ApparentCenter::Geocentric {
+        Some(
+            ephemeris
+                .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+                .map_err(AberratedStateError::from)?,
+        )
+    } else {
+        None
+    };
+    let mut states = |body: Body, epoch: JulianDateTdb| -> Result<StateVector, De441Error> {
+        match body {
+            Body::SmallBody(id) if id == small_body.target_id() => {
+                let (position, velocity) = small_body.state_at(epoch).map_err(|_| {
+                    let (start, end) = small_body.coverage_jd_tdb();
+                    De441Error::OutsideCoverage {
+                        epoch,
+                        start: JulianDateTdb(start),
+                        end: JulianDateTdb(end),
+                    }
+                })?;
+                let sun = ephemeris.state(Body::Sun, Body::SolarSystemBarycenter, epoch)?;
+                Ok(StateVector {
+                    target: body,
+                    center: Body::SolarSystemBarycenter,
+                    epoch,
+                    position_km: std::array::from_fn(|i| sun.position_km[i] + position[i]),
+                    velocity_km_per_day: std::array::from_fn(|i| {
+                        sun.velocity_km_per_day[i] + velocity[i]
+                    }),
+                })
+            }
+            other => ephemeris.state(other, Body::SolarSystemBarycenter, epoch),
+        }
+    };
+    let result = match earth {
+        None => {
+            let light_time =
+                light_time_with_states(Body::Sun, target, reception_epoch, &mut states)
+                    .map_err(AberratedStateError::from)?;
+            finish(
+                &IcrfState {
+                    target,
+                    center: Body::Sun,
+                    observation_epoch: light_time.observation_epoch,
+                    emission_epoch: light_time.emission_epoch,
+                    light_time_seconds: light_time.light_time_seconds,
+                    light_time_rate: light_time.light_time_rate,
+                    source: ObserverAccelerationSource::NotApplicable,
+                    position_km: light_time.position_km,
+                    velocity_km_per_tdb_day: light_time.velocity_km_per_day,
+                },
+                options.frame,
+                false,
+            )?
+        }
+        Some(earth) => {
+            let mut light_time =
+                light_time_with_states(Body::Earth, target, reception_epoch, &mut states)
+                    .map_err(AberratedStateError::from)?;
+            if options.solar_light_deflection {
+                light_time = deflect_light_time_state_by_sun_with(&mut states, &light_time)?;
+            }
+            let mut state = aberrate_light_time_state(
+                &light_time,
+                earth.velocity_km_per_day,
+                earth.acceleration_km_per_day2,
+            )?;
+            state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+            apparent_from_aberrated_state_in_frame(
+                &state,
+                options.frame,
+                options.solar_light_deflection,
+            )?
+        }
+    };
+    apparent_to_degrees_au(&result)
 }

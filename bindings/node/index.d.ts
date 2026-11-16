@@ -22,6 +22,7 @@ export class Engine {
   calcTdb(jdTdb: number, ipl: number, flags?: number): CalcResult;
   calcUt(jdUt: number, ipl: number, flags?: number): CalcResult;
   loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
+  loadChiron(spkPath: string): void;
   loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
 }

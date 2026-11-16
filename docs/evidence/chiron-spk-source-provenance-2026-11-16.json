@@ -1,0 +1,30 @@
+{
+ "schema": "virgostars-ephemeris/data-provenance/1",
+ "note": "Provenance only. The SPK itself is NOT stored in this repository; its reuse terms were not reviewed.",
+ "date_downloaded": "2026-11-16",
+ "authorized_by": "maintainer, in chat, for this single file (announced as 'a few hundred KB'; the actual size is 3.7 MB)",
+ "source": "NASA/JPL Horizons API, EPHEM_TYPE=SPK for the small body '2060;' (2060 Chiron), START_TIME 1899-12-01, STOP_TIME 2101-02-01",
+ "request_url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='2060;'&EPHEM_TYPE='SPK'&START_TIME='1899-12-01'&STOP_TIME='2101-02-01'",
+ "spk_file_id": "20002060",
+ "orbit_solution": "JPL solution date 2026-Jun-05, 6026 observations 1895-2026 (from the Horizons response header)",
+ "file": {
+  "name": "2060_chiron_1900_2101.bsp",
+  "bytes": 3694592,
+  "sha256": "3bf6d28397afd4fdda6634cfc3d0601cdf0ff7a945f08028b4a440820cf73ace"
+ },
+ "structure": {
+  "format": "DAF/SPK little-endian",
+  "segments": 11,
+  "type": 21,
+  "target": 20002060,
+  "center": 10,
+  "frame": "J2000",
+  "coverage": "1899-12-01 to 2101-02-01 TDB"
+ },
+ "checks_performed": [
+  "segment sizes match the type 21 tails",
+  "ten epochs between 1900 and 2100 against Horizons vector tables: largest position difference 1.9e-6 km (2 mm), velocity 1e-12 km/s",
+  "osculating elements at JPL's published epoch reproduce the header values"
+ ],
+ "not_authenticated": "The hash pins the bytes checked here; it does not authenticate the publisher independently."
+}

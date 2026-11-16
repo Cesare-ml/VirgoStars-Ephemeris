@@ -35,6 +35,11 @@ const bodies = [
   ['JupiterBarycenter', 5, 5], ['SaturnBarycenter', 6, 6], ['UranusBarycenter', 7, 7],
   ['NeptuneBarycenter', 8, 8], ['PlutoBarycenter', 9, 9],
 ];
+if (process.env.CHIRON_SPK_PATH) {
+  // Optional: also compare 2060 Chiron from a caller-supplied JPL small-body SPK.
+  engine.loadChiron(process.env.CHIRON_SPK_PATH);
+  bodies.push(['Chiron', "2060;", 15]);
+}
 const tdbList = [];
 for (let jd = 2415100.5; jd < 2487500; jd += 2960.7) tdbList.push(jd);
 // First Horizons EOP-data day (1962-01-20) and last (2026-11-13), as stated in its header.
