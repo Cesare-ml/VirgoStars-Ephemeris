@@ -46,6 +46,7 @@ pub mod error;
 pub mod first_sky;
 pub mod fixed_star;
 pub mod hipparcos;
+pub mod house_angles;
 pub mod light_deflection;
 pub mod light_time;
 pub mod six_field_units;

@@ -27,6 +27,36 @@ export class Engine {
 
 export function julday(year: number, month: number, day: number, hour: number, gregorian?: boolean): number;
 export function revjul(jd: number, gregorian?: boolean): RevJul;
+export interface HouseAnglesResult {
+  ut1JulianDay: number;
+  ttJulianDay: number;
+  latitudeDeg: number;
+  longitudeDegEast: number;
+  armcDeg: number;
+  trueObliquityDeg: number;
+  ascendantDeg: number;
+  midheavenDeg: number;
+  timeSource: string;
+}
+export function houseAnglesUt(jdUt: number, latitudeDeg: number, longitudeDegEast: number): HouseAnglesResult;
+export function createHouseAngleProvider(): Readonly<{
+  calculateHouseAngles(input: {
+    ut1JulianDay: number;
+    ttJulianDay: number;
+    latitudeDeg: number;
+    longitudeDegEast: number;
+  }): Readonly<{
+    model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME';
+    ut1JulianDay: number;
+    ttJulianDay: number;
+    latitudeDeg: number;
+    longitudeDegEast: number;
+    armcDeg: number;
+    ascendantDeg: number;
+    midheavenDeg: number;
+    trueObliquityDeg: number;
+  }>;
+}>;
 export const constants: Readonly<Record<string, number>>;
 
 export interface SwissShapedResult {

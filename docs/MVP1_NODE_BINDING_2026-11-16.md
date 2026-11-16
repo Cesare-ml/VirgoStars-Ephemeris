@@ -90,11 +90,26 @@ Deliberate, visible differences:
   package does not bundle. The TDB entry matches the reference to 0.0007″ (see the
   apparent-position document).
 
+## House angles for `astrological-functions` (added)
+
+`house_angles` (Rust core) computes ARMC (IAU 2006/2000B apparent sidereal time
+plus east longitude), true obliquity, Ascendant and Midheaven; the binding exposes
+`createHouseAngleProvider()` (the `calculateHouseAngles` interface of
+`astrological-functions`, UT1 and TT supplied explicitly, nothing converted
+silently) and `houseAnglesUt(jdUt, lat, lon)` (UT policy declared in
+`timeSource`). It needs no ephemeris file. House *systems* stay in
+`astrological-functions`. With this provider the recorded cusps of all five backend
+systems at both fixture sites are reproduced to 1e-5°, and a local comparison with
+an independent reference over 247 cases per system agrees to 2e-7″ (Placidus
+0.0025″); see `docs/HOUSES_REFERENCE_VALIDATION_2026-11-16.md` in that repository
+and its aggregate receipt. Core tests: `tests/house_angles.rs` (4); binding tests:
+`test/houses.test.mjs` (5).
+
 ## Not done
 
 1. Facade methods used by the backend but absent here: helio/equatorial output,
-   `SE_ECL_NUT`, `swe_azalt`, `swe_houses`/`swe_houses_pos` (houses belong to
-   `astrological-functions`), Chiron/nodes/apogees, `swe_fixstar_ut`/`_mag` by
+   `SE_ECL_NUT`, `swe_azalt`, a `swe_houses`-shaped facade over the provider and
+   `astrological-functions` (the systems themselves are in that repository), Chiron/nodes/apogees, `swe_fixstar_ut`/`_mag` by
    name (needs the reviewed catalog and names).
 2. Verification of shapes against the installed `swisseph` 0.5.17.
 3. A clean-machine consumer test on an offline application, Linux/macOS builds,

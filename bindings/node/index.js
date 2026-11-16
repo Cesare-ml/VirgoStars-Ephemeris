@@ -108,6 +108,43 @@ function revjul(jd, gregorian = true) {
   }
 }
 
+/** House astronomy (ARMC, true obliquity, ASC, MC) from a UT Julian date. */
+function houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast) {
+  try {
+    return loadNative().houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast);
+  } catch (error) {
+    throw Engine._wrap(error);
+  }
+}
+
+/**
+ * Provider for `astrological-functions` (`calculateHouseAngles`): the caller
+ * supplies UT1 and TT explicitly, so no time conversion happens here.
+ */
+function createHouseAngleProvider() {
+  return Object.freeze({
+    calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
+      let r;
+      try {
+        r = loadNative().houseAnglesExplicit(ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast);
+      } catch (error) {
+        throw Engine._wrap(error);
+      }
+      return Object.freeze({
+        model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME',
+        ut1JulianDay: r.ut1JulianDay,
+        ttJulianDay: r.ttJulianDay,
+        latitudeDeg: r.latitudeDeg,
+        longitudeDegEast: r.longitudeDegEast,
+        armcDeg: r.armcDeg,
+        ascendantDeg: r.ascendantDeg,
+        midheavenDeg: r.midheavenDeg,
+        trueObliquityDeg: r.trueObliquityDeg,
+      });
+    },
+  });
+}
+
 /**
  * Swiss-shaped synchronous facade over an Engine, for the call shapes the
  * VirgoStars backend uses: `swe_julday`, `swe_revjul`, `swe_calc_ut`, `swe_calc`.
@@ -179,4 +216,13 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false } = {}) {
   });
 }
 
-module.exports = { Engine, julday, revjul, constants, createSwissShapedFacade, loadNative };
+module.exports = {
+  Engine,
+  julday,
+  revjul,
+  houseAnglesUt,
+  createHouseAngleProvider,
+  constants,
+  createSwissShapedFacade,
+  loadNative,
+};

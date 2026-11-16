@@ -49,6 +49,7 @@ use virgostars_ephemeris_core::fixed_star::{
 use virgostars_ephemeris_core::hipparcos::{
     read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
 };
+use virgostars_ephemeris_core::house_angles::house_angles;
 
 /// Swiss-style flag bits this binding understands (values are the public
 /// constants of the C API: `SEFLG_JPLEPH = 1`, `SEFLG_SPEED = 256`,
@@ -184,6 +185,78 @@ pub fn revjul(jd: f64, gregorian: bool) -> Result<RevJul> {
         day: u32::from(r.day),
         hour: r.decimal_hour,
     })
+}
+
+#[napi(object)]
+pub struct HouseAnglesResult {
+    pub ut1_julian_day: f64,
+    pub tt_julian_day: f64,
+    pub latitude_deg: f64,
+    pub longitude_deg_east: f64,
+    pub armc_deg: f64,
+    pub true_obliquity_deg: f64,
+    pub ascendant_deg: f64,
+    pub midheaven_deg: f64,
+    /// `EXPLICIT_UT1_TT` when both scales were supplied, otherwise the UT policy label.
+    pub time_source: String,
+}
+
+fn angles_result(
+    ut1: f64,
+    tt: f64,
+    lat: f64,
+    lon: f64,
+    time_source: String,
+) -> Result<HouseAnglesResult> {
+    let a = house_angles(ut1, tt, lat, lon).map_err(|e| fail("E_RANGE", e))?;
+    Ok(HouseAnglesResult {
+        ut1_julian_day: a.ut1_jd,
+        tt_julian_day: a.tt_jd,
+        latitude_deg: a.latitude_deg,
+        longitude_deg_east: a.longitude_deg_east,
+        armc_deg: a.armc_deg,
+        true_obliquity_deg: a.true_obliquity_deg,
+        ascendant_deg: a.ascendant_deg,
+        midheaven_deg: a.midheaven_deg,
+        time_source,
+    })
+}
+
+/// House astronomy with **both** UT1 and TT supplied by the caller (no
+/// conversion is done here).
+#[napi]
+pub fn house_angles_explicit(
+    ut1_jd: f64,
+    tt_jd: f64,
+    latitude_deg: f64,
+    longitude_deg_east: f64,
+) -> Result<HouseAnglesResult> {
+    angles_result(
+        ut1_jd,
+        tt_jd,
+        latitude_deg,
+        longitude_deg_east,
+        "EXPLICIT_UT1_TT".to_string(),
+    )
+}
+
+/// House astronomy from a UT Julian date; TT comes from the declared policy
+/// (1900-01-01 .. 2027-06-28 UT).
+#[napi]
+pub fn house_angles_ut(
+    jd_ut: f64,
+    latitude_deg: f64,
+    longitude_deg_east: f64,
+) -> Result<HouseAnglesResult> {
+    let (tdb, source) = jd_ut_to_tdb_with_policy(jd_ut).map_err(|e| fail("E_RANGE", e))?;
+    let tt = tdb_to_tt_jd(tdb.0).map_err(|e| fail("E_RANGE", e))?;
+    angles_result(
+        jd_ut,
+        tt,
+        latitude_deg,
+        longitude_deg_east,
+        source_label(&source),
+    )
 }
 
 #[napi]
