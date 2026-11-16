@@ -1,0 +1,299 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, catalog values, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "crate": "virgostars-ephemeris-core",
+  "module": "fixed_star",
+  "commit": "7a15a1a"
+ },
+ "purpose": "Isolate the ALGORITHM: both engines were given identical caller-supplied star inputs (ICRS J2000 position, proper motion, parallax, radial velocity). This is not a validation of any star catalog.",
+ "ephemeris_file": {
+  "format": "classic JPL DE441 binary",
+  "stored_in_repository": false
+ },
+ "reference": {
+  "name": "Swiss Ephemeris C library (AGPL-3.0), JPL mode on the same file, fixed-star routine",
+  "version": "2.10.03 via sweph-sys 0.3.0",
+  "use": "local only, throw-away probe, not committed; star inputs taken from the library own catalog file ONLY to feed both engines and not stored here"
+ },
+ "grid": {
+  "start_jd_tdb": 2415100.5,
+  "step_days": 1800.3,
+  "dates": 41,
+  "stars": [
+   "Aldebaran",
+   "Algol",
+   "Antares",
+   "Regulus",
+   "Spica",
+   "Polaris",
+   "Deneb",
+   "Altair",
+   "Capella",
+   "Arcturus",
+   "Canopus",
+   "Procyon",
+   "Pollux",
+   "Vega",
+   "Betelgeuse",
+   "Fomalhaut"
+  ]
+ },
+ "rate_reference_note": "Rates are compared with the centered difference (+/-0.01 d) of the reference own positions.",
+ "near_sun_spot_check": {
+  "star": "Regulus (inputs as above)",
+  "dates_tdb_jd": [
+   2451776.5,
+   2451778.5,
+   2451780.5,
+   2452143.5
+  ],
+  "elongation_range_deg": "roughly 1 to 4 (inferred from the size of the deflection)",
+  "result": "with deflection on and off, longitude and latitude agree with the reference to <= 1e-8 degree (<= 4e-5 arcsec); deflection changes the position by up to 0.5 arcsec"
+ },
+ "configurations": {
+  "solar_deflection_on": {
+   "subject_option": "StellarSolarDeflection::PointMass",
+   "reference_flags": "JPLEPH|SPEED",
+   "results": {
+    "Aldebaran": {
+     "longitude_max_abs_diff_arcsec": 0.0005004827016819036,
+     "latitude_max_abs_diff_arcsec": 0.0005134680009177828,
+     "distance_max_relative_diff": 6.083047399130237e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006819133388193308,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5477024238624197e-7
+    },
+    "Algol": {
+     "longitude_max_abs_diff_arcsec": 0.0005319610863807611,
+     "latitude_max_abs_diff_arcsec": 0.00045090000213576786,
+     "distance_max_relative_diff": 3.320832497877291e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006997380996945921,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.508275535228639e-7
+    },
+    "Antares": {
+     "longitude_max_abs_diff_arcsec": 0.000499694442623877,
+     "latitude_max_abs_diff_arcsec": 0.0005133815996316571,
+     "distance_max_relative_diff": 4.738653913705093e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006929524714487708,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5115411293530978e-7
+    },
+    "Regulus": {
+     "longitude_max_abs_diff_arcsec": 0.0004995143626729259,
+     "latitude_max_abs_diff_arcsec": 0.0002893176000773323,
+     "distance_max_relative_diff": 5.555933491052656e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006749263620838171,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.512029687544498e-7
+    },
+    "Spica": {
+     "longitude_max_abs_diff_arcsec": 0.0005007204890716821,
+     "latitude_max_abs_diff_arcsec": 0.00021070439952808329,
+     "distance_max_relative_diff": 2.9733993045510942e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006813102598789752,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6194059955467241e-7
+    },
+    "Polaris": {
+     "longitude_max_abs_diff_arcsec": 0.0004715389422926819,
+     "latitude_max_abs_diff_arcsec": 0.0005517108434105467,
+     "distance_max_relative_diff": 2.8371860416598338e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.0000067252179135579945,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5846080304849058e-7
+    },
+    "Deneb": {
+     "longitude_max_abs_diff_arcsec": 0.0011116400855826214,
+     "latitude_max_abs_diff_arcsec": 0.00024306478110247554,
+     "distance_max_relative_diff": 2.6104673978011306e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006985440116142249,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.8677817603110144e-7
+    },
+    "Altair": {
+     "longitude_max_abs_diff_arcsec": 0.0005538203367905226,
+     "latitude_max_abs_diff_arcsec": 0.0004765572001019791,
+     "distance_max_relative_diff": 1.1870092686550038e-9,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006903770666911524,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.733051059258484e-7
+    },
+    "Capella": {
+     "longitude_max_abs_diff_arcsec": 0.0004949280537402956,
+     "latitude_max_abs_diff_arcsec": 0.0005447483999887481,
+     "distance_max_relative_diff": 5.095011079703227e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006853008085822238,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5870025291467565e-7
+    },
+    "Arcturus": {
+     "longitude_max_abs_diff_arcsec": 0.0007075799658196047,
+     "latitude_max_abs_diff_arcsec": 0.00021430440142466978,
+     "distance_max_relative_diff": 1.0559708663038236e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006942330404882506,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6222090664172331e-7
+    },
+    "Canopus": {
+     "longitude_max_abs_diff_arcsec": 0.0008459534001303837,
+     "latitude_max_abs_diff_arcsec": 0.000537030030045571,
+     "distance_max_relative_diff": 4.9031445570335563e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.0000069220200263570095,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.805833268564514e-7
+    },
+    "Procyon": {
+     "longitude_max_abs_diff_arcsec": 0.0005082515144749777,
+     "latitude_max_abs_diff_arcsec": 0.000502919996847595,
+     "distance_max_relative_diff": 2.085419614772377e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006832616146403448,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.727082432329116e-7
+    },
+    "Pollux": {
+     "longitude_max_abs_diff_arcsec": 0.0004968143912265077,
+     "latitude_max_abs_diff_arcsec": 0.0005127840008611884,
+     "distance_max_relative_diff": 7.139822066903889e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006770227479856042,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5120831443333593e-7
+    },
+    "Vega": {
+     "longitude_max_abs_diff_arcsec": 0.0006286210464168107,
+     "latitude_max_abs_diff_arcsec": 0.0005360436063028828,
+     "distance_max_relative_diff": 6.142490960314717e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006931970156798272,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.695042385748899e-7
+    },
+    "Betelgeuse": {
+     "longitude_max_abs_diff_arcsec": 0.0005044354566052789,
+     "latitude_max_abs_diff_arcsec": 0.0005517504021668174,
+     "distance_max_relative_diff": 3.2849056808004207e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006982313315407414,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.7282957913932178e-7
+    },
+    "Fomalhaut": {
+     "longitude_max_abs_diff_arcsec": 0.0006018010026309639,
+     "latitude_max_abs_diff_arcsec": 0.00025576559750106753,
+     "distance_max_relative_diff": 1.9323631583745282e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006826849804702443,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.7330740368195e-7
+    }
+   }
+  },
+  "solar_deflection_off": {
+   "subject_option": "StellarSolarDeflection::Omit",
+   "reference_flags": "JPLEPH|SPEED|NOGDEFL",
+   "results": {
+    "Aldebaran": {
+     "longitude_max_abs_diff_arcsec": 0.0005004720605938928,
+     "latitude_max_abs_diff_arcsec": 0.0005134680009177828,
+     "distance_max_relative_diff": 6.083051840022335e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006800008054999215,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.583645640176469e-7
+    },
+    "Algol": {
+     "longitude_max_abs_diff_arcsec": 0.0005319578121998347,
+     "latitude_max_abs_diff_arcsec": 0.00045090000213576786,
+     "distance_max_relative_diff": 3.320943520179753e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006870830548066052,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5078773649623498e-7
+    },
+    "Antares": {
+     "longitude_max_abs_diff_arcsec": 0.000499694442623877,
+     "latitude_max_abs_diff_arcsec": 0.0005133851999516992,
+     "distance_max_relative_diff": 4.739098002914943e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006683292172904743,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.8719899166258806e-7
+    },
+    "Regulus": {
+     "longitude_max_abs_diff_arcsec": 0.0004995143626729259,
+     "latitude_max_abs_diff_arcsec": 0.0002893176000773323,
+     "distance_max_relative_diff": 5.5560001044341334e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006904766346280556,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6560136999710002e-7
+    },
+    "Spica": {
+     "longitude_max_abs_diff_arcsec": 0.0005007204890716821,
+     "latitude_max_abs_diff_arcsec": 0.00021070440112680444,
+     "distance_max_relative_diff": 2.9733993045510942e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.0000068493087853737505,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.476230608747617e-7
+    },
+    "Polaris": {
+     "longitude_max_abs_diff_arcsec": 0.0004715389422926819,
+     "latitude_max_abs_diff_arcsec": 0.0005517107922514697,
+     "distance_max_relative_diff": 2.8371416327388488e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006740243875935417,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6878563478513534e-7
+    },
+    "Deneb": {
+     "longitude_max_abs_diff_arcsec": 0.0011116404948552372,
+     "latitude_max_abs_diff_arcsec": 0.00024306480668201402,
+     "distance_max_relative_diff": 2.6100233085912805e-12,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000007008457384019085,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6253685275133007e-7
+    },
+    "Altair": {
+     "longitude_max_abs_diff_arcsec": 0.0005538170626095962,
+     "latitude_max_abs_diff_arcsec": 0.00047655360617682163,
+     "distance_max_relative_diff": 1.187008602521189e-9,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006813681910193287,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.4089836248415682e-7
+    },
+    "Capella": {
+     "longitude_max_abs_diff_arcsec": 0.0004949243702867534,
+     "latitude_max_abs_diff_arcsec": 0.0005447520067036749,
+     "distance_max_relative_diff": 5.095013300149276e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006779256165467687,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.7652464882899916e-7
+    },
+    "Arcturus": {
+     "longitude_max_abs_diff_arcsec": 0.0007075799658196047,
+     "latitude_max_abs_diff_arcsec": 0.00021430440142466978,
+     "distance_max_relative_diff": 1.0559686458577744e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006907852660882879,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5485146870829712e-7
+    },
+    "Canopus": {
+     "longitude_max_abs_diff_arcsec": 0.0008459534001303837,
+     "latitude_max_abs_diff_arcsec": 0.0005370263977511058,
+     "distance_max_relative_diff": 4.903122352573064e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.0000069503495053540535,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6706632515394674e-7
+    },
+    "Procyon": {
+     "longitude_max_abs_diff_arcsec": 0.000508240873386967,
+     "latitude_max_abs_diff_arcsec": 0.0005029236035625217,
+     "distance_max_relative_diff": 2.0854207249954015e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006908063245069686,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6208360707059685e-7
+    },
+    "Pollux": {
+     "longitude_max_abs_diff_arcsec": 0.0004968070243194234,
+     "latitude_max_abs_diff_arcsec": 0.0005127876011812305,
+     "distance_max_relative_diff": 7.139866475824874e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006783383134400297,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.4031710030953373e-7
+    },
+    "Vega": {
+     "longitude_max_abs_diff_arcsec": 0.0006286214556894265,
+     "latitude_max_abs_diff_arcsec": 0.0005360436063028828,
+     "distance_max_relative_diff": 6.142490960314717e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006760298946762713,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.5543908660209382e-7
+    },
+    "Betelgeuse": {
+     "longitude_max_abs_diff_arcsec": 0.0005044354566052789,
+     "latitude_max_abs_diff_arcsec": 0.0005517468082416599,
+     "distance_max_relative_diff": 3.284927885260913e-11,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006898215059862904,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.4398190862383535e-7
+    },
+    "Fomalhaut": {
+     "longitude_max_abs_diff_arcsec": 0.0006017977284500375,
+     "latitude_max_abs_diff_arcsec": 0.00025576920421599425,
+     "distance_max_relative_diff": 1.9323809219429222e-10,
+     "longitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 0.000006897079445750392,
+     "latitude_rate_max_abs_diff_vs_centered_difference_arcsec_per_day": 1.6957825380730946e-7
+    }
+   }
+  }
+ },
+ "not_established": [
+  "accuracy of any real star catalog (none is bundled)",
+  "agreement with JPL Horizons or SOFA/NOVAS beyond the ERFA fixtures in the unit tests",
+  "stars with companions, variability or non-rectilinear motion",
+  "epochs outside 1900-2100"
+ ]
+}

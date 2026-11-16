@@ -44,6 +44,7 @@ pub mod delta_t;
 pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;
+pub mod fixed_star;
 pub mod light_deflection;
 pub mod light_time;
 pub mod six_field_units;

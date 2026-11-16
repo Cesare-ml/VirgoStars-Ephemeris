@@ -43,3 +43,10 @@ Subject to the same NumFOCUS copyright and BSD-3 license in
 [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt).
 Only numerical coefficient constants and verification values are used; no
 ERFA C implementation functions are included.
+
+`crates/ephemeris-core/src/fixed_star.rs` tests use numerical conformance
+values from ERFA `t_pmpx`, `t_ldsun` and `t_atci13` (ERFA 2.0.1.5), and its
+solar-deflection vector follows the distant-source limit of Kaplan (1998),
+USNO. The values keep the NumFOCUS copyright and BSD-3 terms in
+[third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt); no ERFA
+implementation is included.
