@@ -41,6 +41,7 @@ pub mod coordinates;
 pub mod de441;
 pub mod de441_epoch_bridge;
 pub mod delta_t;
+pub mod delta_t_table;
 pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;

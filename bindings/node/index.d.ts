@@ -5,7 +5,7 @@ export interface CalcResult {
   xx: number[];
   /** Flags used; always includes SEFLG_JPLEPH (1). */
   rflag: number;
-  /** TDB_INPUT | IERS_LEAP_SECONDS | DELTA_T_POLYNOMIAL:<model>:<seconds> */
+  /** TDB_INPUT | IERS_LEAP_SECONDS | DELTA_T_POLYNOMIAL:<model>:<seconds> | DELTA_T_TABLE:MEASURED|PREDICTED:<seconds>:<1-sigma|unknown> */
   timeSource: string;
   notes: string[];
 }
@@ -21,6 +21,7 @@ export class Engine {
   constructor(de441Path: string);
   calcTdb(jdTdb: number, ipl: number, flags?: number): CalcResult;
   calcUt(jdUt: number, ipl: number, flags?: number): CalcResult;
+  loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
   loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
 }

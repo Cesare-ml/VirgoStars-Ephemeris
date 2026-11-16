@@ -54,6 +54,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [MVP-1 Node binding scaffold (N-API), declared time policy, Swiss-shaped facade; not a drop-in replacement](docs/MVP1_NODE_BINDING_2026-11-16.md)
 - [MVP-1 comparison with JPL Horizons: separations to 8 µas, frame difference understood](docs/MVP1_HORIZONS_COMPARISON_2026-11-16.md)
 - [MVP-1 Swiss-style facade shape verified against swisseph 0.5.17 (listed calls)](docs/MVP1_SWISSEPH_SHAPE_2026-11-16.md)
+- [MVP-1 measured ΔT (USNO files supplied by the caller) for UT inputs; Moon within 0.02″ of the reference 1972–2018](docs/MVP1_DELTA_T_MEASURED_2026-11-16.md)
 - [Functional coverage target](docs/FEATURE_COVERAGE.md)
 - [Backend-first Swiss-style compatibility inventory](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Work packages for contributors and AI agents](docs/BACKEND_WORK_PACKAGES_2026-11-10.md)

@@ -1,0 +1,15 @@
+{
+ "schema": "virgostars-ephemeris/data-provenance/1",
+ "note": "Provenance only. The tables themselves are NOT stored in this repository; their reuse terms were not reviewed.",
+ "date_downloaded": "2026-11-16",
+ "authorized_by": "maintainer, in chat, for these three files",
+ "publisher": "US Naval Observatory, Nautical Almanac Office (Series 7 data)",
+ "files": [
+  {"name": "deltat.data", "url": "https://maia.usno.navy.mil/ser7/deltat.data", "bytes": 13545, "sha256": "7396fcfdad33856b5242f288887678d75f3803494fa79394bc02f37eb99efc1e", "content": "monthly ΔT = TT-UT1, 1973-02-01 to 2026-10-01"},
+  {"name": "historic_deltat.data", "url": "https://maia.usno.navy.mil/ser7/historic_deltat.data", "bytes": 30345, "sha256": "9f43514119060601a00624a5d9287a91b0b1f5e12bec5209bbabda90b392b70b", "content": "ΔT every half year with errors, 1657 to 1984.5"},
+  {"name": "deltat.preds", "url": "https://maia.usno.navy.mil/ser7/deltat.preds", "bytes": 1483, "sha256": "5d864fddd30b2c64d2a86d3debbb25604eb5de44370c96bccf2abd5463f3db08", "content": "quarterly predictions of TT-UT with errors"}
+ ],
+ "server_last_modified": "Thu, 15 Oct 2026 18:32:31 GMT",
+ "checks_performed": ["strict parse of every line", "strictly increasing dates", "joins into one continuous series", "UT1-UTC derived from the table stays within +/-0.9 s against the IERS leap-second table over 640 months"],
+ "not_authenticated": "The hashes pin the bytes checked here; they do not authenticate the publisher independently."
+}

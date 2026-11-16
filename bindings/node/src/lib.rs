@@ -41,8 +41,11 @@ use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{
     julday_f64, revjul_f64, DecimalHourDateTime,
 };
-use virgostars_ephemeris_core::civil_apparent::{jd_ut_to_tdb_with_policy, CivilTimeSource};
+use virgostars_ephemeris_core::civil_apparent::{
+    jd_ut_to_tdb_with_policy, jd_ut_to_tdb_with_table, CivilTimeSource,
+};
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+use virgostars_ephemeris_core::delta_t_table::DeltaTTable;
 use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::fixed_star::{
     calculate_star_with_solar_deflection, StellarSolarDeflection,
@@ -136,6 +139,15 @@ fn source_label(source: &CivilTimeSource) -> String {
             model_id,
             delta_t_seconds,
         } => format!("DELTA_T_POLYNOMIAL:{model_id}:{delta_t_seconds}"),
+        CivilTimeSource::DeltaTTable {
+            delta_t_seconds,
+            uncertainty_seconds,
+            predicted,
+        } => format!(
+            "DELTA_T_TABLE:{}:{delta_t_seconds}:{}",
+            if *predicted { "PREDICTED" } else { "MEASURED" },
+            uncertainty_seconds.map_or_else(|| "unknown".to_string(), |u| u.to_string())
+        ),
     }
 }
 
@@ -295,6 +307,7 @@ pub fn core_version() -> String {
 pub struct Engine {
     ephemeris: De441<File>,
     stars: HashMap<u32, Hip2Record>,
+    delta_t: Option<DeltaTTable>,
 }
 
 #[napi]
@@ -308,6 +321,7 @@ impl Engine {
         Ok(Self {
             ephemeris,
             stars: HashMap::new(),
+            delta_t: None,
         })
     }
 
@@ -365,12 +379,45 @@ impl Engine {
         self.calc(JulianDateTdb(jd_tdb), ipl, flags, "TDB_INPUT".to_string())
     }
 
-    /// `swe_calc_ut`-shaped: the epoch is a **UT** Julian date; it is
-    /// converted under the declared policy (1900-01-01 … 2027-06-28 UT only).
+    /// Load measured/predicted ΔT from three caller-supplied USNO files
+    /// (`deltat.data`, `historic_deltat.data` and optionally `deltat.preds`). From
+    /// then on `calc_ut` converts UT with this table (range: the table, from
+    /// 1900-01-01 UT) and says so in `time_source`. A failed load keeps the
+    /// previous table. Nothing is downloaded or bundled.
+    #[napi]
+    pub fn load_delta_t(
+        &mut self,
+        deltat_data_path: String,
+        historic_deltat_path: String,
+        deltat_preds_path: Option<String>,
+    ) -> Result<()> {
+        let read = |path: &str| {
+            std::fs::read_to_string(path).map_err(|e| fail("E_DELTAT_FILE", format!("{path}: {e}")))
+        };
+        let monthly = read(&deltat_data_path)?;
+        let historic = read(&historic_deltat_path)?;
+        let preds = match &deltat_preds_path {
+            Some(path) => Some(read(path)?),
+            None => None,
+        };
+        let table = DeltaTTable::from_usno(&monthly, &historic, preds.as_deref())
+            .map_err(|e| fail("E_DELTAT_FILE", e))?;
+        self.delta_t = Some(table);
+        Ok(())
+    }
+
+    /// `swe_calc_ut`-shaped: the epoch is a **UT** Julian date. With a ΔT table
+    /// loaded it is converted with measured ΔT (and predictions after the last
+    /// observation, flagged); otherwise under the declared polynomial/leap-second
+    /// policy (1900-01-01 … 2027-06-28 UT only).
     #[napi]
     pub fn calc_ut(&mut self, jd_ut: f64, ipl: i32, flags: i32) -> Result<CalcResult> {
         check_flags(flags)?;
-        let (tdb, source) = jd_ut_to_tdb_with_policy(jd_ut).map_err(|e| fail("E_RANGE", e))?;
+        let (tdb, source) = match &self.delta_t {
+            Some(table) => jd_ut_to_tdb_with_table(jd_ut, table),
+            None => jd_ut_to_tdb_with_policy(jd_ut),
+        }
+        .map_err(|e| fail("E_RANGE", e))?;
         self.calc(tdb, ipl, flags, source_label(&source))
     }
 

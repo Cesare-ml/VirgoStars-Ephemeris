@@ -80,6 +80,15 @@ class Engine {
     return { xx: r.xx, rflag: r.rflag, timeSource: r.timeSource, notes: r.notes };
   }
 
+  /**
+   * Load measured/predicted DeltaT from caller-supplied USNO files (deltat.data,
+   * historic_deltat.data, optionally deltat.preds). Afterwards `calcUt` uses it and
+   * `timeSource` reads DELTA_T_TABLE:MEASURED|PREDICTED:<seconds>:<1-sigma>.
+   */
+  loadDeltaT(deltatDataPath, historicDeltatPath, deltatPredsPath = null) {
+    return this._call(() => this._native.loadDeltaT(deltatDataPath, historicDeltatPath, deltatPredsPath));
+  }
+
   /** policy: 'strict' | 'traditional'. Returns the number of stars loaded. */
   loadHipparcos(hip2Path, hips, policy) {
     return this._call(() => this._native.loadHipparcos(hip2Path, hips, policy));

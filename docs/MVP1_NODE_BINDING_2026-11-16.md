@@ -92,6 +92,14 @@ Deliberate, visible differences:
   package does not bundle. The TDB entry matches the reference to 0.0007″ (see the
   apparent-position document).
 
+## Measured ΔT (added)
+
+`engine.loadDeltaT(...)` takes three caller-supplied USNO ΔT files; `calcUt` then
+uses measured ΔT (and flagged predictions to 2033) instead of the leap-second and
+polynomial policy, and reports `DELTA_T_TABLE:…` in `timeSource`. The Moon then
+agrees with the reference to 0.02″ in 1972–2018. See
+[MVP1_DELTA_T_MEASURED_2026-11-16.md](MVP1_DELTA_T_MEASURED_2026-11-16.md).
+
 ## House angles for `astrological-functions` (added)
 
 `house_angles` (Rust core) computes ARMC (IAU 2006/2000B apparent sidereal time

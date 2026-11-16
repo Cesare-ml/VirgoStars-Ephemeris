@@ -44,6 +44,7 @@ use crate::de441::{Body, De441, JulianDateTdb};
 use crate::delta_t::{
     decimal_year_from_jd, delta_t_seconds_1900_1972, DeltaTError, DELTA_T_1900_1972_MODEL_ID,
 };
+use crate::delta_t_table::{DeltaTKind, DeltaTTable, DeltaTTableError};
 use crate::first_sky::{CivilTimestamp, SkyError};
 
 const JD_1900_01_01: f64 = 2_415_020.5;
@@ -62,6 +63,14 @@ pub enum CivilTimeSource {
         model_id: &'static str,
         delta_t_seconds: f64,
     },
+    /// ΔT from a caller-supplied measured/predicted table (USNO files).
+    DeltaTTable {
+        delta_t_seconds: f64,
+        /// 1σ uncertainty from the table, when it gives one.
+        uncertainty_seconds: Option<f64>,
+        /// `true` when the value is a prediction, not a measurement.
+        predicted: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,6 +88,7 @@ pub enum CivilApparentError {
     UnsupportedInstant,
     Calendar(CalendarError),
     DeltaT(DeltaTError),
+    DeltaTTable(DeltaTTableError),
     CivilTime(SkyError),
     Apparent(ApparentError),
 }
@@ -93,6 +103,7 @@ impl fmt::Display for CivilApparentError {
             ),
             Self::Calendar(e) => write!(f, "calendar: {e}"),
             Self::DeltaT(e) => write!(f, "delta T: {e}"),
+            Self::DeltaTTable(e) => write!(f, "delta T table: {e}"),
             Self::CivilTime(e) => write!(f, "civil time: {e}"),
             Self::Apparent(e) => write!(f, "apparent positions: {e}"),
         }
@@ -104,6 +115,7 @@ impl Error for CivilApparentError {
         match self {
             Self::Calendar(e) => Some(e),
             Self::DeltaT(e) => Some(e),
+            Self::DeltaTTable(e) => Some(e),
             Self::CivilTime(e) => Some(e),
             Self::Apparent(e) => Some(e),
             Self::InvalidCivil(_) | Self::UnsupportedInstant => None,
@@ -114,6 +126,11 @@ impl Error for CivilApparentError {
 impl From<CalendarError> for CivilApparentError {
     fn from(e: CalendarError) -> Self {
         Self::Calendar(e)
+    }
+}
+impl From<DeltaTTableError> for CivilApparentError {
+    fn from(e: DeltaTTableError) -> Self {
+        Self::DeltaTTable(e)
     }
 }
 impl From<DeltaTError> for CivilApparentError {
@@ -243,4 +260,35 @@ pub fn geocentric_apparent_six_fields_many_from_civil<R: Read + Seek>(
         time_source,
         results,
     })
+}
+
+/// TDB for a **UT Julian date** using a measured/predicted ΔT table: `TT = UT + ΔT`,
+/// TDB = TT + the leading periodic term. The usable range is the intersection of
+/// the table and 1900-01-01 UT onward (the orientation models start in 1900);
+/// outside it the call fails, nothing is extrapolated. Unlike
+/// [`jd_ut_to_tdb_with_policy`] this does not stop at the end of the IERS leap-second
+/// table: dates after the last observation use the table's predictions and are
+/// reported with `predicted: true` and their uncertainty.
+pub fn jd_ut_to_tdb_with_table(
+    jd_ut: f64,
+    table: &DeltaTTable,
+) -> Result<(JulianDateTdb, CivilTimeSource), CivilApparentError> {
+    if !jd_ut.is_finite() {
+        return Err(CivilApparentError::InvalidCivil("non-finite Julian date"));
+    }
+    if jd_ut < JD_1900_01_01 {
+        return Err(CivilApparentError::UnsupportedInstant);
+    }
+    let value = table.delta_t(jd_ut)?;
+    let jd_tt = jd_ut + value.delta_t_seconds / 86_400.0;
+    let g = (357.5291092 + 35_999.0502909 * ((jd_tt - J2000_JD) / 36_525.0)).to_radians();
+    let jd_tdb = jd_tt + 0.001657 * g.sin() / 86_400.0;
+    Ok((
+        JulianDateTdb(jd_tdb),
+        CivilTimeSource::DeltaTTable {
+            delta_t_seconds: value.delta_t_seconds,
+            uncertainty_seconds: value.uncertainty_seconds,
+            predicted: value.kind == DeltaTKind::Predicted,
+        },
+    ))
 }
