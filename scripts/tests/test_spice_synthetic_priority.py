@@ -13,6 +13,7 @@
 #
 # [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 # SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-16): compare branching and reversed relative chains.
 """Optional independent CSPICE-generated SPK priority regression, no real data.
 
 Run with independently installed spiceypy and offline Rust dependencies.
@@ -80,6 +81,54 @@ class SpiceSyntheticPriority(unittest.TestCase):
                 receipt = run_validation(order, cases, folder / f'{name}.csv',
                                          folder / f'{name}.json', 1e-9, 1e-11, spice)
                 self.assertEqual(receipt['case_count'], 22)
+                self.assertFalse(receipt['scientific_accuracy_certified'])
+
+    def test_branching_centers_and_reversed_pairs(self):
+        # Fictional chains share an ancestor; the overlay changes a center as
+        # well as the coefficients, requiring a fresh resolution at each epoch.
+        with tempfile.TemporaryDirectory(prefix='virgostars-spk-branches-') as temporary:
+            folder = Path(temporary)
+            base, overlay = folder / 'base.bsp', folder / 'overlay.bsp'
+            handle = spice.spkopn(str(base), 'fictional branches', 0)
+            try:
+                write_segment(handle, 1000001, 0, -10, 10, 100, 'root')
+                write_segment(handle, 1000002, 1000001, -10, 10, 20, 'left')
+                write_segment(handle, 1000003, 1000001, -10, 10, 30, 'right')
+                write_segment(handle, 1000004, 1000003, -10, 10, 40, 'right child')
+            finally:
+                spice.spkcls(handle)
+            handle = spice.spkopn(str(overlay), 'fictional center overlay', 0)
+            try:
+                write_segment(handle, 1000003, 0, -3, 3, 300, 'different center')
+            finally:
+                spice.spkcls(handle)
+
+            epochs = [-10.0, math.nextafter(-3.0, -math.inf), -3.0,
+                      math.nextafter(-3.0, math.inf), -1.0, 0.0, 1.0,
+                      math.nextafter(3.0, -math.inf), 3.0,
+                      math.nextafter(3.0, math.inf), 10.0]
+            pairs = [(1000002, 1000003), (1000003, 1000002),
+                     (1000004, 1000002), (1000002, 1000004),
+                     (1000001, 1000004), (1000004, 1000001),
+                     (1000003, 0), (0, 1000003)]
+            cases = [f'{target}:{center}:{epoch:.17g}'
+                     for target, center in pairs for epoch in epochs]
+            for order, expected_x, name in (([base, overlay], 300, 'overlay-last'),
+                                            ([overlay, base], 130, 'base-last')):
+                try:
+                    spice.kclear()
+                    for path in order:
+                        spice.furnsh(str(path))
+                    state, _ = spice.spkezr('1000003', 0, 'J2000', 'NONE', '0')
+                    reverse, _ = spice.spkezr('0', 0, 'J2000', 'NONE', '1000003')
+                    self.assertAlmostEqual(state[0], expected_x)
+                    for forward_component, reverse_component in zip(state, reverse):
+                        self.assertAlmostEqual(forward_component, -reverse_component)
+                finally:
+                    spice.kclear()
+                receipt = run_validation(order, cases, folder / f'{name}.csv',
+                                         folder / f'{name}.json', 1e-9, 1e-11, spice)
+                self.assertEqual(receipt['case_count'], 88)
                 self.assertFalse(receipt['scientific_accuracy_certified'])
 
 

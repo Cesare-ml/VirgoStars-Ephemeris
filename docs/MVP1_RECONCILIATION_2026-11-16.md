@@ -82,7 +82,7 @@ comparison; it does not replace the individual model and validation contracts.
    claimed. Approve explicit error budgets and supported date ranges for each
    model, including UT1/Delta T data and extrapolation limits.
    A subsequent [78-case real type-3 and multi-kernel comparison](SPK_NAIF_TYPE3_MULTI_KERNEL_2026-11-16.md)
-   and 44 synthetic CSPICE-generated precedence cases passed locally; these
+   and 220 synthetic CSPICE-generated precedence and branching cases passed locally; these
    limited matrices are not general scientific approval.
 3. **[Open — backend integration]** Run a representative parallel comparison
    against the actual backend over dates, locations, all requested bodies,

@@ -92,6 +92,20 @@ python scripts/spk_naif_reference.py run --kernel <de440s> --kernel <jup120> @ca
 
 ## Additional synthetic precedence regression
 
+A second CSPICE-generated synthetic matrix tests **176 additional cases**:
+eight ordered target/center pairs, 11 epochs and both file orders. Fictional
+objects branch from a common ancestor, include a deeper child and reversed
+pairs, and a higher-priority segment changes the selected center during an
+overlap. Epochs include both endpoints and adjacent representable values.
+The comparison passed against CSPICE with diagnostic component tolerances of
+`1e-9 km` and `1e-11 km/s` in J2000, geometric, TDB seconds past J2000.
+This adds software evidence for these constructed chains, not real-kernel
+coverage or scientific approval. Run the same `unittest` command below.
+
+```powershell
+python -m unittest scripts.tests.test_spice_synthetic_priority -v
+```
+
 With independently installed SpiceyPy, the optional
 `scripts/tests/test_spice_synthetic_priority.py` asks CSPICE to write two
 temporary fictional type-3 kernels. One has overlapping segments for the same
