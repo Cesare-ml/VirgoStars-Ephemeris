@@ -33,3 +33,13 @@ transformation remains independent; no ERFA implementation or library is
 bundled. The numerical reference is attributed under the separate
 [ERFA license](third_party/ERFA_LICENSE.txt) and original
 [conformance test](https://github.com/liberfa/erfa/blob/master/src/t_erfa_c.c).
+
+`crates/ephemeris-core/src/earth_orientation.rs` and its associated tests in
+`crates/ephemeris-core/tests/earth_orientation_contract.rs` use the 77-term
+IAU 2000B luni-solar nutation series table and numerical conformance values
+from the ERFA `nut00b` and `num00b` routines. Reference:
+<https://github.com/liberfa/erfa/blob/master/src/nut00b.c>.
+Subject to the same NumFOCUS copyright and BSD-3 license in
+[third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt).
+Only numerical coefficient constants and verification values are used; no
+ERFA C implementation functions are included.

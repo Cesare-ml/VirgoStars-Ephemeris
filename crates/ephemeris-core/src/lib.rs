@@ -31,6 +31,7 @@
 pub mod aberrated_spherical;
 pub mod aberration;
 pub mod aberration_state;
+pub mod apparent_ecliptic_of_date;
 pub mod calendar;
 pub mod calendar_decimal_hours;
 pub mod chebyshev;
@@ -38,6 +39,7 @@ pub mod civil_aberrated;
 pub mod coordinates;
 pub mod de441;
 pub mod de441_epoch_bridge;
+pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;
 pub mod light_time;

@@ -171,7 +171,13 @@ where
         if next == observation_epoch.0 {
             return Err(LightTimeError::DidNotConverge);
         }
-        if next == emission.0 {
+        // Modification 2026-11-16: a fixed point exactly equal in f64 does not
+        // always exist. For a moving target (the Moon, ~1.3 s of delay) the
+        // iteration can alternate between two adjacent representable JDs
+        // (a 1-ulp, ~40 microsecond, 2-cycle at JD ~2.4e6). Accept a change of
+        // at most 4 ulps of the observation epoch as converged; the returned
+        // state is the one evaluated at `emission`, so it stays self-consistent.
+        if (next - emission.0).abs() <= 4.0 * f64::EPSILON * observation_epoch.0.abs() {
             let direction = position.map(|x| x / range);
             let dot = |velocity: [f64; 3]| -> f64 {
                 direction.iter().zip(velocity).map(|(a, b)| a * b).sum()
