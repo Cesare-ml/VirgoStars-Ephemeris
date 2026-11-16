@@ -230,6 +230,10 @@ fn record_layout<R: Read + Seek>(
 ///
 /// Centralizing this lookup ensures that direct and relative states obey
 /// identical file-order priority, even for competing centers or frames.
+pub(crate) fn segment_covers_at(segment: &SpkSegmentDescriptor, et: f64) -> bool {
+    et >= segment.start_tdb_seconds && et <= segment.end_tdb_seconds
+}
+
 pub(crate) fn select_covering_segment(
     index: &SpkIndex,
     target_id: i32,
@@ -239,11 +243,7 @@ pub(crate) fn select_covering_segment(
         .segments
         .iter()
         .rev()
-        .find(|segment| {
-            segment.target_id == target_id
-                && et >= segment.start_tdb_seconds
-                && et <= segment.end_tdb_seconds
-        })
+        .find(|segment| segment.target_id == target_id && segment_covers_at(segment, et))
         .copied()
 }
 
