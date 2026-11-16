@@ -79,6 +79,9 @@ comparison; it does not replace the individual model and validation contracts.
    An offline caller-manifest [coverage audit](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md)
    now reports unresolved names and missing/assumed fields without approving
    identities or data rights; the complete real manifest remains open.
+   A [reproducible review queue](MVP1_STAR_REVIEW_QUEUE_2026-11-17.md) now
+   consolidates all 106 requests and existing IAU/SIMBAD leads, with two
+   additional IAU-sourced spelling leads documented for manual follow-up.
 2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
    independently review kernel/tool provenance and numerical tolerances, and
    add type-3 and multi-kernel/segment-priority comparisons where these are

@@ -88,6 +88,10 @@ node scripts/iau_star_candidates.mjs <iau-csn.txt> <requested-names.json> <https
 node bindings/node/scripts/audit-star-quality.mjs <new-candidates.json> <hip2.dat> <new-quality.json>
 ```
 
+The [2026-11-17 review queue](MVP1_STAR_REVIEW_QUEUE_2026-11-17.md) combines
+the existing exact-name and SIMBAD leads, replays the HIP2 checks and records
+two additional sourced spelling leads; it does not approve or build a catalog.
+
 The quality audit leaves ambiguous or missing-HIP entries for review; it
 requires unique selected HIPs and fails rather than silently choosing between
 duplicates. File hashes detect changed bytes but do not prove provenance or
