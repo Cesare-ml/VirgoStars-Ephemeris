@@ -1,0 +1,117 @@
+{
+ "schema": "virgostars-ephemeris/horizons-comparison-receipt/1",
+ "kind": "aggregate residuals only; no Horizons rows are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.calcTdb (apparent geocentric, true equator/ecliptic of date, solar deflection on)",
+  "commit": "75d2d4f"
+ },
+ "reference": {
+  "name": "JPL Horizons observer tables, geocenter 500@399, airless apparent, TT input",
+  "sources_stated_by_horizons": "target and center DE441; relativistic light bending by the Sun; EOP file eop.261113.p270209",
+  "frame_stated_by_horizons": "equator and equinox of date, EOP-corrected IAU76/80; its equinox is offset -53 mas from the IAU06/00a of-date frame",
+  "access": "public API, queried 2026-11-16, queries contained only body ids, geocenter and epochs"
+ },
+ "grid": {
+  "dates": 25,
+  "first_jd_tdb": 2415100.5,
+  "step_days": 2960.7,
+  "bodies": [
+   "Sun",
+   "Moon",
+   "Mercury",
+   "Venus",
+   "MarsBarycenter",
+   "JupiterBarycenter",
+   "SaturnBarycenter",
+   "UranusBarycenter",
+   "NeptuneBarycenter",
+   "PlutoBarycenter"
+  ],
+  "note": "Mars..Pluto are system barycenters (Horizons commands 4..9)"
+ },
+ "separations_between_bodies": {
+  "why": "angular separation is invariant under any frame rotation, so it compares light-time, aberration and deflection independently of the precession-nutation model",
+  "pairs": 45,
+  "max_abs_difference_arcsec_pairs_without_moon": 0.000008006551070138812,
+  "max_abs_difference_arcsec_pairs_with_moon": 0.0011857995996251702,
+  "moon_note": "about 2 m at lunar distance; cause not identified"
+ },
+ "absolute_ra_dec": {
+  "max_abs_difference_arcsec_by_body": {
+   "Sun": {
+    "ra_cos_dec": 0.2317461378088245,
+    "dec": 0.09314490015768229
+   },
+   "Moon": {
+    "ra_cos_dec": 0.23726893096224233,
+    "dec": 0.08386977114085425
+   },
+   "Mercury": {
+    "ra_cos_dec": 0.23004908582822936,
+    "dec": 0.09114466276216593
+   },
+   "Venus": {
+    "ra_cos_dec": 0.23336933992098863,
+    "dec": 0.09307443113186764
+   },
+   "MarsBarycenter": {
+    "ra_cos_dec": 0.23344247891090752,
+    "dec": 0.07946085045631435
+   },
+   "JupiterBarycenter": {
+    "ra_cos_dec": 0.24050169781199193,
+    "dec": 0.0854434871655485
+   },
+   "SaturnBarycenter": {
+    "ra_cos_dec": 0.24378909024413434,
+    "dec": 0.07891532264778789
+   },
+   "UranusBarycenter": {
+    "ra_cos_dec": 0.24048366620533276,
+    "dec": 0.09081400145483087
+   },
+   "NeptuneBarycenter": {
+    "ra_cos_dec": 0.24293287198317645,
+    "dec": 0.07623754301135932
+   },
+   "PlutoBarycenter": {
+    "ra_cos_dec": 0.2418020453901702,
+    "dec": 0.08732500804065069
+   }
+  },
+  "reading": "The difference is the same for every body and varies smoothly with the epoch, i.e. a frame rotation: about +0.23 arcsec in RA in 1900, about +0.05 from 1962 to 2026, about -0.16 in 2100. It is the documented difference between Horizons IAU76/80 of-date frame and the IAU 2006/2000B frame used here, not a property of the bodies.",
+  "inside_horizons_eop_span_1962_2026": {
+   "epochs": 8,
+   "ra_offset_arcsec_min": 0.045616637460649895,
+   "ra_offset_arcsec_max": 0.052769466932374685,
+   "ra_offset_after_removing_stated_53_mas_arcsec_range": [
+    -0.007383362539350104,
+    -0.00023053306762531312
+   ],
+   "dec_abs_max_arcsec": 0.0010577933327260425
+  }
+ },
+ "range": {
+  "max_relative_difference_by_body": {
+   "Sun": 1.800781745942004e-13,
+   "Moon": 1.079719136320989e-8,
+   "Mercury": 2.2018942225088267e-11,
+   "Venus": 1.4513279467109896e-11,
+   "MarsBarycenter": 7.756684183846119e-12,
+   "JupiterBarycenter": 1.8625101461111626e-12,
+   "SaturnBarycenter": 1.241007296926e-12,
+   "UranusBarycenter": 5.631051180898794e-13,
+   "NeptuneBarycenter": 3.7414515929867775e-13,
+   "PlutoBarycenter": 3.50941498084012e-13
+  },
+  "range_rate": "Our range rate equals the centered difference of the range that Horizons itself returns to better than 1 mm/s (Mercury 17.740075 vs 17.740074 km/s; Mars -13.033240 vs -13.033240; Moon 0.070360 vs 0.070360, at TDB JD 2452779.5). Horizons own deldot differs from the derivative of its own delta by 1.6 m/s (Mercury), 0.7 m/s (Mars) and 6 mm/s (Moon): a definitional difference, so deldot is not a valid reference for the true range rate."
+ },
+ "not_established": [
+  "agreement of absolute RA/Dec with a frame other than the one Horizons states",
+  "topocentric quantities",
+  "epochs outside 1900-2100",
+  "the 2 m Moon difference"
+ ]
+}
