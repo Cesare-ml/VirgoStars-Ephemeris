@@ -751,6 +751,24 @@ mod compensated_chain_tests {
         assert_eq!(state.velocity_km_per_second, [0.0, 1.0, 0.0]);
     }
 
+    #[test]
+    fn extreme_scale_separation_fails_closed_instead_of_dropping_nonzero_terms() {
+        let tiny = f64::from_bits(1);
+        let mut tiny_first = CompensatedSum::default();
+        tiny_first.add(tiny).unwrap();
+        assert!(matches!(
+            tiny_first.add(f64::MAX),
+            Err(SpkRelativeError::NumericalOverflow)
+        ));
+
+        let mut large_first = CompensatedSum::default();
+        large_first.add(f64::MAX).unwrap();
+        assert!(matches!(
+            large_first.add(tiny),
+            Err(SpkRelativeError::NumericalOverflow)
+        ));
+    }
+
     // Modification (2026-11-16): finite-result-safe scaled cancellation.
     #[test]
     fn large_intermediate_target_sum_can_cancel_to_finite_nonzero_result() {
