@@ -25,15 +25,27 @@
 
 #![forbid(unsafe_code)]
 
+// Modification (2026-11-16): integrate the experimental annual-aberration
+// direction primitive from the existing development branch.
+pub mod aberrated_spherical;
+pub mod aberration;
+pub mod aberration_state;
 pub mod calendar;
 pub mod calendar_decimal_hours;
 pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
 pub mod de441_epoch_bridge;
+// Modification (2026-11-16): integrate experimental orientation primitives
+// from the existing development branches; no production pipeline is enabled.
+pub mod earth_orientation;
+pub mod earth_rotation;
 pub mod error;
 pub mod first_sky;
+pub mod gmst_iau2006;
 pub mod light_time;
+pub mod local_sidereal;
+pub mod six_field_units;
 pub mod spk_batch;
 pub mod spk_direct_state;
 pub mod spk_effective_index;

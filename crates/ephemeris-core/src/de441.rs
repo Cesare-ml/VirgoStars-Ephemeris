@@ -69,6 +69,18 @@ pub struct StateVector {
     pub velocity_km_per_day: [f64; 3],
 }
 
+/// Geometric ICRF state and the selected interpolation polynomial's second
+/// TDB-time derivative, in km, km/day and km/day² respectively.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StateVectorWithAcceleration {
+    pub target: Body,
+    pub center: Body,
+    pub epoch: JulianDateTdb,
+    pub position_km: [f64; 3],
+    pub velocity_km_per_day: [f64; 3],
+    pub acceleration_km_per_day2: [f64; 3],
+}
+
 #[derive(Debug)]
 pub enum De441Error {
     Io(io::Error),
@@ -130,6 +142,7 @@ struct Pointer {
 struct Components {
     position: [f64; 3],
     velocity: [f64; 3],
+    acceleration: [f64; 3],
 }
 impl Components {
     fn add_scaled(self, other: Self, scale: f64) -> Self {
@@ -137,6 +150,7 @@ impl Components {
         for i in 0..3 {
             result.position[i] += other.position[i] * scale;
             result.velocity[i] += other.velocity[i] * scale;
+            result.acceleration[i] += other.acceleration[i] * scale;
         }
         result
     }
@@ -336,6 +350,46 @@ impl<R: Read + Seek> De441<R> {
         center: Body,
         epoch: JulianDateTdb,
     ) -> Result<StateVector, De441Error> {
+        let components = self.state_components(target, center, epoch, false)?;
+        Ok(StateVector {
+            target,
+            center,
+            epoch,
+            position_km: components.position,
+            velocity_km_per_day: components.velocity,
+        })
+    }
+
+    /// Return the same geometric state and analytic second derivative of the
+    /// selected Chebyshev polynomial. At a record or granule boundary the
+    /// acceleration is one-sided according to the existing selection rule.
+    /// This does not establish the physical accuracy of the external file.
+    pub fn state_with_acceleration(
+        &mut self,
+        target: Body,
+        center: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVectorWithAcceleration, De441Error> {
+        let components = self.state_components(target, center, epoch, true)?;
+        Ok(StateVectorWithAcceleration {
+            target,
+            center,
+            epoch,
+            position_km: components.position,
+            velocity_km_per_day: components.velocity,
+            acceleration_km_per_day2: components.acceleration,
+        })
+    }
+
+    // Modification (2026-11-16): integrate optional analytic acceleration
+    // without changing the position/velocity-only evaluation or safeguards.
+    fn state_components(
+        &mut self,
+        target: Body,
+        center: Body,
+        epoch: JulianDateTdb,
+        with_acceleration: bool,
+    ) -> Result<Components, De441Error> {
         let jd = epoch.0;
         if !jd.is_finite() || jd < self.start || jd > self.end {
             return Err(De441Error::OutsideCoverage {
@@ -403,27 +457,28 @@ impl<R: Read + Seek> De441<R> {
                 _ => None,
             };
             if let Some(scale) = lunar_scale {
-                Components::default().add_scaled(self.series(9, jd, record_start, record)?, scale)
+                Components::default().add_scaled(
+                    self.series(9, jd, record_start, record, with_acceleration)?,
+                    scale,
+                )
             } else {
-                self.barycentric(target, jd, record_start, record)?
-                    .add_scaled(self.barycentric(center, jd, record_start, record)?, -1.0)
+                self.barycentric(target, jd, record_start, record, with_acceleration)?
+                    .add_scaled(
+                        self.barycentric(center, jd, record_start, record, with_acceleration)?,
+                        -1.0,
+                    )
             }
         };
         if components
             .position
             .iter()
             .chain(components.velocity.iter())
+            .chain(components.acceleration.iter())
             .any(|value| !value.is_finite())
         {
             return Err(De441Error::InvalidFile("non-finite relative state"));
         }
-        Ok(StateVector {
-            target,
-            center,
-            epoch,
-            position_km: components.position,
-            velocity_km_per_day: components.velocity,
-        })
+        Ok(components)
     }
 
     /// Return geometric ICRF states for multiple targets at one TDB epoch.
@@ -482,6 +537,7 @@ impl<R: Read + Seek> De441<R> {
         jd: f64,
         record_start: f64,
         record: &[u8],
+        with_acceleration: bool,
     ) -> Result<Components, De441Error> {
         let index = match body {
             Body::SolarSystemBarycenter => return Ok(Components::default()),
@@ -496,8 +552,8 @@ impl<R: Read + Seek> De441<R> {
             Body::PlutoBarycenter => 8,
             Body::Sun => 10,
             Body::Earth | Body::Moon => {
-                let emb = self.series(2, jd, record_start, record)?;
-                let moon_geo = self.series(9, jd, record_start, record)?;
+                let emb = self.series(2, jd, record_start, record, with_acceleration)?;
+                let moon_geo = self.series(9, jd, record_start, record, with_acceleration)?;
                 let earth = emb.add_scaled(moon_geo, -1.0 / (1.0 + self.earth_moon_mass_ratio));
                 return Ok(if body == Body::Earth {
                     earth
@@ -506,7 +562,7 @@ impl<R: Read + Seek> De441<R> {
                 });
             }
         };
-        self.series(index, jd, record_start, record)
+        self.series(index, jd, record_start, record, with_acceleration)
     }
 
     fn series(
@@ -515,6 +571,7 @@ impl<R: Read + Seek> De441<R> {
         jd: f64,
         record_start: f64,
         record: &[u8],
+        with_acceleration: bool,
     ) -> Result<Components, De441Error> {
         let p = self.pointers[index];
         if p.first == 0 {
@@ -560,11 +617,13 @@ impl<R: Read + Seek> De441<R> {
         for axis in 0..3 {
             let offset = (p.first - 1 + (granule * 3 + axis) * p.coefficients) * 8;
             let (mut t0, mut t1, mut d0, mut d1) = (1.0, x, 0.0, 1.0);
+            let (mut dd0, mut dd1) = (0.0, 0.0);
             let mut position = f64_at(record, offset);
             if !position.is_finite() {
                 return Err(De441Error::InvalidFile("non-finite Chebyshev coefficient"));
             }
             let mut derivative = 0.0;
+            let mut second_derivative = 0.0;
             if p.coefficients > 1 {
                 let c = f64_at(record, offset + 8);
                 if !c.is_finite() {
@@ -582,6 +641,15 @@ impl<R: Read + Seek> De441<R> {
                 }
                 position += c * t;
                 derivative += c * d;
+                if with_acceleration {
+                    let dd = 4.0 * d1 + 2.0 * x * dd1 - dd0;
+                    let contribution = c * dd;
+                    if c != 0.0 && dd != 0.0 && contribution == 0.0 {
+                        return Err(De441Error::InvalidFile("unrepresentable acceleration"));
+                    }
+                    second_derivative += contribution;
+                    (dd0, dd1) = (dd1, dd);
+                }
                 (t0, t1, d0, d1) = (t1, t, d1, d);
             }
             // Modification 2026-11-14: avoid spurious intermediate overflow
@@ -591,11 +659,25 @@ impl<R: Read + Seek> De441<R> {
             } else {
                 (derivative / width) * 2.0
             };
-            if !position.is_finite() || !velocity.is_finite() {
+            // Avoid squaring 2/width first: it can overflow for a constant
+            // series (0*inf), or underflow even when the final result exists.
+            let acceleration = if !with_acceleration || second_derivative == 0.0 {
+                0.0
+            } else if width >= 1.0 {
+                let factor = 2.0 / width;
+                (second_derivative * factor) * factor
+            } else {
+                ((second_derivative / width) * 2.0 / width) * 2.0
+            };
+            if with_acceleration && second_derivative != 0.0 && acceleration == 0.0 {
+                return Err(De441Error::InvalidFile("unrepresentable acceleration"));
+            }
+            if !position.is_finite() || !velocity.is_finite() || !acceleration.is_finite() {
                 return Err(De441Error::InvalidFile("non-finite interpolated state"));
             }
             result.position[axis] = position;
             result.velocity[axis] = velocity;
+            result.acceleration[axis] = acceleration;
         }
         Ok(result)
     }

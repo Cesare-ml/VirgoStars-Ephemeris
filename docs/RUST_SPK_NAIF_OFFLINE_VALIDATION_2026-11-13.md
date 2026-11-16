@@ -1,6 +1,8 @@
 # Offline SPK geometric state validation against independent NAIF/SPICE
 
-**Created 2026-11-13. Status: comparator implemented; no real-kernel SPK scientific comparison has been run or claimed.**
+**Created 2026-11-13. Status: comparator implemented; a limited real-kernel
+comparison was run on 2026-11-16 and remains pending provenance and scientific
+review. See [the local result](SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md).**
 
 This procedure is an experimental, deterministic, **offline** reference comparison using `SpkKernelSet<File>` and externally supplied NAIF/SPICE `spkezr` results. The underlying SPK modules are integrated on `dev/ephemeris` through [#148](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150), [#157](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157), and [#159](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/159); the Rust comparison harness is integrated through [#160](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/160). The comparator does not import external SPICE code or kernels, make network requests, or claim independent astronomical results from its synthetic tests.
 
