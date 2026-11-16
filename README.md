@@ -69,7 +69,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - The optional `python scripts/spk_naif_reference.py run` mode combines local SPICE vector generation, offline Rust comparison, pre/post kernel checks and a **review-pending, unsigned JSON audit receipt** written only after success; no astronomical accuracy certification is implied.
 - The optional `python scripts/spk_naif_reference.py compare` command checks ordered SPK kernel bytes and reference fingerprints, runs the canonical Rust NAIF comparator with Cargo offline, then rechecks the files even on failure. No genuine SPICE/JPL numerical comparison has been recorded.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
-- Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
+- The implemented experimental SPK subset is limited to DAF/SPK metadata indexing, J2000/ICRF type-2/3 direct states, and ordered target–center chain composition. **Broader SPK compatibility and independent validation against authentic NASA/JPL/NAIF kernels remain open gates**; passing synthetic tests does not establish scientific accuracy or production readiness.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
 - GitHub Actions `Rust development CI` is present on `dev/ephemeris` and checks Rust formatting, debug/release tests, strict Clippy, Rustdoc, Windows GNU cross-compilation, and native Windows/macOS tests. Passing CI validates these code checks, **not** astronomical accuracy against independent NASA/JPL data.
 
