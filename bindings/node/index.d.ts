@@ -26,6 +26,10 @@ export class Engine {
   loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
   /** House astronomy from a UT Julian date under this engine's time policy (measured DeltaT if loaded). */
   houseAnglesUt(jdUt: number, latitudeDeg: number, longitudeDegEast: number): HouseAnglesResult;
+  /** First lunar eclipse with its maximum after (`backward`: before) `jdUt`; times are UT Julian dates. */
+  lunarEclipseUt(jdUt: number, backward?: boolean): LunarEclipseResult;
+  /** First solar eclipse (global circumstances); kind bits 4/8/16/32 plus 1 (central) or 2. */
+  solarEclipseUt(jdUt: number, backward?: boolean): SolarEclipseResult;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
   /**
    * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
@@ -48,6 +52,34 @@ export class Engine {
     jdUt: number, ipl: number, rsmi: number, lonDegEast: number, latDeg: number, geoaltM: number,
     pressureHpa: number, temperatureC: number, searchDays?: number,
   ): number | null;
+}
+
+export interface LunarEclipseResult {
+  kind: number;
+  maximum: number;
+  penumbralBegin: number;
+  penumbralEnd: number;
+  partialBegin?: number | null;
+  partialEnd?: number | null;
+  totalBegin?: number | null;
+  totalEnd?: number | null;
+  umbralMagnitude: number;
+  penumbralMagnitude: number;
+}
+
+export interface SolarEclipseResult {
+  kind: number;
+  maximum: number;
+  partialBegin: number;
+  partialEnd: number;
+  totalBegin?: number | null;
+  totalEnd?: number | null;
+  centerBegin?: number | null;
+  centerEnd?: number | null;
+  /** Closest approach of the shadow axis to the geocentre, equatorial Earth radii. */
+  gamma: number;
+  /** Local apparent noon at the ground point under the axis; 0 if there is none. */
+  noon: number;
 }
 
 export interface AzaltResult {

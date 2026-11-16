@@ -29,6 +29,8 @@ const constants = Object.freeze({
   SEFLG_JPLEPH: 1, SEFLG_SWIEPH: 2, SEFLG_MOSEPH: 4, SEFLG_HELCTR: 8, SEFLG_SPEED: 256,
   SEFLG_NOGDEFL: 512, SEFLG_NOABERR: 1024, SEFLG_EQUATORIAL: 2048,
   SE_ASC: 0, SE_MC: 1, SE_ARMC: 2, SE_VERTEX: 3, SE_EQUASC: 4, SE_COASC1: 5, SE_COASC2: 6, SE_POLASC: 7,
+  SE_ECL_CENTRAL: 1, SE_ECL_NONCENTRAL: 2, SE_ECL_TOTAL: 4, SE_ECL_ANNULAR: 8, SE_ECL_PARTIAL: 16,
+  SE_ECL_ANNULAR_TOTAL: 32, SE_ECL_PENUMBRAL: 64, SE_ECL_ALLTYPES_SOLAR: 63, SE_ECL_ALLTYPES_LUNAR: 84,
   SE_ECL2HOR: 0, SE_EQU2HOR: 1, SE_HOR2ECL: 0, SE_HOR2EQU: 1,
   SE_TRUE_TO_APP: 0, SE_APP_TO_TRUE: 1,
   SE_CALC_RISE: 1, SE_CALC_SET: 2, SE_CALC_MTRANSIT: 4, SE_CALC_ITRANSIT: 8,
@@ -154,6 +156,25 @@ class Engine {
     return r === undefined ? null : r;
   }
 
+  /**
+   * First lunar eclipse (penumbral included) with its maximum after `jdUt`. Times are UT
+   * Julian dates; `kind` is the Swiss bit (4 total, 16 partial, 64 penumbral). The Earth's
+   * shadow is enlarged by 1 % for the atmosphere, as the reference does. `backward` searches the
+   * previous eclipse.
+   */
+  lunarEclipseUt(jdUt, backward = false) {
+    return this._call(() => this._native.lunarEclipseUt(jdUt, Boolean(backward)));
+  }
+
+  /**
+   * First solar eclipse with its greatest eclipse after `jdUt`: kind bits (4 total, 8 annular,
+   * 16 partial, 32 hybrid, +1 central or +2 non-central), greatest eclipse and the instants the
+   * penumbra, umbra and axis first and last touch the globe. UT Julian dates; WGS84 globe.
+   */
+  solarEclipseUt(jdUt, backward = false) {
+    return this._call(() => this._native.solarEclipseUt(jdUt, Boolean(backward)));
+  }
+
   /** policy: 'strict' | 'traditional'. Returns the number of stars loaded. */
   loadHipparcos(hip2Path, hips, policy) {
     return this._call(() => this._native.loadHipparcos(hip2Path, hips, policy));
@@ -245,6 +266,14 @@ function lenientJulday(year, month, day, hour, gregorian) {
 // The reference reports -2 ("no event") when the first event is more than about
 // 26 hours after the start (measured: found at 1.0811 d, missed at 1.0855 d).
 const SWISS_EVENT_WINDOW_DAYS = 26 / 24;
+
+function eclipseTypeMatches(kind, wanted) {
+  const typeBits = wanted & (4 | 8 | 16 | 32);
+  if (typeBits && !(kind & typeBits)) return false;
+  if ((wanted & 1) && !(kind & 1)) return false;
+  if ((wanted & 2) && !(kind & 2)) return false;
+  return true;
+}
 
 function coded(code, message) {
   const e = new Error(`${code}: ${message}`);
@@ -342,6 +371,13 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
     };
   }
 
+  function checkEclipseFlags(ifl) {
+    const f = normalizeFlags(ifl ?? 0);
+    if ((f & ~constants.SEFLG_JPLEPH) !== 0) {
+      throw coded('E_UNSUPPORTED_FLAG', `ephemeris flags ${f} are not supported by the eclipse functions`);
+    }
+  }
+
   return Object.freeze({
     ...constants,
     SE_ECL_NUT: -1,
@@ -432,6 +468,47 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
           },
         });
         return { housePosition: r.housePosition };
+      })),
+    // swe_sol_eclipse_when_glob(tjd_ut, ifl, ifltype, backward[, cb])
+    swe_sol_eclipse_when_glob: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, ifl, ifltype, backward] = args;
+        checkEclipseFlags(ifl);
+        const wanted = (ifltype | 0) & 0x3f;
+        let t = jd;
+        for (let guard = 0; guard < 400; guard += 1) {
+          const e = engine.solarEclipseUt(t, Boolean(backward));
+          if (eclipseTypeMatches(e.kind, wanted)) {
+            const z = (x) => (x === null || x === undefined ? 0 : x);
+            return {
+              rflag: e.kind, maximum: e.maximum, noon: e.noon, begin: e.partialBegin, end: e.partialEnd,
+              totalBegin: z(e.totalBegin), totalEnd: z(e.totalEnd), centerBegin: z(e.centerBegin), centerEnd: z(e.centerEnd),
+            };
+          }
+          t = e.maximum + (backward ? -20 : 20);
+        }
+        throw coded('E_CALC', 'no eclipse of the requested type found within 400 eclipses');
+      })),
+    // swe_lun_eclipse_when(tjd_ut, ifl, ifltype, backward[, cb])
+    swe_lun_eclipse_when: (...args) =>
+      deliver(args, guarded(() => {
+        const [jd, ifl, ifltype, backward] = args;
+        checkEclipseFlags(ifl);
+        const wanted = (ifltype | 0) & 0x54; // total 4, partial 16, penumbral 64
+        let t = jd;
+        for (let guard = 0; guard < 400; guard += 1) {
+          const e = engine.lunarEclipseUt(t, Boolean(backward));
+          if (!wanted || (e.kind & wanted) !== 0) {
+            const z = (x) => (x === null || x === undefined ? 0 : x);
+            return {
+              rflag: e.kind, maximum: e.maximum, partialBegin: z(e.partialBegin), partialEnd: z(e.partialEnd),
+              totalBegin: z(e.totalBegin), totalEnd: z(e.totalEnd),
+              penumbralBegin: e.penumbralBegin, penumbralEnd: e.penumbralEnd,
+            };
+          }
+          t = e.maximum + (backward ? -20 : 20);
+        }
+        throw coded('E_CALC', 'no eclipse of the requested type found within 400 eclipses');
       })),
     // swe_azalt(tjd_ut, calc_flag, geolon, geolat, geoalt, atpress, attemp, x0, x1, x2[, cb])
     swe_azalt: (...args) =>

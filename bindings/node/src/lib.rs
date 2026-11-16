@@ -47,6 +47,7 @@ use virgostars_ephemeris_core::civil_apparent::{
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::delta_t_table::DeltaTTable;
 use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
+use virgostars_ephemeris_core::eclipse::{next_lunar_eclipse, EclipseError, LunarKind, SunMoon};
 use virgostars_ephemeris_core::fixed_star::{
     calculate_star_with_solar_deflection, StellarSolarDeflection,
 };
@@ -64,6 +65,7 @@ use virgostars_ephemeris_core::lunar_points::{lunar_point, LunarPoint};
 use virgostars_ephemeris_core::rise_transit::{
     find_event, Atmosphere, Disc, Event, Limb, Request, RiseError, Site, SkyPosition,
 };
+use virgostars_ephemeris_core::solar_eclipse::{next_solar_eclipse, SolarKind};
 use virgostars_ephemeris_core::spk_type21::SmallBodySpk;
 
 /// Swiss-style flag bits this binding understands (values are the public
@@ -400,6 +402,38 @@ pub fn refrac_extended(
         apparent_altitude_deg: r.apparent_altitude_deg,
         dip_deg: r.dip_deg,
     }
+}
+
+#[napi(object)]
+pub struct LunarEclipseResult {
+    /// Swiss `SE_ECL_*` bit: 4 total, 16 partial, 64 penumbral.
+    pub kind: i32,
+    pub maximum: f64,
+    pub penumbral_begin: f64,
+    pub penumbral_end: f64,
+    pub partial_begin: Option<f64>,
+    pub partial_end: Option<f64>,
+    pub total_begin: Option<f64>,
+    pub total_end: Option<f64>,
+    pub umbral_magnitude: f64,
+    pub penumbral_magnitude: f64,
+}
+
+#[napi(object)]
+pub struct SolarEclipseResult {
+    /// Swiss `SE_ECL_*` bits: 4 total, 8 annular, 16 partial, 32 hybrid, plus 1 central or 2 non-central.
+    pub kind: i32,
+    pub maximum: f64,
+    pub partial_begin: f64,
+    pub partial_end: f64,
+    pub total_begin: Option<f64>,
+    pub total_end: Option<f64>,
+    pub center_begin: Option<f64>,
+    pub center_end: Option<f64>,
+    /// Closest approach of the shadow axis to the geocentre, equatorial Earth radii.
+    pub gamma: f64,
+    /// Local apparent noon at the ground point under the axis, near the maximum (0 if none).
+    pub noon: f64,
 }
 
 #[napi(object)]
@@ -964,6 +998,96 @@ impl Engine {
             RiseError::Position(inner) => inner,
             RiseError::Site(site_error) => fail("E_RANGE", site_error),
             RiseError::InvalidRequest(message) => fail("E_RANGE", message),
+        })
+    }
+
+    /// Apparent geocentric Sun and Moon vectors (km, true equator of date) at a UT instant.
+    fn sun_moon_km(&mut self, jd_ut: f64) -> Result<SunMoon> {
+        let (tdb, _, _) = self.epoch_from_ut(jd_ut)?;
+        let rows = geocentric_apparent_six_fields_many_with_options(
+            &mut self.ephemeris,
+            &[Body::Sun, Body::Moon],
+            tdb,
+            options(FLAG_EQUATORIAL),
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        let vector = |i: usize| {
+            let f = rows[i].fields;
+            let (ra, dec, d) = (
+                f.longitude_deg.to_radians(),
+                f.latitude_deg.to_radians(),
+                f.distance_au * AU_KM,
+            );
+            [
+                d * dec.cos() * ra.cos(),
+                d * dec.cos() * ra.sin(),
+                d * dec.sin(),
+            ]
+        };
+        Ok(SunMoon {
+            sun_km: vector(0),
+            moon_km: vector(1),
+        })
+    }
+
+    /// `swe_lun_eclipse_when`-shaped: the first lunar eclipse (penumbral included)
+    /// whose maximum is after (`backward`: before) `jd_ut`; all times UT. The Earth's shadow
+    /// is enlarged by 1 % for the atmosphere.
+    #[napi]
+    pub fn lunar_eclipse_ut(&mut self, jd_ut: f64, backward: bool) -> Result<LunarEclipseResult> {
+        let found =
+            next_lunar_eclipse(|ut| self.sun_moon_km(ut), jd_ut, 400.0, backward).map_err(|e| {
+                match e {
+                    EclipseError::Position(inner) => inner,
+                    other => fail("E_CALC", other),
+                }
+            })?;
+        Ok(LunarEclipseResult {
+            kind: match found.kind {
+                LunarKind::Penumbral => 64,
+                LunarKind::Partial => 16,
+                LunarKind::Total => 4,
+            },
+            maximum: found.maximum_ut,
+            penumbral_begin: found.penumbral_begin_ut,
+            penumbral_end: found.penumbral_end_ut,
+            partial_begin: found.partial_begin_ut,
+            partial_end: found.partial_end_ut,
+            total_begin: found.total_begin_ut,
+            total_end: found.total_end_ut,
+            umbral_magnitude: found.umbral_magnitude,
+            penumbral_magnitude: found.penumbral_magnitude,
+        })
+    }
+
+    /// `swe_sol_eclipse_when_glob`-shaped: the first solar eclipse whose greatest eclipse
+    /// is after `jd_ut`; all times UT. Geometric shadow on the WGS84 ellipsoid.
+    #[napi]
+    pub fn solar_eclipse_ut(&mut self, jd_ut: f64, backward: bool) -> Result<SolarEclipseResult> {
+        let found =
+            next_solar_eclipse(|ut| self.sun_moon_km(ut), jd_ut, 400.0, backward).map_err(|e| {
+                match e {
+                    EclipseError::Position(inner) => inner,
+                    other => fail("E_CALC", other),
+                }
+            })?;
+        let kind = match found.kind {
+            SolarKind::Partial => 16,
+            SolarKind::Annular => 8,
+            SolarKind::Total => 4,
+            SolarKind::Hybrid => 32,
+        };
+        Ok(SolarEclipseResult {
+            kind: kind | if found.central { 1 } else { 2 },
+            maximum: found.maximum_ut,
+            partial_begin: found.partial_begin_ut,
+            partial_end: found.partial_end_ut,
+            total_begin: found.total_begin_ut,
+            total_end: found.total_end_ut,
+            center_begin: found.center_begin_ut,
+            center_end: found.center_end_ut,
+            gamma: found.gamma,
+            noon: found.noon_ut.unwrap_or(0.0),
         })
     }
 

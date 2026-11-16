@@ -58,6 +58,8 @@ skipped with no data at all.
 - **`swe_houses` / `swe_houses_pos`** (systems V, P, K, R, O; Placidus position) are offered through
   injected house methods, with all nine result keys: see
   [MVP2_HOUSES_FACADE_2026-11-16.md](MVP2_HOUSES_FACADE_2026-11-16.md).
+- **`swe_sol_eclipse_when_glob`, `swe_lun_eclipse_when`** (global circumstances) are offered, with the
+  reference keys: see [MVP2_ECLIPSES_2026-11-16.md](MVP2_ECLIPSES_2026-11-16.md).
 - **`swe_azalt`, `swe_azalt_rev`, `swe_refrac`, `swe_refrac_extended`, `swe_rise_trans`**
   are offered, with the reference's result keys: see
   [MVP2_HORIZON_EVENTS_2026-11-16.md](MVP2_HORIZON_EVENTS_2026-11-16.md).
