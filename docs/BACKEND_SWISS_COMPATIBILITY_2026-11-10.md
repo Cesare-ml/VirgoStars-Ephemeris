@@ -1,5 +1,7 @@
 # Backend-first Swiss-style compatibility inventory
 
+> **Updated product priority (2026-11-11):** [three MVPs for Swiss replacement](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md) is the authoritative owner-approved sequence. **MVP 1 now includes fixed stars, houses, `swe_julday` AND `swe_revjul`, full physical planet positions/speeds, and the load/Node facade.** MVP 2 includes all *other* observed functions (including lunar nodes/apogees and Chiron); MVP 3 includes all remaining Swiss APIs even if unused by VirgoStars. The P0/P1/P2 column below is a **historical 2026-11-10 technical snapshot, not the current product order**; preserve its source evidence and per-call details but use the new MVP classification for planning.
+
 **Snapshot:** 2026-11-10. Planning document, not an implemented API or parity claim.
 This inventory was derived from the local `virgo-stars` backend checkout at
 commit `01218b54100be8b7e08724f8d1d4f83f36742495` and its installed
