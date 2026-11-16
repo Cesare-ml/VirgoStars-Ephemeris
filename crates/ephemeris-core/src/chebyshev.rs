@@ -53,7 +53,6 @@ fn validate_chebyshev_input(coefficients: &[f64], x: f64) -> Result<()> {
     Ok(())
 }
 
-
 /// Neumaier-compensated sum of terms that have already been normalized to a
 /// bounded magnitude. This controls rounding in endpoint cancellation.
 fn compensated_sum(terms: impl Iterator<Item = f64>) -> f64 {
@@ -75,16 +74,22 @@ fn compensated_sum(terms: impl Iterator<Item = f64>) -> f64 {
 /// Contributions whose ratio to the maximum coefficient underflows may still
 /// be lost; this is not an arbitrary-precision accumulator.
 fn endpoint_value(coefficients: &[f64], x: f64) -> Result<f64> {
-    let scale = coefficients
-        .iter()
-        .fold(0.0_f64, |largest, coefficient| largest.max(coefficient.abs()));
+    let scale = coefficients.iter().fold(0.0_f64, |largest, coefficient| {
+        largest.max(coefficient.abs())
+    });
     if scale == 0.0 {
         return Ok(0.0);
     }
-    let normalized = compensated_sum(coefficients.iter().enumerate().map(|(degree, coefficient)| {
-        let sign = if x == -1.0 && degree % 2 == 1 { -1.0 } else { 1.0 };
-        (coefficient / scale) * sign
-    }));
+    let normalized = compensated_sum(coefficients.iter().enumerate().map(
+        |(degree, coefficient)| {
+            let sign = if x == -1.0 && degree % 2 == 1 {
+                -1.0
+            } else {
+                1.0
+            };
+            (coefficient / scale) * sign
+        },
+    ));
     let value = normalized * scale;
     if !value.is_finite() {
         return Err(EphemerisError::ArithmeticOverflow);
@@ -107,13 +112,17 @@ fn endpoint_derivative(coefficients: &[f64], x: f64) -> Result<f64> {
         return Ok(0.0);
     }
     let n = degree as f64;
-    let normalized = compensated_sum(
-        coefficients.iter().enumerate().skip(1).map(|(power, coefficient)| {
-            let sign = if x == -1.0 && power % 2 == 0 { -1.0 } else { 1.0 };
+    let normalized = compensated_sum(coefficients.iter().enumerate().skip(1).map(
+        |(power, coefficient)| {
+            let sign = if x == -1.0 && power % 2 == 0 {
+                -1.0
+            } else {
+                1.0
+            };
             let ratio = power as f64 / n;
             (coefficient / scale) * (ratio * ratio) * sign
-        }),
-    );
+        },
+    ));
     let derivative = (normalized * (n * n)) * scale;
     if !derivative.is_finite() {
         return Err(EphemerisError::ArithmeticOverflow);
@@ -263,14 +272,19 @@ mod tests {
         );
     }
 
-
     #[test]
     fn endpoint_value_survives_clenshaw_intermediate_overflow() {
         // The exact endpoint value is 1e308, but the ordinary Clenshaw
         // recurrence forms 3e308 before cancellation and returns NaN.
         let coefficients = [0.0, -1.0e308, 1.0e308, 1.0e308];
-        assert_eq!(evaluate_chebyshev_value(&coefficients, 1.0).unwrap(), 1.0e308);
-        assert_eq!(evaluate_chebyshev_value(&coefficients, -1.0).unwrap(), 1.0e308);
+        assert_eq!(
+            evaluate_chebyshev_value(&coefficients, 1.0).unwrap(),
+            1.0e308
+        );
+        assert_eq!(
+            evaluate_chebyshev_value(&coefficients, -1.0).unwrap(),
+            1.0e308
+        );
         // The derivative at +1 is genuinely outside f64 range; the full
         // evaluator must continue to reject it instead of returning a
         // partially valid sample.
@@ -288,7 +302,10 @@ mod tests {
         let positive = evaluate_chebyshev(&coefficients, 1.0).unwrap();
         assert_eq!(positive.value, 1.5e308);
         assert_eq!(positive.derivative_dx, 0.5e308);
-        assert_eq!(evaluate_chebyshev_value(&coefficients, -1.0).unwrap(), 0.5e308);
+        assert_eq!(
+            evaluate_chebyshev_value(&coefficients, -1.0).unwrap(),
+            0.5e308
+        );
         assert_eq!(
             evaluate_chebyshev(&coefficients, -1.0),
             Err(EphemerisError::ArithmeticOverflow)
