@@ -1,6 +1,6 @@
 # VirgoStars Ephemeris — implementation roadmap
 
-Status: **planning and experimental implementation**, updated 2026-11-10. The experimental Rust reader integrated from `dev/ephemeris` currently handles the **classic DE441 binary format**, not SPK `.bsp`; JavaScript SPK prototypes on `main` remain research only. See [branch integration status](BRANCH_INTEGRATION_STATUS_2026-11-10.md). All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
+Status: **planning and experimental implementation**, reviewed 2026-11-16. The classic Rust DE441 reader handles the classic binary `.eph` format. Separate experimental Rust modules on `dev/ephemeris` index DAF/SPK metadata, evaluate supported J2000 frame-1 type-2/type-3 segments, and compose one- and multi-kernel target–center chains. These capabilities have **not** passed independent real-kernel NASA/JPL/NAIF validation; they are not a full SPICE implementation or production-ready. Historical JavaScript prototype milestones below are retained as history, not as the current canonical engine. See the [current implementation and integration-order audit](SPK_PR_INTEGRATION_ORDER_AUDIT_2026-11-14.md). All gates below are acceptance criteria, not evidence of completion. The owner authorized GitHub Actions for safe CI on 2026-11-10; CI checks complement, but do not replace, manually documented independent astronomical validation.
 
 | Phase | Scope | Exit gate |
 |---|---|---|
@@ -33,7 +33,7 @@ The owner has set coverage of the documented Swiss Ephemeris capabilities as the
 No Swiss Ephemeris code or runtime dependency; no code from private VirgoStars; no bundled proprietary datasets; each calculation independently testable; no silent fallbacks; production remains unchanged until explicit integration gates.
 
 
-## Checkpoint di lavoro — 2026-11-09 (documentazione aggiornata)
+## Historical JavaScript prototype checkpoint — 2026-11-09 (documentazione aggiornata)
 
 - E1 **parzialmente implementata, non convalidata**: lettori SPK tipo 2 e tipo 3, posizione e velocità, catene target/center, gestione endian; test solo su kernel sintetici. **Non effettuato il confronto con un file NASA reale**.
 - E2 **avviata ma non validata**: modulo UTC/TAI/TT/TDB approssimato valido dichiaratamente dal 1972 al 2026, con tabella leap-seconds conforme a IERS Bulletin C 72. Non sostituisce una implementazione completa del modello temporale SPICE/IAU.
@@ -42,24 +42,24 @@ No Swiss Ephemeris code or runtime dependency; no code from private VirgoStars; 
 - **Blocco attuale:** occorre ottenere ufficialmente un kernel `de440s.bsp` per eseguire e registrare la comparazione numerica; nel runtime isolato il download non è riuscito.
 
 
-### Subsequent checkpoint: geometric coordinates and light-time
+### Historical JavaScript prototype checkpoint — geometric coordinates and light-time (not the current Rust implementation)
 
-E3 now has an **experimental partial implementation**, not scientific validation: equatorial/approximate ecliptic J2000 coordinates and angular speeds from geometric vectors, and an optional one-way light-time-only retarded vector solver. Five new synthetic math tests passed in an isolated Node 22 workspace. This does **not** constitute precession/nutation to the date, aberration, true apparent positions or a VirgoStars chart-ready ephemeris. Real SPK/Horizons scientific comparison remains blocked. See `GEOMETRIC_COORDINATES_AND_LIGHTTIME.md`.
+The legacy JavaScript prototype recorded an experimental partial implementation of equatorial/approximate ecliptic J2000 coordinates and angular speeds from geometric vectors, plus an optional one-way light-time-only retarded-vector solver. Its five synthetic Node 22 tests were historical software checks, not scientific validation. This does **not** establish that the current Rust branch provides precession/nutation to date, aberration, true apparent positions or a VirgoStars chart-ready ephemeris. Real SPK/Horizons scientific comparison remains blocked. For the current Rust geometric light-time scope, see [Geocentric light-time state](GEOCENTRIC_LIGHT_TIME_2026-11-10.md).
 
 Before E3 can be considered validated, implement and independently test frame bias, IAU precession/nutation, Earth observer/stellar aberration, light-time time-derivatives and a canonical ecliptic-of-date result with declared correction modes. Never re-label simple J2000 projections as apparent.
 
 
-### E3 update — independent IAU 2006 P03 numerical benchmark
+### Historical JavaScript prototype checkpoint — IAU 2006 P03 numerical benchmark (not the current Rust implementation)
 
-The original `src/precession.mjs` now implements bias+precession and **mean** equatorial/ecliptic-of-date geometric positional transforms. Five new local Node 22 tests passed. The numerical unit-test oracle is the published ERFA conformance suite (`pmat06` 9-element matrix, `obl06` mean obliquity) rather than only an internal synthetic numerical check. Worst observed element discrepancy approximately 1.1e-16 with a pass tolerance of 1e-14. The implementation is deliberately limited to 1800–2200 TT pending wider validation and omits velocities in rotating date frames to prevent false retrograde classifications.
+At that historical checkpoint, the legacy JavaScript prototype on an older branch contained `src/precession.mjs` with bias+precession and **mean** equatorial/ecliptic-of-date geometric positional transforms. Five Node 22 tests were reported for that prototype. Its numerical oracle was the published ERFA conformance suite (`pmat06` 9-element matrix, `obl06` mean obliquity); the reported worst matrix-element discrepancy was approximately 1.1e-16 against a 1e-14 tolerance. The prototype was limited to 1800–2200 TT and omitted rotating-frame velocities. These historical results do **not** establish that `src/precession.mjs` exists on the current `dev/ephemeris` branch or that the Rust implementation supplies this model.
 
-**Still blocked before E3 completion:** real NASA JPL SPK vectors, IAU nutation, aberration, proper apparent observer corrections, trusted lunar/planet models and full apparent-of-date rates.
+**Still blocked before E3 completion:** independently validated real NASA/JPL SPK vectors, IAU nutation integrated and validated in the Rust pipeline, aberration, proper apparent observer corrections, trusted lunar/planet models and full apparent-of-date rates.
 
 
-### E3 progress — full IAU 2000B short nutation
+### Historical JavaScript prototype checkpoint — IAU 2000B short nutation (not the current Rust implementation)
 
-The project branch now contains `src/nutation.mjs`, a full 77-term IAU 2000B lunar-solar series and the published planetary-bias offsets (not a 4-term approximation). It produces dPsi/dEpsilon, a mean-to-true equatorial nutation matrix and geometric `TRUE_EQUATORIAL_OF_DATE` / `TRUE_ECLIPTIC_OF_DATE` projections by combining with IAU 2006 P03 precession. Original JavaScript code is separated from the BSD-licensed ERFA scientific coefficient table in `src/data/` with retained copyright/license notes.
+At that historical checkpoint, a legacy JavaScript prototype on an older branch contained `src/nutation.mjs`, a 77-term IAU 2000B lunar-solar series and published planetary-bias offsets. It produced dPsi/dEpsilon, a mean-to-true equatorial nutation matrix and geometric `TRUE_EQUATORIAL_OF_DATE` / `TRUE_ECLIPTIC_OF_DATE` projections when combined with the prototype's IAU 2006 P03 precession. The original JavaScript and the BSD-licensed ERFA coefficient table under `src/data/` had separate provenance and notices in that historical implementation.
 
-**Independent mathematical benchmark:** at TT JD 2453736.5, the calculated two nutation components agree with ERFA nut00b within ~5e-20 rad, and the full 3×3 nutation matrix matches ERFA num00b at max absolute element difference ~5.6e-17 (using ERFA's IAU 2000 reference mean obliquity for that standalone matrix check). Five new Node tests are authored but **the complete Node suite has not been executed this checkpoint**.
+**Historical mathematical benchmark (not current Rust validation):** at TT JD 2453736.5, the prototype's two nutation components were reported to agree with ERFA nut00b within ~5e-20 rad, and its 3×3 nutation matrix with ERFA num00b within ~5.6e-17 maximum absolute element difference (using ERFA's IAU 2000 reference mean obliquity for that standalone matrix check). Five Node tests had been authored, but the complete Node suite had not been executed at that checkpoint. Neither those tests nor these measurements certify the current Rust implementation.
 
 **Release remains blocked** by real official NASA SPK validation (#3), aberration, proper light-time/observer composition and date-frame derivatives. IAU 2006/2000B is a declared approximate combination, not the higher-accuracy 2006/2000A standard. No change to the strict APPARENT natal contract or production.

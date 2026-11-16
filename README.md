@@ -2,7 +2,7 @@
 
 **A free and open-source astronomical ephemeris project for astrology applications — licensed under CPAL-1.0.**
 
-**Status: EARLY EXPERIMENTAL IMPLEMENTATION — the Rust core includes a classic JPL DE441 binary reader and synthetic tests, but independent NASA/JPL numerical validation, SPK support, cross-language bindings and production integration remain incomplete.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris.
+**Status: EARLY EXPERIMENTAL IMPLEMENTATION — the Rust core includes a classic JPL DE441 binary reader and separate experimental DAF/SPK indexing, supported type-2/type-3 J2000 state evaluation and target–center chain composition. Those SPK capabilities are not independently validated against real NASA/JPL kernels; cross-language bindings and production integration remain incomplete.** This is an original implementation, not a fork, translation, wrapper or redistribution of Swiss Ephemeris.
 
 
 ## Purpose
@@ -19,14 +19,14 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
 
-- [Architecture and boundaries](docs/ARCHITECTURE.md)
+- [Accepted Rust architecture decision (not an exhaustive architecture map)](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [E1 SPK reference-matrix breadth audit (case coverage only)](docs/SPK_E1_REFERENCE_MATRIX_AUDIT_2026-11-13.md)
-- [NASA/JPL kernels and legal provenance](docs/DATA_AND_LICENSING.md)
-- [Proposed public contracts](docs/API_CONTRACTS.md)
+- [Kernel provenance and distribution preflight](docs/KERNEL_DATA_DISTRIBUTION_PREFLIGHT_2026-11-14.md)
+- [Backend compatibility planning inventory (not a shipping API contract)](docs/BACKEND_SWISS_COMPATIBILITY_2026-11-10.md)
 - [Contributor and AI-agent rules](AGENTS.md)
-- [Italian overview](docs/README.it.md)
+- [Sintesi italiana della decisione architetturale](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md#sintesi-italiana)
 - [Experimental DE441 reader](docs/DE441.md)
 - [Experimental Rust DAF/SPK metadata index](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [Experimental read-only SPK descriptor coverage inspector (not JPL-validated)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
@@ -69,7 +69,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - The optional `python scripts/spk_naif_reference.py run` mode combines local SPICE vector generation, offline Rust comparison, pre/post kernel checks and a **review-pending, unsigned JSON audit receipt** written only after success; no astronomical accuracy certification is implied.
 - The optional `python scripts/spk_naif_reference.py compare` command checks ordered SPK kernel bytes and reference fingerprints, runs the canonical Rust NAIF comparator with Cargo offline, then rechecks the files even on failure. No genuine SPICE/JPL numerical comparison has been recorded.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
-- Real NASA/JPL reference-vector validation and supported SPK kernel reading remain open gates; passing synthetic tests does not establish scientific accuracy.
+- Real NASA/JPL reference-vector validation and broadly validated SPK support remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
 - GitHub Actions `Rust development CI` is present on `dev/ephemeris` and checks Rust formatting, debug/release tests, strict Clippy, Rustdoc, Windows GNU cross-compilation, and native Windows/macOS tests. Passing CI validates these code checks, **not** astronomical accuracy against independent NASA/JPL data.
 
