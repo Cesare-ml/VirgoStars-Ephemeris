@@ -147,6 +147,37 @@ the HIP2 quality flags, or turn a review assertion into a scientific approval.**
 The manifest remains the caller's record and is not included in output results.
 The engine still validates the selected HIP2 records when loading.
 
+### Requested-name coverage
+
+`auditStarCatalogCoverage(manifest, requestedNames)` validates that same
+caller-supplied manifest, then reports exact case-insensitive name/alias matches
+and missing lookup strings. Its `virgostars-star-coverage/1` result is always
+`REVIEW_REQUIRED`: matching an alias only confirms a **caller assertion**.
+Per requested name it reports missing magnitude or the explicit zero-RV
+assumption. A supplied numeric zero is reported as `VALUE_SUPPLIED`, not
+misrepresented as a measured velocity. Counts of missing magnitude and assumed
+zero RV are per **requested name**; `uniqueMatchedStarCount` separately counts
+distinct HIP entries when multiple requested aliases refer to the same star.
+Display labels are not lookup aliases. Empty request lists and duplicate names
+after trimming/case-folding are errors.
+
+The audit does not read HIP2, prove actual engine availability, check astrometric
+quality, confirm scientific identity, authenticate provenance, or approve data
+use/redistribution. It does not create a real manifest from candidate reports.
+Preserve the original manifest and review evidence separately. The report can
+contain caller-supplied names and HIP identifiers; do not redistribute it merely
+because the command produced it.
+
+```powershell
+node bindings/node/scripts/audit-star-manifest-coverage.mjs <reviewed-manifest.json> <requested-names.json>
+```
+
+The second file is a nonempty JSON array of requested strings. The command is
+offline, writes JSON only to stdout, and exits nonzero for invalid inputs. A zero
+exit code means the audit ran, **not** that every name matched or that the
+catalog is approved. A validated manifest currently requires at least one
+entry; an entirely empty candidate list cannot be passed as an approved catalog.
+
 Illustration only; the name, number, sources and values below are fictional:
 
 ```js

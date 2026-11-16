@@ -208,6 +208,20 @@ export function prepareStarCatalog(manifest: StarCatalogManifest): {
   reviewer: string; astrometrySource: string; dataUseDecision: string;
 };
 
+/** Lookup coverage of caller assertions only; no HIP2, identity, rights or numerical approval. */
+export function auditStarCatalogCoverage(manifest: StarCatalogManifest, requestedNames: string[]): {
+  schema: 'virgostars-star-coverage/1'; status: 'REVIEW_REQUIRED';
+  catalogStarCount: number; requestedCount: number; matchedCount: number; unmatchedCount: number;
+  uniqueMatchedStarCount: number; missingMagnitudeCount: number; assumedZeroRadialVelocityCount: number;
+  qualityPolicy: 'strict' | 'traditional'; hip2Eligibility: 'NOT_CHECKED';
+  sourceRights: 'NOT_VERIFIED'; scientificIdentity: 'NOT_VERIFIED';
+  results: Array<
+    | { requestedName: string; status: 'NOT_IN_MANIFEST' }
+    | { requestedName: string; status: 'MATCHED_CALLER_ASSERTION'; canonicalName: string; hip: number;
+        magnitude: 'MISSING' | 'VALUE_SUPPLIED'; radialVelocity: 'ASSUMED_ZERO' | 'VALUE_SUPPLIED' }
+  >;
+};
+
 export interface HouseDiagnosticEvent {
   operation: 'swe_houses' | 'swe_houses_pos';
   code: string;

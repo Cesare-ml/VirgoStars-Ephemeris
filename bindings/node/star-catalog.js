@@ -60,4 +60,41 @@ function prepareStarCatalog(manifest) {
   return { stars, hips: [...hips], qualityPolicy: manifest.qualityPolicy, reviewer, astrometrySource, dataUseDecision };
 }
 
-module.exports = { prepareStarCatalog };
+/** Audit requested lookup strings against a caller-reviewed manifest snapshot. */
+function auditStarCatalogCoverage(manifest, requestedNames) {
+  const catalog = prepareStarCatalog(manifest);
+  if (!Array.isArray(requestedNames) || requestedNames.length === 0) fail('requestedNames must be a non-empty array');
+  const lookup = new Map();
+  for (const star of catalog.stars) {
+    for (const name of [star.name, ...star.aliases]) lookup.set(name.toLocaleLowerCase('en-US'), star);
+  }
+  const seen = new Set();
+  const matchedHips = new Set();
+  const results = requestedNames.map((value, index) => {
+    const requestedName = nonempty(value, `requestedNames[${index}]`);
+    const key = requestedName.toLocaleLowerCase('en-US');
+    if (seen.has(key)) fail(`duplicate requested name: ${requestedName}`);
+    seen.add(key);
+    const star = lookup.get(key);
+    if (!star) return { requestedName, status: 'NOT_IN_MANIFEST' };
+    matchedHips.add(star.hip);
+    return {
+      requestedName, status: 'MATCHED_CALLER_ASSERTION', canonicalName: star.name, hip: star.hip,
+      magnitude: star.magnitude === null ? 'MISSING' : 'VALUE_SUPPLIED',
+      radialVelocity: star.radialVelocityKmS === null ? 'ASSUMED_ZERO' : 'VALUE_SUPPLIED',
+    };
+  });
+  const matched = results.filter((row) => row.status === 'MATCHED_CALLER_ASSERTION');
+  return {
+    schema: 'virgostars-star-coverage/1', status: 'REVIEW_REQUIRED',
+    catalogStarCount: catalog.stars.length, requestedCount: results.length,
+    matchedCount: matched.length, unmatchedCount: results.length - matched.length,
+    uniqueMatchedStarCount: matchedHips.size,
+    missingMagnitudeCount: matched.filter((row) => row.magnitude === 'MISSING').length,
+    assumedZeroRadialVelocityCount: matched.filter((row) => row.radialVelocity === 'ASSUMED_ZERO').length,
+    qualityPolicy: catalog.qualityPolicy, hip2Eligibility: 'NOT_CHECKED',
+    sourceRights: 'NOT_VERIFIED', scientificIdentity: 'NOT_VERIFIED', results,
+  };
+}
+
+module.exports = { prepareStarCatalog, auditStarCatalogCoverage };

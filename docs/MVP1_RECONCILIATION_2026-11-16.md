@@ -76,6 +76,9 @@ comparison; it does not replace the individual model and validation contracts.
    A targeted SIMBAD query found three further HIP candidates and one cluster;
    25 names did not match that query. The [expanded backend diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md)
    records 120 candidate/date cases and important field differences.
+   An offline caller-manifest [coverage audit](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md)
+   now reports unresolved names and missing/assumed fields without approving
+   identities or data rights; the complete real manifest remains open.
 2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
    independently review kernel/tool provenance and numerical tolerances, and
    add type-3 and multi-kernel/segment-priority comparisons where these are
@@ -94,6 +97,9 @@ comparison; it does not replace the individual model and validation contracts.
    A [15-chart local diagnostic](MVP1_BACKEND_CHART_DIAGNOSTIC_2026-11-16.md)
    identifies polar fallback and unavailable Placidus positions that still
    need explicit handling in serialized backend responses.
+   The legacy star path truncates seconds and rejects a zero longitude; an
+   isolated backend branch corrects both, as recorded in [the local diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md).
+   Production and the separate Astrolabio copy remain unchanged.
    An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
    now serializes these warnings separately. A separate local backend branch
    `codex/ephemeris-house-diagnostics-20261116` adds explicit provider injection,

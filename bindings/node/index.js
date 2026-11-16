@@ -4,7 +4,7 @@
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 
 const path = require('node:path');
-const { prepareStarCatalog } = require('./star-catalog.js');
+const { prepareStarCatalog, auditStarCatalogCoverage } = require('./star-catalog.js');
 const { createHouseDiagnosticSession } = require('./house-diagnostics.js');
 
 let native;
@@ -688,6 +688,7 @@ module.exports = {
   createSwissShapedFacade,
   createHouseDiagnosticSession,
   prepareStarCatalog,
+  auditStarCatalogCoverage,
   inspectHipparcosQuality,
   loadNative,
 };

@@ -53,6 +53,20 @@ an associated `displayNameSource`. Lookup remains based on the name/aliases;
 the label is never inferred from Swiss. This enables an explicit migration
 mapping but does not itself populate or approve one.
 
+## Additional legacy input findings — 2026-11-17
+
+The current legacy `getStella` derives the Julian hour from hours and minutes
+but omits seconds, unlike `getPianetiCase`. Its truthiness check also treats a
+finite longitude of exactly `0` degrees as an absent star. A local fictional
+provider confirmed that `12:34:59` is passed to `swe_julday` as `12:34:00`,
+and an otherwise finite zero-longitude result is rejected. These are backend
+source/behavior findings, not measured astronomical discrepancies. The prior
+120-case diagnostic used whole-minute dates and did not cover either case.
+The isolated backend branch `codex/ephemeris-house-diagnostics-20261116` now
+corrects those two cases and passes local regression tests, including one with
+the real Ephemeris/HIP2 path. The production checkout and separate Astrolabio
+copy have not acquired that change; wider consumer validation remains open.
+
 ## Reproduction and evidence
 
 `bindings/node/scripts/audit-star-backend.mjs` is a local-only diagnostic. It

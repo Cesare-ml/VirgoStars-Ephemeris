@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { mkdtempSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { prepareStarCatalog, createSwissShapedFacade } = require('../index.js');
+const { prepareStarCatalog, auditStarCatalogCoverage, createSwissShapedFacade } = require('../index.js');
 
 function fixture() {
   return {
@@ -53,4 +58,58 @@ test('a caller-supplied display name changes results without becoming a lookup a
   assert.equal(facade.swe_fixstar_mag('Example').name, 'Example,exFoo');
   assert.equal(facade.swe_fixstar_mag('Example,exFoo').code, 'E_STAR_NOT_FOUND');
   assert.throws(() => createSwissShapedFacade(engine, { starCatalog: [{ ...catalog.stars[0], displayName: '' }] }), (e) => e.code === 'E_CATALOG');
+});
+
+test('coverage reports aliases, missing names and explicit catalog assumptions without approving them', () => {
+  const manifest = fixture();
+  manifest.stars.push({ name: 'Second', aliases: [], hip: 456, identitySource: 'Fictional', qualityDecision: 'Fictional',
+    magnitude: null, magnitudeMissingReason: 'Missing example magnitude',
+    radialVelocityKmS: 0, radialVelocitySource: 'Fictional supplied value' });
+  const before = structuredClone(manifest);
+  const report = auditStarCatalogCoverage(manifest, [' Example ', 'example alias', 'Second', 'Not present']);
+  assert.equal(report.schema, 'virgostars-star-coverage/1');
+  assert.equal(report.status, 'REVIEW_REQUIRED');
+  assert.equal(report.matchedCount, 3);
+  assert.equal(report.uniqueMatchedStarCount, 2);
+  assert.equal(report.unmatchedCount, 1);
+  assert.equal(report.missingMagnitudeCount, 1);
+  assert.equal(report.assumedZeroRadialVelocityCount, 2, 'counts requested names, not distinct stars');
+  assert.deepEqual(report.results[0], { requestedName: 'Example', status: 'MATCHED_CALLER_ASSERTION', canonicalName: 'Example',
+    hip: 123, magnitude: 'VALUE_SUPPLIED', radialVelocity: 'ASSUMED_ZERO' });
+  assert.equal(report.results[2].radialVelocity, 'VALUE_SUPPLIED');
+  assert.equal(report.results[3].status, 'NOT_IN_MANIFEST');
+  assert.equal(report.hip2Eligibility, 'NOT_CHECKED');
+  assert.equal(report.sourceRights, 'NOT_VERIFIED');
+  assert.equal(report.scientificIdentity, 'NOT_VERIFIED');
+  assert.deepEqual(manifest, before);
+  for (const bad of [[], ['Example', ' example '], [''], [123], 'Example']) {
+    assert.throws(() => auditStarCatalogCoverage(manifest, bad), (error) => error.code === 'E_CATALOG');
+  }
+  assert.throws(() => auditStarCatalogCoverage({ ...manifest, reviewer: '' }, ['Example']), (error) => error.code === 'E_CATALOG');
+});
+
+test('offline coverage CLI reports gaps and fails on invalid input', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'virgostars-catalog-coverage-'));
+  const manifestPath = join(directory, 'manifest.json');
+  const requestsPath = join(directory, 'requests.json');
+  try {
+    const script = fileURLToPath(new URL('../scripts/audit-star-manifest-coverage.mjs', import.meta.url));
+    writeFileSync(manifestPath, JSON.stringify(fixture()));
+    writeFileSync(requestsPath, JSON.stringify(['Example alias', 'Missing']));
+    const completed = spawnSync(process.execPath, [script, manifestPath, requestsPath], { encoding: 'utf8' });
+    assert.equal(completed.status, 0, completed.stderr);
+    const report = JSON.parse(completed.stdout);
+    assert.equal(report.status, 'REVIEW_REQUIRED');
+    assert.equal(report.matchedCount, 1);
+    assert.equal(report.unmatchedCount, 1);
+    writeFileSync(requestsPath, JSON.stringify(['Example', 'EXAMPLE']));
+    const invalid = spawnSync(process.execPath, [script, manifestPath, requestsPath], { encoding: 'utf8' });
+    assert.equal(invalid.status, 1);
+    assert.equal(invalid.stdout, '');
+    assert.match(invalid.stderr, /duplicate requested name/);
+  } finally {
+    rmSync(manifestPath, { force: true });
+    rmSync(requestsPath, { force: true });
+    rmdirSync(directory);
+  }
 });
