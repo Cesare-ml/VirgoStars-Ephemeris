@@ -167,12 +167,15 @@ fn quality_policy_is_explicit_and_not_a_catalog_rule() {
     assert!(!strict.accepts(&mk(7, 1, "20.00")), "7-parameter solution");
     assert!(!strict.accepts(&mk(5, 2, "20.00")), "two components");
     assert!(!strict.accepts(&mk(5, 1, "9.00")), "S/N 4.5 < 5");
-    let relaxed = Hip2QualityPolicy {
-        allowed_solution_types: &[1, 5, 7],
-        required_components: 1,
-        min_parallax_snr: 5.0,
-    };
+    let relaxed = Hip2QualityPolicy::TRADITIONAL_STARS;
     assert!(relaxed.accepts(&mk(7, 1, "20.00")));
+    assert!(relaxed.accepts(&mk(1, 1, "20.00")));
+    assert!(relaxed.accepts(&mk(55, 2, "20.00")));
+    assert!(relaxed.accepts(&mk(75, 1, "20.00")));
+    // Still rejected: unknown solution types, three components, low S/N.
+    assert!(!relaxed.accepts(&mk(9, 1, "20.00")));
+    assert!(!relaxed.accepts(&mk(5, 3, "20.00")));
+    assert!(!relaxed.accepts(&mk(1, 1, "9.00")));
 }
 
 #[test]
@@ -215,4 +218,36 @@ fn genuine_hip2_validates_and_known_stars_have_sane_values() {
     for star in &stars {
         assert!(star.parallax_mas > 5.0 && star.e_parallax_mas > 0.0);
     }
+    // Regulus passes both policies; Aldebaran (Sn 1), Spica (Sn 7) and
+    // Antares (Sn 1) pass only the traditional-stars policy.
+    assert!(Hip2QualityPolicy::STRICT.accepts(&stars[0]));
+    for star in &stars[1..] {
+        assert!(!Hip2QualityPolicy::STRICT.accepts(star), "{}", star.hip);
+        assert!(
+            Hip2QualityPolicy::TRADITIONAL_STARS.accepts(star),
+            "{}",
+            star.hip
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires a caller-supplied genuine hip2.dat in HIP2_PATH"]
+fn genuine_hip2_traditional_policy_accepts_all_sixteen_comparison_stars() {
+    let path = std::env::var_os("HIP2_PATH").expect("HIP2_PATH is not set");
+    let file = std::fs::File::open(path).unwrap();
+    let wanted = [
+        21_421, 49_669, 65_474, 80_763, 37_826, 91_262, 69_673, 113_368, 14_576, 27_989, 24_608,
+        37_279, 30_438, 102_098, 97_649, 11_767,
+    ];
+    let stars = read_hip2_selected(BufReader::new(file), &wanted).unwrap();
+    let strict = stars
+        .iter()
+        .filter(|s| Hip2QualityPolicy::STRICT.accepts(s))
+        .count();
+    let traditional = stars
+        .iter()
+        .filter(|s| Hip2QualityPolicy::TRADITIONAL_STARS.accepts(s))
+        .count();
+    assert_eq!((strict, traditional), (7, 16));
 }

@@ -81,14 +81,20 @@ values, by at most 0.007″ (Altair); most stars stay below 0.002″ in longitud
 This mixes catalog-value and algorithm differences and says nothing about the
 absolute accuracy of the catalog.
 
-**Quality policy needs a maintainer decision.** The default `STRICT` policy
+**Quality policy (maintainer decision, 2026-11-16).** `Hip2QualityPolicy::STRICT`
 (single star, `Sn = 5`, parallax S/N ≥ 5) rejects nine of those 16 familiar
-stars: Aldebaran, Antares, Vega and Betelgeuse (`Sn = 1`, stochastic
-solution), Spica (`Sn = 7`), Algol, Capella and Procyon (`Sn = 75`), and
-Arcturus (`Sn = 55`, two components). Their linear-motion positions still agree
-with the reference to a few milliarcseconds, far below what a chart needs, but
-the catalog flags them as less reliable, so accepting them is a choice, not a
-default.
+stars: Aldebaran, Antares, Vega and Betelgeuse (`Sn = 1`, stochastic solution),
+Spica (`Sn = 7`), Algol, Capella and Procyon (`Sn = 75`), and Arcturus
+(`Sn = 55`, two components). The maintainer accepted these solutions for the
+traditional named stars, so `Hip2QualityPolicy::TRADITIONAL_STARS` allows
+`Sn ∈ {1, 5, 7, 55, 75}` and `Nc ∈ {1, 2}` with S/N ≥ 5; `STRICT` stays
+available. The catalog still flags those solutions as less reliable, and
+their linear-motion positions were within a few milliarcseconds of the
+independent engine in the local comparison. The ignored test
+`genuine_hip2_traditional_policy_accepts_all_sixteen_comparison_stars` confirms on
+the genuine file that 7 of the 16 pass `STRICT` and all 16 pass the new policy.
+Other stars are not covered by this decision; each new star still needs its own
+check of radial velocity, magnitude and identity.
 
 ## Not done — remaining data gates
 
@@ -99,7 +105,7 @@ default.
 3. **Names and aliases** must be cross-identified by HIP number from
    independent sources; the 81-name HIP target list on the star branch is a
    starting point, unreviewed.
-4. **Quality policy** for the stars above (see previous section).
+4. **Quality policy** is decided only for the traditional stars above.
 5. `swe_fixstar_ut`/`swe_fixstar_mag`-shaped facade, magnitude lookup and
    missing-star errors belong to the Node/WASM binding (row 5).
 6. No JPL Horizons or SOFA/NOVAS comparison beyond the ERFA fixtures; rays

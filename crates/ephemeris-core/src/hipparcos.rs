@@ -118,9 +118,10 @@ impl Error for Hip2Error {}
 /// of this project**, not a rule of the catalog.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hip2QualityPolicy {
-    /// Required `Sn` values (e.g. 5 for the standard five-parameter solution).
+    /// Accepted `Sn` values (`10*d + s` of the new reduction).
     pub allowed_solution_types: &'static [u16],
-    pub required_components: u8,
+    /// Accepted numbers of components `Nc`.
+    pub allowed_components: &'static [u8],
     pub min_parallax_snr: f64,
 }
 
@@ -128,13 +129,27 @@ impl Hip2QualityPolicy {
     /// Standard single-star, five-parameter solution with parallax S/N ≥ 5.
     pub const STRICT: Self = Self {
         allowed_solution_types: &[5],
-        required_components: 1,
+        allowed_components: &[1],
+        min_parallax_snr: 5.0,
+    };
+
+    /// Maintainer decision of 2026-11-16 for the traditional named stars: also
+    /// accept the stochastic (`Sn` 1), seven-parameter (7) and the combined
+    /// (55, 75) solutions, and one- or two-component entries, still with
+    /// parallax S/N ≥ 5. These solutions are flagged by the catalog as less
+    /// reliable; the choice trades that against coverage of familiar stars
+    /// (Aldebaran, Antares, Vega, Betelgeuse, Spica, Algol, Capella, Procyon,
+    /// Arcturus), whose linear-motion positions were still within a few
+    /// milliarcseconds of an independent engine in the local comparison.
+    pub const TRADITIONAL_STARS: Self = Self {
+        allowed_solution_types: &[1, 5, 7, 55, 75],
+        allowed_components: &[1, 2],
         min_parallax_snr: 5.0,
     };
 
     pub fn accepts(&self, record: &Hip2Record) -> bool {
         self.allowed_solution_types.contains(&record.solution_type)
-            && record.components == self.required_components
+            && self.allowed_components.contains(&record.components)
             && record.e_parallax_mas > 0.0
             && record.parallax_mas / record.e_parallax_mas >= self.min_parallax_snr
     }
