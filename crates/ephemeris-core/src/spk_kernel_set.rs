@@ -428,6 +428,7 @@ impl<R: Read + Seek> SpkKernelSet<R> {
         results.sort_unstable_by_key(|(target_id, _, _)| *target_id);
         results
     }
+
     /// Evaluate every declared target covered at one TDB/ET instant.
     ///
     /// Results are sorted by signed NAIF target ID, with one entry per
@@ -1461,6 +1462,7 @@ mod tests {
             }
         }
     }
+
     #[test]
     fn selected_segment_reports_latest_file_and_last_covering_descriptor() {
         let earlier = vec![seg(301, 399, 2, [1.0, 0.0], [0.0, 0.0])];
