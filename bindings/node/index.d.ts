@@ -164,6 +164,8 @@ export interface SwissShapedError {
 /** Independently sourced, caller-owned metadata. Null RV explicitly assumes zero; null magnitude is unavailable. */
 export interface StarCatalogEntry {
   name: string;
+  /** Optional caller-owned result label; lookup still uses name and aliases. */
+  displayName?: string;
   aliases: string[];
   hip: number;
   radialVelocityKmS: number | null;
@@ -172,6 +174,7 @@ export interface StarCatalogEntry {
 
 export interface ReviewedStarCatalogEntry extends StarCatalogEntry {
   identitySource: string;
+  displayNameSource?: string;
   qualityDecision: string;
   magnitudeSource?: string;
   magnitudeMissingReason?: string;

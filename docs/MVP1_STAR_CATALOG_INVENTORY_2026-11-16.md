@@ -24,7 +24,7 @@ must be resolved individually; an uncertain identity is not a valid HIP match.
   verification; a missing or unsuitable measurement must not become an
   unreported zero. The source describes heterogeneous historical estimates.
 - The [IAU WGSN announcement](https://www.iau.org/IAU/Iau/News/Ann2026/New-Star-Names-2026.aspx)
-  are identity leads, not automatic proof of every legacy alias or combined
+  provides identity leads, not automatic proof of every legacy alias or combined
   object. Resolve each name and component against the cited source.
 
 [CDS terms](https://cds.unistra.fr/legals/) require the license of each
@@ -94,6 +94,44 @@ duplicates. File hashes detect changed bytes but do not prove provenance or
 provide an atomic snapshot. The candidate parser's fictional tests and the
 real-file HIP2 binding check are software checks, not scientific validation.
 
+## Additional exact-name leads
+
+On 2026-11-16 a single exact-identifier query for those 29 names (both the
+bare name and `NAME ` prefix) against the [CDS-indicated Harvard SIMBAD mirror](https://simbad.cfa.harvard.edu/simbad/sim-tap/)
+returned four named objects. It provided HIP candidates for **Agena, Ahadi and
+Regor**; an inspection of those records gave respectively `(strict=false,
+traditional=false)`, `(false, false)` and `(false, true)`. Regor is not covered
+by the earlier traditional-policy decision merely because it passes the filter.
+The fourth object, **Praesepe**, is classified as an open cluster and has no
+single HIP in that response; handling its coordinates and magnitude requires a
+separate product and scientific choice. The other **25 names had no exact
+identifier result in this query**, not a finding that they are nonexistent.
+The query and response are kept locally for review; their SHA-256s are
+`00e41df48a452921dff9ccb5f73933077bad01eceeb6a7f8bc60cc0b5c42b785`
+and `91afaa059609ed9d4a184391dce78807fe96baf46a7a4b59e25eee037f7a01c5`.
+SIMBAD is a secondary identification lead and its dataset terms, crossmatches,
+component identities and changing mirror contents require review.
+
+The separately downloaded [preliminary WGSN naked-eye catalog](https://exopla.net/iau-wgsn-catalogs/)
+has 9,297 CSV records in this snapshot; exact comparison of its `Name` column
+against the same 29 strings produced no matches. Its SHA-256 is
+`cf06ae6b8f4f2452c7b797e63116f81a3ff39b1cda72163a75b3adbaa1332b5e`.
+This does not rule out aliases or matches in other fields. The file is retained
+only in the local review folder; its source describes it as preliminary.
+
+The CDS Sesame resolver at the Harvard mirror was also queried once per each
+of the 25 remaining names, with `-oxp/~SNV` and percent-encoded input. All 25
+requests completed at the transport layer: 23 responses reported no object and
+two (`Han`, `Wei`) were refused by the service's identifier check. A separate
+`Regulus` control returned a SIMBAD resolver record. These negative/refused
+responses do not prove the objects do not exist or settle alternate spellings.
+The 25 XML responses, input-to-file index and control are retained locally;
+each copy was verified by SHA-256. Further identity research remains open.
+
+An expanded [backend diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md)
+examined the 40 strict-filter candidates at three dates and recorded a result
+name-format difference and a reference-speed discrepancy for further review.
+
 ## Caller-reviewed manifest
 
 `prepareStarCatalog(manifest)` validates the *presence* and consistency of
@@ -101,6 +139,8 @@ explicit reviewer, astrometry source, data-use decision, quality policy, and
 per-object identity source and quality decision. Finite magnitudes and radial
 velocities each require their own source; a null requires an explicit missing
 reason. Duplicate HIPs and case-insensitive names/aliases are rejected. It
+accepts an optional caller-owned `displayName` only with `displayNameSource`;
+this label is returned in results and is not automatically a lookup alias. It
 returns `hips`, `qualityPolicy` and `stars` ready for the existing engine and
 facade. **It does not authenticate any source, establish data rights, inspect
 the HIP2 quality flags, or turn a review assertion into a scientific approval.**

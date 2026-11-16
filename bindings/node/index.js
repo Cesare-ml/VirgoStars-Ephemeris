@@ -342,13 +342,14 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
   const stars = new Map();
   for (const entry of starCatalog) {
     if (!entry || typeof entry.name !== 'string' || !entry.name.trim()
+      || !(entry.displayName === undefined || (typeof entry.displayName === 'string' && entry.displayName.trim()))
       || !Number.isSafeInteger(entry.hip) || entry.hip <= 0 || entry.hip > 0xffffffff
       || !(entry.radialVelocityKmS === null || (typeof entry.radialVelocityKmS === 'number' && Number.isFinite(entry.radialVelocityKmS)))
       || !(entry.magnitude === null || (typeof entry.magnitude === 'number' && Number.isFinite(entry.magnitude)))
       || !Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== 'string' || !alias.trim())) {
       throw coded('E_CATALOG', 'each star needs a name, HIP, aliases, explicit radialVelocityKmS and magnitude');
     }
-    const star = { name: entry.name.trim(), hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
+    const star = { name: entry.name.trim(), displayName: entry.displayName?.trim() ?? entry.name.trim(), hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
     for (const name of [entry.name, ...entry.aliases]) {
       const key = name.trim().toLocaleLowerCase('en-US');
       if (stars.has(key)) throw coded('E_CATALOG', `duplicate star name or alias: ${name}`);
@@ -457,13 +458,13 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
       deliver(args, guarded(() => {
         const star = findStar(args[0]);
         const flags = normalizeFlags(typeof args[2] === 'function' ? 0 : (args[2] ?? 0));
-        return { name: star.name, ...shape(engine.fixstarUt(star.hip, star.radialVelocityKmS, args[1], flags), flags) };
+        return { name: star.displayName, ...shape(engine.fixstarUt(star.hip, star.radialVelocityKmS, args[1], flags), flags) };
       })),
     swe_fixstar_mag: (...args) =>
       deliver(args, guarded(() => {
         const star = findStar(args[0]);
         if (star.magnitude === null) throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}`);
-        return { name: star.name, magnitude: star.magnitude };
+        return { name: star.displayName, magnitude: star.magnitude };
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
     // swe_houses(tjd_ut, geolat, geolon, hsys). The house systems are astrological methods and

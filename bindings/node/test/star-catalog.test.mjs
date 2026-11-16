@@ -39,4 +39,18 @@ test('catalog manifests reject missing evidence, implicit values and ambiguous i
   bad((m) => { m.stars.push({ ...m.stars[0], name: 'Other', aliases: [] }); });
   bad((m) => { m.qualityPolicy = 'automatic'; });
   bad((m) => { m.dataUseDecision = ''; });
+  bad((m) => { m.stars[0].displayName = 'Example,example'; });
+});
+
+test('a caller-supplied display name changes results without becoming a lookup alias', () => {
+  const input = fixture();
+  input.stars[0].displayName = 'Example,exFoo';
+  input.stars[0].displayNameSource = 'Fictional application naming convention';
+  const catalog = prepareStarCatalog(input);
+  const engine = { fixstarUt: () => ({ xx: [1, 2, 3, 4, 5, 6], rflag: 1, timeSource: 'test', notes: [] }) };
+  const facade = createSwissShapedFacade(engine, { starCatalog: catalog.stars });
+  assert.equal(facade.swe_fixstar_ut('Example alias', 2451545, 0).name, 'Example,exFoo');
+  assert.equal(facade.swe_fixstar_mag('Example').name, 'Example,exFoo');
+  assert.equal(facade.swe_fixstar_mag('Example,exFoo').code, 'E_STAR_NOT_FOUND');
+  assert.throws(() => createSwissShapedFacade(engine, { starCatalog: [{ ...catalog.stars[0], displayName: '' }] }), (e) => e.code === 'E_CATALOG');
 });

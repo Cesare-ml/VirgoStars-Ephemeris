@@ -29,6 +29,8 @@ function prepareStarCatalog(manifest) {
     const label = `stars[${index}]`;
     if (!entry || typeof entry !== 'object') fail(`${label} must be an object`);
     const name = nonempty(entry.name, `${label}.name`);
+    const displayName = entry.displayName === undefined ? undefined : nonempty(entry.displayName, `${label}.displayName`);
+    if (displayName !== undefined) nonempty(entry.displayNameSource, `${label}.displayNameSource`);
     if (!Number.isSafeInteger(entry.hip) || entry.hip <= 0 || entry.hip > 0xffffffff || hips.has(entry.hip)) {
       fail(`${label}.hip must be unique and within the u32 range`);
     }
@@ -53,7 +55,7 @@ function prepareStarCatalog(manifest) {
         nonempty(entry[source], `${label}.${source}`);
       }
     }
-    return { name, aliases, hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
+    return { name, aliases, ...(displayName === undefined ? {} : { displayName }), hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
   });
   return { stars, hips: [...hips], qualityPolicy: manifest.qualityPolicy, reviewer, astrometrySource, dataUseDecision };
 }

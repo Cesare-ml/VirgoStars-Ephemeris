@@ -22,7 +22,7 @@ test('unchanged backend builds a fictional chart and star via the explicit adapt
     schema: 'virgostars-star-manifest/1', reviewer: 'test',
     astrometrySource: 'Caller-provided HIP2 file', dataUseDecision: 'Local test only', qualityPolicy: 'strict',
     // A deliberately fictional name and magnitude; this is not a catalog source.
-    stars: [{ name: 'Test star', aliases: [], hip: 49669, radialVelocityKmS: null, magnitude: 1.23,
+    stars: [{ name: 'Test star', displayName: 'Test star,example', displayNameSource: 'Fictional backend convention', aliases: [], hip: 49669, radialVelocityKmS: null, magnitude: 1.23,
       identitySource: 'Fictional test mapping', qualityDecision: 'Test of strict policy',
       magnitudeSource: 'Fictional test magnitude', radialVelocityMissingReason: 'Test assumption' }],
   });
@@ -59,7 +59,7 @@ test('unchanged backend builds a fictional chart and star via the explicit adapt
     assert.ok(chart.houses[name].house.every(Number.isFinite), name);
   }
   const star = backend.getStella('2024-03-20 12:00:00', 12.5, 41.9, 'Test star');
-  assert.equal(star.name, 'Test star');
+  assert.equal(star.name, 'Test star,example');
   assert.equal(star.magnitude, 1.23);
   assert.ok(Number.isFinite(star.latlng.longitude));
   assert.ok(Number.isFinite(star.azalt.azimuth));
