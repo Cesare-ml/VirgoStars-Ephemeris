@@ -194,6 +194,11 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
             "invalid DAF summary or free pointers",
         ));
     }
+    let words_per_record = (RECORD_BYTES / WORD_BYTES) as u64;
+    // The DAF comment area occupies records 2 through the record before the
+    // first summary. Record 1 is the file header and is rejected separately.
+    // Modification (2026-11-16): exclude this reserved area from segment data.
+    let minimum_segment_address = (first as u64 - 1) * words_per_record + 1;
     let mut visited = HashSet::new();
     let mut segments = Vec::new();
     let mut current = first as u64;
@@ -243,6 +248,11 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
             {
                 return Err(SpkIndexError::InvalidFile("invalid SPK segment descriptor"));
             }
+            if (initial as u64) < minimum_segment_address {
+                return Err(SpkIndexError::InvalidFile(
+                    "SPK segment data overlaps DAF file header or reserved comment records",
+                ));
+            }
             let spk_type = integer(&record, ints + 12, order);
             if spk_type <= 0 {
                 return Err(SpkIndexError::InvalidFile("invalid SPK segment type"));
@@ -282,7 +292,6 @@ pub fn inspect_spk<R: Read + Seek>(source: &mut R) -> Result<SpkIndex, SpkIndexE
             "overlapping DAF summary or name records",
         ));
     }
-    let words_per_record = (RECORD_BYTES / WORD_BYTES) as u64;
     // Modification (2026-11-14): the first free DAF word must follow every
     // allocated summary/name record, including metadata appended after data.
     // Checking segment addresses alone misses a free pointer inside metadata.
@@ -555,6 +564,26 @@ mod tests {
 
     // Modification (2026-11-14): data addresses must not alias any DAF
     // summary or the immediately following name record, in either byte order.
+    // Modification (2026-11-16): reserved DAF comment-area regression.
+    #[test]
+    fn rejects_segment_data_in_reserved_comment_records_before_first_summary() {
+        for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
+            for (first, last) in [(129, 132), (256, 256)] {
+                let mut bytes = file(order, false);
+                let pointer = 2 * RECORD_BYTES + 3 * WORD_BYTES + 16;
+                put_i32(&mut bytes, pointer + 16, first, order);
+                put_i32(&mut bytes, pointer + 20, last, order);
+                assert!(matches!(
+                    parse(bytes),
+                    Err(SpkIndexError::InvalidFile(
+                        "SPK segment data overlaps DAF file header or reserved comment records"
+                    ))
+                ));
+            }
+            assert_eq!(parse(file(order, false)).unwrap().segments.len(), 1);
+        }
+    }
+
     #[test]
     fn rejects_segment_data_overlapping_primary_summary_or_name_record() {
         for order in [SpkByteOrder::LittleEndian, SpkByteOrder::BigEndian] {
