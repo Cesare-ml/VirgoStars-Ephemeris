@@ -19,10 +19,10 @@
 //! The caller supplies normalized x in [-1, 1]. For SPK type-2 records,
 //! d/dt = (d/dx) / radius_seconds.
 //!
-//! At exactly x = +/-1, the implementation uses scaled compensated closed-form
-//! sums for value and derivative. This avoids some false intermediate overflow
-//! under cancellation. The mitigation is bounded to endpoints; interior Clenshaw
-//! behavior is unchanged, and genuinely unrepresentable outputs still fail.
+//! At exactly x = +/-1, scaled compensated closed-form sums are a fallback
+//! only when the ordinary Clenshaw result is non-finite. Normal endpoint results
+//! retain the original Clenshaw rounding. The mitigation is endpoint-only, and
+//! genuinely unrepresentable outputs still fail.
 
 use crate::error::{EphemerisError, Result};
 
@@ -92,6 +92,9 @@ fn endpoint_value(coefficients: &[f64], x: f64) -> Result<f64> {
     ));
     let value = normalized * scale;
     if !value.is_finite() {
+        if x == -1.0 || x == 1.0 {
+            return endpoint_value(coefficients, x);
+        }
         return Err(EphemerisError::ArithmeticOverflow);
     }
     Ok(value)
@@ -136,12 +139,6 @@ fn endpoint_derivative(coefficients: &[f64], x: f64) -> Result<f64> {
 /// Endpoints -1 and +1 are allowed.
 pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSample> {
     validate_chebyshev_input(coefficients, x)?;
-    if x == -1.0 || x == 1.0 {
-        return Ok(ChebyshevSample {
-            value: endpoint_value(coefficients, x)?,
-            derivative_dx: endpoint_derivative(coefficients, x)?,
-        });
-    }
 
     // For k=n..1:
     //   b_k  = c_k + 2*x*b_(k+1) - b_(k+2)
@@ -162,6 +159,12 @@ pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSampl
     let value = coefficients[0] + x * b1 - b2;
     let derivative_dx = b1 + x * db1 - db2;
     if !value.is_finite() || !derivative_dx.is_finite() {
+        if x == -1.0 || x == 1.0 {
+            return Ok(ChebyshevSample {
+                value: endpoint_value(coefficients, x)?,
+                derivative_dx: endpoint_derivative(coefficients, x)?,
+            });
+        }
         return Err(EphemerisError::ArithmeticOverflow);
     }
 
@@ -183,9 +186,6 @@ pub fn evaluate_chebyshev(coefficients: &[f64], x: f64) -> Result<ChebyshevSampl
 /// `evaluate_chebyshev`, but avoid computing an irrelevant derivative.
 pub(crate) fn evaluate_chebyshev_value(coefficients: &[f64], x: f64) -> Result<f64> {
     validate_chebyshev_input(coefficients, x)?;
-    if x == -1.0 || x == 1.0 {
-        return endpoint_value(coefficients, x);
-    }
     let (mut b1, mut b2) = (0.0_f64, 0.0_f64);
     for &coefficient in coefficients.iter().skip(1).rev() {
         let b = coefficient + 2.0 * x * b1 - b2;
