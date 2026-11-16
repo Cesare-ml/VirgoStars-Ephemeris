@@ -592,6 +592,7 @@ mod tests {
             let mut bytes = file(order, false);
             put_i32(&mut bytes, 76, 2, order);
             put_i32(&mut bytes, 80, 2, order);
+            put_f64(&mut bytes, RECORD_BYTES + 16, 1.0, order);
             write_segment(&mut bytes, 2, order, 399, -10.0, 100.0, 513);
             let index = parse(bytes)
                 .expect("record two can be the first summary when no comments are reserved");
