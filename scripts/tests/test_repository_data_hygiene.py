@@ -37,6 +37,8 @@ class RepositoryDataHygieneTests(unittest.TestCase):
             "nested/planet.BSP.XZ", "earth.tpc.zst", "sclk.tsc.zip",
             # Modification (2026-11-14): layered archives and tar aliases.
             "data/de441.eph.tar.gz", "archives/DE440.BSP.ZIP.XZ",
+            "archives/de440s.bsp.7z", "archives/DE441.eph.7Z",
+            "archives/de441.eph.tar.7z",
             "venus.se1.TGZ", "leap.tls.tbz2", "earth.bpc.txz",
             "nested/kernel.BSP.TAR.ZST", "sclk.tsc.zip.gz",
         ]:
@@ -44,7 +46,7 @@ class RepositoryDataHygieneTests(unittest.TestCase):
                 self.assertTrue(checker.is_kernel_path(name))
         for name in [
             "src/engine.rs", "data/reference.csv", "docs/de441.eph.md",
-            "astrometry.bsp.txt", "docs/bundle.tar.gz",
+            "data/ordinary.7z", "astrometry.bsp.txt", "docs/bundle.tar.gz",
             "docs/model.bsp.notes.gz", "data/reference.csv.zip",
         ]:
             with self.subTest(name=name):
@@ -85,6 +87,22 @@ class RepositoryDataHygieneTests(unittest.TestCase):
             archive = root / "MERCURY.BSP.TAR.GZ"
             archive.write_bytes(b"synthetic placeholder, not a real kernel")
             subprocess.run(["git", "add", archive.name], cwd=root, check=True)
+            self.assertEqual(
+                checker.check_repository(root),
+                [(archive.name, "external kernel/ephemeris filename")],
+            )
+
+    # Modification (2026-11-16): staged 7-Zip archive names must fail closed.
+    def test_git_index_blocks_7z_wrapped_kernel_without_magic_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            archive = root / "de440s.bsp.7z"
+            ordinary = root / "ordinary.7z"
+            # Synthetic bytes deliberately do not contain a raw kernel header.
+            archive.write_bytes(b"synthetic 7-Zip placeholder, not a real kernel")
+            ordinary.write_bytes(b"ordinary compressed application data")
+            subprocess.run(["git", "add", archive.name, ordinary.name], cwd=root, check=True)
             self.assertEqual(
                 checker.check_repository(root),
                 [(archive.name, "external kernel/ephemeris filename")],

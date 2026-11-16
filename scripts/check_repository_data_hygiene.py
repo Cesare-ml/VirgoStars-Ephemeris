@@ -29,9 +29,9 @@ import sys
 KERNEL_EXTENSIONS = frozenset({
     ".bsp", ".eph", ".se1", ".bpc", ".tpc", ".tls", ".tf", ".tsc",
 })
-# Modification (2026-11-14): recognize layered compression and tarball aliases
-# when screening names of tracked external-kernel files.
-ARCHIVE_EXTENSIONS = (".gz", ".xz", ".bz2", ".zst", ".zip", ".tar", ".tgz", ".tbz2", ".txz", ".tzst")
+# Modification (2026-11-14): recognize layered compression and tarball aliases.
+# Modification (2026-11-16): reject 7-Zip-wrapped external-kernel filenames.
+ARCHIVE_EXTENSIONS = (".gz", ".xz", ".bz2", ".zst", ".zip", ".7z", ".tar", ".tgz", ".tbz2", ".txz", ".tzst")
 SPK_MAGIC = b"DAF/SPK "
 CLASSIC_MAGIC = b"JPL Planetary Ephemeris DE"
 
