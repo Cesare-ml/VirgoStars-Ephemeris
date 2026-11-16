@@ -1,0 +1,112 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.calcUt (UT Julian date input)",
+  "commit": "20b48de"
+ },
+ "purpose": "Measure the effect of the declared UT policy (UT1 taken as UTC after 1972; Espenak-Meeus DeltaT before) against the reference library own UT handling. Positions in the TDB entry were already compared separately.",
+ "reference": {
+  "name": "Swiss Ephemeris C library (AGPL-3.0), JPL mode on the same DE441 file, swe_calc_ut",
+  "version": "2.10.03 via sweph-sys 0.3.0",
+  "use": "local only, not committed"
+ },
+ "grid": {
+  "start_jd_ut": 2415100.5,
+  "step_days": 367.3,
+  "stop_before_jd_ut": 2461500,
+  "dates": 127,
+  "flags": "JPLEPH|SPEED (solar deflection on in both)"
+ },
+ "pre_1972_deltaT_polynomial": {
+  "Sun": {
+   "longitude_max_abs_diff_arcsec": 0.0476435144264542,
+   "latitude_max_abs_diff_arcsec": 0.00029256866855069895
+  },
+  "Moon": {
+   "longitude_max_abs_diff_arcsec": 0.6404256273071951,
+   "latitude_max_abs_diff_arcsec": 0.05718543046375757
+  },
+  "Mercury": {
+   "longitude_max_abs_diff_arcsec": 0.08615314454800682,
+   "latitude_max_abs_diff_arcsec": 0.009277253558570564
+  },
+  "Venus": {
+   "longitude_max_abs_diff_arcsec": 0.059797249878101866,
+   "latitude_max_abs_diff_arcsec": 0.004845310413692516
+  },
+  "Mars": {
+   "longitude_max_abs_diff_arcsec": 0.0345934404322179,
+   "latitude_max_abs_diff_arcsec": 0.00177910001700754
+  },
+  "Jupiter": {
+   "longitude_max_abs_diff_arcsec": 0.011158849792991532,
+   "latitude_max_abs_diff_arcsec": 0.0005873166948777708
+  },
+  "Saturn": {
+   "longitude_max_abs_diff_arcsec": 0.0055177786180138355,
+   "latitude_max_abs_diff_arcsec": 0.0005354112033728597
+  },
+  "Uranus": {
+   "longitude_max_abs_diff_arcsec": 0.0007044048288662452,
+   "latitude_max_abs_diff_arcsec": 0.00053624646912942
+  },
+  "Neptune": {
+   "longitude_max_abs_diff_arcsec": 0.0008278926088678418,
+   "latitude_max_abs_diff_arcsec": 0.0005764164913379943
+  },
+  "Pluto": {
+   "longitude_max_abs_diff_arcsec": 0.0008894729944586288,
+   "latitude_max_abs_diff_arcsec": 0.0006719905464080966
+  }
+ },
+ "post_1972_ut1_taken_as_utc": {
+  "Sun": {
+   "longitude_max_abs_diff_arcsec": 0.02601673086246592,
+   "latitude_max_abs_diff_arcsec": 0.000058785842485954264
+  },
+  "Moon": {
+   "longitude_max_abs_diff_arcsec": 0.3891373517944885,
+   "latitude_max_abs_diff_arcsec": 0.011464051452136914
+  },
+  "Mercury": {
+   "longitude_max_abs_diff_arcsec": 0.03652218265415286,
+   "latitude_max_abs_diff_arcsec": 0.003324455638775703
+  },
+  "Venus": {
+   "longitude_max_abs_diff_arcsec": 0.027658945009534364,
+   "latitude_max_abs_diff_arcsec": 0.0032904785999932074
+  },
+  "Mars": {
+   "longitude_max_abs_diff_arcsec": 0.01667626784183085,
+   "latitude_max_abs_diff_arcsec": 0.001350414831957636
+  },
+  "Jupiter": {
+   "longitude_max_abs_diff_arcsec": 0.005792770525658852,
+   "latitude_max_abs_diff_arcsec": 0.00009448385513977087
+  },
+  "Saturn": {
+   "longitude_max_abs_diff_arcsec": 0.002417031055301777,
+   "latitude_max_abs_diff_arcsec": 0.00011138237212549029
+  },
+  "Uranus": {
+   "longitude_max_abs_diff_arcsec": 0.0007281999387487303,
+   "latitude_max_abs_diff_arcsec": 0.00005310276178782658
+  },
+  "Neptune": {
+   "longitude_max_abs_diff_arcsec": 0.0001732897089823382,
+   "latitude_max_abs_diff_arcsec": 0.00008285079662329053
+  },
+  "Pluto": {
+   "longitude_max_abs_diff_arcsec": 0.0007985800948517863,
+   "latitude_max_abs_diff_arcsec": 0.00016585767639298865
+  }
+ },
+ "reading": "Sun and planets differ by at most 0.09 arcsec; the Moon by up to 0.64 arcsec before 1972 and 0.39 arcsec after, which corresponds to roughly 1.2 s and 0.7 s of time. After 1972 that is the unmodeled UT1-UTC (|UT1-UTC| < 0.9 s); before 1972 it is the difference between the smoothed polynomial fits and the reference table. Closing it needs measured UT1-UTC/Delta T data, which this package does not bundle.",
+ "not_established": [
+  "agreement with JPL Horizons",
+  "dates outside 1900-01-01..2027-06-28 UT (rejected, not extrapolated)"
+ ]
+}

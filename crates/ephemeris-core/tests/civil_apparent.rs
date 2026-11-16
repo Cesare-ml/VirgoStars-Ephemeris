@@ -18,8 +18,8 @@
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::ApparentOptions;
 use virgostars_ephemeris_core::civil_apparent::{
-    civil_to_tdb_with_policy, geocentric_apparent_six_fields_many_from_civil, CivilApparentError,
-    CivilTimeSource,
+    civil_to_tdb_with_policy, geocentric_apparent_six_fields_many_from_civil,
+    jd_ut_to_tdb_with_policy, CivilApparentError, CivilTimeSource,
 };
 use virgostars_ephemeris_core::de441::{Body, De441};
 use virgostars_ephemeris_core::delta_t::{
@@ -139,6 +139,28 @@ fn rejects_unsupported_instants_bad_offsets_and_leap_second_labels() {
         civil_to_tdb_with_policy(civil(2001, 2, 30, 0, 0, 0)),
         Err(CivilApparentError::Calendar(_))
     ));
+}
+
+#[test]
+fn ut_julian_date_entry_agrees_with_the_civil_entry_and_has_hard_limits() {
+    for (c, jd) in [
+        (civil(2000, 1, 1, 12, 0, 0), 2_451_545.0),
+        (civil(1950, 1, 1, 12, 0, 0), 2_433_283.0),
+        (civil(1900, 1, 1, 0, 0, 0), 2_415_020.5),
+        (civil(2027, 6, 27, 23, 0, 0), 2_461_584.5 - 1.0 / 24.0),
+    ] {
+        let (a, sa) = civil_to_tdb_with_policy(c).unwrap();
+        let (b, sb) = jd_ut_to_tdb_with_policy(jd).unwrap();
+        assert!((a.0 - b.0).abs() * 86_400.0 < 1e-3, "{jd}: {} {}", a.0, b.0);
+        assert_eq!(
+            std::mem::discriminant(&sa),
+            std::mem::discriminant(&sb),
+            "{jd}"
+        );
+    }
+    for jd in [2_415_020.499, 2_461_584.5, f64::NAN, 1.0e7] {
+        assert!(jd_ut_to_tdb_with_policy(jd).is_err(), "{jd}");
+    }
 }
 
 #[test]

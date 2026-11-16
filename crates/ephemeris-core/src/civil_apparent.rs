@@ -39,7 +39,7 @@ use crate::apparent_ecliptic_of_date::{
     geocentric_apparent_six_fields_many_with_options, ApparentError, ApparentOptions,
     ApparentSixFieldsDegreesAu,
 };
-use crate::calendar::{Calendar, CalendarDateTime, CalendarError, TimeScale};
+use crate::calendar::{Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale};
 use crate::de441::{Body, De441, JulianDateTdb};
 use crate::delta_t::{
     decimal_year_from_jd, delta_t_seconds_1900_1972, DeltaTError, DELTA_T_1900_1972_MODEL_ID,
@@ -48,6 +48,8 @@ use crate::first_sky::{CivilTimestamp, SkyError};
 
 const JD_1900_01_01: f64 = 2_415_020.5;
 const JD_1972_01_01: f64 = 2_441_317.5;
+/// 2027-06-28 00:00 UT, the first instant outside the IERS table.
+const JD_2027_06_28: f64 = 2_461_584.5;
 const J2000_JD: f64 = 2_451_545.0;
 
 /// Which rule produced the TDB epoch of a civil result.
@@ -166,6 +168,11 @@ pub fn civil_to_tdb_with_policy(
             Err(e) => Err(e.into()),
         };
     }
+    historical_tdb(jd_ut)
+}
+
+/// 1900–1972: `TT = UT + ΔT`, TDB = TT + leading periodic term.
+fn historical_tdb(jd_ut: f64) -> Result<(JulianDateTdb, CivilTimeSource), CivilApparentError> {
     let delta_t = delta_t_seconds_1900_1972(decimal_year_from_jd(jd_ut))?;
     let jd_tt = jd_ut + delta_t / 86_400.0;
     // Leading term of TDB − TT (seconds), consistent with the apparent module.
@@ -178,6 +185,40 @@ pub fn civil_to_tdb_with_policy(
             delta_t_seconds: delta_t,
         },
     ))
+}
+
+/// Convert a **UT Julian date** (the argument of Swiss-style `*_ut` calls) to
+/// TDB under the same declared policy as [`civil_to_tdb_with_policy`]. UT1 is
+/// taken as UTC after 1972, as there. Outside 1900-01-01 … 2027-06-28 UT it is
+/// an error; nothing is extrapolated.
+pub fn jd_ut_to_tdb_with_policy(
+    jd_ut: f64,
+) -> Result<(JulianDateTdb, CivilTimeSource), CivilApparentError> {
+    if !jd_ut.is_finite() {
+        return Err(CivilApparentError::InvalidCivil("non-finite Julian date"));
+    }
+    if !(JD_1900_01_01..JD_2027_06_28).contains(&jd_ut) {
+        return Err(CivilApparentError::UnsupportedInstant);
+    }
+    if jd_ut < JD_1972_01_01 {
+        return historical_tdb(jd_ut);
+    }
+    let civil =
+        JulianDate::from_f64(jd_ut, TimeScale::Ut1)?.to_calendar(Calendar::ProlepticGregorian)?;
+    let timestamp = CivilTimestamp {
+        year: civil.year,
+        month: civil.month,
+        day: civil.day,
+        hour: civil.hour,
+        minute: civil.minute,
+        second: civil.second,
+        utc_offset_minutes: 0,
+    };
+    match timestamp.to_approximate_tdb_julian_date() {
+        Ok(tdb) => Ok((tdb, CivilTimeSource::IersLeapSeconds)),
+        Err(SkyError::UnsupportedUtc) => Err(CivilApparentError::UnsupportedInstant),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Geocentric apparent six fields for several bodies at a civil time.
