@@ -156,22 +156,71 @@ fn ancestors<S: SpkStateResolver>(resolver: &S, body: i32, et: f64) -> (Vec<i32>
 ///
 /// Modification (2026-11-14): preserve small signed link contributions
 /// across center-chain and target-minus-observer cancellation.
+// Modification (2026-11-16): power-of-two scaling keeps finite signed
+// reductions from overflowing before later center-chain cancellation.
 #[derive(Clone, Copy, Default)]
 struct CompensatedSum {
+    /// Neumaier sum expressed in units of 2^scale_exponent.
     value: f64,
     correction: f64,
+    /// Never negative: values below one do not need scaling.
+    scale_exponent: i32,
 }
 
 impl CompensatedSum {
+    /// Return floor(log2(value)) for a positive, finite binary64 value.
+    fn binary_exponent(value: f64) -> i32 {
+        let bits = value.to_bits();
+        let encoded = ((bits >> 52) & 0x7ff) as i32;
+        if encoded != 0 {
+            encoded - 1023
+        } else {
+            let significand = bits & ((1_u64 << 52) - 1);
+            (63 - significand.leading_zeros() as i32) - 1074
+        }
+    }
+
     fn add(&mut self, term: f64) -> Result<(), SpkRelativeError> {
-        let next = self.value + term;
+        if !term.is_finite() {
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+        if term == 0.0 {
+            return Ok(());
+        }
+
+        let exponent = Self::binary_exponent(term.abs());
+        if exponent > self.scale_exponent {
+            let factor = 2.0_f64.powi(self.scale_exponent - exponent);
+            let scaled_value = self.value * factor;
+            let scaled_correction = self.correction * factor;
+            // Do not silently discard an accumulated component when a later
+            // term requires a scale outside binary64's representable range.
+            if (self.value != 0.0 && scaled_value == 0.0)
+                || (self.correction != 0.0 && scaled_correction == 0.0)
+            {
+                return Err(SpkRelativeError::NumericalOverflow);
+            }
+            self.value = scaled_value;
+            self.correction = scaled_correction;
+            self.scale_exponent = exponent;
+        }
+
+        let scale = 2.0_f64.powi(-self.scale_exponent);
+        let scaled_term = term * scale;
+        if scaled_term == 0.0 {
+            // A nonzero input below the normalized binary64 range cannot be
+            // represented under the current common scale: fail closed.
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+
+        let next = self.value + scaled_term;
         if !next.is_finite() {
             return Err(SpkRelativeError::NumericalOverflow);
         }
-        let roundoff = if self.value.abs() >= term.abs() {
-            (self.value - next) + term
+        let roundoff = if self.value.abs() >= scaled_term.abs() {
+            (self.value - next) + scaled_term
         } else {
-            (term - next) + self.value
+            (scaled_term - next) + self.value
         };
         self.correction += roundoff;
         if !self.correction.is_finite() {
@@ -182,7 +231,11 @@ impl CompensatedSum {
     }
 
     fn finish(self) -> Result<f64, SpkRelativeError> {
-        let value = self.value + self.correction;
+        let normalized = self.value + self.correction;
+        if !normalized.is_finite() {
+            return Err(SpkRelativeError::NumericalOverflow);
+        }
+        let value = normalized * 2.0_f64.powi(self.scale_exponent);
         if !value.is_finite() {
             return Err(SpkRelativeError::NumericalOverflow);
         }
@@ -696,6 +749,58 @@ mod compensated_chain_tests {
         let state = resolve_relative(&mut resolver, 100, 0, 0.0).unwrap();
         assert_eq!(state.position_km, [1.0, 0.0, 0.0]);
         assert_eq!(state.velocity_km_per_second, [0.0, 1.0, 0.0]);
+    }
+
+    // Modification (2026-11-16): finite-result-safe scaled cancellation.
+    #[test]
+    fn large_intermediate_target_sum_can_cancel_to_finite_nonzero_result() {
+        let a = 9.0e307;
+        let links = vec![
+            link(100, 101, [a, 0.0, 0.0], [0.0; 3]),
+            link(101, 102, [a, 0.0, 0.0], [0.0; 3]),
+            link(102, 0, [-a, 0.0, 0.0], [0.0; 3]),
+        ];
+        let mut resolver = MockResolver { links };
+        let forward = resolve_relative(&mut resolver, 100, 0, 0.0).unwrap();
+        assert_eq!(forward.position_km, [a, 0.0, 0.0]);
+        let reverse = resolve_relative(&mut resolver, 0, 100, 0.0).unwrap();
+        assert_eq!(reverse.position_km, [-a, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn four_maximum_magnitude_links_cancel_across_target_and_center() {
+        let a = f64::MAX;
+        let mut resolver = MockResolver {
+            links: vec![
+                link(100, 101, [a, 0.0, 0.0], [0.0; 3]),
+                link(101, 0, [a, 0.0, 0.0], [0.0; 3]),
+                link(200, 201, [a, 0.0, 0.0], [0.0; 3]),
+                link(201, 0, [a, 0.0, 0.0], [0.0; 3]),
+            ],
+        };
+        let forward = resolve_relative(&mut resolver, 100, 200, 0.0).unwrap();
+        assert_eq!(forward.position_km, [0.0; 3]);
+        let reverse = resolve_relative(&mut resolver, 200, 100, 0.0).unwrap();
+        assert_eq!(reverse.position_km, [0.0; 3]);
+    }
+
+    #[test]
+    fn scaled_sum_preserves_four_ulp_nonzero_residual_in_both_directions() {
+        let a = 9.0e307_f64;
+        let ulp = f64::from_bits(a.to_bits() + 1) - a;
+        let smaller = a - 4.0 * ulp;
+        let mut resolver = MockResolver {
+            links: vec![
+                link(100, 101, [a, 0.0, 0.0], [0.0; 3]),
+                link(101, 102, [a, 0.0, 0.0], [0.0; 3]),
+                link(102, 103, [-a, 0.0, 0.0], [0.0; 3]),
+                link(103, 0, [-smaller, 0.0, 0.0], [0.0; 3]),
+            ],
+        };
+        let forward = resolve_relative(&mut resolver, 100, 0, 0.0).unwrap();
+        assert_eq!(forward.position_km[0], 4.0 * ulp);
+        let reverse = resolve_relative(&mut resolver, 0, 100, 0.0).unwrap();
+        assert_eq!(reverse.position_km[0], -4.0 * ulp);
     }
 
     #[test]
