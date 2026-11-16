@@ -80,7 +80,7 @@ fn a_fixed_icrf_direction_drifts_at_the_precession_rate_only() {
     // bounded nutation rate (< ~0.1 arcsec/day); latitude rate stays tiny.
     let r = 1.0e9_f64;
     let s = state([r, 0.0, 0.0], [0.0, 0.0, 0.0], J2000);
-    let a = apparent_ecliptic_of_date_from_aberrated_state(&s).unwrap();
+    let a = apparent_ecliptic_of_date_from_aberrated_state(&s, false).unwrap();
     let six = apparent_to_degrees_au(&a).unwrap();
     let lon_rate_arcsec_per_day = six.fields.longitude_speed_deg_per_tdb_day * 3600.0;
     assert!(
@@ -107,9 +107,9 @@ fn velocity_is_rotated_with_the_frame_not_merely_copied() {
         [10.0e6, 2.0e6, 3.0e5],
         J2000 + 5000.25,
     );
-    let a = apparent_ecliptic_of_date_from_aberrated_state(&moving).unwrap();
+    let a = apparent_ecliptic_of_date_from_aberrated_state(&moving, false).unwrap();
     let still = state([1.5e8, 2.0e7, -1.0e6], [0.0; 3], J2000 + 5000.25);
-    let b = apparent_ecliptic_of_date_from_aberrated_state(&still).unwrap();
+    let b = apparent_ecliptic_of_date_from_aberrated_state(&still, false).unwrap();
     let delta = a.spherical.distance_rate_km_per_day - b.spherical.distance_rate_km_per_day;
     let speed = (1.0e7_f64.powi(2) + 2.0e6_f64.powi(2) + 3.0e5_f64.powi(2)).sqrt();
     assert!(delta.abs() <= speed + 1.0, "{delta} {speed}");
@@ -134,25 +134,25 @@ fn rejects_earth_target_bad_metadata_and_unvalidated_epochs() {
     let mut earth = state([1.0e8, 0.0, 0.0], [0.0; 3], J2000);
     earth.target = Body::Earth;
     assert!(matches!(
-        apparent_ecliptic_of_date_from_aberrated_state(&earth),
+        apparent_ecliptic_of_date_from_aberrated_state(&earth, false),
         Err(ApparentError::InvalidIntermediate)
     ));
     let mut late = state([1.0e8, 0.0, 0.0], [0.0; 3], J2000);
     late.emission_epoch = JulianDateTdb(J2000 + 1.0);
     assert!(matches!(
-        apparent_ecliptic_of_date_from_aberrated_state(&late),
+        apparent_ecliptic_of_date_from_aberrated_state(&late, false),
         Err(ApparentError::InvalidIntermediate)
     ));
     // IAU 2000B is only validated for 1900-2100 TT: fail closed outside it.
     for tdb in [2_415_000.0, 2_488_100.0, 1.0e6, 3.0e6] {
         let s = state([1.0e8, 0.0, 0.0], [0.0; 3], tdb);
         assert!(matches!(
-            apparent_ecliptic_of_date_from_aberrated_state(&s),
+            apparent_ecliptic_of_date_from_aberrated_state(&s, false),
             Err(ApparentError::Orientation(_))
         ));
     }
     let nan = state([f64::NAN, 0.0, 0.0], [0.0; 3], J2000);
-    assert!(apparent_ecliptic_of_date_from_aberrated_state(&nan).is_err());
+    assert!(apparent_ecliptic_of_date_from_aberrated_state(&nan, false).is_err());
 }
 
 #[test]

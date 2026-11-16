@@ -14,7 +14,7 @@
 
 //! Offline CLI: classic DE441 → apparent geocentric ecliptic of date.
 //!
-//! Usage: `apparent_six_fields <de441.eph> <TDB-JD> [Body ...]`
+//! Usage: `apparent_six_fields [--no-solar-deflection] <de441.eph> <TDB-JD> [Body ...]`
 //!
 //! The DE441 file is supplied by the caller and never copied or downloaded.
 //! Output is CSV on stdout with explicit frame/correction provenance, in
@@ -24,7 +24,8 @@ use std::env;
 use std::error::Error;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    geocentric_apparent_six_fields_many, APPLIED_CORRECTIONS, NOT_APPLIED_CORRECTIONS,
+    applied_corrections, geocentric_apparent_six_fields_many_with_options, not_applied_corrections,
+    ApparentOptions,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 
@@ -42,7 +43,12 @@ const DEFAULT_TARGETS: [(&str, Body); 10] = [
 ];
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    let mut options = ApparentOptions::default();
+    if let Some(pos) = args.iter().position(|a| a == "--no-solar-deflection") {
+        args.remove(pos);
+        options.solar_light_deflection = false;
+    }
     if args.len() < 3 {
         return Err("usage: apparent_six_fields <de441.eph> <TDB-JD> [Body ...]".into());
     }
@@ -66,7 +72,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let bodies: Vec<Body> = selected.iter().map(|(_, b)| *b).collect();
     let mut ephemeris = De441::open(&args[1])?;
-    let rows = geocentric_apparent_six_fields_many(&mut ephemeris, &bodies, JulianDateTdb(jd))?;
+    let rows = geocentric_apparent_six_fields_many_with_options(
+        &mut ephemeris,
+        &bodies,
+        JulianDateTdb(jd),
+        options,
+    )?;
     println!("target,tdb_jd,tt_jd,longitude_deg,latitude_deg,distance_au,longitude_speed_deg_per_tdb_day,latitude_speed_deg_per_tdb_day,distance_speed_au_per_tdb_day,frame,applied,not_applied");
     for ((name, _), row) in selected.iter().zip(rows.iter()) {
         println!(
@@ -78,8 +89,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             row.fields.longitude_speed_deg_per_tdb_day,
             row.fields.latitude_speed_deg_per_tdb_day,
             row.fields.distance_speed_au_per_tdb_day,
-            APPLIED_CORRECTIONS.join(";"),
-            NOT_APPLIED_CORRECTIONS.join(";"),
+            applied_corrections(options).join(";"),
+            not_applied_corrections(options).join(";"),
         );
     }
     Ok(())

@@ -42,6 +42,7 @@ pub mod de441_epoch_bridge;
 pub mod earth_orientation;
 pub mod error;
 pub mod first_sky;
+pub mod light_deflection;
 pub mod light_time;
 pub mod six_field_units;
 pub mod spk_batch;

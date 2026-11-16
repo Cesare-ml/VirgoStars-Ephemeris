@@ -19,6 +19,7 @@
 //! ```text
 //! classic DE441 (TDB, ICRF, km, km/day)
 //!   → geocentric one-way light-time          (light_time)
+//!   → solar gravitational light deflection  (light_deflection, optional)
 //!   → special-relativistic annual aberration (aberration, aberration_state,
 //!                                             analytic Earth acceleration)
 //!   → IAU 2006 bias-precession + IAU 2000B nutation + true obliquity
@@ -45,8 +46,8 @@
 //!
 //! # Not included (stated, never silently approximated)
 //!
-//! - gravitational light deflection by the Sun and planets (up to roughly
-//!   0.004 arcsecond near the Sun; Swiss applies it by default),
+//! - gravitational light deflection by the planets (Jupiter < 0.0002 arcsecond),
+//!   and the Sun's when `ApparentOptions::solar_light_deflection` is false,
 //! - topocentric parallax/diurnal aberration (this is **geocentric**),
 //! - planet-center correction for system barycenters: a barycenter target
 //!   stays a barycenter in the output `target` label,
@@ -60,16 +61,17 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::aberration_state::{
-    geocentric_light_time_annual_aberration_analytic,
-    geocentric_light_time_annual_aberration_with_earth, AberratedGeocentricState,
-    AberratedStateError, ObserverAccelerationSource,
+    aberrate_light_time_state, AberratedGeocentricState, AberratedStateError,
+    ObserverAccelerationSource,
 };
 use crate::coordinates::{project_fixed_axes, ProjectionError, SphericalState};
-use crate::de441::{Body, De441, JulianDateTdb, StateVector};
+use crate::de441::{Body, De441, JulianDateTdb, StateVector, StateVectorWithAcceleration};
 use crate::earth_orientation::{
     matrix_vector_multiply, true_ecliptic_of_date_matrix, Matrix3x3, OrientationError,
     DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
 };
+use crate::light_deflection::{deflect_light_time_state_by_sun, DeflectionError};
+use crate::light_time::geocentric_light_time;
 use crate::six_field_units::{
     fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
 };
@@ -77,20 +79,49 @@ use crate::six_field_units::{
 /// Half-step, in TT days, of the central difference used for `dM/dt`.
 pub const MATRIX_RATE_HALF_STEP_DAYS: f64 = 0.01;
 
-/// Identifiers of the physical corrections that were applied, in order.
-pub const APPLIED_CORRECTIONS: [&str; 4] = [
-    "one-way geocentric light-time",
-    "annual aberration (special-relativistic)",
-    "IAU 2006 frame bias and precession",
-    "IAU 2000B nutation and true obliquity",
-];
+/// Which optional corrections to apply. The default is the physically
+/// complete set this module offers (solar deflection on).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApparentOptions {
+    /// Apply first-order solar light deflection before aberration.
+    pub solar_light_deflection: bool,
+}
 
-/// Identifiers of corrections that are **not** applied.
-pub const NOT_APPLIED_CORRECTIONS: [&str; 3] = [
-    "gravitational light deflection",
-    "topocentric parallax and diurnal aberration",
-    "planetary-system barycenter to body-center offset",
-];
+impl Default for ApparentOptions {
+    fn default() -> Self {
+        Self {
+            solar_light_deflection: true,
+        }
+    }
+}
+
+/// Corrections applied for `options`, in order.
+pub fn applied_corrections(options: ApparentOptions) -> Vec<&'static str> {
+    let mut list = vec!["one-way geocentric light-time"];
+    if options.solar_light_deflection {
+        list.push("solar gravitational light deflection (first order, Sun only)");
+    }
+    list.extend([
+        "annual aberration (special-relativistic)",
+        "IAU 2006 frame bias and precession",
+        "IAU 2000B nutation and true obliquity",
+    ]);
+    list
+}
+
+/// Corrections that are **not** applied for `options`.
+pub fn not_applied_corrections(options: ApparentOptions) -> Vec<&'static str> {
+    let mut list = Vec::new();
+    if !options.solar_light_deflection {
+        list.push("solar gravitational light deflection");
+    }
+    list.extend([
+        "planetary gravitational light deflection",
+        "topocentric parallax and diurnal aberration",
+        "planetary-system barycenter to body-center offset",
+    ]);
+    list
+}
 
 /// Geocentric apparent spherical state in the true ecliptic and equinox of
 /// date. `spherical.tilt_rad` is always zero (the rotation is already
@@ -99,6 +130,7 @@ pub const NOT_APPLIED_CORRECTIONS: [&str; 3] = [
 pub struct ApparentEclipticOfDate {
     pub spherical: SphericalState,
     pub tt_jd: f64,
+    pub solar_deflection_applied: bool,
     pub emission_epoch: JulianDateTdb,
     pub light_time_seconds: f64,
     pub light_time_rate: f64,
@@ -110,6 +142,7 @@ pub struct ApparentEclipticOfDate {
 pub struct ApparentSixFieldsDegreesAu {
     pub fields: FixedSixFieldsDegreesAu,
     pub tt_jd: f64,
+    pub solar_deflection_applied: bool,
     pub emission_epoch: JulianDateTdb,
     pub light_time_seconds: f64,
     pub light_time_rate: f64,
@@ -120,6 +153,7 @@ pub struct ApparentSixFieldsDegreesAu {
 pub enum ApparentError {
     InvalidIntermediate,
     Aberration(AberratedStateError),
+    Deflection(DeflectionError),
     Orientation(OrientationError),
     Projection(ProjectionError),
     Units(UnitConversionError),
@@ -130,6 +164,7 @@ impl fmt::Display for ApparentError {
         match self {
             Self::InvalidIntermediate => write!(f, "invalid aberrated intermediate state"),
             Self::Aberration(e) => write!(f, "light-time/aberration: {e}"),
+            Self::Deflection(e) => write!(f, "solar deflection: {e}"),
             Self::Orientation(e) => write!(f, "earth orientation: {e}"),
             Self::Projection(e) => write!(f, "spherical projection: {e}"),
             Self::Units(e) => write!(f, "six-field units: {e}"),
@@ -141,6 +176,7 @@ impl Error for ApparentError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Aberration(e) => Some(e),
+            Self::Deflection(e) => Some(e),
             Self::Orientation(e) => Some(e),
             Self::Projection(e) => Some(e),
             Self::Units(e) => Some(e),
@@ -152,6 +188,11 @@ impl Error for ApparentError {
 impl From<AberratedStateError> for ApparentError {
     fn from(e: AberratedStateError) -> Self {
         Self::Aberration(e)
+    }
+}
+impl From<DeflectionError> for ApparentError {
+    fn from(e: DeflectionError) -> Self {
+        Self::Deflection(e)
     }
 }
 impl From<OrientationError> for ApparentError {
@@ -202,6 +243,7 @@ pub fn ecliptic_of_date_rotation_with_rate(
 /// Rotate an already aberrated ICRF state into the true ecliptic of date.
 pub fn apparent_ecliptic_of_date_from_aberrated_state(
     state: &AberratedGeocentricState,
+    solar_deflection_applied: bool,
 ) -> Result<ApparentEclipticOfDate, ApparentError> {
     if state.target == Body::Earth
         || !state.observation_epoch.0.is_finite()
@@ -235,6 +277,7 @@ pub fn apparent_ecliptic_of_date_from_aberrated_state(
     Ok(ApparentEclipticOfDate {
         spherical,
         tt_jd,
+        solar_deflection_applied,
         emission_epoch: state.emission_epoch,
         light_time_seconds: state.light_time_seconds,
         light_time_rate: state.light_time_rate,
@@ -249,6 +292,7 @@ pub fn apparent_to_degrees_au(
     Ok(ApparentSixFieldsDegreesAu {
         fields: fixed_spherical_to_degrees_au(&result.spherical)?,
         tt_jd: result.tt_jd,
+        solar_deflection_applied: result.solar_deflection_applied,
         emission_epoch: result.emission_epoch,
         light_time_seconds: result.light_time_seconds,
         light_time_rate: result.light_time_rate,
@@ -256,15 +300,63 @@ pub fn apparent_to_degrees_au(
     })
 }
 
-/// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch.
+/// Light-time → optional solar deflection → aberration, from Earth's state
+/// at the reception epoch (`earth` must be Earth relative to the barycenter
+/// at exactly `reception_epoch`).
+fn aberrated_state<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    earth: &StateVectorWithAcceleration,
+    options: ApparentOptions,
+) -> Result<AberratedGeocentricState, ApparentError> {
+    if earth.target != Body::Earth
+        || earth.center != Body::SolarSystemBarycenter
+        || earth.epoch != reception_epoch
+    {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    let mut light_time = geocentric_light_time(ephemeris, target, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    if options.solar_light_deflection {
+        light_time = deflect_light_time_state_by_sun(ephemeris, &light_time)?;
+    }
+    let mut state = aberrate_light_time_state(
+        &light_time,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )?;
+    state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+    Ok(state)
+}
+
+/// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch,
+/// default options (solar deflection on).
 pub fn geocentric_apparent_ecliptic_of_date<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     target: Body,
     reception_epoch: JulianDateTdb,
 ) -> Result<ApparentEclipticOfDate, ApparentError> {
-    let state =
-        geocentric_light_time_annual_aberration_analytic(ephemeris, target, reception_epoch)?;
-    apparent_ecliptic_of_date_from_aberrated_state(&state)
+    geocentric_apparent_ecliptic_of_date_with_options(
+        ephemeris,
+        target,
+        reception_epoch,
+        ApparentOptions::default(),
+    )
+}
+
+/// As [`geocentric_apparent_ecliptic_of_date`] with explicit options.
+pub fn geocentric_apparent_ecliptic_of_date_with_options<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
+) -> Result<ApparentEclipticOfDate, ApparentError> {
+    let earth = ephemeris
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    let state = aberrated_state(ephemeris, target, reception_epoch, &earth, options)?;
+    apparent_ecliptic_of_date_from_aberrated_state(&state, options.solar_light_deflection)
 }
 
 /// DE441 → apparent geocentric six fields (degrees, AU, per TDB day).
@@ -277,11 +369,27 @@ pub fn geocentric_apparent_six_fields<R: Read + Seek>(
     apparent_to_degrees_au(&result)
 }
 
-/// Several bodies at one TDB epoch; Earth is read once. All-or-error.
+/// Several bodies at one TDB epoch with default options; Earth is read once.
+/// All-or-error.
 pub fn geocentric_apparent_six_fields_many<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     targets: &[Body],
     reception_epoch: JulianDateTdb,
+) -> Result<Vec<ApparentSixFieldsDegreesAu>, ApparentError> {
+    geocentric_apparent_six_fields_many_with_options(
+        ephemeris,
+        targets,
+        reception_epoch,
+        ApparentOptions::default(),
+    )
+}
+
+/// As [`geocentric_apparent_six_fields_many`] with explicit options.
+pub fn geocentric_apparent_six_fields_many_with_options<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    targets: &[Body],
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
 ) -> Result<Vec<ApparentSixFieldsDegreesAu>, ApparentError> {
     if !reception_epoch.0.is_finite() {
         return Err(ApparentError::InvalidIntermediate);
@@ -296,13 +404,11 @@ pub fn geocentric_apparent_six_fields_many<R: Read + Seek>(
         .iter()
         .copied()
         .map(|target| {
-            let state = geocentric_light_time_annual_aberration_with_earth(
-                ephemeris,
-                target,
-                reception_epoch,
-                &earth,
+            let state = aberrated_state(ephemeris, target, reception_epoch, &earth, options)?;
+            let apparent = apparent_ecliptic_of_date_from_aberrated_state(
+                &state,
+                options.solar_light_deflection,
             )?;
-            let apparent = apparent_ecliptic_of_date_from_aberrated_state(&state)?;
             apparent_to_degrees_au(&apparent)
         })
         .collect()
