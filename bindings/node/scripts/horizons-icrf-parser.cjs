@@ -19,4 +19,17 @@ function parseIcrfTable(raw,name,command,epochs){
     return {raDeg:Number(fields[ra]),decDeg:Number(fields[dec])};
   });
 }
-module.exports={parseIcrfTable};
+function parseIcrfRatesTable(raw,name,command,epochs){
+  const positions=parseIcrfTable(raw,name,command,epochs);
+  const header=raw.split(/\r?\n/).find(line=>line.includes('RA_(ICRF-a-app)'));
+  const columns=header.split(',').map(x=>x.trim()),ra=columns.indexOf('I_dRA*cosD'),dec=columns.indexOf('I_d(DEC)/dt');
+  if(ra<0||dec<0)throw new Error(`missing ICRF rate columns: ${name}`);
+  const lines=raw.slice(raw.indexOf('$$SOE')+5,raw.indexOf('$$EOE')).trim().split(/\r?\n/);
+  return lines.map((line,i)=>{
+    const fields=line.split(',').map(x=>x.trim());
+    if(!fields[ra]||!fields[dec]||![Number(fields[ra]),Number(fields[dec])].every(Number.isFinite))
+      throw new Error(`invalid ICRF rates: ${name} row ${i}`);
+    return {...positions[i],raCosDecArcsecHour:Number(fields[ra]),decArcsecHour:Number(fields[dec])};
+  });
+}
+module.exports={parseIcrfTable,parseIcrfRatesTable};

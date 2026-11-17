@@ -7,6 +7,9 @@ The ordinary `calcTdb`/`calcUt` apparent path still has its existing date
 guard; this does not activate long-range calculations in the desktop or the
 main server.
 
+The [subsequent rates and historical-time diagnostic](PLANET_RATES_AND_HISTORICAL_TIME_2026-11-17.md)
+investigates the remaining rate discrepancy and ΔT uncertainty.
+
 ## Scope and methodology
 
 Ten geocentric targets: Sun, Moon, Mercury, Venus, and the Mars through Pluto

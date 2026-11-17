@@ -12,7 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
-//! Measured ΔT = TT − UT1 from caller-supplied US Naval Observatory tables.
+//! ΔT = TT − UT1 from caller-supplied US Naval Observatory tables.
 //!
 //! **No data is bundled and nothing is downloaded.** The caller passes the text of
 //! three public files published by the USNO Nautical Almanac Office
@@ -20,7 +20,7 @@
 //!
 //! | File | Content | Used for |
 //! |---|---|---|
-//! | `historic_deltat.data` | ΔT every half year, 1657 – 1984.5, with 1σ errors | before 1973 |
+//! | `historic_deltat.data` | ΔT every half year, 1657 – 1984.5, with source-reported errors | before 1973 |
 //! | `deltat.data` | ΔT on the first of each month, 1973-02-01 – the latest observation | measured period |
 //! | `deltat.preds` | quarterly predictions of TT−UT with errors | after the last observation, flagged `Predicted` |
 //!
@@ -31,11 +31,15 @@
 //!   the last observation. Overlaps are resolved in that order, never averaged.
 //! - Between two points ΔT is interpolated **linearly in UT days**; nothing is
 //!   extrapolated: before the first and after the last point the query fails.
-//! - Every value carries its kind (`Measured` or `Predicted`) and its 1σ
-//!   uncertainty when the source gives one.
+//! - Every value carries its legacy kind (`Measured` or `Predicted`) and the
+//!   interpolated source-reported error when available. `Measured` identifies
+//!   the non-prediction table; it does not imply direct atomic-clock
+//!   observations in centuries reconstructed from historical evidence.
 //! - The decimal year of the historic file is converted with the Julian-year
-//!   convention `JD = 2451545.0 + (year − 2000)·365.25`; the up-to-a-day ambiguity
-//!   changes ΔT by about a millisecond.
+//!   convention `JD = 2451545.0 + (year − 2000)·365.25`. The source file does
+//!   not specify this mapping. Relative to Gregorian calendar-year fractions,
+//!   the mismatch reaches 3.75 days over the supplied 1657–1984.5 snapshot;
+//!   the resulting ΔT shift depends on the local slope and is not assumed.
 //!
 //! The values are observational/model data of the USNO, not a product of this
 //! project, and are not covered by this repository's CPAL-1.0 license.
@@ -51,7 +55,9 @@ const MJD_TO_JD: f64 = 2_400_000.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeltaTKind {
+    /// Legacy label for a non-prediction table point, including reconstructions.
     Measured,
+    /// At least one neighboring point is from the prediction table.
     Predicted,
 }
 
@@ -67,7 +73,8 @@ struct Point {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DeltaTValue {
     pub delta_t_seconds: f64,
-    /// 1σ uncertainty interpolated from the neighbouring points, when known.
+    /// Source-reported error interpolated from neighbouring points, when known;
+    /// this does not establish its statistical meaning or interpolation error.
     pub uncertainty_seconds: Option<f64>,
     /// `Predicted` if either neighbour is a prediction.
     pub kind: DeltaTKind,
