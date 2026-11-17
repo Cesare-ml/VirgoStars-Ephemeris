@@ -3,14 +3,16 @@
 // Local exploratory cross-model comparison; no Swiss code or data is bundled.
 const fs=require('node:fs'), path=require('node:path'), crypto=require('node:crypto');
 const {Engine,julday}=require('../index.js');
-const rad=Math.PI/180, years=Array.from({length:21},(_,i)=>250*i);
+const {validationYears}=require('./planet-validation-years.cjs');
+const rad=Math.PI/180;
 const tdbToTt=jd=>jd-0.001657*Math.sin((357.5291092+35999.0502909*((jd-2451545)/36525))*rad)/86400;
 const wrap=x=>((x%360)+540)%360-180;
 const finite=(x,label)=>{if(typeof x!=='number'||!Number.isFinite(x))throw new Error(`invalid ${label}`);return x;};
 async function sha(p){const h=crypto.createHash('sha256');for await(const c of fs.createReadStream(p))h.update(c);return h.digest('hex');}
 async function main(){
-  const [kernel,expected,swissPackage,output,...extra]=process.argv.slice(2);
-  if(!kernel||!/^[a-f0-9]{64}$/.test(expected||'')||!swissPackage||!output||extra.length) throw new Error('usage: <de441> <sha256> <swisseph> <new-report>');
+  const [kernel,expected,swissPackage,output,grid,...extra]=process.argv.slice(2);
+  if(!kernel||!/^[a-f0-9]{64}$/.test(expected||'')||!swissPackage||!output||extra.length) throw new Error('usage: <de441> <sha256> <swisseph> <new-report> [grid]');
+  const years=validationYears(grid);
   if(fs.existsSync(output)||await sha(kernel)!==expected)throw new Error('output exists or kernel hash mismatch');
   const swiss=require(path.resolve(swissPackage)), engine=new Engine(path.resolve(kernel));
   swiss.swe_set_ephe_path(path.dirname(path.resolve(kernel)));swiss.swe_set_jpl_file(path.basename(kernel));
