@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { Engine, julday } = require('../index.js');
 const { validationYears } = require('./planet-validation-years.cjs');
+const { parseIcrfTable } = require('./horizons-icrf-parser.cjs');
 const bodies = [[0,'10','Sun'],[1,'301','Moon'],[2,'199','Mercury'],[3,'299','Venus'],
   [4,'4','Mars Barycenter'],[5,'5','Jupiter Barycenter'],[6,'6','Saturn Barycenter'],
   [7,'7','Uranus Barycenter'],[8,'8','Neptune Barycenter'],[9,'9','Pluto Barycenter']];
@@ -32,34 +33,23 @@ async function main() {
     // Keep request URLs bounded; validate each returned epoch independently.
     for (let offset=0;offset<years.length;offset+=61) {
       const batchTt=tt.slice(offset,offset+61);
-    const params=new URLSearchParams({format:'json',COMMAND:`'${command}'`,OBJ_DATA:"'NO'",MAKE_EPHEM:"'YES'",EPHEM_TYPE:"'OBSERVER'",
-      CENTER:"'500@399'",TLIST:`'${batchTt.map(x=>x.toFixed(9)).join(' ')}'`,TLIST_TYPE:"'JD'",TIME_TYPE:"'TT'",CAL_FORMAT:"'JD'",
-      QUANTITIES:"'45'",REF_SYSTEM:"'ICRF'",ANG_FORMAT:"'DEG'",CSV_FORMAT:"'YES'",EXTRA_PREC:"'YES'",APPARENT:"'AIRLESS'"});
-    const url=`https://ssd.jpl.nasa.gov/api/horizons.api?${params}`;
-    const response=await fetch(url,{signal:AbortSignal.timeout(30000)}); if (!response.ok) throw new Error(`Horizons HTTP ${response.status}`);
-    const raw=(await response.json()).result;
-    if (typeof raw!=='string' || !raw.includes(`Target body name: ${name} (${command})`)
-        || !/Target body name:.*\{source: DE441\}/.test(raw) || !/Center body name: Earth \(399\).*\{source: DE441\}/.test(raw)) throw new Error(`wrong target metadata: ${name}`);
-    const header=raw.split('\n  ').find(line=>line.includes('RA_(ICRF-a-app)'));
-    const start=raw.indexOf('$$SOE'), end=raw.indexOf('$$EOE');
-    if (!header || !header.includes('Date_________JDTT') || start<0 || end<=start) throw new Error(`invalid ICRF table: ${name}`);
-    const cols=header.split(',').map(x=>x.trim());
-    const ra=cols.indexOf('RA_(ICRF-a-app)'), dec=cols.indexOf('DEC_(ICRF-a-app)');
-    if (ra<0 || dec<0) throw new Error(`missing ICRF columns: ${header}`);
-    const table=raw.slice(start+5,end).trim().split('\n').map(line=>line.split(',').map(x=>x.trim()));
-    if (table.length!==batchTt.length) throw new Error(`wrong row count: ${name}`);
-    records.push(...table.map((fields,index)=>{
-      const i=offset+index;
-      if (!fields[0] || !Number.isFinite(Number(fields[0])) || Math.abs(Number(fields[0])-tt[i])>1e-8) throw new Error(`wrong TT epoch: ${name} row ${i}`);
-      if (!fields[ra] || !fields[dec] || !Number.isFinite(Number(fields[ra])) || !Number.isFinite(Number(fields[dec]))) throw new Error(`invalid coordinates: ${name}`);
-      const position=engine.experimentalApparentIcrfTdb(tdb[i],id).positionKm;
-      if (position.length!==3 || !position.every(Number.isFinite) || !Math.hypot(...position)) throw new Error('invalid engine state');
-      const differenceArcsec=separation(position,unit(Number(fields[ra]),Number(fields[dec])));
-      if (id===1) moonMaxArcsec=Math.max(moonMaxArcsec,differenceArcsec);
-      else otherMaxArcsec=Math.max(otherMaxArcsec,differenceArcsec);
-      return {year:years[i],jdTdb:tdb[i],referenceRaDeg:Number(fields[ra]),referenceDecDeg:Number(fields[dec]),differenceArcsec};
-    }));
-    requests.push({url,raw});
+      const params=new URLSearchParams({format:'json',COMMAND:`'${command}'`,OBJ_DATA:"'NO'",MAKE_EPHEM:"'YES'",EPHEM_TYPE:"'OBSERVER'",
+        CENTER:"'500@399'",TLIST:`'${batchTt.map(x=>x.toFixed(9)).join(' ')}'`,TLIST_TYPE:"'JD'",TIME_TYPE:"'TT'",CAL_FORMAT:"'JD'",
+        QUANTITIES:"'45'",REF_SYSTEM:"'ICRF'",ANG_FORMAT:"'DEG'",CSV_FORMAT:"'YES'",EXTRA_PREC:"'YES'",APPARENT:"'AIRLESS'"});
+      const url=`https://ssd.jpl.nasa.gov/api/horizons.api?${params}`;
+      const response=await fetch(url,{signal:AbortSignal.timeout(30000)}); if (!response.ok) throw new Error(`Horizons HTTP ${response.status}`);
+      const raw=(await response.json()).result;
+      const table=parseIcrfTable(raw,name,command,batchTt);
+      records.push(...table.map((fields,index)=>{
+        const i=offset+index;
+        const position=engine.experimentalApparentIcrfTdb(tdb[i],id).positionKm;
+        if (position.length!==3 || !position.every(Number.isFinite) || !Math.hypot(...position)) throw new Error('invalid engine state');
+        const differenceArcsec=separation(position,unit(fields.raDeg,fields.decDeg));
+        if (id===1) moonMaxArcsec=Math.max(moonMaxArcsec,differenceArcsec);
+        else otherMaxArcsec=Math.max(otherMaxArcsec,differenceArcsec);
+        return {year:years[i],jdTdb:tdb[i],referenceRaDeg:fields.raDeg,referenceDecDeg:fields.decDeg,differenceArcsec};
+      }));
+      requests.push({url,raw});
     }
     rows.push({name,command,...(requests.length===1?requests[0]:{requests}),records});
   }

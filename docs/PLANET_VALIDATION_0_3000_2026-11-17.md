@@ -90,7 +90,7 @@ node scripts/compare-swiss-seasonal.cjs <de441> <sha256> <swisseph> <new-report>
 The Horizons script batches requests and retains the public request URL and
 raw response in the ignored local report. Locally retained report SHA-256s:
 
-- `horizons-icrf-10.json`: `81006047e30bf7684955eccecf7993a95539b5c97c0aefde086fe09f8587e0c4`;
+- `horizons-icrf-10-review.json`: `52c64f17fd864949e570d4f8e08c263bd892bb5a44bb7557f1e771599fface4b`;
 - `swiss-10.json`: `808011e7462fbe064b56924bd4cd661875055b3c298f8bab2f52da4627d371f4`;
 - `swiss-seasonal-10.json`: `a117f45125d3a23f2cd232833dad23cd19241b59b936d5229548e5eef9ec7682`.
 
