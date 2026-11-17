@@ -72,8 +72,12 @@ export class Engine {
   experimentalLongTermMeanEclipticTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
   /** Experimental apparent position; extrapolated nutation has no established long-range accuracy. */
   experimentalLongTermApparentTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
+  /** Experimental mixed frame with directly fitted obliquity; no accuracy guarantee. */
+  experimentalLongTermDirectObliquityTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
   /** UT1 and caller-asserted Delta T seconds, uncertainty seconds and source required. */
   experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
+  /** Experimental mixed frame; UT1 and caller-asserted Delta T, uncertainty and source required. */
+  experimentalLongTermDirectObliquityUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   calcUt(jdUt: number, ipl: number, flags?: number): CalcResult;
   loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
   loadChiron(spkPath: string): void;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 // Modification (2026-11-17): experimental Vondrak long-term mean axes.
 // Modification (2026-11-17): extend the experimental guard to ancient epochs.
+// Modification (2026-11-17): add the separately fitted direct obliquity series.
 // Coefficient data from ERFA ltpecl/ltpequ: Copyright 2013-2023 NumFOCUS
 // Foundation; BSD-3, see third_party/ERFA_LICENSE.txt and THIRD_PARTY_NOTICES.md.
 //! Experimental mean equator/ecliptic of date for Julian epochs −13000..5001.
@@ -16,6 +17,20 @@ use crate::earth_orientation::{
 use std::f64::consts::TAU;
 
 const DAYS_PER_JULIAN_YEAR: f64 = 365.25;
+// Vondrák, Capitaine & Wallace (2011), Eq. (10), Table 3: ε_A terms.
+// Period in Julian centuries, cosine and sine amplitudes in arcseconds.
+const OBLIQUITY_TERMS: [[f64; 3]; 10] = [
+    [409.90, 753.872780, -1704.720302],
+    [396.15, -247.805823, -862.308358],
+    [537.22, 379.471484, 447.832178],
+    [402.90, -53.880558, -889.571909],
+    [417.15, -90.109153, 190.402846],
+    [288.92, -353.600190, -56.564991],
+    [4043.00, -63.115353, -296.222622],
+    [306.00, -28.248187, -75.859952],
+    [277.00, 17.703387, 67.473503],
+    [203.00, 38.911307, 3.014055],
+];
 const P_POLY: [[f64; 4]; 2] = [
     [5851.607687, -0.1189000, -0.00028913, 0.000000101],
     [-1600.886300, 1.1689818, -0.00000020, -0.000000437],
@@ -94,6 +109,27 @@ fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     ]
 }
 
+/// Independent direct ε_A series (radians), Eq. (10), Table 3 of Vondrák et
+/// al. (2011). It is fitted separately from the ecliptic/equator pole series,
+/// and can differ from the angle between those two poles at remote epochs.
+/// The numerical guard is experimental and is not an accuracy guarantee.
+pub fn experimental_direct_obliquity(tt_jd: f64) -> Result<f64, OrientationError> {
+    if !tt_jd.is_finite() {
+        return Err(OrientationError::NonFinite { field: "tt_jd" });
+    }
+    let epj = 2000.0 + (tt_jd - J2000_TT_JD) / DAYS_PER_JULIAN_YEAR;
+    if !(EXPERIMENTAL_MIN_JULIAN_EPOCH..=EXPERIMENTAL_MAX_JULIAN_EPOCH).contains(&epj) {
+        return Err(OrientationError::UnsupportedEpoch { epoch_tt_jd: tt_jd });
+    }
+    let t = (tt_jd - J2000_TT_JD) / 36525.0;
+    let mut arcsec = ((-0.000000110 * t - 0.000040397) * t + 0.3624445) * t + 84028.206305;
+    for [period, cosine, sine] in OBLIQUITY_TERMS {
+        let (s, c) = (TAU * t / period).sin_cos();
+        arcsec += cosine * c + sine * s;
+    }
+    Ok(arcsec * ARCSEC_TO_RAD)
+}
+
 /// J2000 mean equatorial axes to mean equator and ecliptic of TT date.
 /// Experimental numerical guard: Julian epochs −13000 through 5001; no frame
 /// bias or nutation. This range is not an accuracy guarantee.
@@ -123,6 +159,26 @@ pub fn mean_date_matrices(tt_jd: f64) -> Result<(Matrix3x3, Matrix3x3), Orientat
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn direct_obliquity_has_published_j2000_value_and_separate_guard() {
+        let eps = experimental_direct_obliquity(J2000_TT_JD).unwrap() / ARCSEC_TO_RAD;
+        // The printed table coefficients sum to 84381.405999 arcseconds at T=0.
+        assert!((eps - 84381.405999).abs() < 1e-8);
+        let h_days = 10.0;
+        let eps_plus = experimental_direct_obliquity(J2000_TT_JD + h_days).unwrap();
+        let eps_minus = experimental_direct_obliquity(J2000_TT_JD - h_days).unwrap();
+        let rate_per_century = (eps_plus - eps_minus) / ARCSEC_TO_RAD * 36525.0 / (2.0 * h_days);
+        // The paper constrains the rate to the IAU 2006 J2000 value.
+        assert!((rate_per_century - (-46.836769)).abs() < 0.00001);
+        assert!(experimental_direct_obliquity(f64::NAN).is_err());
+        assert!(
+            experimental_direct_obliquity(J2000_TT_JD - 15001.0 * DAYS_PER_JULIAN_YEAR).is_err()
+        );
+        assert!(
+            experimental_direct_obliquity(J2000_TT_JD + 3002.0 * DAYS_PER_JULIAN_YEAR).is_err()
+        );
+    }
+
     #[test]
     fn equator_matrix_matches_erfa_reference() {
         // ERFA t_ltp at Julian epoch 1666.666; numerical conformance fixture.

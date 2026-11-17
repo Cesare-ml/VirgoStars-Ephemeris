@@ -104,6 +104,26 @@ test('requested ancient and future calendar endpoints calculate only on the expl
     }
   });
 
+test('direct-obliquity candidate is explicit and its rate differentiates its positions',
+  { skip: kernel ? false : 'DE441_PATH required' }, () => {
+    const engine = new Engine(kernel), wrap = x => ((x % 360) + 540) % 360 - 180, h=0.01;
+    for (const year of [-12999,-10000,-5000,0,2000,3999]) {
+      const jd=julday(year,7,1,12,true);
+      for (const body of [constants.SE_SUN,constants.SE_MOON,constants.SE_MARS,constants.SE_PLUTO]) {
+        const center=engine.experimentalLongTermDirectObliquityTdb(jd,body);
+        const before=engine.experimentalLongTermDirectObliquityTdb(jd-h,body).xx;
+        const after=engine.experimentalLongTermDirectObliquityTdb(jd+h,body).xx;
+        const span=(jd+h)-(jd-h);
+        assert.ok(center.xx.every(Number.isFinite));
+        assert.match(center.notes.join(' '),/MIXED FRAME.*accuracy not established/);
+        assert.ok(Math.abs(wrap(after[0]-before[0])/span-center.xx[3]) < 0.00002);
+        assert.ok(Math.abs((after[1]-before[1])/span-center.xx[4]) < 0.00002);
+      }
+    }
+    assert.throws(()=>engine.experimentalLongTermDirectObliquityTdb(NaN,0),e=>e.code==='E_RANGE');
+    assert.throws(()=>engine.experimentalLongTermDirectObliquityTdb(2451545,15),e=>e.code==='E_UNSUPPORTED_BODY');
+  });
+
 test('experimental corrected mean-ecliptic direction works over the requested range without changing calcTdb',
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);
