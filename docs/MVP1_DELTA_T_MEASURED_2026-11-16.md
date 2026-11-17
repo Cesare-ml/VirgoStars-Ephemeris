@@ -1,5 +1,13 @@
 # MVP 1 — measured ΔT for UT inputs (2026-11-16)
 
+**Clarification, 2026-11-17:** `MEASURED` is the existing API label for the
+non-prediction USNO table, including historical reconstructions; it does not
+assert direct atomic measurements throughout that period. The source column is
+labelled `error`; its exact statistical interpretation has not been verified.
+The implementation's Julian-year mapping can differ from Gregorian calendar
+year fractions by up to 3.75 days in the supplied 1657–1984.5 file. See
+[the follow-up](PLANET_RATES_AND_HISTORICAL_TIME_2026-11-17.md).
+
 **Status: Locally tested. Data supplied by the caller; none bundled.** This closes
 the largest known time-scale limitation of the UT entry (`Engine.calcUt`): the
 earlier policy took UT1 = UTC after 1972 and used smoothed polynomial fits before

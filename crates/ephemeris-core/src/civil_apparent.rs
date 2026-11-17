@@ -66,7 +66,7 @@ pub enum CivilTimeSource {
     /// ΔT from a caller-supplied measured/predicted table (USNO files).
     DeltaTTable {
         delta_t_seconds: f64,
-        /// 1σ uncertainty from the table, when it gives one.
+        /// Source-reported error, when given; its statistical meaning is not verified here.
         uncertainty_seconds: Option<f64>,
         /// `true` when the value is a prediction, not a measurement.
         predicted: bool,
