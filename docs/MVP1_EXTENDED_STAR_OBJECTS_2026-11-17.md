@@ -57,13 +57,17 @@ object-leads-v1.json                045f8ce616b2e106ca5c439f187075575749c1e78ff4
 star-review-queue-mixed-v4.json     5f88c8a5027d1dfe51228dbb3f788b86e943b1d9e0346c703d9ca05eb309ebdd
 ```
 
-The mixed queue records eight names with stellar research leads, five with
+This historical mixed queue records eight names with stellar research leads, five with
 extended-object hypotheses, and **13 names without any machine-recorded lead**.
 Praesepe was already among the four earlier SIMBAD exact leads, so the five
 object names reduce the preceding 17 no-lead count by four, not five. Facies
 has two hypotheses, and the group Spiculum is not collapsed to one member.
 All decisions for all 106 names remain null. The queue is not a manifest and
 the artifacts' redistribution terms are still unreviewed.
+
+Subsequent designation research is documented in the
+[designation-review checkpoint](MVP1_STAR_DESIGNATION_REVIEW_2026-11-17.md),
+which retains these historical counts and records the newer unresolved-name count.
 
 For an extended object, a future product decision must define the object,
 reference coordinates and epoch, time/frame transformations, whether proper

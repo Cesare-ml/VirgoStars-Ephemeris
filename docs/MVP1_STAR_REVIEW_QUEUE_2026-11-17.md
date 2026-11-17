@@ -130,8 +130,9 @@ the report and source-claim document remain unapproved for redistribution.
 
 Subsequent work adds Alsuhail and separate hypotheses for extended objects;
 see [the extended-object checkpoint](MVP1_EXTENDED_STAR_OBJECTS_2026-11-17.md)
-for the latest 13-name machine-recorded gap and its limitations. The counts
-above remain the historical v2 snapshot.
+for the historical 13-name machine-recorded gap and its limitations. The
+[designation-review checkpoint](MVP1_STAR_DESIGNATION_REVIEW_2026-11-17.md)
+records subsequent research. The counts above remain the historical v2 snapshot.
 
 ## Next decisions
 
