@@ -4,7 +4,7 @@
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 
 const path = require('node:path');
-const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry } = require('./star-catalog.js');
+const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry, validateMagnitudeInfo } = require('./star-catalog.js');
 const { createHouseDiagnosticSession } = require('./house-diagnostics.js');
 
 let native;
@@ -394,7 +394,8 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
     }
     const lookupWarnings = validateLookupWarnings(entry.lookupWarnings, [entry.name, ...entry.aliases]);
     const astrometry=entry.astrometry === undefined ? undefined : validateExplicitAstrometry(entry.astrometry);
-    const star = { name: entry.name.trim(), displayName: entry.displayName?.trim() ?? entry.name.trim(), hip: entry.hip, astrometry, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude, lookupWarnings };
+    const magnitudeInfo=validateMagnitudeInfo(entry.magnitudeInfo,entry.magnitude);
+    const star = { name: entry.name.trim(), displayName: entry.displayName?.trim() ?? entry.name.trim(), hip: entry.hip, astrometry, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude, lookupWarnings, magnitudeInfo };
     for (const name of [entry.name, ...entry.aliases]) {
       const key = name.trim().toLocaleLowerCase('en-US');
       if (stars.has(key)) throw coded('E_CATALOG', `duplicate star name or alias: ${name}`);
@@ -518,7 +519,9 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
         const star = findStar(args[0]);
         if (star.magnitude === null) throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}`);
         const warning = lookupWarning(star, args[0]);
-        return { name: star.displayName, magnitude: star.magnitude, ...(warning ? { compatibilityWarning: warning } : {}) };
+        return { name: star.displayName, magnitude: star.magnitude,
+          ...(star.magnitudeInfo ? { magnitudeInfo: {...star.magnitudeInfo} } : {}),
+          ...(warning ? { compatibilityWarning: warning } : {}) };
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
     // swe_houses(tjd_ut, geolat, geolon, hsys). The house systems are astrological methods and

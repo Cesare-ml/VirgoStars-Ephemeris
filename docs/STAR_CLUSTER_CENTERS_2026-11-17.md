@@ -1,5 +1,9 @@
 # Experimental cluster centers — 2026-11-17
 
+Later local results and magnitude estimates are documented in
+[STAR_CATALOG_CLUSTER_MAGNITUDES_2026-11-17.md](STAR_CATALOG_CLUSTER_MAGNITUDES_2026-11-17.md).
+The numbers and magnitude availability below describe the earlier checkpoint.
+
 **Local experimental candidates, not full catalog completion.** These four
 objects are open clusters, not individual stars. The owner chose the correct
 physical identity and explicit notice of differences from Swiss. The main

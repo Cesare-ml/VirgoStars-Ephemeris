@@ -98,6 +98,23 @@ test('Swiss magnitude discrepancies are surfaced only for the affected lookup', 
   assert.equal(facade.swe_fixstar_mag('Example').compatibilityWarning,undefined);
 });
 
+test('integrated magnitude exposes its caller-asserted limitations without changing ordinary stars', () => {
+  const input=fixture(),star=input.stars[0];
+  star.magnitudeInfo={kind:'INTEGRATED_APPARENT',band:'VISUAL',quality:'APPROXIMATE',aperture:'UNSPECIFIED',source:'https://example.org/source'};
+  const prepared=prepareStarCatalog(input),facade=createSwissShapedFacade({}, {starCatalog:prepared.stars});
+  const result=facade.swe_fixstar_mag('Example alias');
+  assert.deepEqual(result.magnitudeInfo,{...star.magnitudeInfo,status:'CALLER_ASSERTED'});
+  result.magnitudeInfo.source='modified';star.magnitudeInfo.source='modified';
+  assert.equal(facade.swe_fixstar_mag('Example').magnitudeInfo.source,'https://example.org/source');
+  for(const change of [{kind:'POINT_STAR'},{band:'V'},{quality:'EXACT'},{aperture:'UNKNOWN'},{source:''}]){
+    const bad=fixture();bad.stars[0].magnitudeInfo={kind:'INTEGRATED_APPARENT',band:'VISUAL',quality:'APPROXIMATE',aperture:'UNSPECIFIED',source:'fixture',...change};
+    assert.throws(()=>prepareStarCatalog(bad),e=>e.code==='E_CATALOG');
+  }
+  const missing=fixture();missing.stars[0].magnitude=null;delete missing.stars[0].magnitudeSource;
+  missing.stars[0].magnitudeMissingReason='fixture';missing.stars[0].magnitudeInfo={...prepared.stars[0].magnitudeInfo};
+  assert.throws(()=>prepareStarCatalog(missing),e=>e.code==='E_CATALOG');
+});
+
 test('nearby designations resolve to distinct objects and preserve lookup warnings', () => {
   const input=fixture();
   input.stars[0].aliases=['Example three'];
