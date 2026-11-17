@@ -65,6 +65,34 @@ test('rejects stale, guessed, malformed and already decided object hypotheses', 
   assert.throws(() => attachObjectLeads({ queueBytes: corruptedQueue, researchBytes: mutate((x) => { x.baseQueueSha256 = sha(corruptedQueue); }) }), /counts are inconsistent/);
 });
 
+test('appends stellar-system and asterism leads without replacing earlier candidates', () => {
+  const initial = attachObjectLeads(fixture());
+  const queue = { ...initial, schema: 'virgostars-star-review-queue/4',
+    counts: { ...initial.counts, noRecordedLeadBeforeDesignations: 0, namesWithDesignationLeads: 1, designationHypotheses: 1 },
+    entries: initial.entries.map((row, i) => ({ ...row, designationCandidates: i === 0 ? [{ hip: 123 }] : [] })) };
+  const queueBytes = bytes(queue);
+  const research = { schema: 'virgostars-star-object-leads/1', status: 'CALLER_ASSERTED_REVIEW_REQUIRED', baseQueueSha256: sha(queueBytes),
+    leads: [
+      { requestedName: 'Alias', objectKind: 'STELLAR_SYSTEM', designation: 'Example system', evidenceNote: 'Fictional system', evidenceUrls: ['https://example.org/system'] },
+      { requestedName: 'Cluster', objectKind: 'ASTERISM', designation: 'Example grouping', evidenceNote: 'Alternative grouping', evidenceUrls: ['https://example.org/group'] },
+    ] };
+  const result = attachObjectLeads({ queueBytes, researchBytes: bytes(research) });
+  assert.equal(result.schema, 'virgostars-star-review-queue/5');
+  assert.equal(result.counts.objectHypotheses, 5);
+  assert.equal(result.counts.namesWithObjectLeads, 3);
+  assert.deepEqual(result.entries[1].objectCandidates.slice(0, 2), initial.entries[1].objectCandidates);
+  assert.deepEqual(result.entries[0].designationCandidates, [{ hip: 123 }]);
+  assert.equal(result.entries[0].objectCandidates[0].singleHipPath, 'COMPONENT_REVIEW_REQUIRED');
+  assert.equal(result.entries[1].objectCandidates[2].singleHipPath, 'NOT_APPLICABLE');
+  assert.equal(result.entries[0].objectCandidates[0].magnitudePolicy, 'UNDECIDED');
+  assert.ok(result.entries.every((row) => Object.values(row.decisions).every((value) => value === null)));
+  const duplicate = { ...research, leads: [{ requestedName: 'Cluster', objectKind: 'OPEN_CLUSTER', designation: 'Example 1', evidenceNote: 'Duplicate', evidenceUrls: ['https://example.org'] }] };
+  assert.throws(() => attachObjectLeads({ queueBytes, researchBytes: bytes(duplicate) }), /duplicate/);
+  const corrupt = { ...queue, counts: { ...queue.counts, designationHypotheses: 2 } };
+  const corruptBytes = bytes(corrupt);
+  assert.throws(() => attachObjectLeads({ queueBytes: corruptBytes, researchBytes: bytes({ ...research, baseQueueSha256: sha(corruptBytes) }) }), /counts are inconsistent/);
+});
+
 const { STAR_STELLAR_QUEUE, STAR_OBJECT_LEADS, STAR_MIXED_QUEUE } = process.env;
 test('real extended-object review is reproducible and refuses overwrite',
   { skip: STAR_STELLAR_QUEUE && STAR_OBJECT_LEADS && STAR_MIXED_QUEUE ? false : 'local object review inputs required' }, () => {
@@ -89,4 +117,37 @@ test('real extended-object review is reproducible and refuses overwrite',
       rmSync(output, { force: true });
       rmdirSync(directory);
     }
+  });
+
+const { STAR_DESIGNATIONS_V6, STAR_OBJECT_LEADS_V2, STAR_COMPLETE_QUEUE } = process.env;
+test('real system and asterism extension preserves the complete earlier queue',
+  { skip: STAR_DESIGNATIONS_V6 && STAR_OBJECT_LEADS_V2 && STAR_COMPLETE_QUEUE ? false : 'local updated review inputs required' }, () => {
+    const directory = mkdtempSync(join(tmpdir(), 'virgostars-complete-review-'));
+    const output = join(directory, 'queue.json');
+    const script = fileURLToPath(new URL('../attach_star_object_leads.mjs', import.meta.url));
+    try {
+      const run = spawnSync(process.execPath, [script, STAR_DESIGNATIONS_V6, STAR_OBJECT_LEADS_V2, output], { encoding: 'utf8' });
+      assert.equal(run.status, 0, run.stderr);
+      const saved = readFileSync(output);
+      assert.deepEqual(saved, readFileSync(STAR_COMPLETE_QUEUE));
+      const prior = JSON.parse(readFileSync(STAR_DESIGNATIONS_V6));
+      const queue = JSON.parse(saved);
+      assert.equal(queue.counts.noRecordedLeadBeforeAdditionalObjects, 1);
+      assert.equal(queue.counts.noRecordedLead, 0);
+      assert.equal(queue.counts.designationHypotheses, 18);
+      assert.equal(queue.counts.objectHypotheses, 8);
+      for (let i = 0; i < prior.entries.length; i++) {
+        assert.deepEqual(queue.entries[i].designationCandidates, prior.entries[i].designationCandidates);
+        assert.deepEqual(queue.entries[i].objectCandidates.slice(0, prior.entries[i].objectCandidates.length), prior.entries[i].objectCandidates);
+        assert.deepEqual(queue.entries[i].decisions, prior.entries[i].decisions);
+      }
+      const row = (name) => queue.entries.find((entry) => entry.requestedName === name);
+      assert.equal(row('Foramen').objectCandidates[0].singleHipPath, 'COMPONENT_REVIEW_REQUIRED');
+      assert.equal(row('Wei').designationCandidates.length, 2);
+      assert.equal(row('Wei').objectCandidates[0].objectKind, 'ASTERISM');
+      assert.ok(queue.entries.every((entry) => Object.values(entry.decisions).every((value) => value === null)));
+      const retry = spawnSync(process.execPath, [script, STAR_DESIGNATIONS_V6, STAR_OBJECT_LEADS_V2, output], { encoding: 'utf8' });
+      assert.equal(retry.status, 1);
+      assert.deepEqual(readFileSync(output), saved);
+    } finally { rmSync(output, { force: true }); rmdirSync(directory); }
   });

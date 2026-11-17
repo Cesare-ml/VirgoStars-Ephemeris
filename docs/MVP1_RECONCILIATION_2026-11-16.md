@@ -89,8 +89,11 @@ comparison; it does not replace the individual model and validation contracts.
    13 names lacked machine-recorded leads at that checkpoint. A further
    [designation review](MVP1_STAR_DESIGNATION_REVIEW_2026-11-17.md) records
    15 unapproved, potentially conflicting hypotheses for ten names, leaving
-   three without a machine-recorded lead. No identities have been resolved;
-   extended-object calculations and all data/quality decisions remain open.
+   three without a machine-recorded lead at that checkpoint. The
+   [last-name research](MVP1_STAR_RESEARCH_LAST_NAMES_2026-11-17.md) records
+   unapproved leads for all 106 requests, including multiple interpretations
+   and a stellar system. No identities have been resolved; extended-object
+   calculations and all data/quality decisions remain open.
 2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
    independently review kernel/tool provenance and numerical tolerances, and
    add type-3 and multi-kernel/segment-priority comparisons where these are

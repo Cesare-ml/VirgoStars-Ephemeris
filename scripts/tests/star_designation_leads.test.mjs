@@ -92,3 +92,26 @@ test('real designation queue reproduces byte-for-byte and refuses overwrite',
       assert.deepEqual(readFileSync(output), saved);
     } finally { rmSync(output, { force: true }); rmSync(dir, { recursive: true, force: true }); }
   });
+
+const { STAR_DESIGNATION_LEADS_V2, STAR_DESIGNATIONS_V6 } = process.env;
+test('expanded real designation research preserves the prior claims and reproduces the queue',
+  { skip: STAR_MIXED_QUEUE && STAR_DESIGNATION_LEADS && STAR_DESIGNATION_LEADS_V2 && STAR_DESIGNATIONS_V6 && HIP2_PATH
+    ? false : 'local updated designation inputs required' }, () => {
+    const oldLeads = JSON.parse(readFileSync(STAR_DESIGNATION_LEADS));
+    const newLeads = JSON.parse(readFileSync(STAR_DESIGNATION_LEADS_V2));
+    assert.deepEqual(newLeads.leads.slice(0, oldLeads.leads.length), oldLeads.leads);
+    const dir = mkdtempSync(join(tmpdir(), 'virgostars-designations-v2-'));
+    const output = join(dir, 'queue.json');
+    const script = fileURLToPath(new URL('../attach_star_designation_leads.mjs', import.meta.url));
+    try {
+      const run = spawnSync(process.execPath, [script, STAR_MIXED_QUEUE, STAR_DESIGNATION_LEADS_V2, HIP2_PATH, output], { encoding: 'utf8' });
+      assert.equal(run.status, 0, run.stderr);
+      const saved = readFileSync(output);
+      assert.deepEqual(saved, readFileSync(STAR_DESIGNATIONS_V6));
+      const queue = JSON.parse(saved);
+      assert.equal(queue.counts.namesWithDesignationLeads, 12);
+      assert.equal(queue.counts.designationHypotheses, 18);
+      assert.equal(queue.counts.noRecordedLead, 1);
+      assert.ok(queue.entries.every((entry) => Object.values(entry.decisions).every((value) => value === null)));
+    } finally { rmSync(output, { force: true }); rmSync(dir, { recursive: true, force: true }); }
+  });

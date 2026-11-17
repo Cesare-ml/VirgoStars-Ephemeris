@@ -87,3 +87,7 @@ null. Additional hypotheses may exist even for names with a recorded lead.
 Source permissions, accuracy, photometry, radial velocity, object/component
 meaning and an approved manifest remain outstanding before backend validation
 and release.
+
+The subsequent [last-name research checkpoint](MVP1_STAR_RESEARCH_LAST_NAMES_2026-11-17.md)
+adds unapproved hypotheses for the three remaining names. The numbers above
+describe this historical queue, not the newer research artifact.
