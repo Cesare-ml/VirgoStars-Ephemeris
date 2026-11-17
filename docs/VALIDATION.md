@@ -1,6 +1,6 @@
-# Numerical validation protocol (design / no tests executed)
+# Numerical validation protocol (independent NASA/JPL gate pending)
 
-**No scientific accuracy, Swiss parity, or runtime compatibility is claimed yet.** Independent astronomical correctness is the primary gate; matching an existing astrology program is a secondary compatibility signal.
+**Evidence status:** Historical JavaScript/Node and isolated V8 synthetic or mathematical checks are recorded below with their dates and execution environments. They are not Rust test results and do not establish independent NASA/JPL/NAIF numerical agreement. The experimental Rust implementation has its own unit tests and CI; their existence does not satisfy the real-kernel scientific acceptance gate. No scientific accuracy, Swiss parity, or runtime compatibility is claimed yet. Independent astronomical correctness is the primary gate; matching an existing astrology program is a secondary compatibility signal.
 
 ## Test matrix
 
