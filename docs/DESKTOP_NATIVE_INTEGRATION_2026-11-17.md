@@ -1,5 +1,11 @@
 # VirgoStars Desktop: native Rust integration handoff
 
+**Later observation:** Desktop main at `15d7a4a` contains a native provider
+using a pinned ephemeris core and a default Cargo feature; the handoff below is
+the original starting-point document. See the
+[MVP readiness checkpoint](MVP_READINESS_2026-11-17.md) for the distinction
+between source integration, local installer testing and release.
+
 **Status: integration candidate, locally tested core; not a released or
 scientifically accepted provider.** Desktop may start integrating planets
 without waiting for stellar catalog completion. The separate restriction on

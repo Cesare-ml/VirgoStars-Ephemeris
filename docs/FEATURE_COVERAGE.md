@@ -1,5 +1,10 @@
 # Functional coverage target — 2026-11-10
 
+**Historical inventory:** the table below describes the initial 2026-11-10
+baseline and is not current capability status. See the
+[MVP readiness checkpoint](MVP_READINESS_2026-11-17.md) and the actual code
+before deciding what the engine can do today.
+
 The project goal is to cover the documented capabilities of Swiss Ephemeris,
 including its astronomical and astrological functions. This is a development
 target, not a claim that they are already implemented, API-compatible or
