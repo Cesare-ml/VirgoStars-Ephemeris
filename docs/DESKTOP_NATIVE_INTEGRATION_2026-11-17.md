@@ -28,6 +28,10 @@ The runnable example performs both desktop coordinate calculations:
 cargo run --example desktop_planets -- <path-to-classic-de441> 2451545.0
 ```
 
+The repository-root `npm test` runs the standalone JavaScript research and
+script tests. The separate `bindings/node` suite requires its native addon to
+be built first; neither is needed to call the Rust crate from Tauri.
+
 The argument is **TDB Julian date**, not UTC, UT1 or TT. Output contains
 true ecliptic/equinox-of-date longitude, latitude, distance and rates, plus
 true equator/equinox-of-date right ascension and declination. Angles are

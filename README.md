@@ -18,8 +18,11 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
-
+- [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Accepted Rust architecture decision (not an exhaustive architecture map)](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md)
+- [Native desktop integration handoff](docs/DESKTOP_NATIVE_INTEGRATION_2026-11-17.md)
+- [Italian overview](docs/README.it.md)
+- [Historical branch integration status](docs/BRANCH_INTEGRATION_STATUS_2026-11-10.md)
 - [Engineering roadmap](docs/ROADMAP.md)
 - [Astronomical accuracy and validation](docs/VALIDATION.md)
 - [E1 SPK reference-matrix breadth audit (case coverage only)](docs/SPK_E1_REFERENCE_MATRIX_AUDIT_2026-11-13.md)
@@ -79,11 +82,11 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 - Experimental Rust workspace: `Cargo.toml`, `crates/ephemeris-core/`, and the classic binary DE441 reader documented in [docs/DE441.md](docs/DE441.md).
 - Experimental time-and-place CLI computes topocentric geometric positions using an externally supplied DE441 binary; see its documented time range and approximations.
-- The experimental Rust `spk_index::inspect_spk` indexes NAIF DAF/SPK headers and segments in both IEEE byte orders. The `spk_direct_state::direct_spk_state` module evaluates primitive J2000/ICRF type-2/3 states. `spk_relative_state::relative_spk_state` combines states within **one kernel**, while the experimental `spk_kernel_set::SpkKernelSet` applies **later-loaded SPK precedence** and composes cross-file center chains. Frame conversion, other SPK types and real-kernel validation remain unimplemented.
-- An experimental **offline** Rust SPK comparison example accepts externally obtained, independently reviewed NAIF/SPICE geometric state vectors, ordered SPK files and explicit error tolerances; the separate Python 3.10+ standard-library `scripts/verify_spk_kernel_hashes.py` checks declared ordered SHA-256 digests against actual kernel bytes before comparison. The Rust example does not invoke that preflight automatically. No actual real-kernel parity result has been verified.
-- The validation-only Python generator `scripts/spk_naif_reference.py` can use an independently installed NAIF/SPICE Toolkit via SpiceyPy to produce geometric reference vectors and verify ordered kernel/source hashes; it is **not** a second production ephemeris engine. No real-kernel parity comparison has been recorded.
+- The experimental Rust `spk_index::inspect_spk` indexes NAIF DAF/SPK headers and segments in both IEEE byte orders. The `spk_direct_state::direct_spk_state` module evaluates primitive J2000/ICRF type-2/3 states. `spk_relative_state::relative_spk_state` combines states within **one kernel**, while the experimental `spk_kernel_set::SpkKernelSet` applies **later-loaded SPK precedence** and composes cross-file center chains. Non-J2000 frames and broader independent validation remain open.
+- An experimental **offline** Rust SPK comparison example accepts externally obtained NAIF/SPICE geometric state vectors, ordered SPK files and explicit error tolerances; the separate Python 3.10+ standard-library `scripts/verify_spk_kernel_hashes.py` checks declared ordered SHA-256 digests against actual kernel bytes before comparison. The Rust example does not invoke that preflight automatically. Limited [real-kernel comparisons](docs/SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md) passed locally and remain subject to review.
+- The validation-only Python generator `scripts/spk_naif_reference.py` can use an independently installed NAIF/SPICE Toolkit via SpiceyPy to produce geometric reference vectors and verify ordered kernel/source hashes; it is **not** a second production ephemeris engine.
 - The optional `python scripts/spk_naif_reference.py run` mode combines local SPICE vector generation, offline Rust comparison, pre/post kernel checks and a **review-pending, unsigned JSON audit receipt** written only after success; no astronomical accuracy certification is implied.
-- The optional `python scripts/spk_naif_reference.py compare` command checks ordered SPK kernel bytes and reference fingerprints, runs the canonical Rust NAIF comparator with Cargo offline, then rechecks the files even on failure. No genuine SPICE/JPL numerical comparison has been recorded.
+- The optional `python scripts/spk_naif_reference.py compare` command checks ordered SPK kernel bytes and reference fingerprints, runs the canonical Rust NAIF comparator with Cargo offline, then rechecks the files even on failure.
 - The historical JavaScript prototypes and synthetic tests are research artifacts, not a second production astronomical engine.
 - Real NASA/JPL reference-vector validation and broadly validated SPK support remain open gates; passing synthetic tests does not establish scientific accuracy.
 - Rust-backed WebAssembly/TypeScript and Python bindings, stable public releases and production integration are not implemented.
@@ -92,3 +95,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 **License:** Original VirgoStars-Ephemeris code is provided under [CPAL-1.0](LICENSE), including its Exhibits A/B, with required attribution and network-use provisions. See [NOTICE](NOTICE) and [Licensing and visible credits](docs/LICENSING_AND_CREDITS.md). A Credits/About link is encouraged but does not necessarily satisfy the license's launch/session prominence requirement.
 
 This project is not affiliated with or endorsed by NASA, JPL, NAIF or Astrodienst. External datasets and dependencies retain their own terms.
+
+The historical standalone JavaScript SPK, precession, nutation and light-time
+prototypes and their tests remain research fixtures. Rust is the canonical
+astronomical core; none of the prototypes is a production provider.

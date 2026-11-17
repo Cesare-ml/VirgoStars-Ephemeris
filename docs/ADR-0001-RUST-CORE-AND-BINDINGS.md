@@ -1,6 +1,6 @@
 # ADR-0001 — Rust astronomical core and cross-language bindings
 
-**Status:** Accepted architectural decision. An experimental Rust DE441 reader exists; bindings, package release, independent numerical validation and production migration remain future work.
+**Status:** Accepted architectural decision. The experimental Rust core and local Node binding exist; published bindings, broader independent validation, a package release and production migration remain open.
 **Date:** 2026-11-09
 **Scope:** `VirgoStars-Ephemeris` and its consumers, including `astrological-functions`, VirgoStars, Astrolabio and third-party applications.
 
@@ -33,7 +33,7 @@ VirgoStars-Ephemeris/
     ADR-0001-RUST-CORE-AND-BINDINGS.md
 ```
 
-The core crate now exists; other directory names above are proposals, not a claim that those packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
+The core crate and an experimental native Node binding now exist; other directory names above are proposals, not claims that those packages already exist. Use feature boundaries that permit smaller artifacts and optional dependencies.
 
 ## Public result contract
 

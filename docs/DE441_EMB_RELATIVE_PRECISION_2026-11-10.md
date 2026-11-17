@@ -1,7 +1,7 @@
 # DE441: precision of Earth/Moon states relative to the Earth–Moon barycenter
 
 Date: 2026-11-10
-Status: experimental implementation. This document describes a change intended for the development branch; check the PR merge history for the branch currently containing it. Independent NASA/JPL/Horizons numerical validation is still outstanding.
+Status: **experimental implementation merged** into `dev/ephemeris` by [PR #29](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/29) and into `main` by [PR #32](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/32). Synthetic CI checks passed; independent NASA/JPL/Horizons numerical validation is still outstanding.
 
 ## Issue and calculation
 

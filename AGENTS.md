@@ -2,6 +2,10 @@
 
 > Applies to the entire `Cesare-ml/VirgoStars-Ephemeris` repository, including future crates, bindings, tests and documentation. Read this file **before editing**. More specific instructions may be added in subdirectories; they must not contradict the license, scientific integrity or repository-safety rules here.
 
+## VirgoStars agent fleet (owner authorization 2026-11-14)
+
+Chats started with the VirgoStars fleet prompt follow [`AGENT_START.md`](https://github.com/Cesare-ml/virgostars-development-orchestrator/blob/main/AGENT_START.md) and the entry for `Cesare-ml/VirgoStars-Ephemeris` in [`config/agent-fleet.json`](https://github.com/Cesare-ml/virgostars-development-orchestrator/blob/main/config/agent-fleet.json). For those agents, the runbook's merge gate is the owner's authorization to merge qualifying PRs, and `ci_allowed` there governs adding read-only CI. Every other rule in this file still applies.
+
 ## 1. Mission and scope
 
 Build a **free, reusable, independently implemented astronomical ephemeris engine** for VirgoStars and third-party software. The canonical implementation is **Rust**, as defined by [ADR-0001](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md). Future JavaScript/TypeScript (WASM) and Python (PyO3/maturin) interfaces shall call the same Rust core instead of duplicating the astronomy.
