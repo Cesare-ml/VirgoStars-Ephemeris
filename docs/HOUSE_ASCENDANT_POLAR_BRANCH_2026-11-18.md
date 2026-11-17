@@ -1,7 +1,7 @@
 # Polar Ascendant: select the rising horizon branch (18 November 2026)
 
-**Status: experimental Rust correction awaiting exact-head Rust CI and
-independent polar numerical reference review.** This file documents a
+**Status: experimental Rust correction with exact-head Rust/Node CI passed;
+independent polar numerical reference review remains open.** This file documents a
 modification derived from the original VirgoStars-Ephemeris code by
 Cesare-ml (VirgoStars project), originally released under CPAL-1.0.
 Original CPAL source notices, `LICENSE`, `NOTICE` and the required
@@ -88,6 +88,16 @@ scientific review may later propose deliberate extra-angle changes.
   at two true obliquities; they also lock the owner's polar fixture,
   the full Rust house-angle entry point and representative original
   extra-angle values.
+- The existing GitHub CI run **#302** on correction commit
+  `8f43e4d1629341175bcc2a7d0d81383d6cf853d3` completed successfully:
+  Rust workspace tests, strict Clippy, formatting, native Node binding tests,
+  and JavaScript prototype tests all passed. This is **code/geometry**
+  validation, not independent scientific polar-house parity.
+- Additional Rust-backed Node tests on this follow-up patch call both the
+  explicit UT1/TT provider and the UT convenience binding at polar latitudes;
+  they verify the seven original synthetic latitude points and rising horizon
+  derivatives. These **must run** against a freshly compiled native addon;
+  do not count a JavaScript-only check as proof the tests passed.
 - **Required before integration:** run `cargo fmt --all -- --check`,
   `cargo test --workspace` and
   `cargo clippy --workspace --all-targets -- -D warnings` on the exact PR
