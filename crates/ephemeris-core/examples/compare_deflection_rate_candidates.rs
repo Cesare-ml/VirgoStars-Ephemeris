@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 // Modification (2026-11-18): diagnose normalized-position rate and guard crossings.
+// Modification (2026-11-18): distinguish sampled guard crossings by stencil.
 //! Exploratory derivatives of the existing deflection model, not a production
 //! correction or a physical accuracy claim. Input CSV: body ID,TDB JD.
 use std::error::Error;
@@ -163,14 +164,21 @@ fn crosses_floor(a: &[Geometry; 4], center: f64) -> bool {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 2 && !(args.len() == 3 && args[2] == "--normalized") {
+    if args.len() != 2
+        && !(args.len() == 3 && ["--normalized", "--floor-details"].contains(&args[2].as_str()))
+    {
         return Err(
-            "usage: compare_deflection_rate_candidates <de441> [--normalized] < cases.csv".into(),
+            "usage: compare_deflection_rate_candidates <de441> [--normalized|--floor-details] < cases.csv".into(),
         );
     }
     let normalized = args.len() == 3;
+    let floor_details = args.len() == 3 && args[2] == "--floor-details";
     let mut eph = De441::open(&args[1])?;
-    println!("body,jd_tdb,elongation_deg,denominator,crosses_floor,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
+    if floor_details {
+        println!("body,jd_tdb,denominator,old_crosses,fine_crosses,finer_crosses,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
+    } else {
+        println!("body,jd_tdb,elongation_deg,denominator,crosses_floor,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
+    }
     for line in io::stdin().lock().lines() {
         let line = line?;
         let fields: Vec<_> = line.split(',').collect();
@@ -219,14 +227,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                 norm(sub(reference, check)),
             )
         };
-        println!(
-            "{id},{jd},{:.12},{:.14e},{crossing},{:.12},{:.12},{:.12}",
-            c.angle,
-            c.denom,
-            old_error * AS_PER_RAD,
-            candidate_error * AS_PER_RAD,
-            reference_disagreement * AS_PER_RAD
-        );
+        if floor_details {
+            println!(
+                "{id},{jd},{:.14e},{},{},{},{:.12},{:.12},{:.12}",
+                c.denom,
+                crosses_floor(&old, c.denom),
+                crosses_floor(&fine, c.denom),
+                crosses_floor(&finer, c.denom),
+                old_error * AS_PER_RAD,
+                candidate_error * AS_PER_RAD,
+                reference_disagreement * AS_PER_RAD
+            );
+        } else {
+            println!(
+                "{id},{jd},{:.12},{:.14e},{crossing},{:.12},{:.12},{:.12}",
+                c.angle,
+                c.denom,
+                old_error * AS_PER_RAD,
+                candidate_error * AS_PER_RAD,
+                reference_disagreement * AS_PER_RAD
+            );
+        }
     }
     Ok(())
 }
