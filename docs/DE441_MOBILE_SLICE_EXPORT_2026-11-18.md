@@ -45,6 +45,49 @@ unneeded series. It does **not** compress or quantize them. The old estimate of
 43–54 MB for the base package is **not a measured result**; obtain the actual
 file size only by running the command on a verified DE441 source.
 
+### Offline package builder and integrity manifest
+
+The standard-library Python helper **does not calculate ephemerides**: it
+invokes the Rust slice exporter, hashes the source and generated packages,
+and writes a local JSON inventory. It never downloads, hosts, replaces or
+publishes any ephemeris data.
+
+```sh
+python scripts/build_de441_mobile_packs.py plan
+python scripts/build_de441_mobile_packs.py build \
+  --source /data/de441.eph --output-dir /data/virgostars-mobile-core \
+  --packs core
+python scripts/build_de441_mobile_packs.py verify \
+  --manifest /data/virgostars-mobile-core/de441-mobile-manifest-v1.json
+```
+
+To generate all ten ranges in a **fresh** directory, use `--packs all`
+and a different `--output-dir`. Specific optional IDs are shown by `plan`.
+The flag `--expected-source-sha256 <64-hex-digest>` can pin an externally
+reviewed input fingerprint. The builder checks the full source SHA-256 both
+before and after extraction; this is a byte-level consistency check,
+not NASA/JPL provenance certification.
+
+Windows PowerShell (with Python and Rust already installed):
+
+```powershell
+python scripts/build_de441_mobile_packs.py build --source "D:\Data\de441.eph" --output-dir "D:\Data\mobile-core" --packs core
+python scripts/build_de441_mobile_packs.py verify --manifest "D:\Data\mobile-core\de441-mobile-manifest-v1.json"
+```
+
+Each manifest lists **all ten planned ranges**. Built entries have exact
+requested and record-aligned JD TDB boundaries, byte counts, SHA-256,
+record counts, and file format. Unbuilt entries are explicitly `not_built`
+and have no downloadable artifact. Existing output files and manifests
+are never overwritten. A failed batch can leave previously generated files,
+but it does **not** publish a manifest; use a fresh directory for a retry.
+
+**This local manifest is unsigned, not a public download catalog.** It marks
+`distribution_rights=review_pending` and
+`scientific_validation=real_kernel_and_independent_reference_pending`
+as explicit release gates. Signature verification, server-side approval,
+and an Android cache/download manager are future work.
+
 ## Scientific and file contract
 
 - Source: classic JPL DE441, with external input fingerprint and provenance
@@ -72,8 +115,9 @@ file size only by running the command on a verified DE441 source.
    original-vs-slice state vectors at a broad sampling of epochs and bodies.
 2. Validate source **and slice** against independently generated NAIF/JPL
    reference values, including positions, velocities and every pack boundary.
-3. Implement a signed/versioned manifest, hashes, online optional download,
-   atomic cache management, rollback, and mobile pack-selection UI separately.
+3. Review the experimental **local unsigned v1 manifest** and add approved
+   signing/distribution, atomic mobile cache management, rollback, and
+   mobile pack-selection UI separately.
 4. Complete a dataset redistribution-rights and provenance review before any
    public hosting, bundling, mirror or release of generated data.
 5. Execute Cargo formatting, tests and strict Clippy plus Android ARM64 tests
@@ -87,3 +131,8 @@ tests for VirgoStars-Ephemeris (Initial Developer: Cesare-ml / VirgoStars
 project). No third-party kernels or code incorporated; no license or notice
 changes. This file documents the change under CPAL-1.0 §3.3; the project's
 existing `LICENSE` and `NOTICE` control.
+
+2026-11-18 follow-up: added the Python standard-library pack orchestration
+helper and synthetic packaging tests, with non-overwriting manifest and
+SHA-256 checks. Python adds no astronomical calculations and this work does
+not complete the scientific or redistribution-rights approval gates.
