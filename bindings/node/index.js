@@ -517,8 +517,11 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
     swe_fixstar_mag: (...args) =>
       deliver(args, guarded(() => {
         const star = findStar(args[0]);
-        if (star.magnitude === null) throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}`);
         const warning = lookupWarning(star, args[0]);
+        if (star.magnitude === null) {
+          const detail = warning ? `; ${warning.code}: ${warning.detail}` : '';
+          throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}${detail}`);
+        }
         return { name: star.displayName, magnitude: star.magnitude,
           ...(star.magnitudeInfo ? { magnitudeInfo: {...star.magnitudeInfo} } : {}),
           ...(warning ? { compatibilityWarning: warning } : {}) };

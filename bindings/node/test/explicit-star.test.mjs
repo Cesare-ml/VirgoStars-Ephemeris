@@ -30,7 +30,14 @@ test('explicit object center retains its warning and reports missing magnitude',
   const facade=createSwissShapedFacade(engine,{starCatalog:prepareStarCatalog(input).stars});
   const result=facade.swe_fixstar_ut('Direct alias',2451545,0);
   assert.equal(result.name,'Fictional cluster center');assert.equal(result.compatibilityWarning.code,'SWISS_POSITION_MISMATCH');
-  assert.equal(facade.swe_fixstar_mag('Direct alias').code,'E_STAR_MAGNITUDE');
+  let callbackResult;
+  const missing=facade.swe_fixstar_mag('Direct alias',result=>{callbackResult=result;});
+  assert.equal(missing.code,'E_STAR_MAGNITUDE');assert.equal(callbackResult,missing);
+  assert.deepEqual(Object.keys(missing),['error']);
+  assert.match(missing.error,/SWISS_POSITION_MISMATCH: fictional center differs from reference/);
+  const withoutWarning=facade.swe_fixstar_mag('Direct');
+  assert.equal(withoutWarning.code,'E_STAR_MAGNITUDE');
+  assert.doesNotMatch(withoutWarning.error,/SWISS_POSITION_MISMATCH/);
 });
 const {DE441_PATH,HIP2_PATH}=process.env;
 test('explicit astrometry follows the same Rust calculation as an equivalent HIP2 record',
