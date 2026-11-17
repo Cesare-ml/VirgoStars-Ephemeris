@@ -1,5 +1,10 @@
 # MVP readiness checkpoint — 2026-11-17
 
+**Priority update:** the owner has paused stellar catalog work. See the
+[MVP 1 priorities and acceptance proposal](MVP1_NEXT_PRIORITIES_2026-11-17.md)
+and [stellar pause checkpoint](STAR_CATALOG_PAUSED_2026-11-17.md). The ordered
+list below is retained as historical context, not the current work order.
+
 **Follow-up:** the previously missing local catalog has been recovered and
 extended; see [stellar recovery](STAR_CATALOG_RECOVERY_2026-11-17.md). The
 absence reported in the historical table below applied to the earlier checkout
