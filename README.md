@@ -55,6 +55,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [MVP-1 complete light-time + aberration six fixed spherical fields/rates and shared degrees/AU export (not apparent of date)](docs/MVP1_ABERRATED_FIXED_SPHERICAL_2026-11-11.md)
 - [MVP-1 geocentric apparent ecliptic of date with rates, locally tested on a real DE441 (solar deflection, civil time 1900–2027, evidence receipts; not integrated)](docs/MVP1_APPARENT_ECLIPTIC_OF_DATE_2026-11-16.md)
 - [MVP-1 fixed-star calculation engine, locally compared; no catalog bundled or approved](docs/MVP1_FIXED_STARS_2026-11-16.md)
+- [Fixed-star catalog: paused local checkpoint and resumption instructions](docs/STAR_CATALOG_PAUSED_2026-11-17.md)
 - [MVP-1 Node binding scaffold (N-API), declared time policy, Swiss-shaped facade; not a drop-in replacement](docs/MVP1_NODE_BINDING_2026-11-16.md)
 - [MVP-1 comparison with JPL Horizons: separations to 8 µas, frame difference understood](docs/MVP1_HORIZONS_COMPARISON_2026-11-16.md)
 - [MVP-1 Swiss-style facade shape verified against swisseph 0.5.17 (listed calls)](docs/MVP1_SWISSEPH_SHAPE_2026-11-16.md)
