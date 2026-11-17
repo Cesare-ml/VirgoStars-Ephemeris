@@ -69,7 +69,11 @@ comparison; it does not replace the individual model and validation contracts.
    terms and independently identify the required stars, aliases, magnitudes
    and radial velocities. Approve the quality policy per supported star and
    decide how missing magnitudes and RV assumptions reach users. No real catalog
-   is supplied by the compatibility API.
+   is bundled by the compatibility API. A subsequent
+   [local 40-star MVP catalog](MVP1_LOCAL_STAR_CATALOG_2026-11-17.md) is now
+   generated from external files and used by the experimental backend, with
+   zero radial velocities explicitly assumed; 66 requested names remain out of
+   scope for this subset.
    [Inventory and caller-reviewed manifest](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md).
    Subsequent offline screening found 77 exact candidates among 106 backend
    names; 40 pass the strict HIP2 filter. No candidate is approved by that check.
