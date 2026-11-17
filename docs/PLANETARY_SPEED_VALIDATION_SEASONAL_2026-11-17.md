@@ -5,6 +5,9 @@ continues [the solar-rate investigation](SOLAR_RATE_OUTLIERS_AND_HISTORICAL_TIME
 There is no change to the astronomical engine, public API or production path.
 The kernel and external reference reports remain caller-owned, ignored files.
 
+A [subsequent Swiss flag and station investigation](SWISS_APPARENT_RATE_DISCREPANCIES_2026-11-17.md)
+isolates correction-dependent effects and checks eight sampled station roots.
+
 ## Geometric velocity: direct Horizons vectors
 
 Using the local classic DE441, we requested [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/manual.html)
