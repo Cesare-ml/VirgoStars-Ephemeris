@@ -10,6 +10,12 @@ test('validation grids include the requested endpoints and reject unknown polici
   const dense=validationYears('0-3000-step-10');
   assert.equal(dense.length,301);assert.equal(dense[0],0);assert.equal(dense.at(-1),3000);
   assert.ok(dense.every((year,i)=>year===i*10));
+  const extended=validationYears('13000bce-3999-step-250');
+  assert.equal(extended.length,69);assert.equal(extended[0],-12999);assert.equal(extended.at(-1),3999);
+  assert.ok(extended.includes(0));assert.ok(extended.every((year,i)=>i===0||year>extended[i-1]));
+  const horizons=validationYears('9999bce-3999-step-500');
+  assert.equal(horizons.length,29);assert.equal(horizons[0],-9998);assert.equal(horizons.at(-1),3999);
+  assert.ok(horizons.every((year,i)=>i===0||year>horizons[i-1]));
   assert.deepEqual(validationYears(),validationYears('0-5000-step-250'));
   assert.throws(()=>validationYears('other'),/unknown validation grid/);
 });

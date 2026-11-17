@@ -23,7 +23,7 @@ test('experimental lunar rates remain consistent with positions over the long-ra
 test('experimental apparent ICRF direction and derivative are explicit over the requested range',
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);
-    for (const year of [0, 1000, 2000, 3000, 4000, 5000]) {
+    for (const year of [-12999, -10000, -5000, 0, 1000, 2000, 3000, 3999, 4000, 5000]) {
       const jd = julday(year, 7, 1, 12, true);
       for (let body = 0; body <= 9; body++) {
         const state = engine.experimentalApparentIcrfTdb(jd, body);
@@ -69,7 +69,7 @@ test('experimental extrapolated apparent path covers the requested sample and ke
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);
     const signed = d => ((d + 540) % 360) - 180;
-    for (const year of [0, 1000, 2000, 3000, 4000, 5000]) {
+    for (const year of [-12999, -10000, -5000, 0, 1000, 2000, 3000, 3999, 4000, 5000]) {
       const jd = julday(year, 7, 1, 12, true);
       for (let body = 0; body <= 9; body++) {
         const result = engine.experimentalLongTermApparentTdb(jd, body);
@@ -87,6 +87,21 @@ test('experimental extrapolated apparent path covers the requested sample and ke
     const existing = engine.calcTdb(date, constants.SE_MARS, constants.SEFLG_SPEED).xx;
     assert.ok(Math.abs(signed(candidate[0] - existing[0])) < 0.000001);
     assert.throws(() => engine.calcTdb(julday(5000, 7, 1, 12, true), constants.SE_MARS), e => e.code === 'E_CALC');
+    assert.throws(() => engine.calcTdb(julday(-12999, 7, 1, 12, true), constants.SE_MARS), e => e.code === 'E_CALC');
+  });
+
+test('requested ancient and future calendar endpoints calculate only on the explicit path',
+  { skip: kernel ? false : 'DE441_PATH required' }, () => {
+    const engine = new Engine(kernel);
+    for (const [year, month, day] of [[-12999,1,1],[-12999,12,31],[3999,1,1],[3999,12,31]]) {
+      const jd = julday(year, month, day, 12, true);
+      for (const body of [constants.SE_SUN,constants.SE_MOON,constants.SE_MARS,constants.SE_PLUTO]) {
+        assert.ok(engine.experimentalLongTermApparentTdb(jd,body).xx.every(Number.isFinite));
+        const result = engine.experimentalLongTermApparentUt1(jd,body,700000,3600,'fictional sensitivity scenario');
+        assert.ok(result.xx.every(Number.isFinite));
+        assert.match(result.notes.join(' '),/accuracy not established/);
+      }
+    }
   });
 
 test('experimental corrected mean-ecliptic direction works over the requested range without changing calcTdb',

@@ -20,7 +20,7 @@ test('Uranus at the 1100 regression epoch is finite in both experimental frames'
 test('explicit UT1 Delta T and uncertainty flow to the same experimental TDB calculation',
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);
-    for (const year of [0, 1000, 2000, 3000, 4000, 5000]) {
+    for (const year of [-12999, -10000, -5000, 0, 1000, 2000, 3000, 4000, 5000]) {
       const jd = julday(year, 7, 1, 12, true);
       const result = engine.experimentalLongTermApparentUt1(jd, constants.SE_MARS, 123.5, 4.2, ' example estimate ');
       assert.equal(result.jdUt1, jd); assert.equal(result.deltaTSeconds, 123.5);
@@ -56,7 +56,7 @@ test('Delta T perturbation changes longitude consistently with the reported TDB 
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);
     const wrap = d => ((d + 540) % 360) - 180;
-    for (const year of [0,1000,2000,3000,4000,5000]) {
+    for (const year of [-12999,-10000,-5000,0,1000,2000,3000,4000,5000]) {
       const jd = julday(year,7,1,12,true);
       for (const body of [constants.SE_MOON, constants.SE_MARS, constants.SE_SATURN]) {
         const center = engine.experimentalLongTermApparentUt1(jd,body,1000,60,'synthetic sensitivity test');

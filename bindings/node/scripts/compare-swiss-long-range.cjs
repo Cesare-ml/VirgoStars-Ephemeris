@@ -51,7 +51,7 @@ async function main(){
   const maxima=Object.fromEntries(keys.map(key=>{const row=rows.reduce((a,b)=>Math.abs(b[key])>Math.abs(a[key])?b:a);return [key,{absolute:Math.abs(row[key]),year:row.year,body:row.body}];}));
   const summary={cases:rows.length,years:years.length,bodies:10,halfStepDays:halfStep,maxima};
   fs.writeFileSync(output,JSON.stringify({schema:'virgostars-swiss-long-range/1',status:'EXPLORATORY',kernelSha256:expected,
-    notes:'TDB input vs approximate TT; Swiss JPL flag checked on all 630 calls; differing model conventions; no release tolerance established',summary,rows},null,2)+'\n',{flag:'wx'});
+    notes:`TDB input vs approximate TT; Swiss JPL flag checked on all ${rows.length*3} calls; differing model conventions; no release tolerance established`,summary,rows},null,2)+'\n',{flag:'wx'});
   console.log(JSON.stringify(summary));
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1;});

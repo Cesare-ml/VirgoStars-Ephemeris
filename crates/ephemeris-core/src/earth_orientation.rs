@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
+// Modification (2026-11-17): widen the explicitly experimental nutation guard.
 //! Earth orientation: IAU 2000B nutation, true equator/ecliptic of date and ECL_NUT.
 //!
 //! Provides the 77-term IAU 2000B nutation series (McCarthy & Luzum 2003) with
@@ -22,8 +23,9 @@
 //! - Nutation, precession, and obliquity strictly require Terrestrial Time (TT).
 //! - Earth Rotation Angle (ERA) and Greenwich Mean Sidereal Time (GMST) strictly
 //!   require Universal Time (UT1); TT is passed separately for the precession term.
-//! - The implementation restricts TT to JD 2415020.0 .. 2488070.0;
-//!   the entire interval has not been independently validated.
+//! - The standard nutation implementation restricts TT to JD 2415020.0 ..
+//!   2488070.0; a separately named experimental extrapolation has its own
+//!   wider guard. Neither entire interval has been independently validated.
 //!
 //! Third-party coefficient reference data: see `THIRD_PARTY_NOTICES.md` (ERFA BSD-3).
 
@@ -297,16 +299,20 @@ pub fn iau2000b_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError>
     Ok(evaluate_nutation_series(tt_jd, t, a))
 }
 
+pub(crate) const EXPERIMENTAL_MIN_JULIAN_EPOCH: f64 = -13000.0;
+pub(crate) const EXPERIMENTAL_MAX_JULIAN_EPOCH: f64 = 5001.0;
+
 /// Experimental extrapolation of the 77-term series using full IERS 2003
 /// polynomial fundamental arguments. This is not standard IAU 2000B and has no
 /// stated physical accuracy outside its modern epoch. Validated only for
 /// implementation agreement on explicit samples, never selected implicitly.
+/// Guarded Julian epochs −13000 through 5001 are experimental, not an accuracy range.
 pub fn experimental_extrapolated_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError> {
     if !tt_jd.is_finite() {
         return Err(OrientationError::NonFinite { field: "tt_jd" });
     }
     let epj = 2000.0 + (tt_jd - J2000_TT_JD) / 365.25;
-    if !(0.0..=5001.0).contains(&epj) {
+    if !(EXPERIMENTAL_MIN_JULIAN_EPOCH..=EXPERIMENTAL_MAX_JULIAN_EPOCH).contains(&epj) {
         return Err(OrientationError::UnsupportedEpoch { epoch_tt_jd: tt_jd });
     }
     let t = (tt_jd - J2000_TT_JD) / DAYS_PER_JULIAN_CENTURY;
@@ -732,6 +738,18 @@ mod tests {
         near(swiss[3], ecl.nutation_obliquity_deg(), 1e-12);
         near(swiss[4], ecl.equation_of_equinoxes_deg(), 1e-12);
         assert_eq!(swiss[5], 0.0);
+    }
+
+    #[test]
+    fn experimental_nutation_extends_only_its_explicit_epoch_guard() {
+        let jd = |year: f64| J2000_TT_JD + (year - 2000.0) * 365.25;
+        for year in [-13000.0, -12999.0, -10000.0, 0.0, 2000.0, 5001.0] {
+            let result = experimental_extrapolated_nutation(jd(year)).unwrap();
+            assert!(result.d_psi_rad.is_finite() && result.d_epsilon_rad.is_finite());
+        }
+        assert!(experimental_extrapolated_nutation(jd(-13001.0)).is_err());
+        assert!(experimental_extrapolated_nutation(jd(5002.0)).is_err());
+        assert!(iau2000b_nutation(jd(-12999.0)).is_err());
     }
 
     #[test]
