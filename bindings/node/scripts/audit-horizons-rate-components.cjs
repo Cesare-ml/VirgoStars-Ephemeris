@@ -5,7 +5,7 @@ const {icrfAngularRates}=require('./icrf-angular-rates.cjs');
 const {julday}=require('../index.js');
 const {validationYears}=require('./planet-validation-years.cjs');
 const labels=['Sun','Moon','Mercury','Venus','Mars Barycenter','Jupiter Barycenter','Saturn Barycenter','Uranus Barycenter','Neptune Barycenter','Pluto Barycenter'];
-const variants=['full','base','no_earth_acceleration','no_retarded_rate','neither','untransformed','untransformed_no_retard'];
+const variants=['full','base','no_earth_acceleration','no_retarded_rate','neither','untransformed','untransformed_no_retard','untransformed_no_retard_no_deflection_rate'];
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 async function sha(file){const h=crypto.createHash('sha256');for await(const c of fs.createReadStream(file))h.update(c);return h.digest('hex');}
 async function main(){

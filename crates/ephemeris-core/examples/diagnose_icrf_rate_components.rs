@@ -113,6 +113,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         print_state(id, jd, "untransformed", untransformed);
         untransformed.velocity_km_per_tdb_day = deflected_no_retard.velocity_km_per_day;
         print_state(id, jd, "untransformed_no_retard", untransformed);
+        // Also omit the derivative of solar deflection, retaining the same
+        // apparent position. This is another intentionally nonphysical state.
+        untransformed.velocity_km_per_tdb_day = no_retarded_rate.velocity_km_per_day;
+        print_state(
+            id,
+            jd,
+            "untransformed_no_retard_no_deflection_rate",
+            untransformed,
+        );
     }
     Ok(())
 }
