@@ -4,6 +4,9 @@
 accuracy certification.** This extends [the 944-case station matrix](SWISS_STATION_MATRIX_2026-11-17.md).
 The canonical engine, its APIs and production activation are unchanged.
 
+A [subsequent engine-only convergence check](ENGINE_STATION_CONVERGENCE_2026-11-17.md)
+compares the returned rates with derivatives of the engine's own longitudes.
+
 ## Swiss rate behavior in short windows
 
 We selected 48 cases from the existing matrix: both directions for Mercury
