@@ -5,6 +5,8 @@ This continues the [13000 BCE–3999 CE diagnostic](PLANET_VALIDATION_13000BCE_3
 Stellar work and main-server migration remain paused. The existing pole-based
 method and normal APIs retain their behavior; this alternative is opt-in.
 
+Continuation: [analytic rate candidate and further ancient comparisons](SOLAR_DEFLECTION_RATE_CANDIDATE_2026-11-18.md).
+
 ## Two separately fitted obliquities
 
 [Vondrák, Capitaine and Wallace (2011)](https://www.aanda.org/articles/aa/pdf/2011/10/aa17274-11.pdf)
