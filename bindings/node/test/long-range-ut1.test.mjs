@@ -6,6 +6,17 @@ const require = createRequire(import.meta.url);
 const { Engine, julday, constants, experimentalEspenakMeeus2006DeltaT } = require('../index.js');
 const kernel = process.env.DE441_PATH;
 
+test('Uranus at the 1100 regression epoch is finite in both experimental frames',
+  { skip: kernel ? false : 'DE441_PATH required' }, () => {
+    const engine = new Engine(kernel), jd = julday(1100, 7, 1, 12, true);
+    const icrf = engine.experimentalApparentIcrfTdb(jd, constants.SE_URANUS);
+    const ecliptic = engine.experimentalLongTermApparentTdb(jd, constants.SE_URANUS);
+    assert.equal(icrf.positionKm.length, 3);
+    assert.ok(icrf.positionKm.every(Number.isFinite));
+    assert.equal(ecliptic.xx.length, 6);
+    assert.ok(ecliptic.xx.every(Number.isFinite));
+  });
+
 test('explicit UT1 Delta T and uncertainty flow to the same experimental TDB calculation',
   { skip: kernel ? false : 'DE441_PATH required' }, () => {
     const engine = new Engine(kernel);

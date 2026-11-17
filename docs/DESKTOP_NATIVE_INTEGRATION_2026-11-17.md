@@ -77,3 +77,6 @@ epochs, frames, centers, units and correction settings across representative
 dates, locations, missing data and polar cases. Confirm the chosen range,
 time policy, house results, provenance and rollback behavior in a native build.
 No production server or desktop deployment is performed by this package.
+
+A later [0–3000 comparison and light-time regression](PLANET_VALIDATION_0_3000_2026-11-17.md)
+records denser local sampling and the remaining time, frame and rate limits.

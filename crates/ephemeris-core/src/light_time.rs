@@ -302,11 +302,13 @@ where
         }
         // Modification 2026-11-16: a fixed point exactly equal in f64 does not
         // always exist. For a moving target (the Moon, ~1.3 s of delay) the
-        // iteration can alternate between two adjacent representable JDs
-        // (a 1-ulp, ~40 microsecond, 2-cycle at JD ~2.4e6). Accept a change of
-        // at most 4 ulps of the observation epoch as converged; the returned
-        // state is the one evaluated at `emission`, so it stays self-consistent.
-        if (next - emission.0).abs() <= 4.0 * f64::EPSILON * observation_epoch.0.abs() {
+        // iteration can alternate between adjacent representable JDs. Accept
+        // a change no larger than epsilon * |observation| (one or, at a
+        // binade boundary, two ulps). The former four-epsilon threshold could
+        // terminate too early for the subsequent sub-ULP refinement: rounding
+        // the next JD can hide another half-ulp of residual. The returned
+        // state is evaluated at `emission`, so it stays self-consistent.
+        if (next - emission.0).abs() <= f64::EPSILON * observation_epoch.0.abs() {
             let direction = position.map(|x| x / range);
             let dot = |velocity: [f64; 3]| -> f64 {
                 direction.iter().zip(velocity).map(|(a, b)| a * b).sum()
@@ -342,6 +344,85 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refinement_accepts_a_converged_affine_distant_target() {
+        let observation = JulianDateTdb(2_123_008.0);
+        let distance = 2_070_687_379.0;
+        let speed = -4_000_000.0;
+        let state = solve(Body::UranusBarycenter, observation, |body, epoch| {
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: if body == Body::Earth {
+                    [0.0; 3]
+                } else {
+                    [distance + speed * (epoch.0 - observation.0), 0.0, 0.0]
+                },
+                velocity_km_per_day: if body == Body::Earth {
+                    [0.0; 3]
+                } else {
+                    [speed, 0.0, 0.0]
+                },
+            })
+        })
+        .unwrap();
+        let target = StateVectorWithAcceleration {
+            target: Body::UranusBarycenter,
+            center: Body::SolarSystemBarycenter,
+            epoch: state.emission_epoch,
+            position_km: state.position_km,
+            velocity_km_per_day: [speed, 0.0, 0.0],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let earth = StateVectorWithAcceleration {
+            target: Body::Earth,
+            center: Body::SolarSystemBarycenter,
+            epoch: observation,
+            position_km: [0.0; 3],
+            velocity_km_per_day: [0.0; 3],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let refined = refine_emission_rounding(
+            state,
+            target,
+            earth,
+            (
+                JulianDateTdb(observation.0 - 10.0),
+                JulianDateTdb(observation.0 + 10.0),
+            ),
+        )
+        .unwrap();
+        // A one-dimensional affine target has the closed-form solution
+        // r = distance*c/(c+speed); compare the result, not just acceptance.
+        let expected_range = distance * C_KM_PER_DAY / (C_KM_PER_DAY + speed);
+        let expected_speed = speed * C_KM_PER_DAY / (C_KM_PER_DAY + speed);
+        assert!((refined.position_km[0] - expected_range).abs() < 1e-5);
+        assert!((refined.velocity_km_per_day[0] - expected_speed).abs() < 1e-8);
+    }
+
+    #[test]
+    #[ignore = "requires caller-supplied DE441_PATH"]
+    fn real_de441_uranus_year_1100_emission_refinement() {
+        let path = std::env::var("DE441_PATH").expect("DE441_PATH");
+        let mut kernel = De441::open(path).expect("classic DE441");
+        let observation = JulianDateTdb(2_123_008.0);
+        let state =
+            geocentric_light_time(&mut kernel, Body::UranusBarycenter, observation).unwrap();
+        let target = kernel
+            .state_with_acceleration(
+                Body::UranusBarycenter,
+                Body::SolarSystemBarycenter,
+                state.emission_epoch,
+            )
+            .unwrap();
+        let earth = kernel
+            .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, observation)
+            .unwrap();
+        let coverage = kernel.coverage();
+        assert!(refine_emission_rounding(state, target, earth, coverage).is_ok());
+    }
 
     #[test]
     fn experimental_refinement_recovers_sub_ulp_emission_offset_and_guards_coverage() {
