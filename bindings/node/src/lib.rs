@@ -11,6 +11,7 @@
 // Contributors retain applicable rights in their own contributions under the terms of this License.
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+// Modification (2026-11-17): expose opt-in direct-obliquity TDB and UT1 methods.
 
 //! Thin Node.js (N-API) binding over `virgostars-ephemeris-core`.
 //!
@@ -34,7 +35,8 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    applied_corrections, experimental_apparent_icrf, experimental_long_term_apparent_ecliptic,
+    applied_corrections, experimental_apparent_icrf,
+    experimental_long_term_apparent_direct_obliquity, experimental_long_term_apparent_ecliptic,
     experimental_long_term_mean_ecliptic, geocentric_apparent_six_fields_many_with_options,
     small_body_apparent_six_fields, tdb_to_tt_jd, ApparentCenter, ApparentFrame, ApparentOptions,
 };
@@ -956,6 +958,37 @@ impl Engine {
         })
     }
 
+    /// Explicit mixed-frame alternative; does not alter the pole-based method.
+    #[napi]
+    pub fn experimental_long_term_direct_obliquity_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<LongTermExperimentalResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let f = experimental_long_term_apparent_direct_obliquity(
+            &mut self.ephemeris,
+            target,
+            JulianDateTdb(jd_tdb),
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        Ok(LongTermExperimentalResult {
+            xx: vec![f.longitude_deg, f.latitude_deg, f.distance_au, f.longitude_speed_deg_per_tdb_day,
+                f.latitude_speed_deg_per_tdb_day, f.distance_speed_au_per_tdb_day],
+            target: format!("{target:?}"), time_source: "TDB_INPUT".to_string(),
+            notes: vec!["EXPERIMENTAL MIXED FRAME: pole-derived equator/equinox plus independently fitted direct Vondrak obliquity; accuracy not established".to_string(),
+                "extrapolated nutation; light-time, solar deflection and annual aberration".to_string(),
+                "first-order sub-ULP emission-time refinement; rates per TDB day".to_string(),
+                "no UT or Delta T conversion; not selected by calcTdb".to_string()],
+        })
+    }
+
     /// Explicit UT1 conversion for the isolated long-range apparent experiment.
     /// UT1 is not UTC, and the caller is responsible for the Delta T estimate.
     #[napi]
@@ -966,6 +999,45 @@ impl Engine {
         delta_t_seconds: f64,
         delta_t_uncertainty_seconds: f64,
         delta_t_source: String,
+    ) -> Result<LongTermUt1Result> {
+        self.long_term_ut1(
+            jd_ut1,
+            ipl,
+            delta_t_seconds,
+            delta_t_uncertainty_seconds,
+            delta_t_source,
+            false,
+        )
+    }
+
+    /// Explicit UT1 alternative using the experimental mixed obliquity frame.
+    #[napi]
+    pub fn experimental_long_term_direct_obliquity_ut1(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        delta_t_uncertainty_seconds: f64,
+        delta_t_source: String,
+    ) -> Result<LongTermUt1Result> {
+        self.long_term_ut1(
+            jd_ut1,
+            ipl,
+            delta_t_seconds,
+            delta_t_uncertainty_seconds,
+            delta_t_source,
+            true,
+        )
+    }
+
+    fn long_term_ut1(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        delta_t_uncertainty_seconds: f64,
+        delta_t_source: String,
+        direct_obliquity: bool,
     ) -> Result<LongTermUt1Result> {
         if delta_t_source.trim().is_empty() || delta_t_source.len() > 200 {
             return Err(fail(
@@ -980,8 +1052,16 @@ impl Engine {
             ut1_to_tdb_with_explicit_delta_t(jd_ut1, delta_t_seconds, delta_t_uncertainty_seconds)
                 .map_err(|e| fail("E_RANGE", e))?;
         let target = body_from_ipl(ipl)?;
-        let f = experimental_long_term_apparent_ecliptic(&mut self.ephemeris, target, epoch.jd_tdb)
-            .map_err(|e| fail("E_CALC", e))?;
+        let f = if direct_obliquity {
+            experimental_long_term_apparent_direct_obliquity(
+                &mut self.ephemeris,
+                target,
+                epoch.jd_tdb,
+            )
+        } else {
+            experimental_long_term_apparent_ecliptic(&mut self.ephemeris, target, epoch.jd_tdb)
+        }
+        .map_err(|e| fail("E_CALC", e))?;
         Ok(LongTermUt1Result {
             xx: vec![
                 f.longitude_deg,
@@ -1000,8 +1080,11 @@ impl Engine {
             delta_t_source: delta_t_source.trim().to_owned(),
             notes: vec![
                 "EXPERIMENTAL: UT1 input; caller-asserted Delta T and uncertainty".to_string(),
-                "Vondrak precession and extrapolated 77-term nutation; accuracy not established"
-                    .to_string(),
+                if direct_obliquity {
+                    "MIXED FRAME: pole-derived equator/equinox plus independently fitted direct Vondrak obliquity; extrapolated nutation; accuracy not established"
+                } else {
+                    "Vondrak precession and extrapolated 77-term nutation; accuracy not established"
+                }.to_string(),
                 "TT to TDB uses one periodic term; rates are per TDB day".to_string(),
                 "first-order sub-ULP emission-time refinement".to_string(),
                 "uncertainty is not converted to a planetary position error; not UTC or local time"

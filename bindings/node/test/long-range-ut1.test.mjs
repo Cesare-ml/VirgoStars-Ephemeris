@@ -29,6 +29,11 @@ test('explicit UT1 Delta T and uncertainty flow to the same experimental TDB cal
       assert.ok(Math.abs((result.jdTdb - result.jdTt) * 86400) < 0.002);
       assert.deepEqual(result.xx, engine.experimentalLongTermApparentTdb(result.jdTdb, constants.SE_MARS).xx);
       assert.match(result.notes.join(' '), /not UTC/);
+      const direct = engine.experimentalLongTermDirectObliquityUt1(jd, constants.SE_MARS, 123.5, 4.2, ' example estimate ');
+      assert.equal(direct.deltaTSeconds, 123.5);assert.equal(direct.deltaTUncertaintySeconds,4.2);
+      assert.equal(direct.deltaTSource,'example estimate');assert.equal(direct.jdTdb,result.jdTdb);
+      assert.deepEqual(direct.xx,engine.experimentalLongTermDirectObliquityTdb(direct.jdTdb,constants.SE_MARS).xx);
+      assert.match(direct.notes.join(' '),/MIXED FRAME.*accuracy not established/);
     }
     const jd = julday(2000, 1, 1, 12, true);
     const result = engine.experimentalLongTermApparentUt1(jd, constants.SE_MARS, 64.184, 1, 'UT1 approximately UTC').xx;
@@ -37,6 +42,7 @@ test('explicit UT1 Delta T and uncertainty flow to the same experimental TDB cal
     assert.ok(Math.abs(wrap(result[0] - existing[0])) < 0.000001);
     for (const [dt, uncertainty, source] of [[NaN, 1, 'x'], [1, -1, 'x'], [1, Infinity, 'x'], [1, 1, ' ']]) {
       assert.throws(() => engine.experimentalLongTermApparentUt1(jd, constants.SE_MARS, dt, uncertainty, source), e => e.code === 'E_RANGE');
+      assert.throws(() => engine.experimentalLongTermDirectObliquityUt1(jd, constants.SE_MARS, dt, uncertainty, source), e => e.code === 'E_RANGE');
     }
     assert.throws(() => engine.experimentalLongTermApparentUt1(jd, constants.SE_CHIRON, 1, 1, 'x'), e => e.code === 'E_UNSUPPORTED_BODY');
   });

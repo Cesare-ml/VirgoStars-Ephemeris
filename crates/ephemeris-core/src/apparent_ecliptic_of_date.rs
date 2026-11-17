@@ -11,6 +11,7 @@
 // Contributors retain applicable rights in their own contributions under the terms of this License.
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+// Modification (2026-11-17): add an opt-in direct-obliquity experimental frame.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -70,8 +71,8 @@ use crate::de441::{
 };
 use crate::earth_orientation::{
     experimental_extrapolated_nutation, iau2006_bias_precession_matrix, matrix_multiply,
-    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, z_rotation,
-    Matrix3x3, OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
+    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, x_rotation,
+    z_rotation, Matrix3x3, OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
 };
 use crate::light_deflection::{
     deflect_light_time_state_by_sun, deflect_light_time_state_by_sun_with, DeflectionError,
@@ -80,7 +81,7 @@ use crate::light_time::{
     geocentric_light_time, heliocentric_light_time, light_time_with_states,
     refine_emission_rounding,
 };
-use crate::long_term_precession::mean_date_matrices;
+use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 use crate::six_field_units::{
     fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
 };
@@ -493,7 +494,7 @@ pub fn experimental_long_term_mean_ecliptic<R: Read + Seek>(
     target: Body,
     reception_epoch: JulianDateTdb,
 ) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
-    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, false)
+    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, false, false)
 }
 
 /// Experimental long-range geocentric apparent ecliptic direction. Uses
@@ -505,7 +506,18 @@ pub fn experimental_long_term_apparent_ecliptic<R: Read + Seek>(
     target: Body,
     reception_epoch: JulianDateTdb,
 ) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
-    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true)
+    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true, false)
+}
+
+/// Explicit alternative with the separately fitted Vondrák ε_A series. The
+/// equator/equinox still come from the pole fit, so this is a mixed convention,
+/// not the pole-derived ecliptic and not a certified accuracy improvement.
+pub fn experimental_long_term_apparent_direct_obliquity<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
+    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true, true)
 }
 
 fn experimental_long_term_ecliptic<R: Read + Seek>(
@@ -513,6 +525,7 @@ fn experimental_long_term_ecliptic<R: Read + Seek>(
     target: Body,
     reception_epoch: JulianDateTdb,
     nutation: bool,
+    direct_obliquity: bool,
 ) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
     let earth = ephemeris
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
@@ -522,7 +535,13 @@ fn experimental_long_term_ecliptic<R: Read + Seek>(
     // ICRF to J2000 mean axes via the existing IAU-2006 frame bias.
     let bias = iau2006_bias_precession_matrix(J2000_TT_JD)?;
     let matrix = |date| -> Result<Matrix3x3, OrientationError> {
-        let mean = matrix_multiply(mean_date_matrices(date)?.1, bias);
+        let (equator, ecliptic) = mean_date_matrices(date)?;
+        let axes = if direct_obliquity {
+            matrix_multiply(x_rotation(experimental_direct_obliquity(date)?), equator)
+        } else {
+            ecliptic
+        };
+        let mean = matrix_multiply(axes, bias);
         if nutation {
             let dpsi = experimental_extrapolated_nutation(date)?.d_psi_rad;
             Ok(matrix_multiply(z_rotation(-dpsi), mean))
