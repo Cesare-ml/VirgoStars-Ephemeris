@@ -40,6 +40,63 @@ test('the recorded Rome reference is reproduced to a few milliarcseconds', () =>
   assert.ok(Math.abs(a.midheavenDeg - 63.6782674613) < 1e-6, String(a.midheavenDeg));
 });
 
+test('native binding returns the rising polar Ascendant in all seven synthetic latitude cases', () => {
+  // Modification 2026-11-18: tests the Rust-backed Node provider at the same
+  // time/longitude as the owner's earlier receipt. Numerical comparison is a
+  // native regression, NOT an independent astronomical/house-cusp reference.
+  const provider = createHouseAngleProvider();
+  const j2000 = {ut1JulianDay: 2451545, ttJulianDay: 2451545.0008,
+    longitudeDegEast: 12.4964};
+  const samples = [
+    [-80, 7.16881630295217],
+    [-66.55, 12.481452337837476],
+    [-45, 17.42420249955754],
+    [0, 24.778143295766903],
+    [45, 41.09682061519927],
+    [66.55, 100.47525199627685],
+    [80, 344.5489205114233],
+  ];
+  const expectedArmcDeg = 292.95347186375847;
+  const expectedMcDeg = 291.23482098822;
+  const circularDistance = (a, b) => Math.abs((a - b + 540) % 360 - 180);
+  for (const [latitudeDeg, expectedAscDeg] of samples) {
+    const result = provider.calculateHouseAngles({...j2000, latitudeDeg});
+    assert.ok(circularDistance(result.ascendantDeg, expectedAscDeg) < 1e-7,
+      `${latitudeDeg}°: native Ascendant differs from owner fixture`);
+    assert.ok(circularDistance(result.armcDeg, expectedArmcDeg) < 1e-7,
+      `${latitudeDeg}°: native ARMC unexpectedly changed`);
+    assert.ok(circularDistance(result.midheavenDeg, expectedMcDeg) < 1e-7,
+      `${latitudeDeg}°: native Midheaven unexpectedly changed`);
+
+    const radians = Math.PI / 180;
+    const phi = latitudeDeg * radians;
+    const theta = result.armcDeg * radians;
+    const epsilon = result.trueObliquityDeg * radians;
+    const longitude = result.ascendantDeg * radians;
+    const x = Math.cos(longitude);
+    const y = Math.cos(epsilon) * Math.sin(longitude);
+    const z = Math.sin(epsilon) * Math.sin(longitude);
+    const sinAltitude = Math.sin(phi) * z + Math.cos(phi) *
+      (x * Math.cos(theta) + y * Math.sin(theta));
+    const risingDerivative = Math.cos(phi) *
+      (y * Math.cos(theta) - x * Math.sin(theta));
+    assert.ok(Math.abs(sinAltitude) < 1e-10, `${latitudeDeg}°: not on horizon`);
+    assert.ok(risingDerivative > 0, `${latitudeDeg}°: setting rather than rising`);
+  }
+});
+
+test('UT convenience binding also selects rising ecliptic crossing at polar latitude', () => {
+  const result = houseAnglesUt(2451545, 80, 12.4964);
+  const radians = Math.PI / 180;
+  const theta = result.armcDeg * radians;
+  const epsilon = result.trueObliquityDeg * radians;
+  const longitude = result.ascendantDeg * radians;
+  const risingDerivative = Math.cos(80 * radians) *
+    (Math.cos(epsilon) * Math.sin(longitude) * Math.cos(theta) -
+      Math.cos(longitude) * Math.sin(theta));
+  assert.ok(risingDerivative > 0, 'houseAnglesUt must forward the rising Rust angle');
+});
+
 test('invalid sites and unsupported epochs fail with E_RANGE', () => {
   const provider = createHouseAngleProvider();
   for (const latitudeDeg of [90, -90, 91, NaN, Infinity]) {
