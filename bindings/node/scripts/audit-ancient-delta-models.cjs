@@ -1,9 +1,12 @@
 'use strict';
 // SPDX-License-Identifier: CPAL-1.0. Published parabola comparison only.
 // Neither formula is an approved ancient-time model or uncertainty estimate.
+// Modification (2026-11-18): support a denser fixed-UT1 sensitivity grid.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {Engine,julday}=require('../index.js');
-const years=[-12999,-10000,-5000,-1999,-1000,-719],shiftScenario=3600;
+const yearsForGrid=grid=>grid==='baseline'?[-12999,-10000,-5000,-1999,-1000,-719]:
+  grid==='dense'?[-12999,...Array.from({length:24},(_,i)=>-12500+i*500),-719]:null;
+const shiftScenario=3600;
 const wrap=x=>((x%360)+540)%360-180;
 function parabolas(year){
   if(!Number.isFinite(year))throw new Error('finite astronomical decimal year required');
@@ -12,9 +15,10 @@ function parabolas(year){
 }
 async function sha(file){const h=crypto.createHash('sha256');for await(const c of fs.createReadStream(file))h.update(c);return h.digest('hex');}
 async function main(){
-  const [kernel,expected,swissPackage,out,...extra]=process.argv.slice(2);
+  const [kernel,expected,swissPackage,out,grid='baseline',...extra]=process.argv.slice(2);
+  const years=yearsForGrid(grid);
   if(!kernel||!/^[a-f0-9]{64}$/.test(expected||'')||!swissPackage||!out||extra.length
-      ||path.resolve(kernel)===path.resolve(out)||fs.existsSync(out))throw new Error('usage: <de441> <sha256> <swisseph> <new-report>');
+      ||!years||path.resolve(kernel)===path.resolve(out)||fs.existsSync(out))throw new Error('usage: <de441> <sha256> <swisseph> <new-report> [baseline|dense]');
   if(await sha(kernel)!==expected)throw new Error('kernel hash mismatch');
   const swiss=require(path.resolve(swissPackage)),engine=new Engine(path.resolve(kernel));
   swiss.swe_set_ephe_path(path.dirname(path.resolve(kernel)));swiss.swe_set_jpl_file(path.basename(kernel));
@@ -36,8 +40,8 @@ async function main(){
   }
   if(await sha(kernel)!==expected)throw new Error('kernel changed');
   const notes='Proleptic Gregorian UT1; NASA 2006 before -1999 and the 2016 parabola before its observational span are unvalidated extrapolations, not historical truth. The 2016 parabola is not its observational spline. Models may share observations; differences and 1h scenario are not uncertainty bounds. Direct-obliquity mixed frame, approximate TT/TDB.';
-  fs.writeFileSync(out,JSON.stringify({schema:'virgostars-ancient-delta-models/1',status:'EXPLORATORY',kernelSha256:expected,notes,rows},null,2)+'\n',{flag:'wx'});
+  fs.writeFileSync(out,JSON.stringify({schema:'virgostars-ancient-delta-models/1',status:'EXPLORATORY',grid,kernelSha256:expected,notes,rows},null,2)+'\n',{flag:'wx'});
   console.log(JSON.stringify({cases:rows.length,first:rows[0],last:rows.at(-1)}));
 }
-module.exports={parabolas};
+module.exports={parabolas,yearsForGrid};
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1});

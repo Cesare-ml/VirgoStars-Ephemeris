@@ -2,7 +2,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const {parabolas}=createRequire(import.meta.url)('../scripts/audit-ancient-delta-models.cjs');
+const {parabolas,yearsForGrid:ut1Years}=createRequire(import.meta.url)('../scripts/audit-ancient-delta-models.cjs');
 const {swissAtTt,yearsForGrid}=createRequire(import.meta.url)('../scripts/compare-horizons-ancient-deltat.cjs');
 test('published exploratory parabolas preserve their mathematical anchors',()=>{
   assert.equal(parabolas(1820).espenakMeeus2006Seconds,-20);
@@ -27,4 +27,13 @@ test('dense Horizons grid is ordered, covers both endpoints, and rejects unknown
   assert.equal(years.at(-1),-719);
   assert.ok(years.slice(1).every((y,i)=>y>years[i]));
   assert.equal(yearsForGrid('unknown'),null);
+});
+
+test('dense UT1 sensitivity grid covers the ancient range in order',()=>{
+  const years=ut1Years('dense');
+  assert.equal(years.length,26);
+  assert.equal(years[0],-12999);
+  assert.equal(years.at(-1),-719);
+  assert.ok(years.slice(1).every((y,i)=>y>years[i]));
+  assert.equal(ut1Years('unknown'),null);
 });
