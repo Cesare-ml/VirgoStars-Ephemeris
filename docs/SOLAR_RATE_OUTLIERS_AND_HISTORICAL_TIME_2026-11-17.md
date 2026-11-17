@@ -4,6 +4,9 @@
 This follows [the rate-component investigation](RATE_COMPONENTS_AND_HISTORICAL_MODELS_2026-11-17.md).
 No production calculation, public API or default time model changed.
 
+A [subsequent seasonal velocity comparison](PLANETARY_SPEED_VALIDATION_SEASONAL_2026-11-17.md)
+checks geometric vectors directly and apparent ecliptic rates against Swiss.
+
 ## Association with solar separation
 
 Reanalyzing the existing 2,400 previously held-out Horizons cases after
