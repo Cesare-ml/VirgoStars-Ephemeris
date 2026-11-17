@@ -1,6 +1,18 @@
-# Numerical validation protocol (design / no tests executed)
+# Numerical validation protocol (experimental implementation; independent real-kernel validation pending)
 
-**No scientific accuracy, Swiss parity, or runtime compatibility is claimed yet.** Independent astronomical correctness is the primary gate; matching an existing astrology program is a secondary compatibility signal.
+**Status as of 2026-11-15:** Rust classic DE441 and experimental DAF/SPK Type-2/3 code, synthetic tests and an offline NAIF/SPICE comparison harness exist on `dev/ephemeris`. This document's older dated checkpoints describe separate historical JavaScript experiments; their pass counts are **not** Rust scientific validation. No passing comparison against a verified real NASA/JPL kernel is recorded here. Do not claim Swiss parity or production readiness.
+
+## E1 independent Rust/SPK acceptance gate
+
+Use the maintained [offline NAIF/SPICE validation procedure](RUST_SPK_NAIF_OFFLINE_VALIDATION_2026-11-13.md) and its referenced scripts rather than treating synthetic Chebyshev tests as astronomical accuracy evidence.
+
+1. Obtain an authorized SPK externally; retain its official source URL, byte size, SHA-256, coverage and redistribution restrictions. Do not commit kernels or unreviewed reference output.
+2. Generate independent NAIF/SPICE `spkezr` reference vectors with the **identical ordered kernel set**; record toolkit version, target and center NAIF IDs, `J2000` frame, `NONE` correction, TDB seconds past J2000 and km/km/s units. Compare only supported Type-2/3 J2000 paths.
+3. Run the documented Python hash preflight against the **same ordered local files**, then the Rust offline comparator. Keep files immutable between reference generation, preflight and comparison; retain both command lines, exit codes, reference CSV provenance and worst per-axis and vector-norm residuals.
+4. Include multiple epochs (interior and segment boundaries), Earth/Moon, Sun/planet centers versus barycenters, reversed target/center pairs and overlapping-kernel precedence where supported. Explicitly record unsupported cases rather than silently skipping them.
+5. Require a reviewer-approved positional and velocity tolerance **before** interpreting residuals. A passing CI, zero exit code on synthetic fixtures, or a user-declared CSV provider string alone cannot establish independent scientific accuracy.
+
+**Current gate:** `IMPLEMENTED_UNVERIFIED`; the real-kernel NAIF comparison, reviewed tolerance budget and reproducible evidence receipt remain outstanding. This gate does not authorize production integration.
 
 ## Test matrix
 
