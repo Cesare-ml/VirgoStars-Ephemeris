@@ -247,7 +247,7 @@ export type StarCatalogEntry = StarCatalogBase & (
 
 export interface StarLookupWarning {
   name: string;
-  code: 'SWISS_POSITION_MISMATCH' | 'SWISS_LOOKUP_UNAVAILABLE' | 'SWISS_RETURNED_DIFFERENT_NAME';
+  code: 'SWISS_POSITION_MISMATCH' | 'SWISS_MAGNITUDE_MISMATCH' | 'SWISS_LOOKUP_UNAVAILABLE' | 'SWISS_RETURNED_DIFFERENT_NAME';
   detail: string;
   status?: 'CALLER_ASSERTED';
 }

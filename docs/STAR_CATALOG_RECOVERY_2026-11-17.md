@@ -1,5 +1,8 @@
 # Local stellar catalog recovery — 2026-11-17
 
+**Follow-up:** six additional locally sourced candidates and their magnitude
+warnings are recorded in [the gap review](STAR_CATALOG_GAP_REVIEW_2026-11-17.md).
+
 **Experimental, local only; catalog coverage remains incomplete.** No
 production provider is changed. The owner chose the astronomically correct
 identity when Swiss selects another object, with an explicit warning.

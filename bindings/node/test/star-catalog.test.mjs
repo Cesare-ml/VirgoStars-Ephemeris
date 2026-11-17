@@ -90,6 +90,14 @@ test('Swiss differences are reported for the requested alias without changing ot
   assert.throws(()=>createSwissShapedFacade(engine,{starCatalog:input.stars}),e=>e.code==='E_CATALOG');
 });
 
+test('Swiss magnitude discrepancies are surfaced only for the affected lookup', () => {
+  const input=fixture();
+  input.stars[0].lookupWarnings=[{name:'Example alias',code:'SWISS_MAGNITUDE_MISMATCH',detail:'Source magnitudes differ.'}];
+  const facade=createSwissShapedFacade({}, {starCatalog:prepareStarCatalog(input).stars});
+  assert.equal(facade.swe_fixstar_mag('example alias').compatibilityWarning.code,'SWISS_MAGNITUDE_MISMATCH');
+  assert.equal(facade.swe_fixstar_mag('Example').compatibilityWarning,undefined);
+});
+
 test('coverage reports aliases, missing names and explicit catalog assumptions without approving them', () => {
   const manifest = fixture();
   manifest.stars.push({ name: 'Second', aliases: [], hip: 456, identitySource: 'Fictional', qualityDecision: 'Fictional',

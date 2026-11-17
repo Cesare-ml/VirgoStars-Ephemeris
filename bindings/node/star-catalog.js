@@ -25,7 +25,7 @@ function validateLookupWarnings(warnings, names, label = 'lookupWarnings') {
     const key = name.toLocaleLowerCase('en-US');
     if (!validNames.has(key) || seen.has(key)) fail(`${label} must reference distinct catalog names`);
     seen.add(key);
-    if (!['SWISS_POSITION_MISMATCH', 'SWISS_LOOKUP_UNAVAILABLE', 'SWISS_RETURNED_DIFFERENT_NAME'].includes(warning.code)
+    if (!['SWISS_POSITION_MISMATCH', 'SWISS_MAGNITUDE_MISMATCH', 'SWISS_LOOKUP_UNAVAILABLE', 'SWISS_RETURNED_DIFFERENT_NAME'].includes(warning.code)
       || typeof warning.detail !== 'string' || !warning.detail.trim() || warning.detail.length > 500) fail(`${label} has invalid warning fields`);
     return { name, code: warning.code, detail: warning.detail.trim(), status:'CALLER_ASSERTED' };
   });
