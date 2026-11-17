@@ -5,6 +5,10 @@ release certification.** This follows [the Swiss and Horizons numerical
 investigation](STATION_NUMERICAL_STABILITY_2026-11-17.md). No production
 calculation, event API or consumer configuration changed.
 
+A [subsequent JPL ecliptic and historical UT1 comparison](STATION_JPL_AND_HISTORICAL_UT1_2026-11-17.md)
+checks directions with an independent orientation implementation and compares
+historical time reconstructions at the sampled events.
+
 ## What was tested
 
 We selected **80 events** from the previously retained station matrix: both
