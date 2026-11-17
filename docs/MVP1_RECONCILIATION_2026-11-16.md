@@ -129,6 +129,11 @@ comparison; it does not replace the individual model and validation contracts.
    Eleven focused tests passed, including a real polar HTTP calculation; the
    regular backend server remains unchanged. Broader parity, product approval,
    release provisioning and rollout/rollback remain open.
+   Subsequent local work adds the 40-star subset to the actual legacy conjunction
+   service and an injectable adapter for its existing controller. With the
+   external Chiron file configured, the extended natal profile returns 15
+   kernel entries and four derived opposite points. The controller integration
+   has been exercised with a simulated COW repository, not the production DB.
 4. **[Open — release engineering]** Validate reproducible builds on target
    platforms, licensing/attribution and data distribution, CI and appropriate
    packaging; agree on the versioned public contract. Staging and deployment

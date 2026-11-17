@@ -61,7 +61,11 @@ the candidate and its baseline had the same 57 failing test names; the local
 candidate also skipped six optional tests when the real-data environment was
 not configured for that suite. The focused real-data tests above had no skips.
 
-The experimental natal contract still has the seven Phase 1 planetary bodies;
-the current production `/stelle` flow and its database enrichment are not yet
-migrated. The next steps are broader representative parity checks, a product
-decision on missing stars and fields, packaging/provisioning and release review.
+Subsequent backend work adds an explicit extended profile: 15 kernel elements
+including Chiron and four derived opposite points, plus the same legacy star
+conjunction service with the 40-star subset. The existing `/stelle` controller
+can receive this provider explicitly and has been tested locally with a fake
+COW repository and logger. The production server and real PostgreSQL path have
+not been switched or verified. See the backend branch's bridge documentation
+for startup, coverage, tests and limitations. Broader parity, packaging and
+release review remain open.
