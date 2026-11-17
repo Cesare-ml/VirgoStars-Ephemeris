@@ -19,6 +19,13 @@ test('applies a verified caller assertion and exposes a lookup-specific warning'
   assert.equal(facade.swe_fixstar_mag('Alpha').compatibilityWarning,undefined);
   assert.equal(r.report.status,'CALLER_ASSERTED');
 });
+test('accepts and preserves a caller-asserted magnitude warning',()=>{
+  const {manifest,decisions}=fixture();
+  decisions.aliases[0].warning={code:'SWISS_MAGNITUDE_MISMATCH',detail:'fictional magnitude difference'};
+  const r=attachReviewedAliases(manifest,swiss,bytes(decisions));
+  const facade=createSwissShapedFacade({}, {starCatalog:prepareStarCatalog(r.manifest).stars});
+  assert.equal(facade.swe_fixstar_mag('alternate').compatibilityWarning.code,'SWISS_MAGNITUDE_MISMATCH');
+});
 test('rejects stale or conflicting decisions instead of attaching them',()=>{
   const {manifest,decisions}=fixture();
   assert.throws(()=>attachReviewedAliases(manifest,Buffer.from(swiss+' '),bytes(decisions)),/hash mismatch/);

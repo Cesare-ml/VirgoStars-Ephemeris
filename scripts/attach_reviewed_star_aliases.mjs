@@ -28,7 +28,7 @@ export function attachReviewedAliases(manifestBytes,swissBytes,decisionBytes){
     if(url.protocol!=='https:'||url.username||url.password)throw new Error('invalid source URL');
     const key=fold(item.lookup),star=byHip.get(item.hip);
     if(!star||star.name!==item.canonicalName||!lookupUniverse.has(key)||occupied.has(key))throw new Error('unknown, conflicting or duplicate alias');
-    if(item.warning!==null&&(!item.warning||Object.keys(item.warning).some(k=>!['code','detail'].includes(k))||!['SWISS_POSITION_MISMATCH','SWISS_LOOKUP_UNAVAILABLE','SWISS_RETURNED_DIFFERENT_NAME'].includes(item.warning.code)
+    if(item.warning!==null&&(!item.warning||Object.keys(item.warning).some(k=>!['code','detail'].includes(k))||!['SWISS_POSITION_MISMATCH','SWISS_MAGNITUDE_MISMATCH','SWISS_LOOKUP_UNAVAILABLE','SWISS_RETURNED_DIFFERENT_NAME'].includes(item.warning.code)
       ||!nonempty(item.warning.detail)||item.warning.detail.length>500))throw new Error('invalid warning');
     occupied.add(key);const record={...item,lookup:item.lookup.trim(),sourceUrl:url.href};
     const group=additions.get(item.hip)??[];group.push(record);additions.set(item.hip,group);records.push(record);
