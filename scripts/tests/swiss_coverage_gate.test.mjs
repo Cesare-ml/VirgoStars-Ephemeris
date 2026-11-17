@@ -15,3 +15,22 @@ test('distinguishes exact name coverage from missing designation',()=>{
 test('rejects a source mismatch',()=>{
   assert.throws(()=>verifySwissCoverage(bytes(manifest()),Buffer.from(swiss+' ')),/hash mismatch/);
 });
+test('reports unavailable magnitudes and assumed velocities for names and aliases separately',()=>{
+  const m=manifest();m.stars[0].aliases=[',a1'];m.stars[0].magnitude=null;m.stars[0].magnitudeMissingReason='fixture';
+  const r=verifySwissCoverage(bytes(m),swiss);
+  assert.equal(r.status,'COMPLETE_LOOKUP_COVERAGE_ONLY');
+  assert.equal(r.fieldCoverage.starsWithoutMagnitude,1);
+  assert.equal(r.fieldCoverage.starsAssumingZeroRadialVelocity,1);
+  assert.deepEqual(r.fieldCoverage.namesWithoutMagnitude,['Alpha']);
+  assert.deepEqual(r.fieldCoverage.designationsWithoutMagnitude,[',A1']);
+  assert.deepEqual(r.fieldCoverage.namesAssumingZeroRadialVelocity,['Alpha']);
+  assert.deepEqual(r.fieldCoverage.designationsAssumingZeroRadialVelocity,[',A1']);
+  m.stars[0].radialVelocityKmS=0;m.stars[0].radialVelocitySource='fixture';
+  assert.equal(verifySwissCoverage(bytes(m),swiss).fieldCoverage.starsAssumingZeroRadialVelocity,0);
+});
+test('does not treat unmatched lookups as missing fields on known stars',()=>{
+  const r=verifySwissCoverage(bytes(manifest()),swiss);
+  assert.deepEqual(r.missingDesignations,[',A1']);
+  assert.deepEqual(r.fieldCoverage.designationsWithoutMagnitude,[]);
+  assert.deepEqual(r.fieldCoverage.designationsAssumingZeroRadialVelocity,[]);
+});

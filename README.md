@@ -15,6 +15,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 ## Read first
 
+- [MVP readiness and remaining acceptance work](docs/MVP_READINESS_2026-11-17.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
