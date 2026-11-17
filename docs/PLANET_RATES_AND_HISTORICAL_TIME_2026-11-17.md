@@ -5,6 +5,10 @@ criteria remain open.** This follows
 [the 0–3000 positional comparison](PLANET_VALIDATION_0_3000_2026-11-17.md).
 No production server or desktop provider is activated.
 
+A [subsequent holdout investigation](RATE_COMPONENTS_AND_HISTORICAL_MODELS_2026-11-17.md)
+tests rate-convention hypotheses on additional epochs and compares selected
+historical time-model values with a later published reconstruction.
+
 ## Apparent ICRF rates versus Horizons
 
 At 61 dates (1 July, astronomical years 0–3000 in steps of 50) and ten
