@@ -4,6 +4,9 @@
 release certification.** This follows [the seasonal comparison](PLANETARY_SPEED_VALIDATION_SEASONAL_2026-11-17.md).
 The normal engine calculation and consumer APIs are unchanged.
 
+The [subsequent station matrix](SWISS_STATION_MATRIX_2026-11-17.md) expands
+this investigation to 944 selected events and examines correction modes.
+
 ## Which corrections affect the discrepancy?
 
 For 5,400 new body/epoch pairs (Moon through Pluto system barycenter; years
