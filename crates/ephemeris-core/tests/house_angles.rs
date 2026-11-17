@@ -165,7 +165,7 @@ fn polar_fix_preserves_reference_fitted_extra_angle_branches() {
 #[test]
 fn full_native_angle_pipeline_keeps_north_and_south_polar_ascendants_rising() {
     let ut1 = 2_451_545.0;
-    let tt = 2_451_545.0008;
+    let tt = 2_451_545.000_8;
     for latitude in [-80.0, 80.0] {
         let angles = house_angles(ut1, tt, latitude, 12.4964).unwrap();
         let (altitude_sine, rise_rate) = horizon_altitude_sine_and_rise_rate(
