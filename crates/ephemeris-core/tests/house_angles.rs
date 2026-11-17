@@ -89,13 +89,15 @@ fn horizon_altitude_sine_and_rise_rate(
 fn polar_ascendant_is_on_eastern_rising_horizon_both_hemispheres() {
     for obliquity in [23.44, 23.437_676_823_739_082] {
         for latitude in [
-            -89.999, -85.0, -80.0, -67.0, -66.55, -45.0, 0.0, 45.0, 66.55, 67.0,
-            80.0, 85.0, 89.999,
+            -89.999, -85.0, -80.0, -67.0, -66.55, -45.0, 0.0, 45.0, 66.55, 67.0, 80.0, 85.0, 89.999,
         ] {
             for armc in (0..360).step_by(5) {
                 let (ascendant, _mc) = angles_from_armc(f64::from(armc), obliquity, latitude);
                 let (altitude_sine, rise_rate) = horizon_altitude_sine_and_rise_rate(
-                    f64::from(armc), obliquity, latitude, ascendant,
+                    f64::from(armc),
+                    obliquity,
+                    latitude,
+                    ascendant,
                 );
                 assert!(
                     altitude_sine.abs() < 1e-10,
@@ -140,12 +142,24 @@ fn polar_fix_preserves_reference_fitted_extra_angle_branches() {
     // select 164.5489°; changing them implicitly would break a separate API.
     let mc = angles_from_armc(armc, epsilon, 10.0).1;
     let tropical = extra_angles_from_armc(armc, epsilon, 10.0, mc);
-    near(tropical.munkasey_co_ascendant_deg, 164.548_920_511_423_3, 1e-9);
+    near(
+        tropical.munkasey_co_ascendant_deg,
+        164.548_920_511_423_3,
+        1e-9,
+    );
     let polar = extra_angles_from_armc(armc, epsilon, -80.0, mc);
     near(polar.koch_co_ascendant_deg, 164.548_920_511_423_3, 1e-9);
-    near(polar.munkasey_polar_ascendant_deg, 344.548_920_511_423_3, 1e-9);
+    near(
+        polar.munkasey_polar_ascendant_deg,
+        344.548_920_511_423_3,
+        1e-9,
+    );
     // The East Point remains purely equatorial and independent of latitude.
-    near(tropical.equatorial_ascendant_deg, polar.equatorial_ascendant_deg, 1e-12);
+    near(
+        tropical.equatorial_ascendant_deg,
+        polar.equatorial_ascendant_deg,
+        1e-12,
+    );
 }
 
 #[test]
