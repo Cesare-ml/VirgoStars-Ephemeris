@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
+// Modification (2026-11-18): diagnose normalized-position rate and guard crossings.
 //! Exploratory derivatives of the existing deflection model, not a production
 //! correction or a physical accuracy claim. Input CSV: body ID,TDB JD.
 use std::error::Error;
 use std::io::{self, BufRead};
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::light_deflection::{
-    solar_deflection_delta, SUN_SCHWARZSCHILD_RADIUS_AU,
+    deflect_light_time_state_by_sun, solar_deflection_delta, SUN_SCHWARZSCHILD_RADIUS_AU,
 };
-use virgostars_ephemeris_core::light_time::geocentric_light_time;
+use virgostars_ephemeris_core::light_time::{geocentric_light_time, GeocentricLightTimeState};
 
 const AU_KM: f64 = 149_597_870.7;
 const FLOOR: f64 = 1e-6;
@@ -81,6 +82,7 @@ struct Geometry {
     analytic: Option<V>,
     angle: f64,
     denom: f64,
+    lt: GeocentricLightTimeState,
 }
 fn geometry(
     eph: &mut De441<std::fs::File>,
@@ -111,6 +113,31 @@ fn geometry(
         analytic: derivative((p, pd), (q, qd), (e, ed), (r / AU_KM, rd / AU_KM)),
         angle: (-dot(p, e)).clamp(-1.0, 1.0).acos().to_degrees(),
         denom: dot(q, add(q, e)),
+        lt,
+    })
+}
+
+// Differentiate the actual normalized output R * normalize(p + delta),
+// returning the unit-vector correction to p and its time derivative.
+fn normalized_correction(p: V, pd: V, delta: V, dd: V) -> (V, V) {
+    let w = add(p, delta);
+    let n = norm(w);
+    let u = scale(w, 1.0 / n);
+    let wd = add(pd, dd);
+    let ud = scale(sub(wd, scale(u, dot(u, wd))), 1.0 / n);
+    (sub(u, p), sub(ud, pd))
+}
+
+fn normalized_delta(g: &Geometry) -> V {
+    let (p, _, _, _) = unit_rate(g.lt.position_km, g.lt.velocity_km_per_day);
+    let w = add(p, g.delta);
+    sub(scale(w, 1.0 / norm(w)), p)
+}
+
+fn fourth_normalized(a: &[Geometry; 4], h: f64) -> V {
+    let values = a.each_ref().map(normalized_delta);
+    std::array::from_fn(|i| {
+        (values[0][i] - 8.0 * values[1][i] + 8.0 * values[2][i] - values[3][i]) / (12.0 * h)
     })
 }
 fn sample(
@@ -136,9 +163,12 @@ fn crosses_floor(a: &[Geometry; 4], center: f64) -> bool {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 2 {
-        return Err("usage: compare_deflection_rate_candidates <de441> < cases.csv".into());
+    if args.len() != 2 && !(args.len() == 3 && args[2] == "--normalized") {
+        return Err(
+            "usage: compare_deflection_rate_candidates <de441> [--normalized] < cases.csv".into(),
+        );
     }
+    let normalized = args.len() == 3;
     let mut eph = De441::open(&args[1])?;
     println!("body,jd_tdb,elongation_deg,denominator,crosses_floor,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
     for line in io::stdin().lock().lines() {
@@ -166,13 +196,36 @@ fn main() -> Result<(), Box<dyn Error>> {
         let Some(candidate) = c.analytic else {
             continue;
         };
+        let (old_error, candidate_error, reference_disagreement) = if normalized {
+            let (p, pd, range, _) = unit_rate(c.lt.position_km, c.lt.velocity_km_per_day);
+            let (_, candidate_rate) = normalized_correction(p, pd, c.delta, candidate);
+            let def = deflect_light_time_state_by_sun(&mut eph, &c.lt)?;
+            let (_, actual_ud, _, _) = unit_rate(def.position_km, def.velocity_km_per_day);
+            let old_correction_rate = sub(actual_ud, pd);
+            let fine_ref = fourth_normalized(&fine, 1.0 / 2048.0);
+            let finer_ref = fourth_normalized(&finer, 1.0 / 4096.0);
+            if !range.is_finite() || range <= 0.0 {
+                return Err("invalid range".into());
+            }
+            (
+                norm(sub(old_correction_rate, fine_ref)),
+                norm(sub(candidate_rate, fine_ref)),
+                norm(sub(fine_ref, finer_ref)),
+            )
+        } else {
+            (
+                norm(sub(old_rate, reference)),
+                norm(sub(candidate, reference)),
+                norm(sub(reference, check)),
+            )
+        };
         println!(
             "{id},{jd},{:.12},{:.14e},{crossing},{:.12},{:.12},{:.12}",
             c.angle,
             c.denom,
-            norm(sub(old_rate, reference)) * AS_PER_RAD,
-            norm(sub(candidate, reference)) * AS_PER_RAD,
-            norm(sub(reference, check)) * AS_PER_RAD
+            old_error * AS_PER_RAD,
+            candidate_error * AS_PER_RAD,
+            reference_disagreement * AS_PER_RAD
         );
     }
     Ok(())
@@ -237,5 +290,46 @@ mod tests {
         let h = 1e-4;
         let expected = scale(sub(value(h), value(-h)), 1.0 / (2.0 * h));
         assert!(norm(sub(got, expected)) * AS_PER_RAD < 1e-7);
+    }
+
+    #[test]
+    fn normalized_position_derivative_matches_independent_difference() {
+        let p = [0.6, 0.8, 0.0];
+        let pd = [-0.008, 0.006, 0.002];
+        let d = [1.0e-5, -7.5e-6, 3.0e-6];
+        let dd = [2.0e-6, -1.5e-6, -1.0e-6];
+        let (_, actual) = normalized_correction(p, pd, d, dd);
+        let value = |t: f64| {
+            let p_raw = add(p, scale(pd, t));
+            let pp = scale(p_raw, 1.0 / norm(p_raw));
+            let w = add(pp, add(d, scale(dd, t)));
+            sub(scale(w, 1.0 / norm(w)), pp)
+        };
+        let h = 1e-4;
+        let reference = scale(sub(value(h), value(-h)), 1.0 / (2.0 * h));
+        assert!(norm(sub(actual, reference)) * AS_PER_RAD < 1e-6);
+    }
+
+    #[test]
+    fn normalized_cartesian_velocity_includes_range_rate() {
+        let p = [0.6, 0.8, 0.0];
+        let pd = [-0.008, 0.006, 0.002];
+        let d = [1.0e-5, -7.5e-6, 3.0e-6];
+        let dd = [2.0e-6, -1.5e-6, -1.0e-6];
+        let (r, rd) = (1000.0, 3.0);
+        let (correction, correction_rate) = normalized_correction(p, pd, d, dd);
+        let expected_velocity = add(
+            scale(add(p, correction), rd),
+            scale(add(pd, correction_rate), r),
+        );
+        let position = |t: f64| {
+            let raw = add(p, scale(pd, t));
+            let pt = scale(raw, 1.0 / norm(raw));
+            let w = add(pt, add(d, scale(dd, t)));
+            scale(w, (r + rd * t) / norm(w))
+        };
+        let h = 1e-4;
+        let numeric = scale(sub(position(h), position(-h)), 1.0 / (2.0 * h));
+        assert!(norm(sub(expected_velocity, numeric)) < 1e-8);
     }
 }
