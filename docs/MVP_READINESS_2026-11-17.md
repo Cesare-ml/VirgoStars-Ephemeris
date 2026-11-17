@@ -1,5 +1,10 @@
 # MVP readiness checkpoint — 2026-11-17
 
+**Follow-up:** the previously missing local catalog has been recovered and
+extended; see [stellar recovery](STAR_CATALOG_RECOVERY_2026-11-17.md). The
+absence reported in the historical table below applied to the earlier checkout
+at the time of that review.
+
 **Status: experimental integration candidate; neither a production server
 replacement nor a scientifically accepted release.** This checkpoint
 distinguishes current source, previous local evidence and missing acceptance;
@@ -47,9 +52,9 @@ loading, identity, data permissions or numerical accuracy; its exit code and
 
 ## Prioritized remaining acceptance work
 
-1. Restore or reconstruct the specific local stellar manifest, rerun its
-   hash-bound coverage/field diagnostic and resolve the recorded missing
-   names, designations and nonstellar/ambiguous objects with correct identity.
+1. Continue from the recovered local stellar manifest and its updated
+   hash-bound coverage/field diagnostic; resolve remaining names, designations
+   and nonstellar/ambiguous objects with correct identity.
 2. Agree on measurable product tolerances and review the planetary, station,
    SPK and time evidence, including independent references and reported-rate
    convention differences. Validate the target date range rather than infer it
