@@ -4,6 +4,8 @@
 public API, historical-time model, or stellar data is changed. This continues
 the [ancient obliquity and ΔT audit](ANCIENT_OBLIQUITY_AND_DELTAT_2026-11-17.md).
 
+Continuation: [normalized deflection, floor crossing and Horizons ICRF](NORMALIZED_DEFLECTION_AND_HORIZONS_FRAME_2026-11-18.md).
+
 ## Candidate rate derivative
 
 The diagnostic differentiates the existing solar-deflection expression
