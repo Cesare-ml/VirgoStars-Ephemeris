@@ -11,7 +11,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.mjs scripts/tests/*.test.mjs",
     "verify:horizons": "node scripts/compare-horizons.mjs"
   },
   "license": "CPAL-1.0"

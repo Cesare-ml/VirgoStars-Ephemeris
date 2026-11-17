@@ -1,6 +1,11 @@
-# Numerical validation protocol (design / no tests executed)
+# Numerical validation protocol
 
-**No scientific accuracy, Swiss parity, or runtime compatibility is claimed yet.** Independent astronomical correctness is the primary gate; matching an existing astrology program is a secondary compatibility signal.
+**The matrix below is a protocol, not evidence that every item passed.** Limited
+local numerical comparisons and software tests are recorded in the
+[MVP integration checkpoint](MVP1_RECONCILIATION_2026-11-16.md); scientific
+acceptance and general backend parity remain open. Independent astronomical
+correctness is the primary gate; matching an existing astrology program is a
+secondary compatibility signal.
 
 ## Test matrix
 

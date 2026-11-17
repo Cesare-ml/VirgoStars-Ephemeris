@@ -1,0 +1,302 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "crate": "virgostars-ephemeris-core",
+  "module": "apparent_ecliptic_of_date",
+  "commit": "5cc13d3"
+ },
+ "ephemeris_file": {
+  "format": "classic JPL DE441 binary",
+  "bytes": 2788676624,
+  "md5_listed_by_distributor": "a7b2a5b8b2ebed52ea4da2304958053b",
+  "stored_in_repository": false
+ },
+ "reference": {
+  "name": "Swiss Ephemeris C library (AGPL-3.0), JPL mode on the same file",
+  "version": "2.10.03 via sweph-sys 0.3.0",
+  "use": "local only, throw-away probe, not committed",
+  "epoch_input": "TDB Julian date passed as its ephemeris time"
+ },
+ "grid": {
+  "start_jd_tdb": 2415100.5,
+  "step_days": 367.3,
+  "stop_before_jd": 2488000,
+  "dates": 199,
+  "targets": [
+   "Sun",
+   "Moon",
+   "Mercury",
+   "Venus",
+   "MarsBarycenter",
+   "JupiterBarycenter",
+   "SaturnBarycenter",
+   "UranusBarycenter",
+   "NeptuneBarycenter",
+   "PlutoBarycenter"
+  ]
+ },
+ "rate_reference_note": "Reference-reported speeds are NOT used: they disagree with the centered difference (+/-0.001 d) of the reference own positions by up to 0.08 arcsec/day (latitude) and ~1e4 km/day (distance).",
+ "configurations": {
+  "solar_deflection_on": {
+   "subject_option": "ApparentOptions::default()",
+   "reference_flags": "JPLEPH|SPEED",
+   "results": {
+    "Sun": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006669142294413177,
+      "latitude_arcsec": 0.0002922012000000423,
+      "distance_km": 7.473915021871668e-7
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0006033271250593941,
+      "latitude_arcsec_per_day": 0.000009989999998356977,
+      "distance_km_per_day": 0.0072334229266221885
+     }
+    },
+    "Moon": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006697979642922292,
+      "latitude_arcsec": 0.0004970088001154949,
+      "distance_km": 1.4960805590656307e-7
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.2753012998816473,
+      "latitude_arcsec_per_day": 0.02253149986146674,
+      "distance_km_per_day": 0.49010671217309515
+     }
+    },
+    "Mercury": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006690670034004143,
+      "latitude_arcsec": 0.00035271360072641755,
+      "distance_km": 0.0023436038377583233
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.002039814630805381,
+      "latitude_arcsec_per_day": 0.00031997160181429507,
+      "distance_km_per_day": 1.2816251168413733
+     }
+    },
+    "Venus": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006660502549493685,
+      "latitude_arcsec": 0.00043129439859512786,
+      "distance_km": 0.0012878884278688773
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00223795714000552,
+      "latitude_arcsec_per_day": 0.0002648561843843211,
+      "distance_km_per_day": 0.7815346581197811
+     }
+    },
+    "MarsBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006657261110376567,
+      "latitude_arcsec": 0.000497217599992883,
+      "distance_km": 0.0005972156363476921
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0016372382765528215,
+      "latitude_arcsec_per_day": 0.00008102156023592766,
+      "distance_km_per_day": 0.34090676722391094
+     }
+    },
+    "JupiterBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006658885922661284,
+      "latitude_arcsec": 0.000534581999966921,
+      "distance_km": 0.0010808941991631293
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0001727664780237781,
+      "latitude_arcsec_per_day": 0.000003549451150185179,
+      "distance_km_per_day": 0.4158349758323465
+     }
+    },
+    "SaturnBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006652116553595988,
+      "latitude_arcsec": 0.000550609200633545,
+      "distance_km": 0.001269170422914101
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00009274819142701674,
+      "latitude_arcsec_per_day": 0.000003967196515047844,
+      "distance_km_per_day": 0.4178505583631668
+     }
+    },
+    "UranusBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006665868113486795,
+      "latitude_arcsec": 0.0005302476000279555,
+      "distance_km": 0.03653754567172349
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00004852823065892853,
+      "latitude_arcsec_per_day": 0.00012111838356356104,
+      "distance_km_per_day": 0.4186973254269854
+     }
+    },
+    "NeptuneBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006662229679932352,
+      "latitude_arcsec": 0.0005495651997478035,
+      "distance_km": 0.000012224003235772329
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.000013736763898250515,
+      "latitude_arcsec_per_day": 0.000001915083975385576,
+      "distance_km_per_day": 0.4205619758770921
+     }
+    },
+    "PlutoBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006597540050279349,
+      "latitude_arcsec": 0.0005328899945311605,
+      "distance_km": 0.00006802923539908078
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.000021502117061866777,
+      "latitude_arcsec_per_day": 0.000005667158533076422,
+      "distance_km_per_day": 0.3907619974725417
+     }
+    }
+   }
+  },
+  "solar_deflection_off": {
+   "subject_option": "--no-solar-deflection",
+   "reference_flags": "JPLEPH|SPEED|NOGDEFL",
+   "results": {
+    "Sun": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006669142294413177,
+      "latitude_arcsec": 0.0002922012000000423,
+      "distance_km": 7.473915021871668e-7
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0006033271250593941,
+      "latitude_arcsec_per_day": 0.000009989999998356977,
+      "distance_km_per_day": 0.0072334229266221885
+     }
+    },
+    "Moon": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006672203653579345,
+      "latitude_arcsec": 0.0004969728001125162,
+      "distance_km": 1.4960805590656307e-7
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.27530242667950233,
+      "latitude_arcsec_per_day": 0.02253159346139455,
+      "distance_km_per_day": 0.49010671217309515
+     }
+    },
+    "Mercury": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006690637292194879,
+      "latitude_arcsec": 0.00035271360072641755,
+      "distance_km": 0.0023436038377583233
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0020403374318078704,
+      "latitude_arcsec_per_day": 0.0003181283706465976,
+      "distance_km_per_day": 1.2816251168413733
+     }
+    },
+    "Venus": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006660502549493685,
+      "latitude_arcsec": 0.000431294400193849,
+      "distance_km": 0.0012878884278688773
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0022380919277864564,
+      "latitude_arcsec_per_day": 0.00026428546561207966,
+      "distance_km_per_day": 0.7815346581197811
+     }
+    },
+    "MarsBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006657265203102725,
+      "latitude_arcsec": 0.000497217599992883,
+      "distance_km": 0.0005972156363476921
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0016365490372871605,
+      "latitude_arcsec_per_day": 0.00008051756021920653,
+      "distance_km_per_day": 0.34098981072415396
+     }
+    },
+    "JupiterBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006658918664470548,
+      "latitude_arcsec": 0.000534581999966921,
+      "distance_km": 0.00012170855395616796
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.0001723590808078157,
+      "latitude_arcsec_per_day": 0.0000036252436209222028,
+      "distance_km_per_day": 0.4156356714317633
+     }
+    },
+    "SaturnBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006652116553595988,
+      "latitude_arcsec": 0.0005506091998341844,
+      "distance_km": 0.00005447653615942016
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00009065753058257187,
+      "latitude_arcsec_per_day": 0.0000030561425390374097,
+      "distance_km_per_day": 0.417717688762778
+     }
+    },
+    "UranusBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006665868113486795,
+      "latitude_arcsec": 0.0005302475999779954,
+      "distance_km": 0.00002657392007776593
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00003758137478715451,
+      "latitude_arcsec_per_day": 0.0000020340403766578967,
+      "distance_km_per_day": 0.41843158622620774
+     }
+    },
+    "NeptuneBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006662229679932352,
+      "latitude_arcsec": 0.0005495651997478035,
+      "distance_km": 0.000010098089629551054
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.000013001310290861046,
+      "latitude_arcsec_per_day": 0.000002080823987725064,
+      "distance_km_per_day": 0.42003064695383724
+     }
+    },
+    "PlutoBarycenter": {
+     "position_max_abs_diff": {
+      "longitude_arcsec": 0.0006597576884814771,
+      "latitude_arcsec": 0.0005328900009260451,
+      "distance_km": 0.00005102192654931059
+     },
+     "rate_max_abs_diff_vs_centered_difference_of_reference_positions": {
+      "longitude_arcsec_per_day": 0.00002313707320733549,
+      "latitude_arcsec_per_day": 0.000004009694670042974,
+      "distance_km_per_day": 0.39235643267720766
+     }
+    }
+   }
+  }
+ },
+ "not_established": [
+  "agreement with JPL Horizons",
+  "absolute accuracy",
+  "epochs outside 1900-2100",
+  "Moon rate residual cause (0.28 arcsec/day)"
+ ],
+ "regenerate": "Needs the reference library and the DE441 file, so it is not part of CI. The subject-only regression baseline is mvp1-apparent-baseline-1900-2100.csv."
+}

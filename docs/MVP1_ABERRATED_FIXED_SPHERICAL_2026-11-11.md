@@ -1,0 +1,239 @@
+# MVP 1 — six fixed-frame spherical fields after annual aberration
+
+**2026-11-11 | original Rust; experimental calculation stage, NOT
+`swe_calc_ut` or validated apparent ecliptic-of-date astronomy.**
+
+This feature joins the prior numerical stages rather than
+reimplementing their astronomy:
+
+```text
+externally supplied classic DE441 .eph file
+  → Earth barycentric position/velocity/analytic acceleration at TDB reception
+  → target emission time and geocentric one-way light-time Cartesian state
+  → Earth's special-relativistic annual aberration, including analytic
+    derivatives of the observer boost
+  → existing fixed-axis Cartesian-to-spherical projection of BOTH
+    the aberrated position AND the aberrated reception-time velocity
+  → six spherical fields + source/epoch/acceleration metadata
+```
+
+The new `src/aberrated_spherical.rs` simply composes existing
+`aberration_state::geocentric_light_time_annual_aberration_analytic`
+and `coordinates::project_fixed_axes`. This avoids duplicating
+the original boost, time-of-flight solver, numerical differentiation
+or the spherical velocity equations. The pure
+`spherical_from_aberrated_state` accepts an already corrected
+`AberratedGeocentricState`, so existing callers can project without
+a second correction. `geocentric_aberrated_fixed_spherical` does
+the full composition given a `De441<R>` reader and epoch.
+
+**Dependency graph:** this draft branch is based on draft PR
+[#76](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/76)
+(analytic Chebyshev Earth acceleration), which is based on draft
+[#73](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/73)
+(analytic aberrated velocity), which depends on draft
+[#46](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/46)
+(observer aberration). The independent draft
+[#70](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/70)
+already implements light-time-only fixed-axis **degrees/AU**
+six-field conversion. **This change does not copy or replace PR #70**;
+when both lines are reviewed/integrated, the common scalar-unit
+adapter should be shared, not duplicated. The new interface preserves
+the original `SphericalState` rad/km shape specifically to avoid
+introducing a second incompatible degree/AU formatter.
+
+## Exact API and scientific contract
+
+```rust
+use virgostars_ephemeris_core::aberrated_spherical::{
+    geocentric_aberrated_fixed_spherical,
+};
+use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut eph = De441::open("/user-supplied/de441.eph")?;
+let result = geocentric_aberrated_fixed_spherical(
+    &mut eph,
+    Body::Venus,
+    JulianDateTdb(2_451_545.0),
+    0.0, // zero rotation = ICRF equatorial fixed axes
+)?;
+println!(
+    "{} rad; {} rad/TDB-day",
+    result.spherical.longitude_rad,
+    result.spherical.longitude_rate_rad_per_day,
+);
+# Ok(())
+# }
+```
+
+The function requires a caller-supplied **classic** DE441 binary;
+not NAIF SPK `.bsp`, not Swiss `.se1`, and never downloads a file.
+Input epoch is **TDB Julian date**, not `swe_calc_ut` Julian UT.
+The passive X-tilt is **constant in time**. A nonzero tilt may be
+useful for mathematical tests but must **not** be called official
+J2000 or true ecliptic of date; no rotating-frame rate term
+`dR/dt × r` is added.
+
+`AberratedFixedSpherical.spherical` provides **six actual fields**:
+- longitude in **radians [0,2π)**, latitude in radians;
+- geocentric distance in **kilometres**;
+- longitude and latitude angular speed in **rad/reception-TDB-day**;
+- radial distance rate in **km/reception-TDB-day**.
+
+It additionally preserves `Body` target identity (important:
+JupiterBarycenter is not Jupiter's center), `Body::Earth` as center,
+reception TDB date, target emission TDB date, one-way light time
+and its time rate, and the
+`ObserverAccelerationSource::AnalyticDe441Chebyshev` provenance.
+The pure converter also preserves `CallerProvided` provenance for
+already-computed states. Projection uses only the *existing*
+validated geometric/singular-direction checks and rejects malformed
+time/delay metadata; it cannot authenticate source arrays.
+
+## Tests and result limitations
+
+New `tests/aberrated_spherical.rs` has **seven original mathematical
+offline regressions**:
+
+1. independent hand-derived six-component spherical position/velocity
+   with zero observer boost, including metadata and Earth center;
+2. exact **transverse Lorentz** result
+   `longitude=acos(beta)`,
+   `dlongitude/dt = -beta_dot/sqrt(1-beta²)`;
+3. a caller-chosen constant 90° X-tilt rotating **both** Cartesian
+   position and velocity, with independently derived latitude speed;
+4. 270° longitude normalization and preserved negative retrograde speed;
+5. invalid Earth target, reversed reception/emission epochs and
+   invalid time/delay metadata rejected before projection;
+6. invalid tilt and pole singularities rejected, no NaN fallback;
+7. centered differences of **independently aberrated source
+   directions** compared to the analytic spherical longitude rate.
+
+The existing synthetic quadratic `tests/de441_analytic_acceleration.rs`
+adds **two** tests, including an eighth regression which runs the
+entire existing classic DE441 reader → analytic Earth acceleration →
+Newtonian light-time → observer aberration → six fixed spherical fields
+and confirms that nonzero observer velocity changes the geometric
+source direction. A ninth test exercises the geocentric **Moon**
+reconstruction through that same pipeline and rejects the undefined
+geocentric Earth-as-target direction.
+
+**These are synthetic/mathematical unit and composition tests, NOT a
+full numerical independent JPL/Horizons or Swiss Ephemeris validation
+of a real geocentric apparent longitude.** No source file/planetary
+scientific fixture was embedded.
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --locked --test aberrated_spherical
+cargo test --workspace --locked --test de441_analytic_acceleration
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+## Missing work to reach MVP-1 Swiss substitution
+
+The result is the **fixed ICRF after geometric light-time and observer
+annual aberration**. It omits solar gravitational light deflection,
+Shapiro delay, additional relativistic potential terms, frame
+bias/precession, *complete* IAU 2000A nutation, **moving
+true-ecliptic-of-date frames and their rates**, UT/TT/TDB conversion,
+topocentric observer changes and physical planet centers for the outer
+DE441 system barycenters. It has no fully validated speed accuracy
+against Swiss 0.5.17 and no Node binding or `swisseph`-shaped
+return contract. Only after these gates pass may outputs be described
+as truly apparent or Swiss compatible.
+
+**2026-11-11 CPAL-1.0 modification record:** new original
+`src/aberrated_spherical.rs`,
+`tests/aberrated_spherical.rs`, one additional test in
+`tests/de441_analytic_acceleration.rs`, `lib.rs` module export,
+this document and a README link. No third-party programs,
+official coefficient datasets, JPL binary, dependencies, license
+changes, package release, deploy or protected-branch merge. Preserve
+CPAL-1.0 Exhibit A notices and **Powered by VirgoStars**
+<https://www.virgostars.it/> attribution.
+
+## New shared consumer-unit projection — 2026-11-11
+
+The original `six_field_units.rs` module now provides the **reusable**
+pure `fixed_spherical_to_degrees_au(&SphericalState)` function. It maps
+the existing six astronomical scalar quantities into a typed
+`FixedSixFieldsDegreesAu` without recomputing positions, interpolating
+ephemeris data, applying light-time or reapplying aberration:
+
+| Source from `SphericalState` | New consumer-unit field |
+|---|---|
+| `longitude_rad` | `longitude_deg`, [0°, 360°) |
+| `latitude_rad` | `latitude_deg` |
+| `distance_km` | `distance_au` |
+| `longitude_rate_rad_per_day` | `longitude_speed_deg_per_tdb_day` |
+| `latitude_rate_rad_per_day` | `latitude_speed_deg_per_tdb_day` |
+| `distance_rate_km_per_day` | `distance_speed_au_per_tdb_day` |
+
+Angle scaling is exactly `180/PI`; distance scaling uses the
+**IAU 2012 defined astronomical unit = 149,597,870.7 km**. The
+rate denominator remains the **observation TDB day** — there is
+no implicit UTC/TT/UT1 conversion. Negative angular and radial rates
+are **not** made positive, preserving retrograde/station semantics.
+The returned object carries `target`, `center`, reception `epoch`
+and `fixed_tilt_rad`, so no planet-system barycenter is silently
+relabelled as a physical planet center and a constant tilt is not
+advertised as ecliptic-of-date.
+
+**Fail-closed checks:** the converter rejects nonfinite inputs, raw
+longitude outside [0, 2π) rather than silently wrapping them,
+latitude outside [−π/2,+π/2], zero/negative distance, and
+overflow/underflow yielding unrepresentable output distance or rates.
+The new `UnitConversionError` describes each case.
+
+In `aberrated_spherical.rs`, two thin wrappers use this one
+formatter:
+- `aberrated_spherical_to_degrees_au(&AberratedFixedSpherical)`
+  formats an already computed aberrated spherical result while
+  preserving target/emission epochs, light-time and acceleration
+  provenance.
+- `geocentric_aberrated_fixed_six_fields(&mut De441, target,
+  reception_tdb, fixed_tilt_rad)` is now a **single call** from a
+  caller-supplied *classic* external DE441 reader to the same six
+  formatted positions and rates.
+
+The existing rad/km `SphericalState` and `AberratedFixedSpherical`
+APIs are preserved; the pure unit formatter can also be reused by
+the **separate** [draft PR #70](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/70)
+after its review and staged integration, replacing its own small
+inline rad/km conversion. This branch neither copies #70's
+implementation nor changes its source. The new library module is
+not specific to either light-time or aberration, preventing further
+duplication in future date-frame pipelines.
+
+The new `tests/six_field_units.rs` contains **7** focused offline
+regressions covering independently computable six-value units,
+boundary wraps, out-of-range latitude/longitude, undefined distances,
+overflow/underflow, signed retrograde and radial speed, and
+metadata/body-identifier preservation after aberration.
+The existing `tests/de441_analytic_acceleration.rs` adds **one**
+end-to-end regression for Mercury **and** the Moon with the full
+synthetic classic DE441 → reception light-time → aberration →
+projection → pure consumer-unit formatter.
+
+**Do not mistake six consumer-style scalar units for scientific Swiss
+equivalence.** Results remain fixed **ICRF** (or a constant arbitrary
+X-tilt) after observer annual aberration, without full IAU precession,
+nutation, solar deflection, physical outer-planet centers, real JPL
+cross-validation or a Node binding. The separate priority roadmap
+still requires the latter before production migration. Numerical
+formatting and synthetic tests only establish *unit and interface*
+behavior, not actual apparent true-ecliptic-of-date parity.
+
+**CPAL-1.0 modification record — 2026-11-11:** added original
+`src/six_field_units.rs`, `tests/six_field_units.rs` and `lib.rs`
+export; extended original `src/aberrated_spherical.rs` with
+consumer-unit wrappers and its error variant, and appended one
+synthetic-DE441 regression to
+`tests/de441_analytic_acceleration.rs`. Updated this document and
+README. No dependency, JPL binary, third-party coefficient table,
+Swiss/ERFA/SOFA program source, license, release, merge or deployment
+change. Preserve CPAL-1.0 Exhibit A and **Powered by VirgoStars**
+<https://www.virgostars.it/>.

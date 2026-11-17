@@ -1,0 +1,181 @@
+# MVP 1 integration checkpoint — 2026-11-16
+
+**Status: locally tested integration candidate, not an approved production
+replacement or a scientific acceptance.** This checkpoint supersedes older
+snapshot statements about the absence of a Node binding or any real SPK
+comparison; it does not replace the individual model and validation contracts.
+
+## Owner constraint and date-range check — 2026-11-17
+
+The owner requires all stars covered by Swiss Ephemeris to be included before
+the new engine is put on the main VirgoStars server. The 40-star local catalog
+does not satisfy this gate. The full Swiss catalog and its supported names must
+be inventoried; the 106 legacy-requested names are not assumed to be the
+entire Swiss catalog. Local experimentation is not production activation.
+
+The locally supplied DE441 planetary file covers years 0 and 5000 as raw TDB
+ephemeris data, but the current apparent-position pipeline does not: its Earth
+orientation model rejects both dates. With the default civil-time policy, the
+local Node engine rejects UT dates outside 1900-01-01 through 2027-06-27; an
+optional Delta T table changes the time-data coverage, not the orientation
+model's limit. Real-engine Mars checks on July 1 in years 0 and 5000 returned
+errors in both TDB apparent and default UT calculations; 1900 and 2026 passed.
+Year 0 uses astronomical numbering. Passing a calculation is not a precision
+validation. The backend bridge separately rejects year 0000.
+
+Subsequent inventory, the 195-entry experimental candidate catalog and the
+60-vector JPL comparison are documented in
+[the follow-up](SWISS_INVENTORY_AND_LONG_RANGE_2026-11-17.md). The full Swiss
+catalog and long-range apparent positions remain open.
+
+Later experimental 0–5000 apparent calculations and 196-star candidate work
+are reported in [the next checkpoint](LONG_RANGE_AND_SWISS_ALIASES_2026-11-17.md).
+They do not establish long-range release accuracy or complete Swiss coverage.
+
+The subsequent [706-candidate positional and UT1 checkpoint](SWISS_POSITIONAL_AND_EXPLICIT_UT1_2026-11-17.md)
+adds explicitly supplied Delta T and wider local star wiring; both remain experimental.
+
+The subsequent [alias and long-range grid checkpoint](SWISS_ALIASES_AND_PLANET_GRID_2026-11-17.md)
+records the separate 712-star strict and 919-star traditional-policy candidates.
+
+The latest [emission refinement and name checkpoint](EMISSION_REFINEMENT_AND_NAMES_2026-11-17.md)
+records 929 local star candidates, 567 aliases, and the isolated light-time precision improvement.
+The subsequent [physical-identity and coverage checkpoint](STAR_COVERAGE_PHYSICAL_IDENTITIES_2026-11-17.md)
+records the 1,062-entry experimental mixed catalog and the outstanding lookup gaps.
+
+## Integrated work
+
+- Started from Claude's `integration/mvp1-apparent-pipeline-20261116`
+  (`01ac627`) and merged `dev/ephemeris` (`af2f6e8`): SPK indexing and
+  chain-safety work, DE441 batch limits and repository data hygiene.
+- Reconciled the previous local Earth rotation, GMST and local sidereal modules,
+  split-UT1 handling, truncated-nutation accuracy labels, and the finite-range,
+  normalization and acceleration hardening with Claude's apparent pipeline.
+- The native Node binding supports fixed stars at UT with the engine's own
+  selected time policy. Its optional `starCatalog` supplies independent
+  `name`, `aliases`, `hip`, `radialVelocityKmS` and `magnitude` fields. Values
+  must be explicit; null RV explicitly assumes zero and null magnitude is an
+  error on lookup. The HIP records must first be loaded separately under the
+  appropriate quality policy. Aliases are case-insensitive and collisions are
+  rejected at construction. No third-party star metadata is bundled.
+- `legacyEphePath` explicitly enables the facade's directory-checking
+  `swe_set_ephe_path`; it cannot change the file already open in the engine.
+  `SEFLG_SWIEPH` still requires explicit `acceptSwiephFlag`; effective flags
+  continue to identify JPL data. This is an opt-in compatibility adapter, not
+  implicit backend activation.
+
+## Local evidence
+
+- `cargo test --workspace --offline --locked` passed; three additional
+  explicitly ignored real-DE441 tests passed (two acceleration comparisons and
+  the star solar-deflection check). `cargo fmt --check` and Clippy with
+  `-D warnings` passed for both the Rust workspace and the standalone Node
+  binding. Repository data-hygiene unit tests: 9 passed.
+- Node suite: 74 passed, no skips on Windows, with caller-supplied classic
+  DE441, HIP2, Chiron SPK, USNO Delta T, an installed Swiss reference, and
+  `astrological-functions` house methods. The actual unchanged backend
+  `func.js` was loaded with a test-only injected facade: one fictional chart
+  exercised its 15 requested bodies, five house systems and a fictional
+  star-name/magnitude mapping. This is a smoke test, not a statistical
+  parallel-run parity study or backend deployment. The house-method source was
+  local branch `feat/houses-reference-validation-20261116`, commit
+  `5b4df7dce4e00fa556fc22500e08295c723ec9f5`, not a released package.
+- After adding catalog-manifest validation, the same Node suite passed 76/76
+  with no skips, including the backend smoke test using a fictional manifest.
+- After adding HIP2 quality inspection, the Node suite passed 77/77 with no
+  skips; the two fictional IAU candidate-parser tests also passed. The local
+  candidate and quality reports regenerated byte-for-byte identically.
+- After adding the optional sourced star display label, the Node suite passed
+  78/78 with no skips, including the actual backend smoke test.
+- After adding explicit polar-house diagnostics and a specific unavailable
+  position error, the Node suite passed 81/81 with no skips.
+- After adding the optional serialized house-diagnostics session, the Node
+  suite passed 85/85 with no skips, including an unchanged-backend polar test.
+- Independent SPK comparison: 80 geometric DE440s type-2 cases against
+  CSPICE, including record boundaries and declared coverage endpoints, passed
+  the predeclared diagnostic bounds. Data, unsigned receipts and provenance
+  review remain external; see [the comparison](SPK_NAIF_LOCAL_COMPARISON_2026-11-16.md).
+  That earlier comparison does not validate type 3, multi-kernel priority, other frames or apparent
+  corrections.
+- See the individual model documents for previous Horizons/ERFA/Swiss local
+  comparisons and their tolerances. Passing software tests is not the same as
+  scientific review or CI, staging and production validation.
+
+## Remaining checklist before an accepted MVP 1
+
+1. **[Open — source and product decision]** Review catalog redistribution/use
+   terms and independently identify the required stars, aliases, magnitudes
+   and radial velocities. Approve the quality policy per supported star and
+   decide how missing magnitudes and RV assumptions reach users. No real catalog
+   is bundled by the compatibility API. A subsequent
+   [local 40-star MVP catalog](MVP1_LOCAL_STAR_CATALOG_2026-11-17.md) is now
+   generated from external files and used by the experimental backend, with
+   zero radial velocities explicitly assumed; 66 requested names remain out of
+   scope for this subset.
+   [Inventory and caller-reviewed manifest](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md).
+   Subsequent offline screening found 77 exact candidates among 106 backend
+   names; 40 pass the strict HIP2 filter. No candidate is approved by that check.
+   A targeted SIMBAD query found three further HIP candidates and one cluster;
+   25 names did not match that query. The [expanded backend diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md)
+   records 120 candidate/date cases and important field differences.
+   An offline caller-manifest [coverage audit](MVP1_STAR_CATALOG_INVENTORY_2026-11-16.md)
+   now reports unresolved names and missing/assumed fields without approving
+   identities or data rights; the complete real manifest remains open.
+   A [reproducible review queue](MVP1_STAR_REVIEW_QUEUE_2026-11-17.md) now
+   consolidates all 106 requests and existing IAU/SIMBAD leads, with two
+   additional IAU-sourced spelling leads documented for manual follow-up.
+   Five additional historical spelling leads are now recorded in a separate
+   v2 queue; 18 names still lack any recorded lead and all decisions remain open.
+   The [extended-object follow-up](MVP1_EXTENDED_STAR_OBJECTS_2026-11-17.md)
+   records Alsuhail and five cluster/nebula/group names as unapproved hypotheses;
+   13 names lacked machine-recorded leads at that checkpoint. A further
+   [designation review](MVP1_STAR_DESIGNATION_REVIEW_2026-11-17.md) records
+   15 unapproved, potentially conflicting hypotheses for ten names, leaving
+   three without a machine-recorded lead at that checkpoint. The
+   [last-name research](MVP1_STAR_RESEARCH_LAST_NAMES_2026-11-17.md) records
+   unapproved leads for all 106 requests, including multiple interpretations
+   and a stellar system. No identities have been resolved; extended-object
+   calculations and all data/quality decisions remain open.
+2. **[Open — scientific review]** Retain durable raw SPK comparison evidence,
+   independently review kernel/tool provenance and numerical tolerances, and
+   add type-3 and multi-kernel/segment-priority comparisons where these are
+   claimed. Approve explicit error budgets and supported date ranges for each
+   model, including UT1/Delta T data and extrapolation limits.
+   A subsequent [78-case real type-3 and multi-kernel comparison](SPK_NAIF_TYPE3_MULTI_KERNEL_2026-11-16.md)
+   and 220 synthetic CSPICE-generated precedence and branching cases passed locally; these
+   limited matrices are not general scientific approval.
+   A further 196 real-kernel comparisons cover cross-body and reverse target/
+   observer chains under both file orders; independent review remains open.
+3. **[Open — backend integration]** Run a representative parallel comparison
+   against the actual backend over dates, locations, all requested bodies,
+   flags, houses, and error paths; resolve differences and existing backend
+   truthiness/error-handling issues. Version and integrate the external house
+   implementation, establish data provisioning, provenance and rollback.
+   A [15-chart local diagnostic](MVP1_BACKEND_CHART_DIAGNOSTIC_2026-11-16.md)
+   identifies polar fallback and unavailable Placidus positions that still
+   need explicit handling in serialized backend responses.
+   The legacy star path truncates seconds and rejects a zero longitude; an
+   isolated backend branch corrects both, as recorded in [the local diagnostic](MVP1_STAR_BACKEND_COMPARISON_2026-11-16.md).
+   Production and the separate Astrolabio copy remain unchanged.
+   A subsequent 360-case, three-site seconds check against the same facade
+   passed for the corrected backend and identified 360 inconsistencies in the
+   original local checkout; this is wiring evidence, not scientific validation.
+   An [optional diagnostics session](MVP1_HOUSE_DIAGNOSTICS_BRIDGE_2026-11-16.md)
+   now serializes these warnings separately. A separate local backend branch
+   `codex/ephemeris-house-diagnostics-20261116` adds explicit provider injection,
+   a versioned experimental natal contract and an opt-in loopback HTTP laboratory.
+   Eleven focused tests passed, including a real polar HTTP calculation; the
+   regular backend server remains unchanged. Broader parity, product approval,
+   release provisioning and rollout/rollback remain open.
+   Subsequent local work adds the 40-star subset to the actual legacy conjunction
+   service and an injectable adapter for its existing controller. With the
+   external Chiron file configured, the extended natal profile returns 15
+   kernel entries and four derived opposite points. The controller integration
+   has been exercised with a simulated COW repository, not the production DB.
+4. **[Open — release engineering]** Validate reproducible builds on target
+   platforms, licensing/attribution and data distribution, CI and appropriate
+   packaging; agree on the versioned public contract. Staging and deployment
+   require their own verification and authorization.
+
+These tasks are not an estimate that all remaining work has equal weight. The
+one-chart smoke test and numerical comparison do not establish general parity.

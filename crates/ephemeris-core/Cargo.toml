@@ -22,3 +22,14 @@ description = "Astronomical calculation core for VirgoStars Ephemeris"
 
 [lib]
 name = "virgostars_ephemeris_core"
+
+# Compile and run the formatter / CLI contract unit tests in cargo test --workspace.
+[[example]]
+name = "aberrated_csv"
+path = "examples/aberrated_csv.rs"
+test = true
+
+[[example]]
+name = "compare_aberrated_csv"
+path = "examples/compare_aberrated_csv.rs"
+test = true

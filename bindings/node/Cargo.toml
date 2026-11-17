@@ -1,0 +1,21 @@
+[package]
+name = "virgostars-ephemeris-node"
+version = "0.0.0"
+edition = "2021"
+license = "CPAL-1.0"
+publish = false
+description = "Experimental Node.js binding (N-API) over virgostars-ephemeris-core"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+virgostars-ephemeris-core = { path = "../../crates/ephemeris-core" }
+napi = { version = "2", default-features = false, features = ["napi6"] }
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"
+
+# Standalone workspace: keeps the core workspace free of binding dependencies.
+[workspace]

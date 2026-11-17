@@ -1,0 +1,145 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "calls": "swe_sol_eclipse_when_glob and swe_lun_eclipse_when of the Swiss-shaped facade",
+  "commit": "working tree on top of 8b93135"
+ },
+ "against_installed_swisseph_0_5_17": {
+  "range": "1900-03-01 .. 2026-01-01 UT, every eclipse in sequence (the reference search is restarted 20 days after each maximum)",
+  "result_key_sets_identical": true,
+  "solar": {
+   "eclipses": 285,
+   "mismatches": 0,
+   "mismatched_flag_pairs": [],
+   "maximum": {
+    "n": 285,
+    "rms_s": 2.86,
+    "max_s": 9.89
+   },
+   "noon": {
+    "n": 218,
+    "rms_s": 0.72,
+    "max_s": 7.72
+   },
+   "begin": {
+    "n": 284,
+    "rms_s": 21.17,
+    "max_s": 171.57
+   },
+   "end": {
+    "n": 284,
+    "rms_s": 21.31,
+    "max_s": 175.42
+   },
+   "totalBegin": {
+    "n": 189,
+    "rms_s": 5.53,
+    "max_s": 22.06
+   },
+   "totalEnd": {
+    "n": 189,
+    "rms_s": 6.73,
+    "max_s": 39.28
+   },
+   "centerBegin": {
+    "n": 183,
+    "rms_s": 8.79,
+    "max_s": 76.2
+   },
+   "centerEnd": {
+    "n": 183,
+    "rms_s": 8.83,
+    "max_s": 65.04
+   }
+  },
+  "lunar": {
+   "eclipses": 289,
+   "mismatches": 0,
+   "mismatched_flag_pairs": [],
+   "maximum": {
+    "n": 289,
+    "rms_s": 1.14,
+    "max_s": 5.08
+   },
+   "penumbralBegin": {
+    "n": 289,
+    "rms_s": 1.42,
+    "max_s": 9.43
+   },
+   "penumbralEnd": {
+    "n": 289,
+    "rms_s": 1.44,
+    "max_s": 9.14
+   },
+   "partialBegin": {
+    "n": 183,
+    "rms_s": 2.48,
+    "max_s": 13.06
+   },
+   "partialEnd": {
+    "n": 183,
+    "rms_s": 2.48,
+    "max_s": 13.17
+   },
+   "totalBegin": {
+    "n": 105,
+    "rms_s": 4.91,
+    "max_s": 41.83
+   },
+   "totalEnd": {
+    "n": 105,
+    "rms_s": 5.02,
+    "max_s": 42.92
+   }
+  },
+  "type_filters_first_12_eclipses_from_1950_within_the_supported_range": {
+   "solar:total": {
+    "sequences_equal": true,
+    "count": 12
+   },
+   "solar:annular": {
+    "sequences_equal": true,
+    "count": 12
+   },
+   "solar:partial": {
+    "sequences_equal": true,
+    "count": 12
+   },
+   "solar:hybrid": {
+    "sequences_equal": true,
+    "count": 5
+   },
+   "lunar:total": {
+    "sequences_equal": true,
+    "count": 12
+   },
+   "lunar:partial": {
+    "sequences_equal": true,
+    "count": 12
+   },
+   "lunar:penumbral": {
+    "sequences_equal": true,
+    "count": 12
+   }
+  },
+  "backward_search_40_eclipses_from_2020": {
+   "solar": {
+    "sequences_equal": true,
+    "count": 40
+   },
+   "lunar": {
+    "sequences_equal": true,
+    "count": 40
+   }
+  },
+  "notes": [
+   "Shadow radii: the reference enlarges the Earth shadow by 1 % (Earth radius / 0.99); fitted from 166 penumbral, 106 partial and 66 total lunar contacts (bias 64.6 km before, 0.0 km after, scatter 1 km).",
+   "Solar begin/end of the partial phase differ most in grazing partial eclipses; the reference returns begin = end = 0 for one extremely grazing eclipse, which is excluded from the statistics.",
+   "noon is 0 in this engine when the point of the globe under the axis never crosses the Sun meridian within half a day (about one in five of the near-polar eclipses); the reference gives a value there.",
+   "A centrality bit alone as ifltype returns no result in the reference; this engine filters by it."
+  ]
+ }
+}

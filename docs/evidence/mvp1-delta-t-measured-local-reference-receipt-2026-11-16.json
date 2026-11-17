@@ -1,0 +1,64 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.calcUt with Engine.loadDeltaT (USNO measured/predicted DeltaT)",
+  "commit": "cb2ddd6"
+ },
+ "reference": {
+  "name": "Swiss Ephemeris C library (AGPL-3.0) via the installed swisseph 0.5.17 Node package, JPL mode on the same de441.eph, swe_calc_ut and swe_deltat; local only",
+  "use": "not committed, not a dependency"
+ },
+ "grid": {
+  "start_jd_ut": 2415100.5,
+  "step_days": 367.3,
+  "dates": 127,
+  "targets": "Sun..Pluto (Mars..Pluto barycenters)"
+ },
+ "longitude_difference_by_era": {
+  "1900-1930": {
+   "dates": 30,
+   "moon_longitude_max_arcsec": 0.6615959347982425,
+   "other_bodies_longitude_max_arcsec": 0.07954597635944083
+  },
+  "1930-1972": {
+   "dates": 42,
+   "moon_longitude_max_arcsec": 0.2783501736303151,
+   "other_bodies_longitude_max_arcsec": 0.03322403308629873
+  },
+  "1972-2018": {
+   "dates": 46,
+   "moon_longitude_max_arcsec": 0.020829168943237164,
+   "other_bodies_longitude_max_arcsec": 0.0022887007617100608
+  },
+  "2018-2027": {
+   "dates": 9,
+   "moon_longitude_max_arcsec": 1.815076091679657,
+   "other_bodies_longitude_max_arcsec": 0.2075725851682364
+  }
+ },
+ "before_for_comparison": {
+  "moon_pre_1972_arcsec": 0.64,
+  "moon_post_1972_arcsec": 0.39,
+  "note": "polynomial DeltaT before 1972, UT1 taken as UTC after; see mvp1-node-ut-entry-local-reference-receipt-2026-11-16.json"
+ },
+ "deltat_agreement_with_reference_swe_deltat": {
+  "note": "DeltaT values (seconds), our table minus the reference function, at 14 dates",
+  "within_0_06_s": "from 1941 to 2018 (largest 0.058 s; 0.000 to 0.03 s from 1950 to 2018); 0.17 s at 1926, 0.31 s at 1912, 0.7 s at 1900",
+  "differs_by": {
+   "1913": -0.312,
+   "1900.0": -0.695,
+   "2022.4": -1.376,
+   "2026.7": -2.845
+  },
+  "reading": "After about 2018 the reference swe_deltat departs from the measured values (71.9 s against measured 69.1 s in 2026) while the measured USNO series is internally consistent with the IERS leap-second table; in 1900-1930 the two series differ by 0.2-0.7 s. The residuals outside 1941-2018 therefore reflect the reference ΔT, not the table."
+ },
+ "consistency_check_against_leap_seconds": "UT1-UTC derived from the table stays within +/-0.9 s over 640 monthly points 1973-2026",
+ "not_established": [
+  "agreement with IERS C04 UT1-UTC at daily resolution (not downloaded)",
+  "accuracy of historic values before 1925 beyond the stated 1-sigma errors",
+  "predictions beyond the last measured point (flagged PREDICTED with their stated errors)"
+ ]
+}

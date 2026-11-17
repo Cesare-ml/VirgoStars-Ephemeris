@@ -1,0 +1,1238 @@
+// The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+//
+// Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+//
+// The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+//
+// The Original Developer is the Initial Developer.
+//
+// The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+//
+// Contributors retain applicable rights in their own contributions under the terms of this License.
+//
+// [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+
+//! First experimental time-and-place geometric planet positions.
+//!
+//! Uses an explicit UTC offset, classic DE441, IAU 2006 mean precession and
+//! WGS84. Results are approximate topocentric geometric directions, not
+//! apparent positions or a complete Swiss Ephemeris replacement.
+
+use std::error::Error;
+use std::f64::consts::{PI, TAU};
+use std::fmt;
+use std::io::{Read, Seek};
+
+use crate::calendar::{Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale};
+use crate::de441::{Body, De441, De441Error};
+use crate::time::{tai_to_tt, AtomicTimeError};
+
+const DAY_SECONDS: f64 = 86_400.0;
+const J2000: f64 = 2_451_545.0;
+const ARCSEC_TO_RAD: f64 = PI / (180.0 * 3600.0);
+const WGS84_A_KM: f64 = 6378.137;
+const WGS84_FLATTENING: f64 = 1.0 / 298.257_223_563;
+
+// MJD at UTC midnight when the new TAI-UTC value becomes effective.
+// IERS Bulletin C 72, July 2026; this table expires at 2027-06-28 UTC.
+const LEAP_SECONDS: &[(i64, i32)] = &[
+    (41317, 10),
+    (41499, 11),
+    (41683, 12),
+    (42048, 13),
+    (42413, 14),
+    (42778, 15),
+    (43144, 16),
+    (43509, 17),
+    (43874, 18),
+    (44239, 19),
+    (44786, 20),
+    (45151, 21),
+    (45516, 22),
+    (46247, 23),
+    (47161, 24),
+    (47892, 25),
+    (48257, 26),
+    (48804, 27),
+    (49169, 28),
+    (49534, 29),
+    (50083, 30),
+    (50630, 31),
+    (51179, 32),
+    (53736, 33),
+    (54832, 34),
+    (56109, 35),
+    (57204, 36),
+    (57754, 37),
+];
+
+/// UTC-offset timestamp, parsed from `YYYY-MM-DDTHH:MM:SS[.fraction]Z`
+/// or a fixed offset such as `+01:00`. Leap-second labels are unsupported.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CivilTimestamp {
+    pub year: i32,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: f64,
+    /// Civil local time minus UTC, in minutes.
+    pub utc_offset_minutes: i16,
+}
+
+/// WGS84 geodetic latitude and east-positive longitude in degrees.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Observer {
+    pub latitude_deg: f64,
+    pub longitude_deg_east: f64,
+    pub height_m: f64,
+}
+
+/// All directions are geometric and topocentric, in mean axes of date.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanetPosition {
+    pub body: Body,
+    pub mean_ecliptic_longitude_deg: f64,
+    pub mean_ecliptic_latitude_deg: f64,
+    pub mean_right_ascension_deg: f64,
+    pub mean_declination_deg: f64,
+    pub altitude_deg: f64,
+    /// Azimuth measured east from north; undefined at the zenith or nadir.
+    pub azimuth_deg: Option<f64>,
+    pub distance_km: f64,
+}
+
+/// Explicit limitations applying to every result from this experimental model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkyApproximation {
+    Ut1EqualsUtc,
+    TruncatedTdbMinusTt,
+    NoNutation,
+    NoLightTime,
+    NoAberration,
+    NoGravitationalDeflection,
+    NoPolarMotion,
+    NoAtmosphericRefraction,
+    OuterPlanetSystemBarycenters,
+}
+
+pub const MODEL_APPROXIMATIONS: &[SkyApproximation] = &[
+    SkyApproximation::Ut1EqualsUtc,
+    SkyApproximation::TruncatedTdbMinusTt,
+    SkyApproximation::NoNutation,
+    SkyApproximation::NoLightTime,
+    SkyApproximation::NoAberration,
+    SkyApproximation::NoGravitationalDeflection,
+    SkyApproximation::NoPolarMotion,
+    SkyApproximation::NoAtmosphericRefraction,
+    SkyApproximation::OuterPlanetSystemBarycenters,
+];
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkyPositions {
+    pub utc_day_number: i64,
+    pub utc_fraction_of_day: f64,
+    pub tt_julian_day: f64,
+    pub tdb_julian_day: f64,
+    pub tai_minus_utc_seconds: i32,
+    pub observer: Observer,
+    pub approximations: &'static [SkyApproximation],
+    pub positions: Vec<PlanetPosition>,
+}
+
+#[derive(Debug)]
+pub enum SkyError {
+    InvalidInput(&'static str),
+    UnsupportedUtc,
+    Calendar(CalendarError),
+    AtomicTime(AtomicTimeError),
+    Ephemeris(De441Error),
+}
+impl fmt::Display for SkyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidInput(s) => write!(f, "invalid input: {s}"),
+            Self::UnsupportedUtc => write!(
+                f,
+                "UTC is outside the validated IERS table (1972-01-01 through 2027-06-27)"
+            ),
+            Self::Calendar(e) => write!(f, "calendar: {e}"),
+            Self::AtomicTime(e) => write!(f, "atomic time: {e}"),
+            Self::Ephemeris(e) => write!(f, "ephemeris: {e}"),
+        }
+    }
+}
+// Modification (2026-11-14): preserve typed underlying causes for callers
+// using std::error::Error::source, including DE441's nested I/O failures.
+impl Error for SkyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Calendar(error) => Some(error),
+            Self::AtomicTime(error) => Some(error),
+            Self::Ephemeris(error) => Some(error),
+            Self::InvalidInput(_) | Self::UnsupportedUtc => None,
+        }
+    }
+}
+impl From<CalendarError> for SkyError {
+    fn from(e: CalendarError) -> Self {
+        Self::Calendar(e)
+    }
+}
+impl From<AtomicTimeError> for SkyError {
+    fn from(e: AtomicTimeError) -> Self {
+        Self::AtomicTime(e)
+    }
+}
+impl From<De441Error> for SkyError {
+    fn from(e: De441Error) -> Self {
+        Self::Ephemeris(e)
+    }
+}
+
+impl CivilTimestamp {
+    /// Parse a timestamp with an explicit `Z` or numeric `±HH:MM` offset.
+    pub fn parse(value: &str) -> Result<Self, SkyError> {
+        if !value.is_ascii() || value.len() < 20 {
+            return Err(SkyError::InvalidInput(
+                "timestamp must include a numeric UTC offset or Z",
+            ));
+        }
+        let (date, clock_with_offset) = value
+            .split_once('T')
+            .ok_or(SkyError::InvalidInput("expected YYYY-MM-DDTHH:MM:SS±HH:MM"))?;
+        if date.len() != 10 || &date[4..5] != "-" || &date[7..8] != "-" {
+            return Err(SkyError::InvalidInput("invalid date syntax"));
+        }
+        if !date[0..4].bytes().all(|b| b.is_ascii_digit())
+            || !date[5..7].bytes().all(|b| b.is_ascii_digit())
+            || !date[8..10].bytes().all(|b| b.is_ascii_digit())
+        {
+            return Err(SkyError::InvalidInput("invalid date digits"));
+        }
+        let year = date[0..4]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid year"))?;
+        let month = date[5..7]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid month"))?;
+        let day = date[8..10]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid day"))?;
+        let (clock, utc_offset_minutes) = if let Some(clock) = clock_with_offset.strip_suffix('Z') {
+            (clock, 0)
+        } else {
+            if clock_with_offset.len() < 14 {
+                return Err(SkyError::InvalidInput("timestamp requires ±HH:MM"));
+            }
+            let at = clock_with_offset.len() - 6;
+            let offset = &clock_with_offset[at..];
+            let sign = match &offset[0..1] {
+                "+" => 1,
+                "-" => -1,
+                _ => return Err(SkyError::InvalidInput("timestamp requires ±HH:MM")),
+            };
+            if &offset[3..4] != ":" {
+                return Err(SkyError::InvalidInput("invalid UTC offset"));
+            }
+            if !offset[1..3].bytes().all(|b| b.is_ascii_digit())
+                || !offset[4..6].bytes().all(|b| b.is_ascii_digit())
+            {
+                return Err(SkyError::InvalidInput("invalid UTC offset digits"));
+            }
+            let h: i16 = offset[1..3]
+                .parse()
+                .map_err(|_| SkyError::InvalidInput("invalid UTC offset"))?;
+            let m: i16 = offset[4..6]
+                .parse()
+                .map_err(|_| SkyError::InvalidInput("invalid UTC offset"))?;
+            if h > 14 || m > 59 || (h == 14 && m != 0) {
+                return Err(SkyError::InvalidInput("UTC offset must be within ±14:00"));
+            }
+            (&clock_with_offset[..at], sign * (h * 60 + m))
+        };
+        if clock.len() < 8 || &clock[2..3] != ":" || &clock[5..6] != ":" {
+            return Err(SkyError::InvalidInput("invalid clock syntax"));
+        }
+        if !clock[0..2].bytes().all(|b| b.is_ascii_digit())
+            || !clock[3..5].bytes().all(|b| b.is_ascii_digit())
+            || !clock[6..8].bytes().all(|b| b.is_ascii_digit())
+            || (clock.len() > 8
+                && (&clock[8..9] != "."
+                    || clock.len() == 9
+                    || !clock[9..].bytes().all(|b| b.is_ascii_digit())))
+        {
+            return Err(SkyError::InvalidInput("invalid clock digits"));
+        }
+        let hour = clock[0..2]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid hour"))?;
+        let minute = clock[3..5]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid minute"))?;
+        let second = clock[6..]
+            .parse()
+            .map_err(|_| SkyError::InvalidInput("invalid second"))?;
+        let timestamp = Self {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            utc_offset_minutes,
+        };
+        timestamp.validate()?;
+        Ok(timestamp)
+    }
+
+    fn validate(self) -> Result<(), SkyError> {
+        if !(-840..=840).contains(&self.utc_offset_minutes) {
+            return Err(SkyError::InvalidInput("UTC offset must be within ±14:00"));
+        }
+        // Use the calendar module only to validate/encode civil clock fields.
+        // This internal label is arithmetic only; no clock is asserted to be UT1.
+        CalendarDateTime {
+            year: self.year,
+            month: self.month,
+            day: self.day,
+            hour: self.hour,
+            minute: self.minute,
+            second: self.second,
+            scale: TimeScale::Ut1,
+        }
+        .to_julian_date(Calendar::ProlepticGregorian)?;
+        Ok(())
+    }
+}
+
+fn shift_day(
+    day: i64,
+    fraction: f64,
+    seconds: f64,
+    scale: TimeScale,
+) -> Result<JulianDate, SkyError> {
+    let shifted = fraction + seconds / DAY_SECONDS;
+    let (day, fraction) = if shifted < 0.0 {
+        (day - 1, shifted + 1.0)
+    } else if shifted >= 1.0 {
+        (day + 1, shifted - 1.0)
+    } else {
+        (day, shifted)
+    };
+    Ok(JulianDate::new(day, fraction, scale)?)
+}
+
+#[derive(Clone, Copy)]
+struct Epochs {
+    utc: JulianDate,
+    tt_jd: f64,
+    tdb_jd: f64,
+    tai_utc: i32,
+}
+
+fn epochs(civil: CivilTimestamp) -> Result<Epochs, SkyError> {
+    civil.validate()?;
+    let local = CalendarDateTime {
+        year: civil.year,
+        month: civil.month,
+        day: civil.day,
+        hour: civil.hour,
+        minute: civil.minute,
+        second: civil.second,
+        scale: TimeScale::Ut1,
+    }
+    .to_julian_date(Calendar::ProlepticGregorian)?;
+    // UTC is encoded using nominal 86400-second civil days; leap-second labels
+    // are rejected. UT1 will later be explicitly approximated as UTC.
+    let utc = shift_day(
+        local.day_number(),
+        local.midnight_fraction(),
+        -f64::from(civil.utc_offset_minutes) * 60.0,
+        TimeScale::Ut1,
+    )?;
+    let mjd = utc.day_number() - 2_400_001;
+    let expiry = CalendarDateTime {
+        year: 2027,
+        month: 6,
+        day: 28,
+        hour: 0,
+        minute: 0,
+        second: 0.0,
+        scale: TimeScale::Ut1,
+    }
+    .to_julian_date(Calendar::ProlepticGregorian)?
+    .day_number();
+    if mjd < 41317 || utc.day_number() >= expiry {
+        return Err(SkyError::UnsupportedUtc);
+    }
+    let tai_utc = LEAP_SECONDS
+        .iter()
+        .rev()
+        .find(|(day, _)| *day <= mjd)
+        .map(|(_, value)| *value)
+        .ok_or(SkyError::UnsupportedUtc)?;
+    let tai = shift_day(
+        utc.day_number(),
+        utc.midnight_fraction(),
+        f64::from(tai_utc),
+        TimeScale::Tai,
+    )?;
+    let tt = tai_to_tt(tai)?;
+    let (tt_a, tt_b) = tt.parts()?;
+    let tt_jd = tt_a + tt_b;
+    // USNO Circular 179, section 2.3: truncated TDB−TT series, seconds.
+    let t = ((tt_a - J2000) + tt_b) / 36_525.0;
+    let tdb_tt = 0.001657 * (628.3076 * t + 6.2401).sin()
+        + 0.000022 * (575.3385 * t + 4.2970).sin()
+        + 0.000014 * (1256.6152 * t + 6.1969).sin()
+        + 0.000005 * (606.9777 * t + 4.0212).sin()
+        + 0.000005 * (52.9691 * t + 0.4444).sin()
+        + 0.000002 * (21.3299 * t + 5.5431).sin()
+        + 0.000010 * t * (628.3076 * t + 4.2490).sin();
+    let tdb = shift_day(
+        tt.day_number(),
+        tt.midnight_fraction(),
+        tdb_tt,
+        TimeScale::Tdb,
+    )?;
+    let tdb_jd = tdb.to_de441_epoch()?.0;
+    Ok(Epochs {
+        utc,
+        tt_jd,
+        tdb_jd,
+        tai_utc,
+    })
+}
+
+/// Convert a civil timestamp with an explicit UTC offset to an **approximate**
+/// TDB Julian date for the classic DE441 and fixed-axis velocity APIs.
+///
+/// This exposes the same time conversion already used by `calculate`:
+/// proleptic Gregorian input -> UTC -> IERS TAI-UTC -> TT -> the truncated
+/// USNO TDB-TT series. It is valid only for UTC dates from 1972-01-01
+/// through 2027-06-27 inclusive (Bulletin C 72 coverage), and rejects
+/// leap-second labels rather than treating them as ordinary seconds.
+///
+/// The output is TDB JD, **not UT1 or TT**, and must not be presented as
+/// a validated high-precision TDB conversion. The single-f64 Julian date
+/// also has limited sub-second precision at modern epochs. This method
+/// neither reads an ephemeris file nor supplies missing apparent corrections.
+impl CivilTimestamp {
+    pub fn to_approximate_tdb_julian_date(self) -> Result<crate::de441::JulianDateTdb, SkyError> {
+        Ok(crate::de441::JulianDateTdb(epochs(self)?.tdb_jd))
+    }
+}
+
+type Matrix = [[f64; 3]; 3];
+fn multiply(a: Matrix, b: Matrix) -> Matrix {
+    let mut output = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            output[i][j] = (0..3).map(|k| a[i][k] * b[k][j]).sum();
+        }
+    }
+    output
+}
+fn x_rotation(angle: f64) -> Matrix {
+    let (s, c) = angle.sin_cos();
+    [[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]]
+}
+fn z_rotation(angle: f64) -> Matrix {
+    let (s, c) = angle.sin_cos();
+    [[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]]
+}
+fn poly(t: f64, coefficients: [f64; 6]) -> f64 {
+    coefficients.iter().rev().fold(0.0, |sum, c| sum * t + c) * ARCSEC_TO_RAD
+}
+
+/// IAU 2006 Fukushima–Williams bias/precession, ICRF to mean equator of TT date.
+fn mean_date_matrix(tt_jd: f64) -> (Matrix, f64) {
+    let t = (tt_jd - J2000) / 36_525.0;
+    let g = poly(
+        t,
+        [
+            -0.052928,
+            10.556378,
+            0.4932044,
+            -0.00031238,
+            -0.000002788,
+            0.0000000260,
+        ],
+    );
+    let p = poly(
+        t,
+        [
+            84381.412819,
+            -46.811016,
+            0.0511268,
+            0.00053289,
+            -0.000000440,
+            -0.0000000176,
+        ],
+    );
+    let q = poly(
+        t,
+        [
+            -0.041775,
+            5038.481484,
+            1.5584175,
+            -0.00018522,
+            -0.000026452,
+            -0.0000000148,
+        ],
+    );
+    let e = poly(
+        t,
+        [
+            84381.406,
+            -46.836769,
+            -0.0001831,
+            0.00200340,
+            -0.000000576,
+            -0.0000000434,
+        ],
+    );
+    (
+        multiply(
+            multiply(multiply(x_rotation(-e), z_rotation(-q)), x_rotation(p)),
+            z_rotation(g),
+        ),
+        e,
+    )
+}
+fn rotate(matrix: Matrix, v: [f64; 3]) -> [f64; 3] {
+    std::array::from_fn(|i| (0..3).map(|j| matrix[i][j] * v[j]).sum())
+}
+fn gmst(utc: JulianDate, tt_jd: f64) -> f64 {
+    // USNO approximate GMST; substitute UTC for UT1 explicitly.
+    let d0 = utc.day_number() as f64 - 0.5 - J2000;
+    let h = utc.midnight_fraction() * 24.0;
+    let t = (tt_jd - J2000) / 36_525.0;
+    let hours = 6.697375 + 0.065707485828 * d0 + 1.0027379 * h + 0.0854103 * t + 0.0000258 * t * t;
+    (hours * PI / 12.0).rem_euclid(TAU)
+}
+fn spherical(v: [f64; 3]) -> Result<(f64, f64, f64), SkyError> {
+    let planar = v[0].hypot(v[1]);
+    let distance = planar.hypot(v[2]);
+    if !distance.is_finite() || distance == 0.0 || planar == 0.0 {
+        return Err(SkyError::InvalidInput("undefined geometric direction"));
+    }
+    Ok((
+        normalized_degrees(v[1].atan2(v[0])),
+        v[2].atan2(planar).to_degrees(),
+        distance,
+    ))
+}
+fn normalized_degrees(angle: f64) -> f64 {
+    let value = angle.rem_euclid(TAU).to_degrees();
+    if value == 0.0 || value >= 360.0 {
+        0.0
+    } else {
+        value
+    }
+}
+fn validate_observer(site: Observer) -> Result<(), SkyError> {
+    if !site.latitude_deg.is_finite()
+        || !site.longitude_deg_east.is_finite()
+        || !site.height_m.is_finite()
+        || !(-90.0..=90.0).contains(&site.latitude_deg)
+        || !(-180.0..=180.0).contains(&site.longitude_deg_east)
+        || !(-12_000.0..=100_000.0).contains(&site.height_m)
+    {
+        return Err(SkyError::InvalidInput(
+            "expected latitude ±90°, longitude ±180° east, and height -12000..100000 m",
+        ));
+    }
+    Ok(())
+}
+
+fn observer_vector(site: Observer, local_angle: f64) -> [f64; 3] {
+    let (sin_lat, cos_lat) = site.latitude_deg.to_radians().sin_cos();
+    let (sin_ang, cos_ang) = local_angle.sin_cos();
+    let e2 = WGS84_FLATTENING * (2.0 - WGS84_FLATTENING);
+    let n = WGS84_A_KM / (1.0 - e2 * sin_lat * sin_lat).sqrt();
+    let height = site.height_m / 1000.0;
+    [
+        (n + height) * cos_lat * cos_ang,
+        (n + height) * cos_lat * sin_ang,
+        (n * (1.0 - e2) + height) * sin_lat,
+    ]
+}
+
+fn horizontal_direction(
+    v: [f64; 3],
+    latitude: f64,
+    angle: f64,
+) -> Result<(f64, Option<f64>), SkyError> {
+    let (sin_lat, cos_lat) = latitude.sin_cos();
+    let (sin_ang, cos_ang) = angle.sin_cos();
+    let east = -sin_ang * v[0] + cos_ang * v[1];
+    let north = -sin_lat * cos_ang * v[0] - sin_lat * sin_ang * v[1] + cos_lat * v[2];
+    let up = cos_lat * cos_ang * v[0] + cos_lat * sin_ang * v[1] + sin_lat * v[2];
+    let horizontal = east.hypot(north);
+    let distance = horizontal.hypot(up);
+    if !distance.is_finite() || distance == 0.0 {
+        return Err(SkyError::InvalidInput("non-finite topocentric direction"));
+    }
+    let altitude_deg = up.atan2(horizontal).to_degrees();
+    let azimuth_deg = if horizontal <= 1e-14 * distance {
+        None
+    } else {
+        Some(normalized_degrees(east.atan2(north)))
+    };
+    Ok((altitude_deg, azimuth_deg))
+}
+
+/// Calculate an experimental topocentric geometric sky from the supplied DE441 reader.
+/// Outer planets are their system barycenters, not planetary centers.
+pub fn calculate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    civil: CivilTimestamp,
+    site: Observer,
+) -> Result<SkyPositions, SkyError> {
+    validate_observer(site)?;
+    let epoch = epochs(civil)?;
+    let (bias_precession, obliquity) = mean_date_matrix(epoch.tt_jd);
+    let angle = gmst(epoch.utc, epoch.tt_jd) + site.longitude_deg_east.to_radians();
+    let obs = observer_vector(site, angle);
+    let bodies = [
+        Body::Sun,
+        Body::Moon,
+        Body::Mercury,
+        Body::Venus,
+        Body::MarsBarycenter,
+        Body::JupiterBarycenter,
+        Body::SaturnBarycenter,
+        Body::UranusBarycenter,
+        Body::NeptuneBarycenter,
+        Body::PlutoBarycenter,
+    ];
+    let mut positions = Vec::with_capacity(bodies.len());
+    for body in bodies {
+        let state =
+            ephemeris.state(body, Body::Earth, crate::de441::JulianDateTdb(epoch.tdb_jd))?;
+        let geocentric = rotate(bias_precession, state.position_km);
+        let topocentric = std::array::from_fn(|i| geocentric[i] - obs[i]);
+        let (ra, dec, distance_km) = spherical(topocentric)?;
+        let (longitude, latitude, _) = spherical(rotate(x_rotation(obliquity), topocentric))?;
+        let (altitude_deg, azimuth_deg) =
+            horizontal_direction(topocentric, site.latitude_deg.to_radians(), angle)?;
+        positions.push(PlanetPosition {
+            body,
+            mean_ecliptic_longitude_deg: longitude,
+            mean_ecliptic_latitude_deg: latitude,
+            mean_right_ascension_deg: ra,
+            mean_declination_deg: dec,
+            altitude_deg,
+            azimuth_deg,
+            distance_km,
+        });
+    }
+    Ok(SkyPositions {
+        utc_day_number: epoch.utc.day_number(),
+        utc_fraction_of_day: epoch.utc.midnight_fraction(),
+        tt_julian_day: epoch.tt_jd,
+        tdb_julian_day: epoch.tdb_jd,
+        tai_minus_utc_seconds: epoch.tai_utc,
+        observer: site,
+        approximations: MODEL_APPROXIMATIONS,
+        positions,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn near(a: f64, b: f64, tolerance: f64) {
+        assert!((a - b).abs() <= tolerance, "{a} != {b}");
+    }
+    fn at(value: &str) -> Epochs {
+        epochs(CivilTimestamp::parse(value).unwrap()).unwrap()
+    }
+
+    // Modification (2026-11-14): preserve the actual parser's calendar
+    // failure type instead of losing the cause in a top-level SkyError.
+    #[test]
+    fn invalid_civil_date_exposes_calendar_source() {
+        let error = CivilTimestamp::parse("2026-02-30T12:00:00Z").unwrap_err();
+        assert!(matches!(
+            error
+                .source()
+                .and_then(|source| source.downcast_ref::<CalendarError>()),
+            Some(CalendarError::InvalidDate)
+        ));
+    }
+
+    #[test]
+    fn sky_errors_preserve_typed_time_and_nested_de441_io_sources() {
+        let atomic = SkyError::AtomicTime(AtomicTimeError::WrongInputScale {
+            expected: TimeScale::Tai,
+            actual: TimeScale::Tt,
+        });
+        assert!(matches!(
+            atomic
+                .source()
+                .and_then(|source| source.downcast_ref::<AtomicTimeError>()),
+            Some(AtomicTimeError::WrongInputScale {
+                expected: TimeScale::Tai,
+                actual: TimeScale::Tt,
+            })
+        ));
+
+        let de441 = SkyError::Ephemeris(De441Error::Io(std::io::Error::from(
+            std::io::ErrorKind::UnexpectedEof,
+        )));
+        let first_cause = de441.source().expect("DE441 wrapper must be a cause");
+        assert!(first_cause.downcast_ref::<De441Error>().is_some());
+        let second_cause = first_cause
+            .source()
+            .and_then(|source| source.downcast_ref::<std::io::Error>())
+            .expect("underlying std::io::Error must be accessible");
+        assert_eq!(second_cause.kind(), std::io::ErrorKind::UnexpectedEof);
+
+        assert!(SkyError::InvalidInput("test").source().is_none());
+        assert!(SkyError::UnsupportedUtc.source().is_none());
+    }
+
+    // Modification (2026-11-14): independently anchor the IAU 2006 mean
+    // obliquity to ERFA's published eraObl06 conformance fixture (TT, radians).
+    #[test]
+    fn iau_2006_mean_obliquity_matches_erfa_obl06_reference() {
+        // ERFA src/t_erfa_c.c, t_obl06: TT JD = 2400000.5 + 54388.0.
+        let (_, obliquity_rad) = mean_date_matrix(2_400_000.5 + 54_388.0);
+        near(obliquity_rad, 0.409_074_922_938_725_8, 1.0e-14);
+    }
+
+    // Modification (2026-11-14): guard orthonormality and handedness of the
+    // fixed-epoch ICRF-to-mean-equator bias/precession rotation.
+    #[test]
+    fn mean_date_precession_matrix_preserves_orthonormal_right_handed_axes() {
+        for jd_tt in [
+            2_451_545.0,
+            2_400_000.5 + 50_123.999_9,
+            2_400_000.5 + 54_388.0,
+        ] {
+            let (matrix, _) = mean_date_matrix(jd_tt);
+            for i in 0..3 {
+                for j in 0..3 {
+                    let dot: f64 = (0..3).map(|k| matrix[i][k] * matrix[j][k]).sum();
+                    near(dot, if i == j { 1.0 } else { 0.0 }, 2.0e-14);
+                }
+            }
+            let determinant = matrix[0][0]
+                * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+            near(determinant, 1.0, 2.0e-14);
+        }
+    }
+
+    #[test]
+    fn civil_offset_and_leap_seconds_are_applied_after_utc_normalization() {
+        let a = at("2026-11-10T13:30:00+01:00");
+        let b = at("2026-11-10T12:30:00Z");
+        near(a.tt_jd, b.tt_jd, 1e-12);
+        near(a.tdb_jd, b.tdb_jd, 1e-12);
+        assert_eq!(a.tai_utc, 37);
+        assert_eq!(at("2017-01-01T00:30:00+01:00").tai_utc, 36);
+        let before = at("2016-12-31T23:59:59Z");
+        let after = at("2017-01-01T00:00:00Z");
+        assert_eq!((before.tai_utc, after.tai_utc), (36, 37));
+        near((after.tt_jd - before.tt_jd) * DAY_SECONDS, 2.0, 0.0001);
+    }
+
+    #[test]
+    fn utc_offset_normalization_guards_both_iers_coverage_edges() {
+        // The IERS table's coverage is a property of the UTC instant,
+        // never of the original local calendar date.
+        let first_utc = at("1972-01-01T00:00:00Z");
+        let first_local = at("1972-01-01T14:00:00+14:00");
+        assert_eq!(first_utc.tai_utc, 10);
+        assert_eq!(first_utc.utc.day_number(), first_local.utc.day_number());
+        near(
+            first_utc.utc.midnight_fraction(),
+            first_local.utc.midnight_fraction(),
+            1e-15,
+        );
+        near(first_utc.tt_jd, first_local.tt_jd, 1e-12);
+
+        let last_utc = at("2027-06-27T23:59:59Z");
+        let last_local = at("2027-06-28T13:59:59+14:00");
+        assert_eq!(last_utc.tai_utc, 37);
+        assert_eq!(last_utc.utc.day_number(), last_local.utc.day_number());
+        near(last_utc.tt_jd, last_local.tt_jd, 1e-12);
+
+        // The same local dates can be outside coverage after applying
+        // the offset; the limit is inclusive through the final UTC day.
+        for timestamp in ["1972-01-01T00:00:00+01:00", "2027-06-27T10:00:00-14:00"] {
+            assert!(
+                matches!(
+                    epochs(CivilTimestamp::parse(timestamp).unwrap()),
+                    Err(SkyError::UnsupportedUtc)
+                ),
+                "{timestamp} must be rejected after UTC normalization"
+            );
+        }
+
+        // A date before 1972 in local civil time may still be a valid
+        // 1972 UTC instant, provided it uses an explicit negative offset.
+        let shifted = at("1971-12-31T23:59:59-01:00");
+        assert_eq!(shifted.tai_utc, 10);
+        near(shifted.tt_jd, at("1972-01-01T00:59:59Z").tt_jd, 1e-12);
+    }
+
+    #[test]
+    fn leap_second_schedule_is_selected_from_utc_not_local_midnight() {
+        // 2017-01-01 00:30 in a +01 zone is still 2016-12-31 UTC:
+        // the post-2016 leap-second TAI-UTC offset is not yet in effect.
+        let before = at("2017-01-01T00:30:00+01:00");
+        let before_utc = at("2016-12-31T23:30:00Z");
+        assert_eq!(before.tai_utc, 36);
+        near(before.tt_jd, before_utc.tt_jd, 1e-12);
+
+        // Conversely, local 2016-12-31 with a -01 offset can already be
+        // 2017-01-01 UTC; the new offset must apply.
+        let after = at("2016-12-31T23:30:00-01:00");
+        let after_utc = at("2017-01-01T00:30:00Z");
+        assert_eq!(after.tai_utc, 37);
+        near(after.tt_jd, after_utc.tt_jd, 1e-12);
+        assert_eq!(after.utc.day_number(), before.utc.day_number() + 1);
+    }
+
+    #[test]
+    fn timestamp_validation_rejects_unsupported_and_ambiguous_inputs() {
+        for value in [
+            "2026-11-10T12:00:00",
+            "2026-11-10T12:00:60Z",
+            "2026-02-30T12:00:00Z",
+            "2026-11-10T12:00:00+14:01",
+            "2026-11-10T12:00:00--1:00",
+            "2026-11-10T12:00:0e3Z",
+            "2026-11-10T12:00:00.Z",
+        ] {
+            assert!(CivilTimestamp::parse(value).is_err(), "{value}");
+        }
+        for value in ["1971-12-31T23:59:59Z", "2027-06-28T00:00:00Z"] {
+            assert!(matches!(
+                epochs(CivilTimestamp::parse(value).unwrap()),
+                Err(SkyError::UnsupportedUtc)
+            ));
+        }
+        assert!(epochs(CivilTimestamp::parse("2027-06-27T23:59:59Z").unwrap()).is_ok());
+    }
+
+    // Civil effective dates and TAI-UTC values cross-checked against the
+    // published historical table from Hong Kong Observatory. This independent
+    // date fixture prevents an erroneous hard-coded MJD from self-validating.
+    // The first row is the 1972 UTC baseline, not an inserted leap second.
+    const LEAP_CIVIL_REFERENCE: &[(i32, u8, u8, i32)] = &[
+        (1972, 1, 1, 10),
+        (1972, 7, 1, 11),
+        (1973, 1, 1, 12),
+        (1974, 1, 1, 13),
+        (1975, 1, 1, 14),
+        (1976, 1, 1, 15),
+        (1977, 1, 1, 16),
+        (1978, 1, 1, 17),
+        (1979, 1, 1, 18),
+        (1980, 1, 1, 19),
+        (1981, 7, 1, 20),
+        (1982, 7, 1, 21),
+        (1983, 7, 1, 22),
+        (1985, 7, 1, 23),
+        (1988, 1, 1, 24),
+        (1990, 1, 1, 25),
+        (1991, 1, 1, 26),
+        (1992, 7, 1, 27),
+        (1993, 7, 1, 28),
+        (1994, 7, 1, 29),
+        (1996, 1, 1, 30),
+        (1997, 7, 1, 31),
+        (1999, 1, 1, 32),
+        (2006, 1, 1, 33),
+        (2009, 1, 1, 34),
+        (2012, 7, 1, 35),
+        (2015, 7, 1, 36),
+        (2017, 1, 1, 37),
+    ];
+
+    fn utc_civil_day(day_number: i64) -> CalendarDateTime {
+        JulianDate::new(day_number, 0.0, TimeScale::Ut1)
+            .unwrap()
+            .to_calendar(Calendar::ProlepticGregorian)
+            .unwrap()
+    }
+
+    fn timestamp_on_day(
+        day: CalendarDateTime,
+        hour: u8,
+        minute: u8,
+        second: f64,
+        offset_minutes: i16,
+    ) -> CivilTimestamp {
+        CivilTimestamp {
+            year: day.year,
+            month: day.month,
+            day: day.day,
+            hour,
+            minute,
+            second,
+            utc_offset_minutes: offset_minutes,
+        }
+    }
+
+    // Modification (2026-11-14): independently anchor every post-1972
+    // positive leap-second transition, not only the 2016/2017 example.
+    #[test]
+    fn all_historical_utc_leap_transitions_match_civil_dates_and_tt_steps() {
+        assert_eq!(LEAP_SECONDS.len(), LEAP_CIVIL_REFERENCE.len());
+
+        for (index, &(year, month, day, tai_minus_utc)) in LEAP_CIVIL_REFERENCE.iter().enumerate() {
+            let at_midnight = CalendarDateTime {
+                year,
+                month,
+                day,
+                hour: 0,
+                minute: 0,
+                second: 0.0,
+                scale: TimeScale::Ut1,
+            }
+            .to_julian_date(Calendar::ProlepticGregorian)
+            .unwrap();
+            let mjd = at_midnight.day_number() - 2_400_001;
+            assert_eq!(
+                LEAP_SECONDS[index],
+                (mjd, tai_minus_utc),
+                "historical TAI-UTC table entry {index} disagrees with civil effective date"
+            );
+            let after = epochs(timestamp_on_day(
+                utc_civil_day(at_midnight.day_number()),
+                0,
+                0,
+                0.0,
+                0,
+            ))
+            .unwrap();
+            assert_eq!(after.tai_utc, tai_minus_utc);
+
+            if index == 0 {
+                assert_eq!(tai_minus_utc, 10, "1972 baseline is not a leap insertion");
+                continue;
+            }
+            assert_eq!(
+                tai_minus_utc,
+                LEAP_CIVIL_REFERENCE[index - 1].3 + 1,
+                "all historical post-baseline adjustments are positive one-second leaps"
+            );
+            let previous_day = utc_civil_day(at_midnight.day_number() - 1);
+            let before = epochs(timestamp_on_day(previous_day, 23, 59, 59.0, 0)).unwrap();
+            assert_eq!(before.tai_utc, tai_minus_utc - 1);
+            assert_eq!(before.utc.day_number() + 1, after.utc.day_number());
+            // The UTC leap label 23:59:60 is deliberately unsupported.
+            // Its elapsed second is nevertheless reflected in TT: the
+            // adjacent *supported* 23:59:59 and 00:00:00 labels span 2 SI s.
+            near((after.tt_jd - before.tt_jd) * DAY_SECONDS, 2.0, 0.0001);
+        }
+    }
+
+    #[test]
+    fn all_leap_boundaries_normalize_extreme_utc_offsets_before_tai_lookup() {
+        for &(year, month, day, tai_minus_utc) in LEAP_CIVIL_REFERENCE.iter().skip(1) {
+            let next_midnight = CalendarDateTime {
+                year,
+                month,
+                day,
+                hour: 0,
+                minute: 0,
+                second: 0.0,
+                scale: TimeScale::Ut1,
+            }
+            .to_julian_date(Calendar::ProlepticGregorian)
+            .unwrap();
+            let new_day = utc_civil_day(next_midnight.day_number());
+            let previous_day = utc_civil_day(next_midnight.day_number() - 1);
+            let utc_before = epochs(timestamp_on_day(previous_day, 23, 59, 59.0, 0)).unwrap();
+            let utc_after = epochs(timestamp_on_day(new_day, 0, 0, 0.0, 0)).unwrap();
+
+            // A +14:00 label on the effective date is still in the previous
+            // UTC day, whereas -12:00 on the prior local date is already in
+            // the next UTC day. The leap-second selection must use UTC.
+            let plus_fourteen = epochs(timestamp_on_day(new_day, 13, 59, 59.0, 840)).unwrap();
+            let minus_twelve = epochs(timestamp_on_day(previous_day, 12, 0, 0.0, -720)).unwrap();
+
+            assert_eq!(plus_fourteen.tai_utc, tai_minus_utc - 1);
+            assert_eq!(minus_twelve.tai_utc, tai_minus_utc);
+            assert_eq!(plus_fourteen.utc.day_number(), utc_before.utc.day_number());
+            assert_eq!(minus_twelve.utc.day_number(), utc_after.utc.day_number());
+            near(
+                plus_fourteen.utc.midnight_fraction(),
+                utc_before.utc.midnight_fraction(),
+                1e-12,
+            );
+            near(
+                minus_twelve.utc.midnight_fraction(),
+                utc_after.utc.midnight_fraction(),
+                1e-12,
+            );
+            near(
+                (plus_fourteen.tt_jd - utc_before.tt_jd) * DAY_SECONDS,
+                0.0,
+                0.0001,
+            );
+            near(
+                (minus_twelve.tt_jd - utc_after.tt_jd) * DAY_SECONDS,
+                0.0,
+                0.0001,
+            );
+        }
+    }
+
+    #[test]
+    fn precession_matches_independent_erfa_pmat06_reference() {
+        // ERFA t_pmat06 numerical conformance data; see THIRD_PARTY_NOTICES.md.
+        let expected = [
+            [
+                0.999_999_550_517_600_7,
+                0.000_869_540_461_734_820_8,
+                0.000_377_973_520_186_558_9,
+            ],
+            [
+                -0.000_869_540_472_377_203_1,
+                0.999_999_621_949_602_7,
+                -0.000_000_136_175_249_708_027,
+            ],
+            [
+                -0.000_377_973_495_703_408_95,
+                -0.000_000_192_488_084_789_445_7,
+                0.999_999_928_567_997_2,
+            ],
+        ];
+        let (matrix, _) = mean_date_matrix(2_400_000.5 + 50_123.999_9);
+        for i in 0..3 {
+            for j in 0..3 {
+                near(matrix[i][j], expected[i][j], 1e-14);
+            }
+        }
+    }
+
+    // Modification (2026-11-14): validate the existing WGS84 Cartesian
+    // observer conversion against an independent ERFA gd2gc test fixture.
+    #[test]
+    fn wgs84_observer_xyz_matches_independent_erfa_gd2gc_reference() {
+        // ERFA t_gd2gc: WGS84, geodetic longitude 3.1 radians,
+        // latitude -0.5 radians, ellipsoidal height 2500 meters.
+        // The ERFA reference is Earth-fixed XYZ in meters. In this unit
+        // fixture the supplied local rotation angle equals the longitude;
+        // production first_sky::calculate additionally includes GMST.
+        // See THIRD_PARTY_NOTICES.md for source and separate ERFA license.
+        let site = Observer {
+            latitude_deg: (-0.5_f64).to_degrees(),
+            longitude_deg_east: 3.1_f64.to_degrees(),
+            height_m: 2500.0,
+        };
+        validate_observer(site).unwrap();
+        let actual = observer_vector(site, 3.1);
+        let erfa_reference_meters = [
+            -5_599_000.557_704_995,
+            233_011.672_234_792_03,
+            -3_040_909.470_698_336,
+        ];
+        for axis in 0..3 {
+            near(actual[axis], erfa_reference_meters[axis] / 1000.0, 1e-9);
+        }
+    }
+
+    #[test]
+    fn wgs84_height_and_half_turn_preserve_geodetic_geometry() {
+        let latitude = -0.5_f64;
+        let angle = 3.1_f64;
+        let site = Observer {
+            latitude_deg: latitude.to_degrees(),
+            longitude_deg_east: angle.to_degrees(),
+            height_m: 2500.0,
+        };
+        let base = observer_vector(site, angle);
+        let raised = observer_vector(
+            Observer {
+                height_m: site.height_m + 1000.0,
+                ..site
+            },
+            angle,
+        );
+        // A +1000 m ellipsoidal height increment is +1 km in the
+        // geodetic normal direction, irrespective of Earth flattening.
+        let expected_height_delta = [
+            latitude.cos() * angle.cos(),
+            latitude.cos() * angle.sin(),
+            latitude.sin(),
+        ];
+        for axis in 0..3 {
+            near(raised[axis] - base[axis], expected_height_delta[axis], 1e-9);
+        }
+
+        // A 180-degree rotation of the local sidereal/longitude angle
+        // reverses both equatorial components but leaves Z unchanged.
+        let opposite = observer_vector(site, angle + PI);
+        near(opposite[0], -base[0], 1e-9);
+        near(opposite[1], -base[1], 1e-9);
+        near(opposite[2], base[2], 1e-9);
+    }
+
+    // Modification (2026-11-14): independently anchor the experimental
+    // geometric horizontal projection to ERFA t_hd2ae (see third-party notices).
+    #[test]
+    fn geometric_horizontal_coordinates_match_independent_erfa_hd2ae() {
+        // ERFA t_hd2ae: hour angle 1.1 rad, declination 1.2 rad,
+        // observer latitude 0.3 rad. Encode the same hour angle using
+        // local sidereal angle - equatorial right ascension = 1.1 rad.
+        let hour_angle = 1.1_f64;
+        let declination = 1.2_f64;
+        let latitude = 0.3_f64;
+        let sidereal_angle = 0.7_f64;
+        let right_ascension = sidereal_angle - hour_angle;
+        let length_km = 42_000.0;
+        let direction = [
+            length_km * declination.cos() * right_ascension.cos(),
+            length_km * declination.cos() * right_ascension.sin(),
+            length_km * declination.sin(),
+        ];
+
+        let (altitude_deg, azimuth_deg) =
+            horizontal_direction(direction, latitude, sidereal_angle).unwrap();
+        near(altitude_deg.to_radians(), 0.447_218_630_499_048_6, 1e-13);
+        near(
+            azimuth_deg
+                .expect("off-zenith direction has azimuth")
+                .to_radians(),
+            5.916_889_243_730_066,
+            1e-13,
+        );
+
+        // Azimuth and altitude describe direction, so changing a positive
+        // distance scale or adding a sidereal full turn cannot change them.
+        for scale in [0.0001, 10_000.0] {
+            let scaled = direction.map(|x| x * scale);
+            let (scaled_alt, scaled_az) =
+                horizontal_direction(scaled, latitude, sidereal_angle).unwrap();
+            near(scaled_alt, altitude_deg, 1e-11);
+            near(scaled_az.unwrap(), azimuth_deg.unwrap(), 1e-11);
+        }
+        let (rotated_alt, rotated_az) =
+            horizontal_direction(direction, latitude, sidereal_angle + TAU).unwrap();
+        near(rotated_alt, altitude_deg, 1e-11);
+        near(rotated_az.unwrap(), azimuth_deg.unwrap(), 1e-11);
+    }
+
+    #[test]
+    fn geometric_zenith_and_nadir_have_no_defined_azimuth() {
+        let latitude = 0.3_f64;
+        let sidereal_angle = 0.7_f64;
+        let zenith = [
+            latitude.cos() * sidereal_angle.cos(),
+            latitude.cos() * sidereal_angle.sin(),
+            latitude.sin(),
+        ];
+
+        let (zenith_alt, zenith_az) =
+            horizontal_direction(zenith, latitude, sidereal_angle).unwrap();
+        near(zenith_alt, 90.0, 1e-12);
+        assert_eq!(zenith_az, None);
+
+        let (nadir_alt, nadir_az) =
+            horizontal_direction(zenith.map(|x| -x), latitude, sidereal_angle).unwrap();
+        near(nadir_alt, -90.0, 1e-12);
+        assert_eq!(nadir_az, None);
+
+        // A sufficiently nonzero horizontal displacement restores a
+        // well-defined azimuth, rather than collapsing the whole sky.
+        let perturbed = [zenith[0], zenith[1] + 1e-10, zenith[2]];
+        let (_, near_zenith_az) =
+            horizontal_direction(perturbed, latitude, sidereal_angle).unwrap();
+        assert!(near_zenith_az.is_some());
+    }
+
+    #[test]
+    fn gmst_and_wgs84_geometries_match_reference_and_cardinal_directions() {
+        let j2000 = JulianDate::new(2_451_545, 0.5, TimeScale::Ut1).unwrap();
+        near(gmst(j2000, J2000).to_degrees() / 15.0, 18.697375, 0.00005);
+        let equator = Observer {
+            latitude_deg: 0.0,
+            longitude_deg_east: 0.0,
+            height_m: 0.0,
+        };
+        let p = observer_vector(equator, 0.0);
+        near(p[0], 6378.137, 1e-9);
+        near(p[1], 0.0, 1e-9);
+        near(p[2], 0.0, 1e-9);
+        let pole = observer_vector(
+            Observer {
+                latitude_deg: 90.0,
+                ..equator
+            },
+            0.0,
+        );
+        near(pole[2], 6_356.752_314_245, 1e-8);
+        let (alt, az) = horizontal_direction([0.0, 1.0, 0.0], 0.0, 0.0).unwrap();
+        near(alt, 0.0, 1e-12);
+        near(az.unwrap(), 90.0, 1e-12);
+        let (alt, az) = horizontal_direction([0.0, 0.0, 1.0], 0.0, 0.0).unwrap();
+        near(alt, 0.0, 1e-12);
+        near(az.unwrap(), 0.0, 1e-12);
+        let (alt, az) = horizontal_direction([1.0, 0.0, 0.0], 0.0, 0.0).unwrap();
+        near(alt, 90.0, 1e-12);
+        assert_eq!(az, None);
+        assert_eq!(spherical([1.0, -1e-20, 0.0]).unwrap().0, 0.0);
+    }
+
+    #[test]
+    #[ignore = "requires DE441_PATH pointing to the external JPL binary"]
+    fn supplied_kernel_produces_time_and_place_dependent_planet_positions() {
+        let path = std::env::var_os("DE441_PATH").expect("set DE441_PATH");
+        let mut eph = De441::open(path).unwrap();
+        let time = CivilTimestamp::parse("2026-11-10T13:30:00+01:00").unwrap();
+        let milan = Observer {
+            latitude_deg: 45.4642,
+            longitude_deg_east: 9.19,
+            height_m: 120.0,
+        };
+        let result = calculate(&mut eph, time, milan).unwrap();
+        assert!(result
+            .approximations
+            .contains(&SkyApproximation::Ut1EqualsUtc));
+        assert_eq!(result.positions.len(), 10);
+        assert_eq!(result.positions[0].body, Body::Sun);
+        assert_eq!(result.positions[1].body, Body::Moon);
+        assert!(result
+            .positions
+            .iter()
+            .all(|p| (0.0..360.0).contains(&p.mean_ecliptic_longitude_deg)
+                && (-90.0..=90.0).contains(&p.altitude_deg)
+                && p.distance_km > 0.0));
+        let offset_time = CivilTimestamp::parse("2026-11-10T12:30:00Z").unwrap();
+        let same = calculate(&mut eph, offset_time, milan).unwrap();
+        near(result.tdb_julian_day, same.tdb_julian_day, 0.0);
+        near(
+            result.positions[1].mean_ecliptic_longitude_deg,
+            same.positions[1].mean_ecliptic_longitude_deg,
+            1e-10,
+        );
+        let opposite = calculate(
+            &mut eph,
+            time,
+            Observer {
+                latitude_deg: -45.4642,
+                longitude_deg_east: -170.81,
+                height_m: 0.0,
+            },
+        )
+        .unwrap();
+        assert!(
+            (result.positions[1].mean_ecliptic_longitude_deg
+                - opposite.positions[1].mean_ecliptic_longitude_deg)
+                .abs()
+                > 0.01
+        );
+    }
+}

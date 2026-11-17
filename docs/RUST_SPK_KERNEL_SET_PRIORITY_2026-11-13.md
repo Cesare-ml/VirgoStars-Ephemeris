@@ -1,0 +1,131 @@
+# Experimental Rust SPK kernel-set priority and cross-file center chains
+
+**Date:** 2026-11-13 · **Integration review:** 2026-11-14 · **Status:** experimental, synthetic tests only.
+
+The dependency sequence is now integrated on `dev/ephemeris` in order: [#148 DAF/SPK index](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/148), [#150 Type-2/3 primitive states](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/150) (including the MID/RADIUS coherence fix from #200), and [#157 single-file center chains](https://github.com/Cesare-ml/VirgoStars-Ephemeris/pull/157). The multi-kernel layer is an incremental extension of those modules; this change does **not** imply real-kernel validation or production readiness.
+
+## Scope and public API
+
+`spk_kernel_set::SpkKernelSet<R>` owns a sequence of independently indexed, externally provided SPK streams, with the source and `SpkIndex` kept together. `R` must implement `Read + Seek` and be the **same Rust type** across the set (for example `std::fs::File`). Kernels with differing IEEE endianness may be mixed.
+
+- `SpkKernelSet::new()` constructs an empty set.
+- `load(source)` validates the DAF/SPK index before adding the source. **A failed load adds no entry**; a successful load makes the new kernel highest priority. This is strictly append-in-load-order, without filenames/meta-kernels.
+- `unload_last()` returns and removes the most recent source, restoring the remaining files' priority. `kernel_count()` and `is_empty()` expose the current inventory.
+- `selected_segment(target_naif_id, et)` inspects the **winning declared descriptor and zero-based load index** without reading Chebyshev coefficients; it returns `Ok(None)` for missing coverage and errors on nonfinite ET.
+- `direct_state(target_naif_id, et)` returns a primitive **target relative to the winning segment's declared center**.
+- `relative_state(target_naif_id, center_naif_id, et)` composes the necessary links from multiple files to their shared ancestor, **without duplicating Chebyshev evaluation or relative-vector composition**.
+
+### Effective-segment inspection (2026-11-14)
+
+For troubleshooting kernel-stack precedence, callers can inspect which loaded source and DAF descriptor the engine will choose **before** evaluating a state:
+
+```rust
+# use std::fs::File;
+# use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut kernels = SpkKernelSet::new();
+kernels.load(File::open("/path/to/reviewed/older.bsp")?)?;
+kernels.load(File::open("/path/to/reviewed/newer.bsp")?)?;
+if let Some((load_index, descriptor)) = kernels.selected_segment(301, 0.0)? {
+    println!("0-based load index: {load_index}, center: {}", descriptor.center_id);
+    println!("SPK type: {}, frame: {}", descriptor.spk_type, descriptor.frame_id);
+}
+# Ok(())
+# }
+```
+
+The inspect method uses exactly the same last-loaded / last-covering selection as `direct_state`, now by a shared selection path. It does **not** verify Chebyshev bytes, check frame/type support, or test center-chain connectivity. Thus even a selected descriptor with unsupported frame, unsupported type, or corrupt coefficients must still cause `direct_state` to fail rather than falling back to a lower-priority kernel. Index 0 is the oldest loaded source; unloading the newest kernel does not renumber surviving sources, but may change the winning selection. The method returns `Ok(None)` for missing target/time coverage, including an empty set, and `InvalidEpoch` for NaN/infinite TDB/ET. These are metadata-only synthetic contract checks and do not establish NASA/JPL numerical parity.
+
+### Declared target inventory and coverage gaps (2026-11-14)
+
+The experimental `SpkKernelSet` also offers read-only, in-memory metadata diagnostics:
+
+- `declared_target_ids()`: sorted unique signed NAIF IDs that occur as segment **targets**, not IDs that occur only as centers.
+- `declared_segments_for_target(target_id)`: original descriptors in load/DAF order, including duplicates and masked entries.
+- `declared_coverage_boundaries_for_target(target_id)`: sorted unique raw start/end boundaries, including those inside overlapping spans.
+- `declared_coverage_intervals_for_target(target_id)`: sorted **union of inclusive declared spans** as `Vec<(f64, f64)>`. Overlaps and exactly touching endpoints merge; true gaps remain distinct, even when separated by a single binary64 step. Signed zero is normalized to positive zero.
+
+All epochs here are **TDB/ET seconds past J2000**, not UTC dates or Julian days. These inventories use only the indexed DAF descriptors after load; they do not re-read the kernel and do not evaluate position or velocity. Consequently the union is an *upper bound on possible declared target coverage*, **not a guarantee of computable states**: unsupported types/frames, corrupt coefficients, shadowing and broken center chains remain possible. Use `selected_segment(target_id, et)` to diagnose effective descriptor priority and `direct_state`/`relative_state` for actual geometric state evaluation.
+
+### Evaluate selected direct coverage at an exact TDB/ET epoch (2026-11-14)
+
+The read-only `declared_coverage_intervals_for_target` inventory reports **declared** DAF time spans, even for unsupported or malformed SPK segment data. It is deliberately not an accuracy or usability certificate. To inspect a **single** epoch with real coefficient reads, use `SpkKernelSet::probe_direct_state(target_id, et)`. It returns `Result<Option<SpkDirectStateProbe>, SpkStateError>`:
+
+- Invalid/nonfinite ET returns the outer `InvalidEpoch` error. No covering segment returns `Ok(None)`.
+- When covered, `kernel_index` (zero-based, load order) and `descriptor` identify the actual highest-priority source, and `evaluation` holds the result from the canonical Rust type-2/3 direct evaluator.
+- The inner `evaluation` is `Ok(SpkDirectState)` on success or `Err(SpkStateError)` on unsupported frames/types, malformed records, interpolation or I/O failures. **Never** retry a shadowed older descriptor after an inner failure.
+- Existing `direct_state(target_id, et)` uses this same selection/evaluation path and continues returning `MissingSegment` for absent coverage, otherwise the actual geometric state or its error.
+
+This performs kernel reads at the requested epoch, unlike the metadata-only APIs. Success means **one direct target-relative-to-declared-center** geometric state was computed at that instant, in frame 1 (J2000/ICRF), with position km and velocity km/s. It does not imply whole-interval computability, a valid chain between arbitrary target and center, light-time/apparent corrections, or independent JPL/NAIF scientific accuracy.
+
+### Evaluate a whole-kernel direct-state snapshot (2026-11-14)
+
+`SpkKernelSet::probe_direct_states_at(et)` composes the existing, authoritative `declared_target_ids()` and `probe_direct_state(target_id, et)` routines. It returns `Result<Vec<(i32, SpkDirectStateProbe)>, SpkStateError>`, **sorted by signed NAIF target ID** and containing exactly one entry per target that has a declared covering descriptor at the requested finite ET. Targets declared only outside this instant are omitted; the no-filter inventory remains available through `declared_target_ids()`. A nonfinite epoch is an outer `InvalidEpoch` error, including on an empty kernel set.
+
+Each returned probe contains the winning kernel load index, original DAF descriptor and `evaluation` result from the **actual coefficient read/interpolation**. An unsupported or corrupt highest-priority segment produces an error **inside its own probe**; no implicit fallback to older kernels occurs and independent successes for other targets are still reported. Use this diagnostic method to audit a mixed-quality SPK stack rather than the atomic success/failure semantics of a science-oriented batch relative-state query.
+
+These are **single-epoch direct** target-relative-to-selected-center samples, on the TDB seconds-past-J2000 scale, frame 1 J2000/ICRF, with km and km/s values only where evaluation succeeds. The report does not certify a full coverage interval, center-chain connectivity, physical/apparent corrections, or independent NASA/JPL reference parity.
+
+### Segment precedence
+
+For a given target and finite epoch:
+
+1. Search **last loaded SPK file first**, then earlier files.
+2. Within each file, search **last physical segment first**, considering only that segment's target ID and coverage.
+3. Apply frame, SPK type, coefficients and data checks **after** selecting the highest-priority covering segment. If it is corrupt, uses an unsupported frame/type, or creates a cyclic center chain, return an explicit error. Do **not** bypass it to earlier competing data.
+4. Only when a higher-priority file has **no matching time coverage** may an earlier covering file provide the required link. Each body/center link is selected separately.
+
+This follows the NAIF SPK precedence rules, including competing segments with different centers or frames: [SPK Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html), [NAIF SPK training, segment priority](https://naif.jpl.nasa.gov/pub/naif/self_training/individual_docs/15_spk.pdf).
+
+### Scientific contract
+
+The output remains **geometric** at one finite **TDB/ET seconds past J2000** instant, in fixed **NAIF frame 1 (J2000/ICRF)**, with position **kilometres** and velocity **kilometres per second**. Only **SPK Types 2 and 3** can be evaluated. A primitive direct state identifies its selected center; a relative result identifies the requested target/center and the shared ancestor. An identical target and center gives an exact zero by mathematical identity only.
+
+**Not included:** non-J2000 frames, other SPK segment types, light-time/aberration/relativity or apparent positions, TT/UTC to TDB transformations, SPICE kernels other than SPK, event searches, filename-based unload of arbitrary earlier loads, or dynamically selected heterogeneous source types. This is not an implementation of the full NAIF SPICE toolkit or a replacement for all NAIF `spkez` functionality.
+
+## Usage
+
+```rust
+use std::fs::File;
+use virgostars_ephemeris_core::spk_kernel_set::SpkKernelSet;
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut kernels = SpkKernelSet::new();
+kernels.load(File::open("/path/to/legally-obtained/planetary.bsp")?)?;
+kernels.load(File::open("/path/to/legally-obtained/earth-moon.bsp")?)?;
+let moon_minus_earth = kernels.relative_state(301, 399, 0.0)?;
+println!("Moon relative Earth: {:?} km", moon_minus_earth.position_km);
+println!("Velocity: {:?} km/s", moon_minus_earth.velocity_km_per_second);
+# Ok(())
+# }
+```
+
+The example only succeeds if the supplied files' required segments actually cover ET=0 and are of supported type/frame. A given JPL file may use other centers and segment formats; synthetic tests do not establish compatibility with it.
+
+## Validation and safety
+
+Nine original synthetic unit tests construct small in-memory DAF/SPK files with known constant/linear Chebyshev data (no NASA kernels), verifying:
+
+1. Cross-file Moon→Earth→EMB→SSB and Mars→SSB composition with different endian formats and mixed SPK Types 2/3.
+2. Later-loaded same-target segment with **different center** changing the resulting center chain; removing the file restores earlier data.
+3. Fallback to older data only outside the newer file's time coverage; inclusive start boundary.
+4. An unsupported newer frame or type preventing fallback.
+5. A higher-priority segment with a corrupt footer preventing fallback.
+6. Cycles formed only after composing edges from separate files.
+7. Later in-file descriptor precedence *within* the highest-priority file.
+8. Invalid file rejection leaves inventory unchanged; empty set reports explicit missing target.
+9. Identical-body zero, nonfinite epoch rejection and unloading the latest source.
+
+These test behaviors, format handling, and strict platform checks are **not independent scientific validation**. Real SPK ephemeris files must be legally acquired externally, hashed, and compared against identical-kernel NAIF/Horizons geometric J2000 reference vectors and rates at approved tolerances before accuracy claims or production integration.
+
+Run existing read-only Rust CI (`cargo fmt --all -- --check`, debug/release workspace tests, strict Clippy, Rustdoc, Windows GNU cross-target and native Windows/macOS checks). Report only **actual observed** results.
+
+## Modification and provenance
+
+2026-11-13: original implementation `crates/ephemeris-core/src/spk_kernel_set.rs`, refactoring of the preexisting geometric center-chain resolver to a shared internal `SpkStateResolver` interface, one `lib.rs` export, English documentation and README capability correction. All computational work stays in the canonical Rust engine; no duplicated astronomy in JavaScript or TypeScript.
+
+Original source remains under [CPAL-1.0](../LICENSE) with the required VirgoStars attribution: [NOTICE](../NOTICE), [licensing guidance](LICENSING_AND_CREDITS.md). No Swiss Ephemeris/NAIF Toolkit source, kernel data, external packages, releases, deployments, or production modifications were introduced.
+
+2026-11-14 integration reconciliation: preserved existing DAF/SPK index validation, Type-2/3 record-grid coherence, and single-kernel center-chain behavior while adding only the multi-kernel module, shared resolver refactor, API export and related docs. Reconciled without rewriting branch history; independent real-kernel comparison remains outstanding.
+
+2026-11-14: Exposed read-only `selected_segment` metadata diagnostics, shared its winner selection with `direct_state`, and added three synthetic precedence/coverage/error regressions. No new data or external dependency; no real-kernel validation performed.

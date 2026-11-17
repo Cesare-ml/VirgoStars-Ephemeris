@@ -1,0 +1,826 @@
+// The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+//
+// Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+//
+// The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+//
+// The Original Developer is the Initial Developer.
+//
+// The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+//
+// Contributors retain applicable rights in their own contributions under the terms of this License.
+//
+// [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+
+//! Geocentric reception light-time correction in fixed ICRF axes.
+//!
+//! This is one stage of an apparent-position pipeline, not an apparent
+//! position, an Earth-of-date frame, or a Swiss-compatible output.
+//!
+//! Modified 2026-11-14: reject light-time delays too small to move a
+//! single-f64 TDB emission epoch, rather than mistaking rounding for convergence.
+
+use std::error::Error;
+use std::fmt;
+use std::io::{Read, Seek};
+
+use crate::de441::{
+    Body, De441, De441Error, JulianDateTdb, StateVector, StateVectorWithAcceleration,
+};
+
+/// Exact SI speed of light in kilometres per second.
+pub const SPEED_OF_LIGHT_KM_PER_SECOND: f64 = 299_792.458;
+const SECONDS_PER_DAY: f64 = 86_400.0;
+const C_KM_PER_DAY: f64 = SPEED_OF_LIGHT_KM_PER_SECOND * SECONDS_PER_DAY;
+const MAX_ITERATIONS: usize = 32;
+
+/// Reception light-time corrected target relative to Earth's center.
+///
+/// The observation and emission epochs are TDB JD; axes are fixed ICRF.
+/// The velocity is the derivative of the returned position with respect to
+/// observation TDB, including the derivative of the one-way light-time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GeocentricLightTimeState {
+    pub target: Body,
+    pub observation_epoch: JulianDateTdb,
+    pub emission_epoch: JulianDateTdb,
+    pub light_time_seconds: f64,
+    /// Derivative of light time with respect to observation time (s/s).
+    pub light_time_rate: f64,
+    pub position_km: [f64; 3],
+    pub velocity_km_per_day: [f64; 3],
+}
+
+#[derive(Debug)]
+pub enum LightTimeError {
+    Ephemeris(De441Error),
+    /// No geocentric direction exists for Earth or a zero-range target.
+    UndefinedDirection,
+    /// Non-finite geometry or an invalid light-time derivative denominator.
+    InvalidGeometry,
+    /// The fixed-point solution did not settle on a representable TDB JD.
+    DidNotConverge,
+}
+
+impl fmt::Display for LightTimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ephemeris(error) => write!(f, "light-time ephemeris error: {error}"),
+            Self::UndefinedDirection => write!(f, "light-time direction is undefined"),
+            Self::InvalidGeometry => write!(f, "invalid light-time geometry or velocity"),
+            Self::DidNotConverge => write!(f, "light-time iteration did not converge"),
+        }
+    }
+}
+
+impl Error for LightTimeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Ephemeris(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+impl From<De441Error> for LightTimeError {
+    fn from(error: De441Error) -> Self {
+        Self::Ephemeris(error)
+    }
+}
+
+/// One-way reception correction for a target observed from Earth's center.
+///
+/// Samples the Earth at observation TDB and the target at the iterated emission
+/// TDB using the caller's classic DE441 reader. Only Newtonian light-time is
+/// included: there is no stellar aberration, gravitational light deflection,
+/// precession/nutation, terrestrial observer, refraction or time conversion.
+/// The DE441 reader uses a single-f64 JD, limiting emission-time resolution.
+/// Earth as target is rejected; out-of-coverage emission epochs are errors.
+pub fn geocentric_light_time<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+) -> Result<GeocentricLightTimeState, LightTimeError> {
+    solve(target, observation_epoch, |body, epoch| {
+        ephemeris.state(body, Body::SolarSystemBarycenter, epoch)
+    })
+}
+
+/// Experimental first-order refinement for sub-ULP emission time. The stored
+/// emission JD remains rounded; the vector is shifted using the target's
+/// instantaneous barycentric velocity and acceleration. No improvement is
+/// claimed at a kernel coverage boundary or for discontinuous state providers.
+pub(crate) fn refine_emission_rounding(
+    state: GeocentricLightTimeState,
+    target: StateVectorWithAcceleration,
+    earth: StateVectorWithAcceleration,
+    coverage: (JulianDateTdb, JulianDateTdb),
+) -> Result<GeocentricLightTimeState, LightTimeError> {
+    if target.target != state.target
+        || target.center != Body::SolarSystemBarycenter
+        || target.epoch != state.emission_epoch
+        || earth.target != Body::Earth
+        || earth.center != Body::SolarSystemBarycenter
+        || earth.epoch != state.observation_epoch
+        || !coverage.0 .0.is_finite()
+        || !coverage.1 .0.is_finite()
+        || coverage.0 .0 > coverage.1 .0
+        || target
+            .velocity_km_per_day
+            .iter()
+            .chain(target.acceleration_km_per_day2.iter())
+            .chain(earth.velocity_km_per_day.iter())
+            .any(|v| !v.is_finite())
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let range = state.position_km[0]
+        .hypot(state.position_km[1])
+        .hypot(state.position_km[2]);
+    if !range.is_finite() || range == 0.0 || !state.light_time_seconds.is_finite() {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let direction = state.position_km.map(|v| v / range);
+    let dot = |a: [f64; 3], b: [f64; 3]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+    let denom = 1.0 + dot(direction, target.velocity_km_per_day) / C_KM_PER_DAY;
+    if !denom.is_finite() || denom <= 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    // Subtract the two nearby large JDs first: this difference is exact under
+    // Sterbenz's lemma, unlike rounding observation-delay to a single JD.
+    let shift = ((state.observation_epoch.0 - state.emission_epoch.0)
+        - state.light_time_seconds / SECONDS_PER_DAY)
+        / denom;
+    let limit = 4.0 * f64::EPSILON * state.observation_epoch.0.abs();
+    if !shift.is_finite()
+        || shift.abs() > limit
+        || (state.emission_epoch.0 - coverage.0 .0) + shift < 0.0
+        || (coverage.1 .0 - state.emission_epoch.0) - shift < 0.0
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let position: [f64; 3] =
+        std::array::from_fn(|i| state.position_km[i] + target.velocity_km_per_day[i] * shift);
+    let target_velocity: [f64; 3] = std::array::from_fn(|i| {
+        target.velocity_km_per_day[i] + target.acceleration_km_per_day2[i] * shift
+    });
+    let range = position[0].hypot(position[1]).hypot(position[2]);
+    if !range.is_finite() || range == 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let direction = position.map(|v| v / range);
+    let denominator = C_KM_PER_DAY + dot(direction, target_velocity);
+    if !denominator.is_finite() || denominator <= 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let rate =
+        (dot(direction, target_velocity) - dot(direction, earth.velocity_km_per_day)) / denominator;
+    let velocity =
+        std::array::from_fn(|i| target_velocity[i] * (1.0 - rate) - earth.velocity_km_per_day[i]);
+    if !rate.is_finite() || velocity.iter().any(|v: &f64| !v.is_finite()) {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    Ok(GeocentricLightTimeState {
+        position_km: position,
+        velocity_km_per_day: velocity,
+        light_time_seconds: range / SPEED_OF_LIGHT_KM_PER_SECOND,
+        light_time_rate: rate,
+        ..state
+    })
+}
+
+/// One-way light-time from `observer` to `target` with a caller-supplied state
+/// provider (barycentric ICRF states). It lets a target that DE441 does not hold,
+/// such as a small body from an SPK, use the same solver.
+pub fn light_time_with_states<F>(
+    observer: Body,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+    states: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from(observer, target, observation_epoch, states)
+}
+
+/// One-way reception correction for a target observed from the **Sun's center**
+/// (heliocentric): the photon leaves the target at the iterated emission epoch and
+/// arrives at the Sun at the observation epoch. The returned vector is
+/// `target(emission) − Sun(observation)` in ICRF axes and its velocity is the
+/// derivative with respect to the observation epoch (including the light-time
+/// rate), exactly as for [`geocentric_light_time`]. The Sun itself is rejected as
+/// a target (no direction exists); Earth is a valid target.
+pub fn heliocentric_light_time<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+) -> Result<GeocentricLightTimeState, LightTimeError> {
+    solve_from(Body::Sun, target, observation_epoch, |body, epoch| {
+        ephemeris.state(body, Body::SolarSystemBarycenter, epoch)
+    })
+}
+
+// Every input to the light-time solver must be a geometric state relative
+// to the solar-system barycenter at the exact requested TDB epoch. Checking
+// these tags prevents silently subtracting vectors for different origins or
+// observation times if a future state provider violates that contract.
+fn checked_barycentric_state(
+    state: StateVector,
+    target: Body,
+    epoch: JulianDateTdb,
+) -> Result<StateVector, LightTimeError> {
+    if state.target != target
+        || state.center != Body::SolarSystemBarycenter
+        || state.epoch != epoch
+        || state
+            .position_km
+            .iter()
+            .chain(state.velocity_km_per_day.iter())
+            .any(|component| !component.is_finite())
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    Ok(state)
+}
+
+fn solve<F>(
+    target: Body,
+    observation_epoch: JulianDateTdb,
+    barycentric_state: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    solve_from(Body::Earth, target, observation_epoch, barycentric_state)
+}
+
+fn solve_from<F>(
+    observer_body: Body,
+    target: Body,
+    observation_epoch: JulianDateTdb,
+    mut barycentric_state: F,
+) -> Result<GeocentricLightTimeState, LightTimeError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    if target == observer_body {
+        return Err(LightTimeError::UndefinedDirection);
+    }
+    if !observation_epoch.0.is_finite() {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let observer = checked_barycentric_state(
+        barycentric_state(observer_body, observation_epoch)?,
+        observer_body,
+        observation_epoch,
+    )?;
+    let mut emission = observation_epoch;
+    for _ in 0..MAX_ITERATIONS {
+        let body =
+            checked_barycentric_state(barycentric_state(target, emission)?, target, emission)?;
+        let position =
+            std::array::from_fn::<_, 3, _>(|i| body.position_km[i] - observer.position_km[i]);
+        let range = position[0].hypot(position[1]).hypot(position[2]);
+        if !range.is_finite() {
+            return Err(LightTimeError::InvalidGeometry);
+        }
+        if range == 0.0 {
+            return Err(LightTimeError::UndefinedDirection);
+        }
+        let delay_seconds = range / SPEED_OF_LIGHT_KM_PER_SECOND;
+        let next = observation_epoch.0 - delay_seconds / SECONDS_PER_DAY;
+        if !next.is_finite() {
+            return Err(LightTimeError::InvalidGeometry);
+        }
+        // A positive light-time delay can round back to the *observation*
+        // epoch at single-f64 JD resolution. That is not an emission epoch
+        // the reader can distinguish, even though the fixed-point iteration
+        // would appear to have converged on its first step.
+        if next == observation_epoch.0 {
+            return Err(LightTimeError::DidNotConverge);
+        }
+        // Modification 2026-11-16: a fixed point exactly equal in f64 does not
+        // always exist. For a moving target (the Moon, ~1.3 s of delay) the
+        // iteration can alternate between two adjacent representable JDs
+        // (a 1-ulp, ~40 microsecond, 2-cycle at JD ~2.4e6). Accept a change of
+        // at most 4 ulps of the observation epoch as converged; the returned
+        // state is the one evaluated at `emission`, so it stays self-consistent.
+        if (next - emission.0).abs() <= 4.0 * f64::EPSILON * observation_epoch.0.abs() {
+            let direction = position.map(|x| x / range);
+            let dot = |velocity: [f64; 3]| -> f64 {
+                direction.iter().zip(velocity).map(|(a, b)| a * b).sum()
+            };
+            let target_radial = dot(body.velocity_km_per_day);
+            let observer_radial = dot(observer.velocity_km_per_day);
+            let denominator = C_KM_PER_DAY + target_radial;
+            if !denominator.is_finite() || denominator <= 0.0 {
+                return Err(LightTimeError::InvalidGeometry);
+            }
+            let delay_rate = (target_radial - observer_radial) / denominator;
+            let velocity = std::array::from_fn::<_, 3, _>(|i| {
+                body.velocity_km_per_day[i] * (1.0 - delay_rate) - observer.velocity_km_per_day[i]
+            });
+            if !delay_rate.is_finite() || velocity.iter().any(|x| !x.is_finite()) {
+                return Err(LightTimeError::InvalidGeometry);
+            }
+            return Ok(GeocentricLightTimeState {
+                target,
+                observation_epoch,
+                emission_epoch: emission,
+                light_time_seconds: delay_seconds,
+                light_time_rate: delay_rate,
+                position_km: position,
+                velocity_km_per_day: velocity,
+            });
+        }
+        emission = JulianDateTdb(next);
+    }
+    Err(LightTimeError::DidNotConverge)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn experimental_refinement_recovers_sub_ulp_emission_offset_and_guards_coverage() {
+        let observation = JulianDateTdb(2_451_545.0);
+        let emission = JulianDateTdb(observation.0 - 1.0 / SECONDS_PER_DAY);
+        let input = GeocentricLightTimeState {
+            target: Body::Moon,
+            observation_epoch: observation,
+            emission_epoch: emission,
+            light_time_seconds: 1.0,
+            light_time_rate: 0.0,
+            position_km: [SPEED_OF_LIGHT_KM_PER_SECOND, 0.0, 0.0],
+            velocity_km_per_day: [86_400.0, 0.0, 0.0],
+        };
+        let target = StateVectorWithAcceleration {
+            target: Body::Moon,
+            center: Body::SolarSystemBarycenter,
+            epoch: emission,
+            position_km: [SPEED_OF_LIGHT_KM_PER_SECOND, 0.0, 0.0],
+            velocity_km_per_day: [86_400.0, 0.0, 0.0],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let earth = StateVectorWithAcceleration {
+            target: Body::Earth,
+            center: Body::SolarSystemBarycenter,
+            epoch: observation,
+            position_km: [0.0; 3],
+            velocity_km_per_day: [0.0; 3],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let coverage = (
+            JulianDateTdb(observation.0 - 2.0),
+            JulianDateTdb(observation.0 + 1.0),
+        );
+        let actual = refine_emission_rounding(input, target, earth, coverage).unwrap();
+        let shift = ((observation.0 - emission.0) - 1.0 / SECONDS_PER_DAY)
+            / (1.0 + 86_400.0 / C_KM_PER_DAY);
+        assert_ne!(shift, 0.0);
+        assert_ne!(actual.position_km[0], input.position_km[0]);
+        assert!((actual.position_km[0] - (input.position_km[0] + 86_400.0 * shift)).abs() < 1e-9);
+        assert_eq!(actual.emission_epoch, emission);
+        assert!(refine_emission_rounding(input, target, earth, (observation, coverage.1)).is_err());
+        let wrong_earth = StateVectorWithAcceleration {
+            target: Body::Venus,
+            ..earth
+        };
+        assert!(refine_emission_rounding(input, target, wrong_earth, coverage).is_err());
+    }
+
+    const JD: f64 = 2_451_545.0;
+
+    fn linear(body: Body, epoch: JulianDateTdb) -> Result<StateVector, De441Error> {
+        let (initial, rate) = match body {
+            Body::Earth => ([0.0, 0.0, 0.0], [10.0 * SECONDS_PER_DAY, 0.0, 0.0]),
+            Body::MarsBarycenter => (
+                [150_000_000.0, 0.0, 0.0],
+                [30.0 * SECONDS_PER_DAY, 0.0, 0.0],
+            ),
+            _ => return Err(De441Error::MissingSeries("test body")),
+        };
+        Ok(StateVector {
+            target: body,
+            center: Body::SolarSystemBarycenter,
+            epoch,
+            position_km: std::array::from_fn(|i| initial[i] + (epoch.0 - JD) * rate[i]),
+            velocity_km_per_day: rate,
+        })
+    }
+
+    #[test]
+    fn moving_target_has_analytic_delay_and_derivative() {
+        let state = solve(Body::MarsBarycenter, JulianDateTdb(JD), linear).unwrap();
+        let expected_delay = 150_000_000.0 / (SPEED_OF_LIGHT_KM_PER_SECOND + 30.0);
+        let expected_rate = (30.0 - 10.0) / (SPEED_OF_LIGHT_KM_PER_SECOND + 30.0);
+        assert!((state.light_time_seconds - expected_delay).abs() < 0.000_001);
+        assert!((state.light_time_rate - expected_rate).abs() < 1.0e-15);
+        let expected_velocity = (30.0 * (1.0 - expected_rate) - 10.0) * SECONDS_PER_DAY;
+        assert!((state.velocity_km_per_day[0] - expected_velocity).abs() < 1.0e-7);
+        assert!(state.emission_epoch.0 < state.observation_epoch.0);
+    }
+
+    // Modification (2026-11-14): independent three-dimensional, finite-
+    // difference regression for geometric reception light-time kinematics.
+    // The linear Cartesian fixture is synthetic, not JPL validation.
+    fn linear_three_axis(body: Body, epoch: JulianDateTdb) -> Result<StateVector, De441Error> {
+        let (origin_km, velocity_km_per_second) = match body {
+            Body::Earth => ([20.0e6, -40.0e6, 30.0e6], [12.0, -9.0, 2.0]),
+            Body::MarsBarycenter => ([120.0e6, 32.0e6, 50.0e6], [-15.0, 22.0, -5.0]),
+            _ => return Err(De441Error::MissingSeries("test body")),
+        };
+        let elapsed_seconds = (epoch.0 - JD) * SECONDS_PER_DAY;
+        Ok(StateVector {
+            target: body,
+            center: Body::SolarSystemBarycenter,
+            epoch,
+            position_km: std::array::from_fn(|i| {
+                origin_km[i] + velocity_km_per_second[i] * elapsed_seconds
+            }),
+            velocity_km_per_day: velocity_km_per_second.map(|v| v * SECONDS_PER_DAY),
+        })
+    }
+
+    #[test]
+    fn three_axis_light_time_velocity_and_delay_rate_match_centered_differences() {
+        // Both the target and observer move on independent XYZ linear paths.
+        // Compare the solver's d(position)/d(reception TDB) and d(delay)/dt
+        // against independent samples separated by 600 seconds on each side.
+        let epoch = JulianDateTdb(JD);
+        let half_step_days = 600.0 / SECONDS_PER_DAY;
+        let before_epoch = JulianDateTdb(JD - half_step_days);
+        let after_epoch = JulianDateTdb(JD + half_step_days);
+        let actual_interval_seconds = (after_epoch.0 - before_epoch.0) * SECONDS_PER_DAY;
+
+        let current = solve(Body::MarsBarycenter, epoch, linear_three_axis).unwrap();
+        let before = solve(Body::MarsBarycenter, before_epoch, linear_three_axis).unwrap();
+        let after = solve(Body::MarsBarycenter, after_epoch, linear_three_axis).unwrap();
+        assert!(current
+            .position_km
+            .iter()
+            .all(|coordinate| *coordinate != 0.0));
+        assert!(current
+            .velocity_km_per_day
+            .iter()
+            .all(|speed| *speed != 0.0));
+        assert!(current.emission_epoch.0 < current.observation_epoch.0);
+        assert!(actual_interval_seconds > 0.0);
+
+        for axis in 0..3 {
+            let numerical_km_per_second =
+                (after.position_km[axis] - before.position_km[axis]) / actual_interval_seconds;
+            let analytic_km_per_second = current.velocity_km_per_day[axis] / SECONDS_PER_DAY;
+            assert!(
+                (analytic_km_per_second - numerical_km_per_second).abs() < 2.0e-5,
+                "light-time XYZ velocity mismatch on axis {axis}: analytic={analytic_km_per_second}, numerical={numerical_km_per_second}"
+            );
+        }
+        let numerical_delay_rate =
+            (after.light_time_seconds - before.light_time_seconds) / actual_interval_seconds;
+        assert!(
+            (current.light_time_rate - numerical_delay_rate).abs() < 1.0e-8,
+            "light-time delay-rate mismatch: analytic={}, numerical={numerical_delay_rate}",
+            current.light_time_rate
+        );
+    }
+
+    #[test]
+    fn stationary_three_axis_light_time_preserves_exact_zero_rates() {
+        // A 3:4:12 right triangle has Euclidean norm 13. Both barycentric
+        // states are stationary, giving an analytically known 260-second delay.
+        let distance_km = SPEED_OF_LIGHT_KM_PER_SECOND * 260.0;
+        let scale = distance_km / 13.0;
+        let relative = [3.0 * scale, 4.0 * scale, 12.0 * scale];
+        let current = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let position_km = match body {
+                Body::Earth => [0.0; 3],
+                Body::MarsBarycenter => relative,
+                _ => return Err(De441Error::MissingSeries("test body")),
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km,
+                velocity_km_per_day: [0.0; 3],
+            })
+        })
+        .unwrap();
+
+        assert!((current.light_time_seconds - 260.0).abs() < 1.0e-10);
+        assert_eq!(current.position_km, relative);
+        assert_eq!(current.velocity_km_per_day, [0.0; 3]);
+        assert_eq!(current.light_time_rate, 0.0);
+        assert!(current.emission_epoch.0 < current.observation_epoch.0);
+    }
+
+    #[test]
+    fn rejects_delay_that_cannot_shift_single_f64_emission_epoch() {
+        // At J2000 an f64 JD is quantized to roughly 40 microseconds.
+        // A 1 km one-way delay is about 3.3 microseconds. Returning the
+        // observation JD as the emission JD would silently claim precision
+        // the classic reader's epoch representation does not possess.
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let x = if body == Body::Earth { 0.0 } else { 1.0 };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [x, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        });
+        assert!(matches!(result, Err(LightTimeError::DidNotConverge)));
+    }
+
+    #[test]
+    fn representable_short_delay_still_converges() {
+        // 100 km has a ~334 microsecond delay at this JD, which is
+        // distinguishable from reception at single-f64 JD precision.
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let x = if body == Body::Earth { 0.0 } else { 100.0 };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [x, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        })
+        .unwrap();
+        assert!(result.emission_epoch.0 < result.observation_epoch.0);
+        assert!((result.light_time_seconds - 100.0 / SPEED_OF_LIGHT_KM_PER_SECOND).abs() < 1e-15);
+        assert_eq!(result.position_km, [100.0, 0.0, 0.0]);
+        assert_eq!(result.velocity_km_per_day, [0.0; 3]);
+    }
+
+    #[test]
+    fn rejects_undefined_direction_and_invalid_epoch() {
+        assert!(matches!(
+            solve(Body::Earth, JulianDateTdb(JD), linear),
+            Err(LightTimeError::UndefinedDirection)
+        ));
+        assert!(matches!(
+            solve(Body::Sun, JulianDateTdb(f64::NAN), linear),
+            Err(LightTimeError::InvalidGeometry)
+        ));
+    }
+
+    #[test]
+    fn propagates_ephemeris_errors() {
+        assert!(matches!(
+            solve(Body::Sun, JulianDateTdb(JD), linear),
+            Err(LightTimeError::Ephemeris(De441Error::MissingSeries(_)))
+        ));
+    }
+
+    #[test]
+    fn rejects_nonfinite_velocity() {
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let mut state = linear(body, epoch)?;
+            if body == Body::MarsBarycenter {
+                state.velocity_km_per_day[0] = f64::NAN;
+            }
+            Ok(state)
+        });
+        assert!(matches!(result, Err(LightTimeError::InvalidGeometry)));
+    }
+
+    #[test]
+    fn rejects_inconsistent_state_origin_body_and_epoch() {
+        for corrupted_body in [Body::Earth, Body::MarsBarycenter] {
+            for field in 0..3 {
+                let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+                    let mut state = linear(body, epoch)?;
+                    if body == corrupted_body {
+                        match field {
+                            0 => state.target = Body::Sun,
+                            1 => state.center = Body::Earth,
+                            2 => state.epoch = JulianDateTdb(epoch.0 + 1.0),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Ok(state)
+                });
+                assert!(
+                    matches!(result, Err(LightTimeError::InvalidGeometry)),
+                    "corrupted body={corrupted_body:?}, field={field}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_nonfinite_observer_or_target_state_before_subtraction() {
+        for corrupted_body in [Body::Earth, Body::MarsBarycenter] {
+            for field in 0..2 {
+                let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+                    let mut state = linear(body, epoch)?;
+                    if body == corrupted_body {
+                        if field == 0 {
+                            state.position_km[1] = f64::NAN;
+                        } else {
+                            state.velocity_km_per_day[1] = f64::INFINITY;
+                        }
+                    }
+                    Ok(state)
+                });
+                assert!(
+                    matches!(result, Err(LightTimeError::InvalidGeometry)),
+                    "corrupted body={corrupted_body:?}, field={field}"
+                );
+            }
+        }
+    }
+
+    // Modification (2026-11-15): cross-stage synthetic angular-rate and wrap regressions
+    // transplanted from stale PR #45 onto the current light-time core without
+    // changing the production solver. These remain synthetic, not JPL validation.
+    #[test]
+    fn transverse_light_time_spherical_rates_match_reception_finite_difference() {
+        use crate::coordinates::project_fixed_axes;
+        use std::f64::consts::{PI, TAU};
+
+        const TARGET_POSITION: [f64; 3] = [150_000_000.0, 40_000_000.0, -5_000_000.0];
+        const TARGET_VELOCITY: [f64; 3] = [
+            16.0 * SECONDS_PER_DAY,
+            -8.0 * SECONDS_PER_DAY,
+            0.8 * SECONDS_PER_DAY,
+        ];
+        const EARTH_VELOCITY: [f64; 3] = [-2.0 * SECONDS_PER_DAY, 25.0 * SECONDS_PER_DAY, 0.0];
+        let linear_transverse = |body: Body, epoch: JulianDateTdb| {
+            let dt = epoch.0 - JD;
+            let (position, velocity) = match body {
+                Body::Earth => ([0.0; 3], EARTH_VELOCITY),
+                Body::MarsBarycenter => (TARGET_POSITION, TARGET_VELOCITY),
+                _ => return Err(De441Error::MissingSeries("synthetic transverse body")),
+            };
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: std::array::from_fn(|i| position[i] + dt * velocity[i]),
+                velocity_km_per_day: velocity,
+            })
+        };
+
+        let at = |observation_day: f64| {
+            let epoch = JulianDateTdb(observation_day);
+            let corrected = solve(Body::MarsBarycenter, epoch, linear_transverse).unwrap();
+            let relative = StateVector {
+                target: corrected.target,
+                center: Body::Earth,
+                epoch,
+                position_km: corrected.position_km,
+                velocity_km_per_day: corrected.velocity_km_per_day,
+            };
+            (corrected, project_fixed_axes(&relative, 0.0).unwrap())
+        };
+
+        let (center, sph) = at(JD);
+        // The ±600 s step dominates single-f64 JD quantization for this
+        // smooth synthetic motion while retaining small finite-difference curvature.
+        let h_days = 600.0 / SECONDS_PER_DAY;
+        let (previous, before) = at(JD - h_days);
+        let (next, after) = at(JD + h_days);
+
+        let signed_longitude_span =
+            (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
+        let numerical_longitude_rate = signed_longitude_span / (2.0 * h_days);
+        let numerical_latitude_rate = (after.latitude_rad - before.latitude_rad) / (2.0 * h_days);
+        let numerical_distance_rate = (after.distance_km - before.distance_km) / (2.0 * h_days);
+        let numerical_delay_rate = (next.light_time_seconds - previous.light_time_seconds)
+            / (2.0 * h_days * SECONDS_PER_DAY);
+
+        assert!(center.emission_epoch.0 < center.observation_epoch.0);
+        assert!(
+            sph.longitude_rate_rad_per_day < 0.0,
+            "synthetic angular motion must be retrograde"
+        );
+        assert!(
+            (sph.longitude_rate_rad_per_day - numerical_longitude_rate).abs() < 3.0e-7,
+            "retarded longitude derivative disagrees: analytic={}, finite={}",
+            sph.longitude_rate_rad_per_day,
+            numerical_longitude_rate
+        );
+        assert!(
+            (sph.latitude_rate_rad_per_day - numerical_latitude_rate).abs() < 3.0e-7,
+            "retarded latitude derivative disagrees: analytic={}, finite={}",
+            sph.latitude_rate_rad_per_day,
+            numerical_latitude_rate
+        );
+        assert!(
+            (sph.distance_rate_km_per_day - numerical_distance_rate).abs() < 0.1,
+            "retarded distance derivative disagrees: analytic={}, finite={}",
+            sph.distance_rate_km_per_day,
+            numerical_distance_rate
+        );
+        assert!(
+            (center.light_time_rate - numerical_delay_rate).abs() < 3.0e-8,
+            "light-time derivative disagrees: analytic={}, finite={}",
+            center.light_time_rate,
+            numerical_delay_rate
+        );
+    }
+
+    #[test]
+    fn retrograde_longitude_rate_is_continuous_across_zero_meridian() {
+        use crate::coordinates::project_fixed_axes;
+        use std::f64::consts::{PI, TAU};
+
+        let state_at = |day: f64| {
+            let epoch = JulianDateTdb(day);
+            let corrected = solve(Body::MarsBarycenter, epoch, |body, t| {
+                let (position, velocity) = match body {
+                    Body::Earth => ([0.0; 3], [0.0; 3]),
+                    Body::MarsBarycenter => (
+                        [100_000_000.0, 0.0, 0.0],
+                        [0.0, -20.0 * SECONDS_PER_DAY, 0.0],
+                    ),
+                    _ => return Err(De441Error::MissingSeries("synthetic meridian body")),
+                };
+                Ok(StateVector {
+                    target: body,
+                    center: Body::SolarSystemBarycenter,
+                    epoch: t,
+                    position_km: std::array::from_fn(|i| position[i] + (t.0 - JD) * velocity[i]),
+                    velocity_km_per_day: velocity,
+                })
+            })
+            .unwrap();
+            project_fixed_axes(
+                &StateVector {
+                    target: corrected.target,
+                    center: Body::Earth,
+                    epoch,
+                    position_km: corrected.position_km,
+                    velocity_km_per_day: corrected.velocity_km_per_day,
+                },
+                0.0,
+            )
+            .unwrap()
+        };
+
+        let h = 600.0 / SECONDS_PER_DAY;
+        let before = state_at(JD - h);
+        let current = state_at(JD);
+        let after = state_at(JD + h);
+        assert!(before.longitude_rad < 0.01);
+        assert!(after.longitude_rad > TAU - 0.01);
+        assert!(current.longitude_rate_rad_per_day < 0.0);
+        let signed_span = (after.longitude_rad - before.longitude_rad + PI).rem_euclid(TAU) - PI;
+        let numerical_rate = signed_span / (2.0 * h);
+        assert!(
+            (current.longitude_rate_rad_per_day - numerical_rate).abs() < 3.0e-7,
+            "longitude wrap regression: analytic={}, finite={}",
+            current.longitude_rate_rad_per_day,
+            numerical_rate
+        );
+    }
+
+    #[test]
+    fn zero_relative_range_and_nonfinite_observer_rate_fail_closed() {
+        let zero_range = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            Ok(StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: [1_000_000.0, 0.0, 0.0],
+                velocity_km_per_day: [0.0; 3],
+            })
+        });
+        assert!(matches!(
+            zero_range,
+            Err(LightTimeError::UndefinedDirection)
+        ));
+
+        let bad_velocity = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let mut state = linear(body, epoch)?;
+            if body == Body::Earth {
+                state.velocity_km_per_day[1] = f64::INFINITY;
+            }
+            Ok(state)
+        });
+        assert!(matches!(bad_velocity, Err(LightTimeError::InvalidGeometry)));
+    }
+
+    #[test]
+    fn reports_nonconvergence_for_near_light_speed_synthetic_target() {
+        let result = solve(Body::MarsBarycenter, JulianDateTdb(JD), |body, epoch| {
+            let mut state = linear(body, epoch)?;
+            if body == Body::Earth {
+                state.position_km = [0.0; 3];
+                state.velocity_km_per_day = [0.0; 3];
+            } else {
+                let speed = 0.99 * C_KM_PER_DAY;
+                state.position_km = [1.0e9 + speed * (epoch.0 - JD), 0.0, 0.0];
+                state.velocity_km_per_day = [speed, 0.0, 0.0];
+            }
+            Ok(state)
+        });
+        assert!(matches!(result, Err(LightTimeError::DidNotConverge)));
+    }
+}

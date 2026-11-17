@@ -15,23 +15,66 @@
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
 //! Experimental pre-release crate: the classic DE441 reader is not independently validated.
-//! No SPK file parsing, Earth orientation, UTC conversion, aberration, or
-//! validated real-world astronomical positions are provided at this stage.
+//! Experimental SPK indexing, type-2/3 J2000 evaluation, and ordered
+//! multi-kernel center-chain composition are available. Non-J2000 frames,
+//! independent JPL validation and stable production-grade astronomy are
+//! not provided at this stage.
+//! A standalone observer-velocity annual-aberration direction stage and its
+//! fixed-axis six-field export are experimental and must not be mislabeled a
+//! complete apparent position.
 //!
 //! The core is intentionally free of external runtime dependencies so the
 //! mathematical primitives can be audited independently.
 
 #![forbid(unsafe_code)]
 
+pub mod aberrated_spherical;
+pub mod aberration;
+pub mod aberration_state;
+pub mod apparent_ecliptic_of_date;
 pub mod calendar;
+pub mod calendar_decimal_hours;
 pub mod chebyshev;
+pub mod civil_aberrated;
+pub mod civil_apparent;
 pub mod coordinates;
 pub mod de441;
+pub mod de441_epoch_bridge;
+pub mod delta_t;
+pub mod delta_t_table;
+pub mod earth_orientation;
+pub mod earth_rotation;
+pub mod eclipse;
 pub mod error;
+pub mod first_sky;
+pub mod fixed_star;
+pub mod gmst_iau2006;
+pub mod hipparcos;
+pub mod horizon;
+pub mod house_angles;
+pub mod light_deflection;
+pub mod light_time;
+pub mod local_sidereal;
+pub mod lunar_points;
+pub mod rise_transit;
+pub mod six_field_units;
+pub mod solar_eclipse;
+pub mod spk_batch;
+pub mod spk_direct_state;
+pub mod spk_effective_index;
+pub mod spk_index;
+pub mod spk_kernel_set;
+pub mod spk_pair_diagnostics;
+pub mod spk_relative_state;
+pub mod spk_type21;
 pub mod state;
 pub mod time;
+pub mod wgs84_ecef;
 
 pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
 pub use state::{ChebyshevPositionRecord, StateVectorKm, Vector3};
 pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
+pub mod delta_t_long_range;
+pub mod explicit_delta_t;
+pub mod long_term_precession;

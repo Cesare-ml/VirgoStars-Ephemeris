@@ -1,0 +1,72 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, SPK data or code are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.loadChiron + calcTdb body 15",
+  "commit": "28b6bda"
+ },
+ "data": "JPL small-body SPK of 2060 Chiron (type 21), solution of 2026-06-05; provenance in chiron-spk-source-provenance-2026-11-16.json",
+ "against_jpl_horizons": {
+  "method": "angular separations between ten bodies and Chiron (55 pairs, 25 epochs 1900-2100), invariant under the frame difference Horizons states",
+  "separation_max_arcsec_without_moon_pairs": 0.000008,
+  "chiron_range_max_relative_difference": 1.1e-12,
+  "chiron_range_rate_max_difference_km_s": 0.00035,
+  "note": "Horizons uses the same JPL orbit solution, so this verifies the evaluation and the apparent pipeline, not the orbit."
+ },
+ "against_installed_swisseph_0_5_17": {
+  "note": "the reference computes Chiron from its own older orbit fit; epoch = TDB, JPL mode for the planets",
+  "grid": {
+   "dates": 98,
+   "step_days": 733.7
+  },
+  "maximum_differences": {
+   "geocentric ecliptic": {
+    "lon_arcsec": 1.556889488165325,
+    "lat_arcsec": 0.30184329204416827,
+    "dist_rel": 0.0000025450255831671598,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0018747237158917018,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0005532338741245924
+   },
+   "geocentric equatorial": {
+    "lon_arcsec": 1.374534904380198,
+    "lat_arcsec": 0.7311842117494471,
+    "dist_rel": 0.0000025450255831671598,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0017194257473068797,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0008151505716175178
+   },
+   "heliocentric ecliptic": {
+    "lon_arcsec": 1.4009351216373034,
+    "lat_arcsec": 0.2928044991843848,
+    "dist_rel": 0.000001948387909456173,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0004637575479138345,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0002394072979142875
+   }
+  },
+  "by_era_max_total_arcsec": {
+   "1900-1950": {
+    "dates": 200,
+    "max_arcsec": 1.3187980224545743
+   },
+   "1950-2000": {
+    "dates": 200,
+    "max_arcsec": 0.5526513663164321
+   },
+   "2000-2030": {
+    "dates": 120,
+    "max_arcsec": 0.2957609265911624
+   },
+   "2030-2100": {
+    "dates": 269,
+    "max_arcsec": 1.6577568797901945
+   }
+  },
+  "reading": "The difference is smallest (0.3 arcsec) where Chiron was observed most recently (2000-2030) and grows toward the ends of 1900-2100 (1.3 and 1.7 arcsec): the reference orbit fit is older. It is a difference of orbit solutions, not of the apparent-position pipeline."
+ },
+ "not_established": [
+  "accuracy of the JPL orbit itself",
+  "epochs outside 1900-2100",
+  "other small bodies (supported by the reader, not exercised)"
+ ]
+}

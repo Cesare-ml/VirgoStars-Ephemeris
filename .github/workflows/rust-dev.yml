@@ -1,0 +1,167 @@
+# EXHIBIT A. Common Public Attribution License Version 1.0.
+# The contents of this file are subject to the Common Public Attribution License Version 1.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://opensource.org/license/CPAL-1.0. The License is based on the Mozilla Public License Version 1.1 but Sections 14 and 15 have been added to cover use of software over a computer network and provide for limited attribution for the Original Developer. In addition, Exhibit A has been modified to be consistent with Exhibit B.
+# 
+# Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+# 
+# The Original Code is the original VirgoStars-Ephemeris source code released under CPAL-1.0 by the Initial Developer, excluding third-party programs, data, and other materials licensed separately.
+# 
+# The Original Developer is the Initial Developer.
+# 
+# The Initial Developer of the Original Code is Cesare-ml (VirgoStars project). All portions of the code written by Cesare-ml are Copyright (c) 2026 Cesare-ml. All Rights Reserved.
+# 
+# Contributors retain applicable rights in their own contributions under the terms of this License.
+# 
+# [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+# SPDX-License-Identifier: CPAL-1.0
+# Modification (2026-11-14): test offline SPK batch example on all CI platforms.
+
+name: Rust development CI
+
+on:
+  pull_request:
+    branches: [dev/ephemeris]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'scripts/**'
+      - '.github/workflows/rust-dev.yml'
+  push:
+    branches: [dev/ephemeris]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'scripts/**'
+      - '.github/workflows/rust-dev.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust fmt, test and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check for accidentally tracked external kernels
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+          python3 scripts/check_repository_data_hygiene.py --repo .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run deterministic workspace tests
+        run: cargo test --workspace --locked
+      - name: Check offline Horizons reference parser
+        run: cargo test --workspace --example validate_horizons --locked
+      - name: Check offline SPK NAIF reference parser and residuals
+        run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Check offline SPK kernel SHA-256 preflight (synthetic tests)
+        run: python3 -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
+      - name: Test E1 SPK reference-matrix breadth audit
+        run: python3 -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
+      - name: Test local SPK coverage inspector on Linux
+        run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test SPK boundary priority probes on Linux
+        run: cargo test --workspace --example spk_boundary_probes --locked
+      - name: Test explicit SPK state query on Linux
+        run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on Linux
+        run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on Linux
+        run: cargo test --workspace --example spk_probe_at --locked
+      - name: Run optimized workspace regression tests
+        run: cargo test --workspace --release --locked
+      - name: Check Clippy warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Check public Rust API documentation
+        run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: '-D warnings'
+      - name: Install Windows GNU compilation target
+        run: rustup target add x86_64-pc-windows-gnu
+      - name: Check Windows GNU cross-target compilation
+        run: cargo check --workspace --locked --target x86_64-pc-windows-gnu
+
+  windows-native:
+    name: Windows native Rust tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run workspace tests natively on Windows
+        run: cargo test --workspace --locked
+      - name: Run Horizons comparator regressions on Windows
+        run: cargo test --workspace --example validate_horizons --locked
+      - name: Run SPK reference comparator regressions on Windows
+        run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Check offline SPK hash verification on Windows
+        run: python -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
+      - name: Test independent SPICE reference generator (mocked) on Windows
+        run: python -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
+      - name: Test E1 reference-matrix breadth audit on Windows
+        run: python -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
+      - name: Test local SPK coverage inspector on Windows
+        run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test SPK boundary priority probes on Windows
+        run: cargo test --workspace --example spk_boundary_probes --locked
+      - name: Test explicit SPK state query on Windows
+        run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on Windows
+        run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on Windows
+        run: cargo test --workspace --example spk_probe_at --locked
+      - name: Run Clippy natively on Windows
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  macos-native:
+    name: macOS native Rust tests
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run workspace tests natively on macOS
+        run: cargo test --workspace --locked
+      - name: Run Horizons comparator regressions on macOS
+        run: cargo test --workspace --example validate_horizons --locked
+      - name: Run SPK reference comparator regressions on macOS
+        run: cargo test --workspace --example validate_spk_reference --locked
+      - name: Check offline SPK hash verification on macOS
+        run: python3 -m unittest discover -s scripts -p 'test_verify_spk_kernel_hashes.py'
+      - name: Test independent SPICE reference generator (mocked) on macOS
+        run: python3 -m unittest discover -s scripts/tests -p 'test_spk_naif_reference.py'
+      - name: Test E1 reference-matrix breadth audit on macOS
+        run: python3 -m unittest discover -s scripts/tests -p 'test_spk_e1_matrix.py'
+      - name: Test local SPK coverage inspector on macOS
+        run: cargo test --workspace --example inspect_spk_coverage --locked
+      - name: Test SPK boundary priority probes on macOS
+        run: cargo test --workspace --example spk_boundary_probes --locked
+      - name: Test explicit SPK state query on macOS
+        run: cargo test --workspace --example spk_state_at --locked
+      - name: Test same-epoch SPK batch CLI on macOS
+        run: cargo test --workspace --example spk_batch_at --locked
+      - name: Test direct-state SPK diagnostics CLI on macOS
+        run: cargo test --workspace --example spk_probe_at --locked
+      - name: Run Clippy natively on macOS
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings

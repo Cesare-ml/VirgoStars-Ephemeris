@@ -1,0 +1,247 @@
+{
+ "schema": "virgostars-ephemeris/local-reference-receipt/1",
+ "kind": "aggregate residuals only; no reference-library output rows, code or binaries are stored",
+ "date": "2026-11-16",
+ "subject": {
+  "package": "bindings/node",
+  "call": "Engine.calcTdb with SEFLG_EQUATORIAL and/or SEFLG_HELCTR",
+  "commit": "9fd3be2"
+ },
+ "reference": {
+  "name": "installed swisseph 0.5.17 (AGPL), swe_calc with ephemeris time = TDB, JPL mode on the same de441.eph; local only"
+ },
+ "grid": {
+  "dates": 41,
+  "first_jd_tdb": 2415100.5,
+  "step_days": 1800.3
+ },
+ "maximum_differences": {
+  "geocentric equatorial": {
+   "Sun": {
+    "lon_arcsec": 0.00044392409108695574,
+    "lat_arcsec": 0.0005731721273605217,
+    "dist_rel": 3.774758283725532e-15,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00010023152707816507,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000045572513962532923
+   },
+   "Moon": {
+    "lon_arcsec": 0.0006130895599198993,
+    "lat_arcsec": 0.0005508433901013632,
+    "dist_rel": 1.262323578998803e-13,
+    "rate_lon_arcsec_per_day_vs_centered": 0.053148261164892574,
+    "rate_lat_arcsec_per_day_vs_centered": 0.02712611453219438
+   },
+   "Mercury": {
+    "lon_arcsec": 0.00045030055844108574,
+    "lat_arcsec": 0.0005882693884018408,
+    "dist_rel": 1.3687828648301092e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0016505476889250303,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0007003536626637441
+   },
+   "Venus": {
+    "lon_arcsec": 0.00046287955228763167,
+    "lat_arcsec": 0.0005368466119648474,
+    "dist_rel": 1.5504930672705086e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00018355839987993505,
+    "rate_lat_arcsec_per_day_vs_centered": 0.00008351179757726257
+   },
+   "Mars": {
+    "lon_arcsec": 0.0006550199486810016,
+    "lat_arcsec": 0.0005555588245442777,
+    "dist_rel": 2.1078694345533222e-12,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00011196784119871239,
+    "rate_lat_arcsec_per_day_vs_centered": 0.00003464435898159479
+   },
+   "Jupiter": {
+    "lon_arcsec": 0.0006152374226076063,
+    "lat_arcsec": 0.0005070793577033328,
+    "dist_rel": 2.0861090632706691e-13,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000029026402581511235,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000009757387997577638
+   },
+   "Saturn": {
+    "lon_arcsec": 0.0005596434675680939,
+    "lat_arcsec": 0.0005886177177671925,
+    "dist_rel": 6.272760089132134e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000017085150794127202,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000005845030334739043
+   },
+   "Uranus": {
+    "lon_arcsec": 0.00046573177314712666,
+    "lat_arcsec": 0.0005212754004446651,
+    "dist_rel": 5.495603971894525e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000007489789188852569,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000003304857119218463
+   },
+   "Neptune": {
+    "lon_arcsec": 0.0005625034646072891,
+    "lat_arcsec": 0.0005215711766481945,
+    "dist_rel": 7.482903185973555e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000010211748784072494,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0000028449466977532867
+   },
+   "Pluto": {
+    "lon_arcsec": 0.0004874645583186066,
+    "lat_arcsec": 0.0004954800537859683,
+    "dist_rel": 7.72715225139109e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000009270258485849503,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0000030306328072104982
+   }
+  },
+  "heliocentric ecliptic": {
+   "Moon": {
+    "lon_arcsec": 0.0005873655481991591,
+    "lat_arcsec": 0.0004290534056773307,
+    "dist_rel": 2.2638779739736492e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00019970544418157488,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000018328786369897765
+   },
+   "Mercury": {
+    "lon_arcsec": 0.9173082745746797,
+    "lat_arcsec": 0.10261389722092673,
+    "dist_rel": 7.741796732574358e-7,
+    "rate_lon_arcsec_per_day_vs_centered": 0.10375155480986109,
+    "rate_lat_arcsec_per_day_vs_centered": 0.010164913612031867
+   },
+   "Venus": {
+    "lon_arcsec": 0.2759834368589509,
+    "lat_arcsec": 0.012055505592201143,
+    "dist_rel": 8.305547138931502e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.007940163029473979,
+    "rate_lat_arcsec_per_day_vs_centered": 0.00046686964962766586
+   },
+   "Mars": {
+    "lon_arcsec": 0.07863828377594473,
+    "lat_arcsec": 0.002083994543333745,
+    "dist_rel": 3.0888774649184825e-8,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0009849576138698524,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000027804202146902712
+   },
+   "Jupiter": {
+    "lon_arcsec": 0.016133276858454337,
+    "lat_arcsec": 0.0006865979572889813,
+    "dist_rel": 3.4727225539654683e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00001526742687274485,
+    "rate_lat_arcsec_per_day_vs_centered": 8.758374623208526e-7
+   },
+   "Saturn": {
+    "lon_arcsec": 0.0058488994000072125,
+    "lat_arcsec": 0.0007166008290759862,
+    "dist_rel": 1.3210521565554245e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000010197190442040593,
+    "rate_lat_arcsec_per_day_vs_centered": 4.125828007364718e-7
+   },
+   "Uranus": {
+    "lon_arcsec": 0.0025166083105432335,
+    "lat_arcsec": 0.0005414302077927369,
+    "dist_rel": 5.33756039367006e-10,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0000072515041409093595,
+    "rate_lat_arcsec_per_day_vs_centered": 8.051576124573634e-8
+   },
+   "Neptune": {
+    "lon_arcsec": 0.0012515130947576836,
+    "lat_arcsec": 0.000532280263065843,
+    "dist_rel": 4.206146542173883e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000006627528769537205,
+    "rate_lat_arcsec_per_day_vs_centered": 8.708948562308194e-8
+   },
+   "Pluto": {
+    "lon_arcsec": 0.0011524904039106332,
+    "lat_arcsec": 0.000549467076638166,
+    "dist_rel": 8.53741966011512e-10,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00000679449393310716,
+    "rate_lat_arcsec_per_day_vs_centered": 4.378204962636467e-7
+   },
+   "Earth": {
+    "lon_arcsec": 0.0004999440989195136,
+    "lat_arcsec": 0.0004292641029199671,
+    "dist_rel": 2.7533531010703882e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00015678526796847336,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000009452200254263438
+   }
+  },
+  "heliocentric equatorial": {
+   "Moon": {
+    "lon_arcsec": 0.000498481767863268,
+    "lat_arcsec": 0.0005920682696114454,
+    "dist_rel": 2.2638779739736492e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00022142986644269058,
+    "rate_lat_arcsec_per_day_vs_centered": 0.00008948714749212883
+   },
+   "Mercury": {
+    "lon_arcsec": 1.033165425315019,
+    "lat_arcsec": 0.3639899541134639,
+    "dist_rel": 7.741796732574358e-7,
+    "rate_lon_arcsec_per_day_vs_centered": 0.12133207088638187,
+    "rate_lat_arcsec_per_day_vs_centered": 0.05167297442851826
+   },
+   "Venus": {
+    "lon_arcsec": 0.2864804396267573,
+    "lat_arcsec": 0.10262277141031007,
+    "dist_rel": 8.305547138931502e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.007246739003274882,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0032593617197207436
+   },
+   "Mars": {
+    "lon_arcsec": 0.08391702181143046,
+    "lat_arcsec": 0.02810306794316375,
+    "dist_rel": 3.088877442714022e-8,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0009305604063314377,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0004364061304329425
+   },
+   "Jupiter": {
+    "lon_arcsec": 0.017155113118860754,
+    "lat_arcsec": 0.006345602373158954,
+    "dist_rel": 3.472722776010073e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000016264948038413607,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000009604795271622724
+   },
+   "Saturn": {
+    "lon_arcsec": 0.005651015271723736,
+    "lat_arcsec": 0.001907035694159731,
+    "dist_rel": 1.3210521565554245e-9,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000010099832595256153,
+    "rate_lat_arcsec_per_day_vs_centered": 0.0000037351106691937974
+   },
+   "Uranus": {
+    "lon_arcsec": 0.0027278249035589397,
+    "lat_arcsec": 0.0008794996091410212,
+    "dist_rel": 5.337563724339134e-10,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000007552808466149141,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000002604881807130588
+   },
+   "Neptune": {
+    "lon_arcsec": 0.001354075993731385,
+    "lat_arcsec": 0.0005530011392806955,
+    "dist_rel": 4.2061243377133906e-11,
+    "rate_lon_arcsec_per_day_vs_centered": 0.0000071853301027852146,
+    "rate_lat_arcsec_per_day_vs_centered": 0.00000275281823469177
+   },
+   "Pluto": {
+    "lon_arcsec": 0.0009861652870313264,
+    "lat_arcsec": 0.0005069871082952204,
+    "dist_rel": 8.53741966011512e-10,
+    "rate_lon_arcsec_per_day_vs_centered": 0.000007117716149286635,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000002716556246357832
+   },
+   "Earth": {
+    "lon_arcsec": 0.00044392409108695574,
+    "lat_arcsec": 0.0005731720506219062,
+    "dist_rel": 2.7533531010703882e-14,
+    "rate_lon_arcsec_per_day_vs_centered": 0.00017775449432377854,
+    "rate_lat_arcsec_per_day_vs_centered": 0.000049649503908177905
+   }
+  }
+ },
+ "reading": {
+  "geocentric_equatorial": "RA and Dec agree with the reference to 0.00066 arcsec for all ten bodies, the same floor as the ecliptic output.",
+  "heliocentric_moon_and_earth": "agree to 0.0006 arcsec.",
+  "heliocentric_planets": "differ by up to 0.92 arcsec (Mercury), 0.28 (Venus), 0.08 (Mars), 0.016 (Jupiter), 0.006 (Saturn), 0.0025 (Uranus), 0.0013 (Neptune), 0.0012 (Pluto), decreasing with distance. At J2000 the reference value for Mars equals a variant in which the light-time delay is taken from the planet distance to the solar-system barycentre instead of to the Sun (359.43841263 vs 359.43841267 degrees), while for the Earth it equals the Sun-based definition used here. This is consistent with, but not proof of, a convention of the reference; we implement the physical definition (the photon arrives at the Sun).",
+  "rates": "rates agree with centered differences of the reference positions to 1e-3 arcsec/day or better except Mercury (0.1) and Venus (0.008) heliocentrically, where the position convention above also changes the apparent motion."
+ },
+ "not_established": [
+  "bit-for-bit reproduction of the reference heliocentric convention",
+  "topocentric or J2000-frame outputs",
+  "epochs outside 1900-2100"
+ ]
+}

@@ -1,5 +1,7 @@
 use std::io::Cursor;
-use virgostars_ephemeris_core::de441::{Body, De441, De441Error, JulianDateTdb};
+use virgostars_ephemeris_core::de441::{
+    Body, De441, De441Error, JulianDateTdb, MAX_DE441_BATCH_OUTPUT_BYTES,
+};
 
 fn put_f64(bytes: &mut [u8], offset: usize, value: f64) {
     bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
@@ -354,4 +356,111 @@ fn chebyshev_velocity_agrees_with_central_position_difference_inside_granules() 
             );
         }
     }
+}
+
+#[test]
+fn relative_states_close_triangle_for_position_and_velocity_across_granules() {
+    // A->B + B->C = A->C, for independently requested center/target pairs.
+    // This catches inconsistent center subtraction and velocity units.
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    for jd in [1000.0, 1007.5, 1016.0, 1023.5, 1032.0, 1048.0, 1064.0] {
+        let epoch = JulianDateTdb(jd);
+        let mercury_earth = eph.state(Body::Mercury, Body::Earth, epoch).unwrap();
+        let earth_moon = eph.state(Body::Earth, Body::Moon, epoch).unwrap();
+        let mercury_moon = eph.state(Body::Mercury, Body::Moon, epoch).unwrap();
+        for axis in 0..3 {
+            let expected_position = mercury_earth.position_km[axis] + earth_moon.position_km[axis];
+            let expected_velocity =
+                mercury_earth.velocity_km_per_day[axis] + earth_moon.velocity_km_per_day[axis];
+            assert!(
+                (expected_position - mercury_moon.position_km[axis]).abs() < 1e-9,
+                "position closure at JD {jd}, axis {axis}"
+            );
+            assert!(
+                (expected_velocity - mercury_moon.velocity_km_per_day[axis]).abs() < 1e-9,
+                "velocity closure at JD {jd}, axis {axis}"
+            );
+        }
+    }
+}
+
+#[test]
+fn states_at_caps_result_payload_and_preserves_large_repeated_batches() {
+    let max_states = MAX_DE441_BATCH_OUTPUT_BYTES
+        / std::mem::size_of::<virgostars_ephemeris_core::de441::StateVector>();
+    assert!(max_states > 1);
+
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+
+    // One below the limit is a substantial but valid duplicate-preserving batch.
+    let large_targets = vec![Body::Mercury; max_states - 1];
+    let large = eph
+        .states_at(
+            &large_targets,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1010.0),
+        )
+        .unwrap();
+    assert_eq!(large.len(), max_states - 1);
+    assert!(large.iter().all(|state| {
+        state.target == Body::Mercury
+            && state.center == Body::SolarSystemBarycenter
+            && state.epoch == JulianDateTdb(1010.0)
+            && state.position_km == large[0].position_km
+    }));
+    drop(large);
+
+    // The exact derived limit is accepted; no duplicate targets are removed.
+    let exact_targets = vec![Body::Mercury; max_states];
+    let exact = eph
+        .states_at(
+            &exact_targets,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1010.0),
+        )
+        .unwrap();
+    assert_eq!(exact.len(), max_states);
+    assert!(exact.iter().all(|state| state.target == Body::Mercury));
+    drop(exact);
+
+    // The output cap wins before evaluating a body with a missing data series.
+    // This also avoids allocating the over-limit output vector in the test.
+    let oversized_targets = vec![Body::Sun; max_states + 1];
+    assert!(matches!(
+        eph.states_at(
+            &oversized_targets,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1010.0)
+        ),
+        Err(De441Error::BatchOutputTooLarge {
+            requested_states,
+            max_states: error_limit
+        }) if requested_states == max_states + 1 && error_limit == max_states
+    ));
+}
+
+#[test]
+fn states_at_empty_input_still_validates_the_epoch() {
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    assert!(eph
+        .states_at(&[], Body::Earth, JulianDateTdb(1010.0))
+        .unwrap()
+        .is_empty());
+    assert!(matches!(
+        eph.states_at(&[], Body::Earth, JulianDateTdb(999.0)),
+        Err(De441Error::OutsideCoverage { .. })
+    ));
+}
+
+#[test]
+fn states_at_still_propagates_a_missing_body_series_for_valid_batches() {
+    let mut eph = De441::new(Cursor::new(fixture())).unwrap();
+    assert!(matches!(
+        eph.states_at(
+            &[Body::Sun],
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1010.0)
+        ),
+        Err(De441Error::MissingSeries("Sun"))
+    ));
 }

@@ -70,10 +70,17 @@ impl ChebyshevPositionRecord {
                 field: "position Chebyshev coefficient",
             });
         }
-        if !(midpoint.value() - radius_seconds).is_finite()
-            || !(midpoint.value() + radius_seconds).is_finite()
-        {
+        let start = midpoint.value() - radius_seconds;
+        let end = midpoint.value() + radius_seconds;
+        if !start.is_finite() || !end.is_finite() {
             return Err(EphemerisError::ArithmeticOverflow);
+        }
+        // Modification (2026-11-14): at very large binary64 ET epochs a
+        // positive radius may round both endpoints onto the midpoint.
+        // Reject such a collapsed record instead of accepting an interval
+        // that cannot represent its own endpoints.
+        if start >= midpoint.value() || end <= midpoint.value() {
+            return Err(EphemerisError::InvalidRadius);
         }
 
         Ok(Self {
@@ -167,6 +174,39 @@ mod tests {
         assert!(record
             .state_at(TdbSecondsPastJ2000::new(11.0).unwrap())
             .is_err());
+    }
+
+    // Modification (2026-11-14): a nominally positive radius must advance
+    // both binary64 ET endpoints; otherwise the record's physical interval
+    // collapses in the input time representation.
+    #[test]
+    fn rejects_record_radius_unresolvable_at_large_tdb_epochs() {
+        let large = 9_007_199_254_740_992.0_f64; // 2^53 ET seconds
+        let tiny = 1.0;
+        for sign in [-1.0, 1.0] {
+            let center = sign * large;
+            let midpoint = TdbSecondsPastJ2000::new(center).unwrap();
+            assert!(center - tiny == center || center + tiny == center);
+            assert!(matches!(
+                ChebyshevPositionRecord::new(midpoint, tiny, [vec![1.0], vec![2.0], vec![3.0]],),
+                Err(EphemerisError::InvalidRadius)
+            ));
+
+            // A distinctly resolvable interval remains valid and evaluates
+            // finite constant coefficients at both included endpoints.
+            let record =
+                ChebyshevPositionRecord::new(midpoint, 2.0, [vec![1.0], vec![2.0], vec![3.0]])
+                    .unwrap();
+            for epoch in [center - 2.0, center, center + 2.0] {
+                let state = record
+                    .state_at(TdbSecondsPastJ2000::new(epoch).unwrap())
+                    .unwrap();
+                assert_eq!(state.position_km.x, 1.0);
+                assert_eq!(state.position_km.y, 2.0);
+                assert_eq!(state.position_km.z, 3.0);
+                assert_eq!(state.velocity_km_per_second.x, 0.0);
+            }
+        }
     }
 
     #[test]
