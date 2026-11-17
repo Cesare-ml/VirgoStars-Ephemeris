@@ -1,5 +1,8 @@
 # Stellar component and designation review — 2026-11-17
 
+**Follow-up:** four approximate cluster-center candidates are described in
+[the cluster-center checkpoint](STAR_CLUSTER_CENTERS_2026-11-17.md).
+
 **Experimental local candidates; incomplete catalog.** This follows the
 [previous gap review](STAR_CATALOG_GAP_REVIEW_2026-11-17.md). The owner's
 choice of correct physical identity, with differences from Swiss signaled,
