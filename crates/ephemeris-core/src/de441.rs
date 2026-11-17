@@ -25,7 +25,7 @@ SPDX-License-Identifier: CPAL-1.0
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 const HEADER_SIZE: usize = 2856;
@@ -81,10 +81,23 @@ pub struct StateVectorWithAcceleration {
     pub acceleration_km_per_day2: [f64; 3],
 }
 
+/// A classic-DE441 slice retains the original source coefficients and rounds
+/// its stored coverage outwards to whole source records.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SliceSummary {
+    pub requested_start_tdb: JulianDateTdb,
+    pub requested_end_exclusive_tdb: JulianDateTdb,
+    pub stored_start_tdb: JulianDateTdb,
+    pub stored_end_tdb: JulianDateTdb,
+    pub coefficient_records: usize,
+    pub bytes_written: u64,
+}
+
 #[derive(Debug)]
 pub enum De441Error {
     Io(io::Error),
     InvalidFile(&'static str),
+    InvalidSliceRange(&'static str),
     OutsideCoverage {
         epoch: JulianDateTdb,
         start: JulianDateTdb,
@@ -102,6 +115,7 @@ impl fmt::Display for De441Error {
         match self {
             Self::Io(e) => write!(f, "DE441 I/O error: {e}"),
             Self::InvalidFile(message) => write!(f, "invalid DE441 file: {message}"),
+            Self::InvalidSliceRange(message) => write!(f, "invalid DE441 slice: {message}"),
             Self::OutsideCoverage { epoch, start, end } => write!(
                 f,
                 "TDB Julian date {} is outside [{}, {}]",
@@ -341,6 +355,104 @@ impl<R: Read + Seek> De441<R> {
     /// Inclusive interval as specified by the binary header, in TDB Julian days.
     pub fn coverage(&self) -> (JulianDateTdb, JulianDateTdb) {
         (JulianDateTdb(self.start), JulianDateTdb(self.end))
+    }
+
+    /// Stream a self-contained classic-DE441 slice without changing any
+    /// source Chebyshev coefficient. The requested interval is half-open in
+    /// Julian Date TDB; stored coverage expands to full source records.
+    ///
+    /// Output contains the two original header/constant records (with only
+    /// the declared coverage dates changed) followed by the selected source
+    /// coefficient records. The caller must treat a failed write as a partial
+    /// output and publish the file only after separately reopening it.
+    /// No SPK/SE1 files, time-scale conversions or compression are involved.
+    ///
+    /// Modification 2026-11-18: original VirgoStars classic-file slice export.
+    pub fn write_slice<W: Write>(
+        &mut self,
+        requested_start: JulianDateTdb,
+        requested_end_exclusive: JulianDateTdb,
+        output: &mut W,
+    ) -> Result<SliceSummary, De441Error> {
+        let (start, end) = (requested_start.0, requested_end_exclusive.0);
+        if !start.is_finite() || !end.is_finite() || start >= end {
+            return Err(De441Error::InvalidSliceRange(
+                "expected finite increasing half-open TDB interval",
+            ));
+        }
+        if start < self.start || end > self.end {
+            return Err(De441Error::InvalidSliceRange(
+                "requested interval exceeds source coverage",
+            ));
+        }
+
+        // Find the first record whose end is strictly after the requested
+        // start. Binary-searching JD boundaries avoids float-to-int casts
+        // and avoids keeping an unnecessary preceding record at a boundary.
+        let (mut low, mut high) = (0usize, self.record_count);
+        while low < high {
+            let mid = low + (high - low) / 2;
+            if self.start + (mid + 1) as f64 * self.step <= start {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        let first_record = low;
+
+        // First record beginning at/after the requested exclusive end.
+        let (mut low, mut high) = (first_record, self.record_count);
+        while low < high {
+            let mid = low + (high - low) / 2;
+            if self.start + mid as f64 * self.step < end {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        let after_last_record = low;
+        if first_record >= after_last_record {
+            return Err(De441Error::InvalidSliceRange(
+                "requested interval does not select a coefficient record",
+            ));
+        }
+        let stored_start = self.start + first_record as f64 * self.step;
+        let stored_end = self.start + after_last_record as f64 * self.step;
+        let record_count = after_last_record - first_record;
+        let bytes_written = (record_count as u64 + 2) * self.record_size as u64;
+
+        let mut buffer = vec![0u8; self.record_size];
+        self.source.seek(SeekFrom::Start(0))?;
+        self.source.read_exact(&mut buffer)?;
+        buffer[2652..2660].copy_from_slice(&stored_start.to_le_bytes());
+        buffer[2660..2668].copy_from_slice(&stored_end.to_le_bytes());
+        output.write_all(&buffer)?;
+        self.source.read_exact(&mut buffer)?;
+        output.write_all(&buffer)?;
+
+        self.source.seek(SeekFrom::Start(
+            (first_record as u64 + 2) * self.record_size as u64,
+        ))?;
+        for index in first_record..after_last_record {
+            self.source.read_exact(&mut buffer)?;
+            let expected_start = self.start + index as f64 * self.step;
+            if f64_at(&buffer, 0) != expected_start
+                || f64_at(&buffer, 8) != expected_start + self.step
+            {
+                return Err(De441Error::InvalidFile(
+                    "coefficient record has unexpected dates",
+                ));
+            }
+            output.write_all(&buffer)?;
+        }
+        Ok(SliceSummary {
+            requested_start_tdb: requested_start,
+            requested_end_exclusive_tdb: requested_end_exclusive,
+            stored_start_tdb: JulianDateTdb(stored_start),
+            stored_end_tdb: JulianDateTdb(stored_end),
+            coefficient_records: record_count,
+            bytes_written,
+        })
     }
 
     /// Returns a geometric target-relative-to-center state at a TDB epoch.
