@@ -180,6 +180,16 @@ mod tests {
     }
 
     #[test]
+    fn direct_obliquity_near_j2000_agrees_with_published_erfa_iau2006_fixture() {
+        // Independent ERFA t_obl06 fixture (TT JD 2400000.5 + 54388.0).
+        // These are different fitted models, so this is a bounded comparison,
+        // not a claim of exact equality or ancient-epoch validation.
+        let expected_iau2006 = 0.409_074_922_938_725_8_f64;
+        let actual = experimental_direct_obliquity(2_400_000.5 + 54_388.0).unwrap();
+        assert!((actual - expected_iau2006).abs() < 1.0e-10, "{actual}");
+    }
+
+    #[test]
     fn equator_matrix_matches_erfa_reference() {
         // ERFA t_ltp at Julian epoch 1666.666; numerical conformance fixture.
         let expected = [
