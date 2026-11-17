@@ -1,5 +1,7 @@
 # Horizons ecliptic stations and historical UT1 — 2026-11-17
 
+Further work: [station direction windows and an illustrative future UT1 scenario](STATION_WINDOWS_AND_FUTURE_UT1_2026-11-17.md).
+
 **Status: sampled independent-implementation comparisons and illustrative
 historical-time analysis; not a physical accuracy guarantee.** This continues
 [the engine-only convergence check](ENGINE_STATION_CONVERGENCE_2026-11-17.md).
