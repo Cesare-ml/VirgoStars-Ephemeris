@@ -4,6 +4,9 @@
 continues [the earlier rate and historical-time comparison](PLANET_RATES_AND_HISTORICAL_TIME_2026-11-17.md).
 No production calculation or default has changed.
 
+The [subsequent solar-separation and historical-time investigation](SOLAR_RATE_OUTLIERS_AND_HISTORICAL_TIME_2026-11-17.md)
+tests a further rate hypothesis and compares 39 historical epochs with Horizons.
+
 ## Horizons apparent ICRF rate convention
 
 The earlier 610 cases (ten geocentric bodies, 1 July at astronomical years
