@@ -4,12 +4,28 @@ import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { inspectHipparcosQuality } = require('../index.js');
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 
-try {
+// Missing individual HIP entries are isolated without hiding other file errors.
+export function inspectAvailable(path, hips, inspect) {
+  if (!hips.length) return { rows: [], missing: [] };
+  try {
+    return { rows: inspect(path, hips), missing: [] };
+  } catch (error) {
+    if (error.code !== 'E_CATALOG_FILE' || !String(error.message).includes('hip2 field HIP not found is out of range')) throw error;
+    if (hips.length === 1) return { rows: [], missing: hips };
+    const middle = Math.floor(hips.length / 2);
+    const left = inspectAvailable(path, hips.slice(0, middle), inspect);
+    const right = inspectAvailable(path, hips.slice(middle), inspect);
+    return { rows: [...left.rows, ...right.rows], missing: [...left.missing, ...right.missing] };
+  }
+}
+
+function main() {
   const [reportPath, hip2Path, outputPath, ...extra] = process.argv.slice(2);
   if (!reportPath || !hip2Path || !outputPath || extra.length) {
     throw new Error('usage: node audit-star-quality.mjs <candidate-report.json> <hip2.dat> <new-output.json>');
@@ -44,17 +60,22 @@ try {
   const hips = selections.map((r) => r.candidates[0].hip);
   if (!hips.length || new Set(hips).size !== hips.length) throw new Error('no unique HIP candidates; resolve duplicates first');
   const before = hash(readFileSync(hip2Path));
-  const quality = inspectHipparcosQuality(hip2Path, hips);
+  const { rows: quality, missing } = inspectAvailable(hip2Path, hips, inspectHipparcosQuality);
+  const byHip = new Map(quality.map(row => [row.hip, row]));
+  if (byHip.size !== quality.length || quality.length + missing.length !== hips.length
+      || hips.some(hip => !byHip.has(hip) && !missing.includes(hip))) throw new Error('inconsistent HIP2 inspection results');
   if (hash(readFileSync(hip2Path)) !== before || hash(readFileSync(reportPath)) !== hash(reportBytes)) {
     throw new Error('input changed during inspection');
   }
   const output = { schema: 'virgostars-hip2-quality-audit/1', status: 'REVIEW_REQUIRED',
     candidateReportSha256: hash(reportBytes), hip2Sha256: before,
-    note: 'Numerical policy eligibility is not permission to use a star.',
-    results: selections.map((r, i) => ({ requestedName: r.requestedName, ...quality[i] })) };
+    note: 'Numerical policy eligibility is not permission to use a star.', missingHipIds: missing,
+    results: selections.filter(r => byHip.has(r.candidates[0].hip))
+      .map(r => ({ requestedName: r.requestedName, ...byHip.get(r.candidates[0].hip) })) };
   writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`, { flag: 'wx' });
-  console.log(`${quality.length} candidates inspected: ${quality.filter((q) => q.strictEligible).length} strict, ${quality.filter((q) => q.traditionalEligible).length} traditional filter; review required.`);
-} catch (error) {
-  console.error(`HIP2 quality audit failed: ${error.message}`);
-  process.exitCode = 1;
+  console.log(`${quality.length} candidates inspected, ${missing.length} absent from HIP2: ${quality.filter((q) => q.strictEligible).length} strict, ${quality.filter((q) => q.traditionalEligible).length} traditional filter; review required.`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try { main(); } catch (error) { console.error(`HIP2 quality audit failed: ${error.message}`); process.exitCode = 1; }
 }

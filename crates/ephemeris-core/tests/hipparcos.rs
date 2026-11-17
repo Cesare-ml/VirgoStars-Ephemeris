@@ -20,9 +20,34 @@ use std::io::{BufReader, Cursor};
 
 use virgostars_ephemeris_core::fixed_star::propagate_star_icrs_astrometric;
 use virgostars_ephemeris_core::hipparcos::{
-    parse_hip2_record, read_hip2_selected, Hip2Error, Hip2QualityPolicy, RadialVelocity,
-    HIP2_EPOCH_JD, HIP2_RECORD_LENGTH,
+    accepts_experimental_hip2, parse_hip2_record, read_hip2_selected, Hip2Error, Hip2QualityPolicy,
+    RadialVelocity, HIP2_EPOCH_JD, HIP2_RECORD_LENGTH,
 };
+
+#[test]
+fn experimental_policy_requires_explicit_finite_positive_parallax_and_known_solution() {
+    let mut r = parse_hip2_record(&fictional()).unwrap();
+    assert!(Hip2QualityPolicy::STRICT.accepts(&r));
+    assert!(accepts_experimental_hip2(&r));
+    r.solution_type = 15;
+    r.components = 2;
+    r.parallax_mas = 1.0;
+    assert!(!Hip2QualityPolicy::TRADITIONAL_STARS.accepts(&r));
+    assert!(accepts_experimental_hip2(&r));
+    r.parallax_mas = 0.0;
+    assert!(!accepts_experimental_hip2(&r));
+    r.parallax_mas = -1.0;
+    assert!(!accepts_experimental_hip2(&r));
+    r.parallax_mas = 1.0;
+    r.e_parallax_mas = 0.0;
+    assert!(!accepts_experimental_hip2(&r));
+    r.e_parallax_mas = 1.0;
+    r.solution_type = 42;
+    assert!(!accepts_experimental_hip2(&r));
+    r.solution_type = 15;
+    r.components = 0;
+    assert!(!accepts_experimental_hip2(&r));
+}
 
 /// Build a 276-byte record; each value is right-aligned in its CDS columns.
 #[allow(clippy::too_many_arguments)]

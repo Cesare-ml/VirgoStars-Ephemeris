@@ -155,6 +155,20 @@ impl Hip2QualityPolicy {
     }
 }
 
+/// Broad compatibility research filter; not a scientific quality guarantee.
+/// Allows positive low-S/N parallaxes and non-single/accelerating solutions,
+/// but propagation still uses only the five linear astrometric parameters.
+/// Explicitly requesting this filter never changes the strict/traditional ones.
+pub fn accepts_experimental_hip2(record: &Hip2Record) -> bool {
+    let solution = record.solution_type;
+    (solution == 0 || (solution <= 159 && matches!(solution % 10, 1 | 3 | 5 | 7 | 9)))
+        && (1..=9).contains(&record.components)
+        && record.parallax_mas.is_finite()
+        && (0.001..=10_000.0).contains(&record.parallax_mas)
+        && record.e_parallax_mas.is_finite()
+        && record.e_parallax_mas > 0.0
+}
+
 fn field(line: &str, from: usize, to: usize) -> &str {
     // 1-based inclusive columns; the caller guarantees ASCII and length.
     &line[from - 1..to]

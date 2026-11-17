@@ -75,3 +75,6 @@ pub use chebyshev::{evaluate_chebyshev, ChebyshevSample};
 pub use error::{EphemerisError, Result};
 pub use state::{ChebyshevPositionRecord, StateVectorKm, Vector3};
 pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
+pub mod delta_t_long_range;
+pub mod explicit_delta_t;
+pub mod long_term_precession;

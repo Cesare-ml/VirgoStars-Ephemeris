@@ -69,13 +69,18 @@ use crate::de441::{
     Body, De441, De441Error, JulianDateTdb, StateVector, StateVectorWithAcceleration,
 };
 use crate::earth_orientation::{
-    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, Matrix3x3,
-    OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
+    experimental_extrapolated_nutation, iau2006_bias_precession_matrix, matrix_multiply,
+    matrix_vector_multiply, true_ecliptic_of_date_matrix, true_equator_of_date_matrix, z_rotation,
+    Matrix3x3, OrientationError, DAYS_PER_JULIAN_CENTURY, J2000_TT_JD,
 };
 use crate::light_deflection::{
     deflect_light_time_state_by_sun, deflect_light_time_state_by_sun_with, DeflectionError,
 };
-use crate::light_time::{geocentric_light_time, heliocentric_light_time, light_time_with_states};
+use crate::light_time::{
+    geocentric_light_time, heliocentric_light_time, light_time_with_states,
+    refine_emission_rounding,
+};
+use crate::long_term_precession::mean_date_matrices;
 use crate::six_field_units::{
     fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
 };
@@ -439,6 +444,111 @@ fn aberrated_state<R: Read + Seek>(
     )?;
     state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
     Ok(state)
+}
+
+/// Isolated experiment: remove the leading light-time emission rounding error.
+fn experimental_aberrated_state<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    earth: &StateVectorWithAcceleration,
+) -> Result<AberratedGeocentricState, ApparentError> {
+    let mut lt = geocentric_light_time(ephemeris, target, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    let emission = ephemeris
+        .state_with_acceleration(target, Body::SolarSystemBarycenter, lt.emission_epoch)
+        .map_err(AberratedStateError::from)?;
+    lt = refine_emission_rounding(lt, emission, *earth, ephemeris.coverage())
+        .map_err(AberratedStateError::from)?;
+    lt = deflect_light_time_state_by_sun(ephemeris, &lt)?;
+    let mut state = aberrate_light_time_state(
+        &lt,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )?;
+    state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+    Ok(state)
+}
+
+/// Diagnostic geocentric apparent vector in fixed ICRF axes, at TDB reception.
+/// Includes light-time, solar deflection and annual aberration, but no Earth
+/// orientation or atmospheric refraction. Distance is the light-time range.
+pub fn experimental_apparent_icrf<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<AberratedGeocentricState, ApparentError> {
+    let earth = ephemeris
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    experimental_aberrated_state(ephemeris, target, reception_epoch, &earth)
+}
+
+/// Experimental geocentric direction with light-time, solar deflection and
+/// annual aberration, in the **mean** long-term ecliptic of date. Nutation is
+/// deliberately absent. Input is TDB, not UT. This is not a true apparent
+/// ecliptic longitude and is not used by the normal apparent pipeline.
+pub fn experimental_long_term_mean_ecliptic<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
+    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, false)
+}
+
+/// Experimental long-range geocentric apparent ecliptic direction. Uses
+/// extrapolated 77-term nutation with full IERS fundamental arguments;
+/// accuracy outside the modern range is not established. TT/TDB input only,
+/// no UT/Delta-T conversion, and never selected by the standard API.
+pub fn experimental_long_term_apparent_ecliptic<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
+    experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true)
+}
+
+fn experimental_long_term_ecliptic<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    nutation: bool,
+) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
+    let earth = ephemeris
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+        .map_err(AberratedStateError::from)?;
+    let state = experimental_aberrated_state(ephemeris, target, reception_epoch, &earth)?;
+    let tt = tdb_to_tt_jd(reception_epoch.0)?;
+    // ICRF to J2000 mean axes via the existing IAU-2006 frame bias.
+    let bias = iau2006_bias_precession_matrix(J2000_TT_JD)?;
+    let matrix = |date| -> Result<Matrix3x3, OrientationError> {
+        let mean = matrix_multiply(mean_date_matrices(date)?.1, bias);
+        if nutation {
+            let dpsi = experimental_extrapolated_nutation(date)?.d_psi_rad;
+            Ok(matrix_multiply(z_rotation(-dpsi), mean))
+        } else {
+            Ok(mean)
+        }
+    };
+    let h = MATRIX_RATE_HALF_STEP_DAYS;
+    let m = matrix(tt)?;
+    let plus = matrix(tt + h)?;
+    let minus = matrix(tt - h)?;
+    let dm: Matrix3x3 =
+        std::array::from_fn(|i| std::array::from_fn(|j| (plus[i][j] - minus[i][j]) / (2.0 * h)));
+    let p = matrix_vector_multiply(m, state.position_km);
+    let v = matrix_vector_multiply(m, state.velocity_km_per_tdb_day);
+    let drift = matrix_vector_multiply(dm, state.position_km);
+    let cartesian = StateVector {
+        target,
+        center: Body::Earth,
+        epoch: reception_epoch,
+        position_km: p,
+        velocity_km_per_day: std::array::from_fn(|i| v[i] + drift[i]),
+    };
+    Ok(fixed_spherical_to_degrees_au(&project_fixed_axes(
+        &cartesian, 0.0,
+    )?)?)
 }
 
 /// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch,

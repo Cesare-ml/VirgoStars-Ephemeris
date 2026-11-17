@@ -4,7 +4,7 @@
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 
 const path = require('node:path');
-const { prepareStarCatalog, auditStarCatalogCoverage } = require('./star-catalog.js');
+const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry } = require('./star-catalog.js');
 const { createHouseDiagnosticSession } = require('./house-diagnostics.js');
 
 let native;
@@ -95,6 +95,31 @@ class Engine {
     return { xx: r.xx, rflag: r.rflag, timeSource: r.timeSource, notes: r.notes };
   }
 
+  /** Geometric Earth-centered ICRF state, TDB input, km and km/TDB day. */
+  geometricStateTdb(jdTdb, ipl) {
+    return this._call(() => this._native.geometricStateTdb(jdTdb, ipl));
+  }
+
+  /** Experimental corrected Earth-centered ICRF vector, TDB input. */
+  experimentalApparentIcrfTdb(jdTdb, ipl) {
+    return this._call(() => this._native.experimentalApparentIcrfTdb(jdTdb, ipl));
+  }
+
+  /** Experimental corrected direction, mean ecliptic of date; nutation omitted. */
+  experimentalLongTermMeanEclipticTdb(jdTdb, ipl) {
+    return this._call(() => this._native.experimentalLongTermMeanEclipticTdb(jdTdb, ipl));
+  }
+
+  /** Experimental apparent direction; nutation is extrapolated, accuracy not established. */
+  experimentalLongTermApparentTdb(jdTdb, ipl) {
+    return this._call(() => this._native.experimentalLongTermApparentTdb(jdTdb, ipl));
+  }
+
+  /** Explicit caller Delta T: UT1 input is not UTC or local civil time. */
+  experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
+    return this._call(() => this._native.experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));
+  }
+
   /** UT Julian date input, converted under the declared time policy. */
   calcUt(jdUt, ipl, flags = 0) {
     const r = this._call(() => this._native.calcUt(jdUt, ipl, flags));
@@ -178,7 +203,7 @@ class Engine {
     return this._call(() => this._native.solarEclipseUt(jdUt, Boolean(backward)));
   }
 
-  /** policy: 'strict' | 'traditional'. Returns the number of stars loaded. */
+  /** Explicit policy: 'strict' | 'traditional' | 'experimental'. */
   loadHipparcos(hip2Path, hips, policy) {
     return this._call(() => this._native.loadHipparcos(hip2Path, hips, policy));
   }
@@ -194,6 +219,16 @@ class Engine {
     const r = this._call(() => this._native.fixstarUt(hip, rvKmS, jdUt, flags));
     return { xx: r.xx, rflag: r.rflag, timeSource: r.timeSource, notes: r.notes };
   }
+
+  /** Experimental caller-supplied ICRS astrometry; explicit TDB epoch. */
+  fixstarExplicitTdb(astrometry, rvKmS, jdTdb, flags = 0) {
+    return this._call(() => this._native.fixstarExplicitTdb(validateExplicitAstrometry(astrometry), rvKmS, jdTdb, flags));
+  }
+
+  /** Same explicit astrometry at UT using the engine's time policy. */
+  fixstarExplicitUt(astrometry, rvKmS, jdUt, flags = 0) {
+    return this._call(() => this._native.fixstarExplicitUt(validateExplicitAstrometry(astrometry), rvKmS, jdUt, flags));
+  }
 }
 
 function julday(year, month, day, hour, gregorian = true) {
@@ -202,6 +237,12 @@ function julday(year, month, day, hour, gregorian = true) {
   } catch (error) {
     throw Engine._wrap(error);
   }
+}
+
+/** Explicit historical 2006 estimate; does not calculate its uncertainty. */
+function experimentalEspenakMeeus2006DeltaT(decimalYear) {
+  try { return loadNative().experimentalEspenakMeeus2006DeltaT(decimalYear); }
+  catch (error) { throw Engine._wrap(error); }
 }
 
 function revjul(jd, gregorian = true) {
@@ -344,13 +385,16 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
   for (const entry of starCatalog) {
     if (!entry || typeof entry.name !== 'string' || !entry.name.trim()
       || !(entry.displayName === undefined || (typeof entry.displayName === 'string' && entry.displayName.trim()))
-      || !Number.isSafeInteger(entry.hip) || entry.hip <= 0 || entry.hip > 0xffffffff
+      || !((Number.isSafeInteger(entry.hip) && entry.hip > 0 && entry.hip <= 0xffffffff && entry.astrometry === undefined && entry.sourceId === undefined)
+        || (entry.hip === undefined && entry.astrometry !== undefined && typeof entry.sourceId === 'string' && entry.sourceId.trim()))
       || !(entry.radialVelocityKmS === null || (typeof entry.radialVelocityKmS === 'number' && Number.isFinite(entry.radialVelocityKmS)))
       || !(entry.magnitude === null || (typeof entry.magnitude === 'number' && Number.isFinite(entry.magnitude)))
       || !Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== 'string' || !alias.trim())) {
       throw coded('E_CATALOG', 'each star needs a name, HIP, aliases, explicit radialVelocityKmS and magnitude');
     }
-    const star = { name: entry.name.trim(), displayName: entry.displayName?.trim() ?? entry.name.trim(), hip: entry.hip, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
+    const lookupWarnings = validateLookupWarnings(entry.lookupWarnings, [entry.name, ...entry.aliases]);
+    const astrometry=entry.astrometry === undefined ? undefined : validateExplicitAstrometry(entry.astrometry);
+    const star = { name: entry.name.trim(), displayName: entry.displayName?.trim() ?? entry.name.trim(), hip: entry.hip, astrometry, radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude, lookupWarnings };
     for (const name of [entry.name, ...entry.aliases]) {
       const key = name.trim().toLocaleLowerCase('en-US');
       if (stars.has(key)) throw coded('E_CATALOG', `duplicate star name or alias: ${name}`);
@@ -362,6 +406,9 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
     const star = stars.get(name.trim().toLocaleLowerCase('en-US'));
     if (!star) throw coded('E_STAR_NOT_FOUND', `unknown star: ${name}`);
     return star;
+  }
+  function lookupWarning(star, name) {
+    return star.lookupWarnings?.find(warning => warning.name.toLocaleLowerCase('en-US') === name.trim().toLocaleLowerCase('en-US'));
   }
   function deliver(args, result) {
     const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
@@ -459,13 +506,19 @@ function createSwissShapedFacade(engine, { acceptSwiephFlag = false, provenance 
       deliver(args, guarded(() => {
         const star = findStar(args[0]);
         const flags = normalizeFlags(typeof args[2] === 'function' ? 0 : (args[2] ?? 0));
-        return { name: star.displayName, ...shape(engine.fixstarUt(star.hip, star.radialVelocityKmS, args[1], flags), flags) };
+        const warning = lookupWarning(star, args[0]);
+        const calculation = star.astrometry
+          ? engine.fixstarExplicitUt(star.astrometry, star.radialVelocityKmS, args[1], flags)
+          : engine.fixstarUt(star.hip, star.radialVelocityKmS, args[1], flags);
+        return { name: star.displayName, ...shape(calculation, flags),
+          ...(warning ? { compatibilityWarning: warning } : {}) };
       })),
     swe_fixstar_mag: (...args) =>
       deliver(args, guarded(() => {
         const star = findStar(args[0]);
         if (star.magnitude === null) throw coded('E_STAR_MAGNITUDE', `magnitude unavailable for ${star.name}`);
-        return { name: star.displayName, magnitude: star.magnitude };
+        const warning = lookupWarning(star, args[0]);
+        return { name: star.displayName, magnitude: star.magnitude, ...(warning ? { compatibilityWarning: warning } : {}) };
       })),
     swe_get_planet_name: (ipl) => ({ name: BODY_NAMES_BY_NUMBER[ipl] ?? String(ipl) }),
     // swe_houses(tjd_ut, geolat, geolon, hsys). The house systems are astrological methods and
@@ -680,6 +733,7 @@ module.exports = {
   refrac,
   refracExtended,
   julday,
+  experimentalEspenakMeeus2006DeltaT,
   lenientJulday,
   revjul,
   houseAnglesUt,

@@ -17,13 +17,67 @@ export interface RevJul {
   hour: number;
 }
 
+/** Geometric ICRF Earth-centered state; no apparent or civil-time corrections. */
+export interface GeometricStateResult {
+  jdTdb: number;
+  target: string;
+  center: 'Earth';
+  frame: 'ICRF';
+  positionKm: number[];
+  velocityKmPerDay: number[];
+}
+
+export interface LongTermExperimentalResult {
+  /** Longitude, latitude, distance, and rates in degrees/AU per TDB day. */
+  xx: number[];
+  target: string;
+  timeSource: 'TDB_INPUT';
+  notes: string[];
+}
+
+/** Apparent geocentric ICRF vector, light-time range in km and derivative in km/TDB day. */
+export interface ApparentIcrfResult extends GeometricStateResult {
+  notes: string[];
+}
+
+export interface LongTermUt1Result {
+  xx: number[];
+  target: string;
+  jdUt1: number;
+  jdTt: number;
+  jdTdb: number;
+  deltaTSeconds: number;
+  deltaTUncertaintySeconds: number;
+  deltaTSource: string;
+  notes: string[];
+}
+
+export interface LongRangeDeltaTEstimate {
+  decimalYear: number;
+  seconds: number;
+  model: 'ESPENAK_MEEUS_2006_UNCORRECTED';
+  notes: string[];
+}
+
+/** Historical 2006 model estimate for astronomical decimal years 0 through 3000; uncertainty not supplied. */
+export function experimentalEspenakMeeus2006DeltaT(decimalYear: number): LongRangeDeltaTEstimate;
+
 export class Engine {
   constructor(de441Path: string);
   calcTdb(jdTdb: number, ipl: number, flags?: number): CalcResult;
+  geometricStateTdb(jdTdb: number, ipl: number): GeometricStateResult;
+  /** Experimental airless apparent vector with light-time, solar deflection and aberration. */
+  experimentalApparentIcrfTdb(jdTdb: number, ipl: number): ApparentIcrfResult;
+  /** Experimental mean ecliptic of date; nutation is not included. */
+  experimentalLongTermMeanEclipticTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
+  /** Experimental apparent position; extrapolated nutation has no established long-range accuracy. */
+  experimentalLongTermApparentTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
+  /** UT1 and caller-asserted Delta T seconds, uncertainty seconds and source required. */
+  experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   calcUt(jdUt: number, ipl: number, flags?: number): CalcResult;
   loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
   loadChiron(spkPath: string): void;
-  loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional'): number;
+  loadHipparcos(hip2Path: string, hips: number[], policy: 'strict' | 'traditional' | 'experimental'): number;
   /** House astronomy from a UT Julian date under this engine's time policy (measured DeltaT if loaded). */
   houseAnglesUt(jdUt: number, latitudeDeg: number, longitudeDegEast: number): HouseAnglesResult;
   /** First lunar eclipse with its maximum after (`backward`: before) `jdUt`; times are UT Julian dates. */
@@ -32,6 +86,8 @@ export class Engine {
   solarEclipseUt(jdUt: number, backward?: boolean): SolarEclipseResult;
   fixstarTdb(hip: number, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
   fixstarUt(hip: number, rvKmS: number | null, jdUt: number, flags?: number): CalcResult;
+  fixstarExplicitTdb(astrometry: ExplicitStarAstrometry, rvKmS: number | null, jdTdb: number, flags?: number): CalcResult;
+  fixstarExplicitUt(astrometry: ExplicitStarAstrometry, rvKmS: number | null, jdUt: number, flags?: number): CalcResult;
   /**
    * Horizon coordinates of an ecliptic (`equatorialInput` false) or equatorial-of-date
    * direction. Azimuth is from the SOUTH toward the west. Pressure 0 is estimated from `geoaltM`.
@@ -162,17 +218,41 @@ export interface SwissShapedError {
 }
 
 /** Independently sourced, caller-owned metadata. Null RV explicitly assumes zero; null magnitude is unavailable. */
-export interface StarCatalogEntry {
+export interface ExplicitStarAstrometry {
+  epochTdbJd: number;
+  rightAscensionDeg: number;
+  declinationDeg: number;
+  properMotionRaCosDecMasPerYear: number;
+  properMotionDecMasPerYear: number;
+  parallaxMas: number;
+}
+
+export interface StarCatalogBase {
   name: string;
   /** Optional caller-owned result label; lookup still uses name and aliases. */
   displayName?: string;
   aliases: string[];
-  hip: number;
+  /** Caller-asserted numerical selection tier, not independent scientific approval. */
+  qualityTier?: 'strict' | 'traditional' | 'experimental';
+  /** Caller-asserted differences for individual lookup names. */
+  lookupWarnings?: StarLookupWarning[];
   radialVelocityKmS: number | null;
   magnitude: number | null;
 }
 
-export interface ReviewedStarCatalogEntry extends StarCatalogEntry {
+export type StarCatalogEntry = StarCatalogBase & (
+  | { hip: number; sourceId?: never; astrometry?: never }
+  | { hip?: never; sourceId: string; astrometry: ExplicitStarAstrometry }
+);
+
+export interface StarLookupWarning {
+  name: string;
+  code: 'SWISS_POSITION_MISMATCH' | 'SWISS_LOOKUP_UNAVAILABLE' | 'SWISS_RETURNED_DIFFERENT_NAME';
+  detail: string;
+  status?: 'CALLER_ASSERTED';
+}
+
+export type ReviewedStarCatalogEntry = StarCatalogEntry & {
   identitySource: string;
   displayNameSource?: string;
   qualityDecision: string;
@@ -180,14 +260,15 @@ export interface ReviewedStarCatalogEntry extends StarCatalogEntry {
   magnitudeMissingReason?: string;
   radialVelocitySource?: string;
   radialVelocityMissingReason?: string;
-}
+  astrometrySource?: string;
+};
 
 export interface StarCatalogManifest {
-  schema: 'virgostars-star-manifest/1';
+  schema: 'virgostars-star-manifest/1' | 'virgostars-star-manifest/2';
   reviewer: string;
   astrometrySource: string;
   dataUseDecision: string;
-  qualityPolicy: 'strict' | 'traditional';
+  qualityPolicy: 'strict' | 'traditional' | 'experimental';
   stars: ReviewedStarCatalogEntry[];
 }
 
@@ -198,13 +279,14 @@ export interface HipparcosQualityResult {
   components: number;
   strictEligible: boolean;
   traditionalEligible: boolean;
+  experimentalEligible: boolean;
 }
 
 export function inspectHipparcosQuality(hip2Path: string, hips: number[]): HipparcosQualityResult[];
 
 /** Validates caller assertions; does not itself verify scientific identity or data rights. */
 export function prepareStarCatalog(manifest: StarCatalogManifest): {
-  stars: StarCatalogEntry[]; hips: number[]; qualityPolicy: 'strict' | 'traditional';
+  stars: StarCatalogEntry[]; hips: number[]; qualityPolicy: 'strict' | 'traditional' | 'experimental';
   reviewer: string; astrometrySource: string; dataUseDecision: string;
 };
 
@@ -213,7 +295,7 @@ export function auditStarCatalogCoverage(manifest: StarCatalogManifest, requeste
   schema: 'virgostars-star-coverage/1'; status: 'REVIEW_REQUIRED';
   catalogStarCount: number; requestedCount: number; matchedCount: number; unmatchedCount: number;
   uniqueMatchedStarCount: number; missingMagnitudeCount: number; assumedZeroRadialVelocityCount: number;
-  qualityPolicy: 'strict' | 'traditional'; hip2Eligibility: 'NOT_CHECKED';
+  qualityPolicy: 'strict' | 'traditional' | 'experimental'; hip2Eligibility: 'NOT_CHECKED';
   sourceRights: 'NOT_VERIFIED'; scientificIdentity: 'NOT_VERIFIED';
   results: Array<
     | { requestedName: string; status: 'NOT_IN_MANIFEST' }

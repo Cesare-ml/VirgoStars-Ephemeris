@@ -24,7 +24,9 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Seek};
 
-use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
+use crate::de441::{
+    Body, De441, De441Error, JulianDateTdb, StateVector, StateVectorWithAcceleration,
+};
 
 /// Exact SI speed of light in kilometres per second.
 pub const SPEED_OF_LIGHT_KM_PER_SECOND: f64 = 299_792.458;
@@ -101,6 +103,89 @@ pub fn geocentric_light_time<R: Read + Seek>(
 ) -> Result<GeocentricLightTimeState, LightTimeError> {
     solve(target, observation_epoch, |body, epoch| {
         ephemeris.state(body, Body::SolarSystemBarycenter, epoch)
+    })
+}
+
+/// Experimental first-order refinement for sub-ULP emission time. The stored
+/// emission JD remains rounded; the vector is shifted using the target's
+/// instantaneous barycentric velocity and acceleration. No improvement is
+/// claimed at a kernel coverage boundary or for discontinuous state providers.
+pub(crate) fn refine_emission_rounding(
+    state: GeocentricLightTimeState,
+    target: StateVectorWithAcceleration,
+    earth: StateVectorWithAcceleration,
+    coverage: (JulianDateTdb, JulianDateTdb),
+) -> Result<GeocentricLightTimeState, LightTimeError> {
+    if target.target != state.target
+        || target.center != Body::SolarSystemBarycenter
+        || target.epoch != state.emission_epoch
+        || earth.target != Body::Earth
+        || earth.center != Body::SolarSystemBarycenter
+        || earth.epoch != state.observation_epoch
+        || !coverage.0 .0.is_finite()
+        || !coverage.1 .0.is_finite()
+        || coverage.0 .0 > coverage.1 .0
+        || target
+            .velocity_km_per_day
+            .iter()
+            .chain(target.acceleration_km_per_day2.iter())
+            .chain(earth.velocity_km_per_day.iter())
+            .any(|v| !v.is_finite())
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let range = state.position_km[0]
+        .hypot(state.position_km[1])
+        .hypot(state.position_km[2]);
+    if !range.is_finite() || range == 0.0 || !state.light_time_seconds.is_finite() {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let direction = state.position_km.map(|v| v / range);
+    let dot = |a: [f64; 3], b: [f64; 3]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+    let denom = 1.0 + dot(direction, target.velocity_km_per_day) / C_KM_PER_DAY;
+    if !denom.is_finite() || denom <= 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    // Subtract the two nearby large JDs first: this difference is exact under
+    // Sterbenz's lemma, unlike rounding observation-delay to a single JD.
+    let shift = ((state.observation_epoch.0 - state.emission_epoch.0)
+        - state.light_time_seconds / SECONDS_PER_DAY)
+        / denom;
+    let limit = 4.0 * f64::EPSILON * state.observation_epoch.0.abs();
+    if !shift.is_finite()
+        || shift.abs() > limit
+        || (state.emission_epoch.0 - coverage.0 .0) + shift < 0.0
+        || (coverage.1 .0 - state.emission_epoch.0) - shift < 0.0
+    {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let position: [f64; 3] =
+        std::array::from_fn(|i| state.position_km[i] + target.velocity_km_per_day[i] * shift);
+    let target_velocity: [f64; 3] = std::array::from_fn(|i| {
+        target.velocity_km_per_day[i] + target.acceleration_km_per_day2[i] * shift
+    });
+    let range = position[0].hypot(position[1]).hypot(position[2]);
+    if !range.is_finite() || range == 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let direction = position.map(|v| v / range);
+    let denominator = C_KM_PER_DAY + dot(direction, target_velocity);
+    if !denominator.is_finite() || denominator <= 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let rate =
+        (dot(direction, target_velocity) - dot(direction, earth.velocity_km_per_day)) / denominator;
+    let velocity =
+        std::array::from_fn(|i| target_velocity[i] * (1.0 - rate) - earth.velocity_km_per_day[i]);
+    if !rate.is_finite() || velocity.iter().any(|v: &f64| !v.is_finite()) {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    Ok(GeocentricLightTimeState {
+        position_km: position,
+        velocity_km_per_day: velocity,
+        light_time_seconds: range / SPEED_OF_LIGHT_KM_PER_SECOND,
+        light_time_rate: rate,
+        ..state
     })
 }
 
@@ -257,6 +342,54 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn experimental_refinement_recovers_sub_ulp_emission_offset_and_guards_coverage() {
+        let observation = JulianDateTdb(2_451_545.0);
+        let emission = JulianDateTdb(observation.0 - 1.0 / SECONDS_PER_DAY);
+        let input = GeocentricLightTimeState {
+            target: Body::Moon,
+            observation_epoch: observation,
+            emission_epoch: emission,
+            light_time_seconds: 1.0,
+            light_time_rate: 0.0,
+            position_km: [SPEED_OF_LIGHT_KM_PER_SECOND, 0.0, 0.0],
+            velocity_km_per_day: [86_400.0, 0.0, 0.0],
+        };
+        let target = StateVectorWithAcceleration {
+            target: Body::Moon,
+            center: Body::SolarSystemBarycenter,
+            epoch: emission,
+            position_km: [SPEED_OF_LIGHT_KM_PER_SECOND, 0.0, 0.0],
+            velocity_km_per_day: [86_400.0, 0.0, 0.0],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let earth = StateVectorWithAcceleration {
+            target: Body::Earth,
+            center: Body::SolarSystemBarycenter,
+            epoch: observation,
+            position_km: [0.0; 3],
+            velocity_km_per_day: [0.0; 3],
+            acceleration_km_per_day2: [0.0; 3],
+        };
+        let coverage = (
+            JulianDateTdb(observation.0 - 2.0),
+            JulianDateTdb(observation.0 + 1.0),
+        );
+        let actual = refine_emission_rounding(input, target, earth, coverage).unwrap();
+        let shift = ((observation.0 - emission.0) - 1.0 / SECONDS_PER_DAY)
+            / (1.0 + 86_400.0 / C_KM_PER_DAY);
+        assert_ne!(shift, 0.0);
+        assert_ne!(actual.position_km[0], input.position_km[0]);
+        assert!((actual.position_km[0] - (input.position_km[0] + 86_400.0 * shift)).abs() < 1e-9);
+        assert_eq!(actual.emission_epoch, emission);
+        assert!(refine_emission_rounding(input, target, earth, (observation, coverage.1)).is_err());
+        let wrong_earth = StateVectorWithAcceleration {
+            target: Body::Venus,
+            ..earth
+        };
+        assert!(refine_emission_rounding(input, target, wrong_earth, coverage).is_err());
+    }
 
     const JD: f64 = 2_451_545.0;
 

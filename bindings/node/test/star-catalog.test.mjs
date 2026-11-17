@@ -32,6 +32,21 @@ test('catalog manifests require explicit sources and assumptions before facade u
   assert.equal(result.stars[0].aliases[0], 'Example alias');
 });
 
+test('optional quality tier stays explicit and cannot exceed a strict policy', () => {
+  const input = fixture(); input.stars[0].qualityTier = 'traditional';
+  assert.throws(() => prepareStarCatalog(input), error => error.code === 'E_CATALOG');
+  input.qualityPolicy = 'traditional';
+  assert.equal(prepareStarCatalog(input).stars[0].qualityTier, 'traditional');
+  input.stars[0].qualityTier = 'unreviewed';
+  assert.throws(() => prepareStarCatalog(input), error => error.code === 'E_CATALOG');
+  input.stars[0].qualityTier = 'experimental';
+  assert.throws(() => prepareStarCatalog(input), error => error.code === 'E_CATALOG');
+  input.qualityPolicy = 'experimental';
+  assert.equal(prepareStarCatalog(input).stars[0].qualityTier, 'experimental');
+  delete input.stars[0].qualityTier;
+  assert.throws(() => prepareStarCatalog(input), error => error.code === 'E_CATALOG');
+});
+
 test('catalog manifests reject missing evidence, implicit values and ambiguous identities', () => {
   const bad = (mutate) => { const m = fixture(); mutate(m); assert.throws(() => prepareStarCatalog(m), (e) => e.code === 'E_CATALOG'); };
   bad((m) => { m.stars[0].identitySource = ''; });
@@ -58,6 +73,21 @@ test('a caller-supplied display name changes results without becoming a lookup a
   assert.equal(facade.swe_fixstar_mag('Example').name, 'Example,exFoo');
   assert.equal(facade.swe_fixstar_mag('Example,exFoo').code, 'E_STAR_NOT_FOUND');
   assert.throws(() => createSwissShapedFacade(engine, { starCatalog: [{ ...catalog.stars[0], displayName: '' }] }), (e) => e.code === 'E_CATALOG');
+});
+
+test('Swiss differences are reported for the requested alias without changing other lookups', () => {
+  const input=fixture();
+  input.stars[0].lookupWarnings=[{name:'Example alias',code:'SWISS_POSITION_MISMATCH',detail:'Swiss resolves a different object.'}];
+  const catalog=prepareStarCatalog(input);
+  const engine={fixstarUt:()=>({xx:[1,2,3,4,5,6],rflag:1,timeSource:'test',notes:[]})};
+  const facade=createSwissShapedFacade(engine,{starCatalog:catalog.stars});
+  const warning={...input.stars[0].lookupWarnings[0],status:'CALLER_ASSERTED'};
+  assert.deepEqual(facade.swe_fixstar_ut('example alias',2451545,0).compatibilityWarning,warning);
+  assert.deepEqual(facade.swe_fixstar_mag('EXAMPLE ALIAS').compatibilityWarning,warning);
+  assert.equal(facade.swe_fixstar_ut('Example',2451545,0).compatibilityWarning,undefined);
+  input.stars[0].lookupWarnings[0].name='Unknown';
+  assert.throws(()=>prepareStarCatalog(input),e=>e.code==='E_CATALOG');
+  assert.throws(()=>createSwissShapedFacade(engine,{starCatalog:input.stars}),e=>e.code==='E_CATALOG');
 });
 
 test('coverage reports aliases, missing names and explicit catalog assumptions without approving them', () => {

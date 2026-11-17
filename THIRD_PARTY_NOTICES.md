@@ -1,5 +1,14 @@
 # Third-party scientific reference data
 
+Modification (2026-11-17): `long_term_precession.rs` uses Vondrak et al.
+long-term pole coefficient tables and a conformance numerical matrix from ERFA
+`ltpecl`, `ltpequ` and `t_ltp`; copyright 2013–2023 NumFOCUS Foundation,
+subject to [ERFA's BSD-3 license](third_party/ERFA_LICENSE.txt). Reference:
+<https://github.com/liberfa/erfa>. The model is separately implemented in Rust.
+The experimental extrapolated nutation path also uses the IERS 2003
+fundamental-argument numerical coefficients, checked against ERFA `fal03`,
+`falp03`, `faf03`, `fad03` and `faom03`, under the same notice and license.
+
 `crates/ephemeris-core/tests/geometric_projection.rs` uses a numerical
 position/velocity example and expected spherical results from the ERFA
 `t_pv2s` conformance test. ERFA is copyright 2013–2021 NumFOCUS Foundation;

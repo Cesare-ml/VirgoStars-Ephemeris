@@ -5,6 +5,44 @@ replacement or a scientific acceptance.** This checkpoint supersedes older
 snapshot statements about the absence of a Node binding or any real SPK
 comparison; it does not replace the individual model and validation contracts.
 
+## Owner constraint and date-range check — 2026-11-17
+
+The owner requires all stars covered by Swiss Ephemeris to be included before
+the new engine is put on the main VirgoStars server. The 40-star local catalog
+does not satisfy this gate. The full Swiss catalog and its supported names must
+be inventoried; the 106 legacy-requested names are not assumed to be the
+entire Swiss catalog. Local experimentation is not production activation.
+
+The locally supplied DE441 planetary file covers years 0 and 5000 as raw TDB
+ephemeris data, but the current apparent-position pipeline does not: its Earth
+orientation model rejects both dates. With the default civil-time policy, the
+local Node engine rejects UT dates outside 1900-01-01 through 2027-06-27; an
+optional Delta T table changes the time-data coverage, not the orientation
+model's limit. Real-engine Mars checks on July 1 in years 0 and 5000 returned
+errors in both TDB apparent and default UT calculations; 1900 and 2026 passed.
+Year 0 uses astronomical numbering. Passing a calculation is not a precision
+validation. The backend bridge separately rejects year 0000.
+
+Subsequent inventory, the 195-entry experimental candidate catalog and the
+60-vector JPL comparison are documented in
+[the follow-up](SWISS_INVENTORY_AND_LONG_RANGE_2026-11-17.md). The full Swiss
+catalog and long-range apparent positions remain open.
+
+Later experimental 0–5000 apparent calculations and 196-star candidate work
+are reported in [the next checkpoint](LONG_RANGE_AND_SWISS_ALIASES_2026-11-17.md).
+They do not establish long-range release accuracy or complete Swiss coverage.
+
+The subsequent [706-candidate positional and UT1 checkpoint](SWISS_POSITIONAL_AND_EXPLICIT_UT1_2026-11-17.md)
+adds explicitly supplied Delta T and wider local star wiring; both remain experimental.
+
+The subsequent [alias and long-range grid checkpoint](SWISS_ALIASES_AND_PLANET_GRID_2026-11-17.md)
+records the separate 712-star strict and 919-star traditional-policy candidates.
+
+The latest [emission refinement and name checkpoint](EMISSION_REFINEMENT_AND_NAMES_2026-11-17.md)
+records 929 local star candidates, 567 aliases, and the isolated light-time precision improvement.
+The subsequent [physical-identity and coverage checkpoint](STAR_COVERAGE_PHYSICAL_IDENTITIES_2026-11-17.md)
+records the 1,062-entry experimental mixed catalog and the outstanding lookup gaps.
+
 ## Integrated work
 
 - Started from Claude's `integration/mvp1-apparent-pipeline-20261116`

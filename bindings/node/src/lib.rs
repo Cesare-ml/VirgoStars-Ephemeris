@@ -34,7 +34,8 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    applied_corrections, geocentric_apparent_six_fields_many_with_options,
+    applied_corrections, experimental_apparent_icrf, experimental_long_term_apparent_ecliptic,
+    experimental_long_term_mean_ecliptic, geocentric_apparent_six_fields_many_with_options,
     small_body_apparent_six_fields, tdb_to_tt_jd, ApparentCenter, ApparentFrame, ApparentOptions,
 };
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
@@ -45,14 +46,16 @@ use virgostars_ephemeris_core::civil_apparent::{
     jd_ut_to_tdb_with_policy, jd_ut_to_tdb_with_table, CivilTimeSource,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
+use virgostars_ephemeris_core::delta_t_long_range::espenak_meeus_2006_long_range;
 use virgostars_ephemeris_core::delta_t_table::DeltaTTable;
 use virgostars_ephemeris_core::earth_orientation::ecliptic_nutation;
 use virgostars_ephemeris_core::eclipse::{next_lunar_eclipse, EclipseError, LunarKind, SunMoon};
+use virgostars_ephemeris_core::explicit_delta_t::ut1_to_tdb_with_explicit_delta_t;
 use virgostars_ephemeris_core::fixed_star::{
-    calculate_star_with_solar_deflection, StellarSolarDeflection,
+    calculate_star_with_solar_deflection, FixedStarCatalogEntry, StellarSolarDeflection,
 };
 use virgostars_ephemeris_core::hipparcos::{
-    read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
+    accepts_experimental_hip2, read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
 };
 use virgostars_ephemeris_core::horizon::{
     ecliptic_to_equatorial, equatorial_to_horizontal, estimated_pressure_hpa,
@@ -105,6 +108,78 @@ pub struct CalcResult {
     pub notes: Vec<String>,
 }
 
+/// Geometric Earth-centered ICRF state, without apparent or time corrections.
+#[napi(object)]
+pub struct GeometricStateResult {
+    pub jd_tdb: f64,
+    pub target: String,
+    pub center: String,
+    pub frame: String,
+    pub position_km: Vec<f64>,
+    pub velocity_km_per_day: Vec<f64>,
+}
+
+/// Experimental apparent ICRF vector, not a geometric state.
+#[napi(object)]
+pub struct ApparentIcrfResult {
+    pub jd_tdb: f64,
+    pub target: String,
+    pub center: String,
+    pub frame: String,
+    pub position_km: Vec<f64>,
+    pub velocity_km_per_day: Vec<f64>,
+    pub notes: Vec<String>,
+}
+
+/// Diagnostic only: corrected direction in the mean long-term ecliptic.
+#[napi(object)]
+pub struct LongTermExperimentalResult {
+    pub xx: Vec<f64>,
+    pub target: String,
+    pub time_source: String,
+    pub notes: Vec<String>,
+}
+
+/// The supplied Delta T and uncertainty are caller assertions, not measurements.
+#[napi(object)]
+pub struct LongTermUt1Result {
+    pub xx: Vec<f64>,
+    pub target: String,
+    pub jd_ut1: f64,
+    pub jd_tt: f64,
+    pub jd_tdb: f64,
+    pub delta_t_seconds: f64,
+    pub delta_t_uncertainty_seconds: f64,
+    pub delta_t_source: String,
+    pub notes: Vec<String>,
+}
+
+/// Old historical/projection model; uncertainty is deliberately not supplied.
+#[napi(object)]
+pub struct LongRangeDeltaTEstimate {
+    pub decimal_year: f64,
+    pub seconds: f64,
+    pub model: String,
+    pub notes: Vec<String>,
+}
+
+#[napi]
+pub fn experimental_espenak_meeus_2006_delta_t(
+    decimal_year: f64,
+) -> Result<LongRangeDeltaTEstimate> {
+    let seconds = espenak_meeus_2006_long_range(decimal_year).map_err(|e| fail("E_RANGE", e))?;
+    Ok(LongRangeDeltaTEstimate {
+        decimal_year,
+        seconds,
+        model: "ESPENAK_MEEUS_2006_UNCORRECTED".to_string(),
+        notes: vec![
+            "EXPERIMENTAL estimate, not an observation; uncertainty not supplied".to_string(),
+            "2005 onward uses old projections, not current Earth-orientation data".to_string(),
+            "decimal astronomical year 0 through 3000 only; no UTC conversion".to_string(),
+        ],
+    })
+}
+
 /// Diagnostic flags only; passing a numerical filter is not a review decision.
 #[napi(object)]
 pub struct HipparcosQualityResult {
@@ -113,6 +188,18 @@ pub struct HipparcosQualityResult {
     pub components: u32,
     pub strict_eligible: bool,
     pub traditional_eligible: bool,
+    pub experimental_eligible: bool,
+}
+
+/// Caller-supplied ICRS astrometry, with explicit TDB reference epoch.
+#[napi(object)]
+pub struct ExplicitStarAstrometry {
+    pub epoch_tdb_jd: f64,
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+    pub proper_motion_ra_cos_dec_mas_per_year: f64,
+    pub proper_motion_dec_mas_per_year: f64,
+    pub parallax_mas: f64,
 }
 
 /// Inspect selected external HIP2 records without modifying any Engine.
@@ -139,6 +226,7 @@ pub fn inspect_hipparcos_quality(
             components: u32::from(record.components),
             strict_eligible: Hip2QualityPolicy::STRICT.accepts(&record),
             traditional_eligible: Hip2QualityPolicy::TRADITIONAL_STARS.accepts(&record),
+            experimental_eligible: accepts_experimental_hip2(&record),
         })
         .collect())
 }
@@ -731,6 +819,197 @@ impl Engine {
         self.calc(JulianDateTdb(jd_tdb), ipl, flags, "TDB_INPUT".to_string())
     }
 
+    /// Diagnostic geometric state in ICRF axes for explicit TDB Julian dates.
+    /// No civil-time, light-time, aberration, precession or nutation is applied.
+    #[napi]
+    pub fn geometric_state_tdb(&mut self, jd_tdb: f64, ipl: i32) -> Result<GeometricStateResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail(
+                "E_UNSUPPORTED_BODY",
+                "geocentric geometric target must be 0..=9",
+            ));
+        }
+        let body = body_from_ipl(ipl)?;
+        let state = self
+            .ephemeris
+            .state(body, Body::Earth, JulianDateTdb(jd_tdb))
+            .map_err(|e| fail("E_CALC", e))?;
+        Ok(GeometricStateResult {
+            jd_tdb,
+            target: format!("{body:?}"),
+            center: "Earth".to_string(),
+            frame: "ICRF".to_string(),
+            position_km: state.position_km.to_vec(),
+            velocity_km_per_day: state.velocity_km_per_day.to_vec(),
+        })
+    }
+
+    /// Diagnostic apparent ICRF vector with reception time explicitly in TDB.
+    #[napi]
+    pub fn experimental_apparent_icrf_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<ApparentIcrfResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail(
+                "E_UNSUPPORTED_BODY",
+                "geocentric target must be 0..=9",
+            ));
+        }
+        let target = body_from_ipl(ipl)?;
+        let state = experimental_apparent_icrf(&mut self.ephemeris, target, JulianDateTdb(jd_tdb))
+            .map_err(|e| fail("E_CALC", e))?;
+        Ok(ApparentIcrfResult {
+            jd_tdb,
+            target: format!("{target:?}"),
+            center: "Earth".to_string(),
+            frame: "ICRF".to_string(),
+            position_km: state.position_km.to_vec(),
+            velocity_km_per_day: state.velocity_km_per_tdb_day.to_vec(),
+            notes: vec![
+                "EXPERIMENTAL; light-time, solar deflection and annual aberration; airless"
+                    .to_string(),
+                "position magnitude is light-time range; velocities are derivatives per TDB day"
+                    .to_string(),
+                "first-order sub-ULP emission-time refinement; emission JD remains rounded"
+                    .to_string(),
+            ],
+        })
+    }
+
+    /// Explicit approximation, not the regular true apparent-position API.
+    #[napi]
+    pub fn experimental_long_term_mean_ecliptic_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<LongTermExperimentalResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let f = experimental_long_term_mean_ecliptic(
+            &mut self.ephemeris,
+            target,
+            JulianDateTdb(jd_tdb),
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        Ok(LongTermExperimentalResult {
+            xx: vec![
+                f.longitude_deg,
+                f.latitude_deg,
+                f.distance_au,
+                f.longitude_speed_deg_per_tdb_day,
+                f.latitude_speed_deg_per_tdb_day,
+                f.distance_speed_au_per_tdb_day,
+            ],
+            target: format!("{target:?}"),
+            time_source: "TDB_INPUT".to_string(),
+            notes: vec![
+                "EXPERIMENTAL: Vondrak long-term mean ecliptic; nutation omitted".to_string(),
+                "geocentric; light-time, solar deflection and annual aberration applied"
+                    .to_string(),
+                "first-order sub-ULP emission-time refinement".to_string(),
+                "not a true apparent ecliptic of date; no UT or Delta T conversion".to_string(),
+            ],
+        })
+    }
+
+    /// Explicit approximate apparent position; extrapolated nutation.
+    #[napi]
+    pub fn experimental_long_term_apparent_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<LongTermExperimentalResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let f = experimental_long_term_apparent_ecliptic(
+            &mut self.ephemeris,
+            target,
+            JulianDateTdb(jd_tdb),
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        Ok(LongTermExperimentalResult {
+            xx: vec![f.longitude_deg, f.latitude_deg, f.distance_au, f.longitude_speed_deg_per_tdb_day,
+                f.latitude_speed_deg_per_tdb_day, f.distance_speed_au_per_tdb_day],
+            target: format!("{target:?}"), time_source: "TDB_INPUT".to_string(),
+            notes: vec!["EXPERIMENTAL: Vondrak precession with 77-term extrapolated nutation; accuracy not established".to_string(),
+                "geocentric; light-time, solar deflection and annual aberration applied".to_string(),
+                "first-order sub-ULP emission-time refinement".to_string(),
+                "no UT or Delta T conversion; not selected by calcTdb".to_string()],
+        })
+    }
+
+    /// Explicit UT1 conversion for the isolated long-range apparent experiment.
+    /// UT1 is not UTC, and the caller is responsible for the Delta T estimate.
+    #[napi]
+    pub fn experimental_long_term_apparent_ut1(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        delta_t_uncertainty_seconds: f64,
+        delta_t_source: String,
+    ) -> Result<LongTermUt1Result> {
+        if delta_t_source.trim().is_empty() || delta_t_source.len() > 200 {
+            return Err(fail(
+                "E_RANGE",
+                "a Delta T source label (1..200 bytes) is required",
+            ));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let epoch =
+            ut1_to_tdb_with_explicit_delta_t(jd_ut1, delta_t_seconds, delta_t_uncertainty_seconds)
+                .map_err(|e| fail("E_RANGE", e))?;
+        let target = body_from_ipl(ipl)?;
+        let f = experimental_long_term_apparent_ecliptic(&mut self.ephemeris, target, epoch.jd_tdb)
+            .map_err(|e| fail("E_CALC", e))?;
+        Ok(LongTermUt1Result {
+            xx: vec![
+                f.longitude_deg,
+                f.latitude_deg,
+                f.distance_au,
+                f.longitude_speed_deg_per_tdb_day,
+                f.latitude_speed_deg_per_tdb_day,
+                f.distance_speed_au_per_tdb_day,
+            ],
+            target: format!("{target:?}"),
+            jd_ut1: epoch.jd_ut1,
+            jd_tt: epoch.jd_tt,
+            jd_tdb: epoch.jd_tdb.0,
+            delta_t_seconds,
+            delta_t_uncertainty_seconds,
+            delta_t_source: delta_t_source.trim().to_owned(),
+            notes: vec![
+                "EXPERIMENTAL: UT1 input; caller-asserted Delta T and uncertainty".to_string(),
+                "Vondrak precession and extrapolated 77-term nutation; accuracy not established"
+                    .to_string(),
+                "TT to TDB uses one periodic term; rates are per TDB day".to_string(),
+                "first-order sub-ULP emission-time refinement".to_string(),
+                "uncertainty is not converted to a planetary position error; not UTC or local time"
+                    .to_string(),
+            ],
+        })
+    }
+
     /// Load measured/predicted ΔT from three caller-supplied USNO files
     /// (`deltat.data`, `historic_deltat.data` and optionally `deltat.preds`). From
     /// then on `calc_ut` converts UT with this table (range: the table, from
@@ -1130,7 +1409,8 @@ impl Engine {
     }
 
     /// Load and validate Hipparcos records for the given HIP numbers from a
-    /// caller-supplied `hip2.dat`. `policy` is `"strict"` or `"traditional"`.
+    /// caller-supplied `hip2.dat`. The broad `"experimental"` policy also
+    /// admits low-S/N and multiple-star solutions with explicit limitations.
     /// A requested star that fails the policy or is absent is an error; the
     /// previous selection is kept untouched on failure. Returns the count.
     #[napi]
@@ -1140,16 +1420,17 @@ impl Engine {
         hips: Vec<u32>,
         policy: String,
     ) -> Result<u32> {
-        let policy = match policy.as_str() {
-            "strict" => Hip2QualityPolicy::STRICT,
-            "traditional" => Hip2QualityPolicy::TRADITIONAL_STARS,
+        let accepts: fn(&Hip2Record) -> bool = match policy.as_str() {
+            "strict" => |r: &Hip2Record| Hip2QualityPolicy::STRICT.accepts(r),
+            "traditional" => |r: &Hip2Record| Hip2QualityPolicy::TRADITIONAL_STARS.accepts(r),
+            "experimental" => accepts_experimental_hip2,
             other => return Err(fail("E_RANGE", format!("unknown policy {other:?}"))),
         };
         let file = File::open(&hip2_path).map_err(|e| fail("E_CATALOG_FILE", e))?;
         let records = read_hip2_selected(BufReader::new(file), &hips)
             .map_err(|e| fail("E_CATALOG_FILE", e))?;
         for record in &records {
-            if !policy.accepts(record) {
+            if !accepts(record) {
                 return Err(fail(
                     "E_STAR_QUALITY",
                     format!(
@@ -1216,6 +1497,9 @@ impl Engine {
         notes.push(
             "Hipparcos 2007 astrometry, rectilinear motion, annual parallax and aberration".into(),
         );
+        if !Hip2QualityPolicy::TRADITIONAL_STARS.accepts(&record) {
+            notes.push("EXPERIMENTAL low-quality or multiple-star solution; extra astrometric parameters not applied".into());
+        }
         if deflection == StellarSolarDeflection::PointMass {
             notes.push("first-order solar light deflection".into());
         }
@@ -1248,6 +1532,90 @@ impl Engine {
     ) -> Result<CalcResult> {
         let (tdb, _, source) = self.epoch_from_ut(jd_ut)?;
         let mut result = self.fixstar_tdb(hip, rv_km_s, tdb.0, flags)?;
+        result.time_source = source;
+        Ok(result)
+    }
+
+    /// Experimental non-HIP object with caller-supplied ICRS catalog values.
+    /// Null radial velocity is an explicit zero assumption, not a measurement.
+    #[napi]
+    pub fn fixstar_explicit_tdb(
+        &mut self,
+        astrometry: ExplicitStarAstrometry,
+        rv_km_s: Option<f64>,
+        jd_tdb: f64,
+        flags: i32,
+    ) -> Result<CalcResult> {
+        check_flags(flags)?;
+        if flags & (FLAG_HELCTR | FLAG_EQUATORIAL) != 0 {
+            return Err(fail(
+                "E_UNSUPPORTED_FLAG",
+                "fixed stars support neither heliocentric nor equatorial flags",
+            ));
+        }
+        if !jd_tdb.is_finite() || rv_km_s.is_some_and(|v| !v.is_finite()) {
+            return Err(fail("E_RANGE", "non-finite epoch or radial velocity"));
+        }
+        let entry = FixedStarCatalogEntry {
+            epoch_tdb: JulianDateTdb(astrometry.epoch_tdb_jd),
+            right_ascension_deg: astrometry.right_ascension_deg,
+            declination_deg: astrometry.declination_deg,
+            proper_motion_ra_cos_dec_mas_per_year: astrometry.proper_motion_ra_cos_dec_mas_per_year,
+            proper_motion_dec_mas_per_year: astrometry.proper_motion_dec_mas_per_year,
+            parallax_mas: astrometry.parallax_mas,
+            radial_velocity_km_per_second: rv_km_s.unwrap_or(0.0),
+        };
+        let tt = tdb_to_tt_jd(jd_tdb).map_err(|e| fail("E_RANGE", e))?;
+        let deflection = if flags & FLAG_NOGDEFL == 0 {
+            StellarSolarDeflection::PointMass
+        } else {
+            StellarSolarDeflection::Omit
+        };
+        let p = calculate_star_with_solar_deflection(
+            &mut self.ephemeris,
+            entry,
+            tt,
+            JulianDateTdb(jd_tdb),
+            deflection,
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        let mut notes = vec!["EXPERIMENTAL caller-supplied ICRS astrometry; rectilinear motion, parallax and aberration".to_string()];
+        if rv_km_s.is_none() {
+            notes
+                .push("radial velocity assumed to be 0 km/s (no measurement supplied)".to_string());
+        }
+        if deflection == StellarSolarDeflection::PointMass {
+            notes.push("first-order solar light deflection".to_string());
+        }
+        Ok(CalcResult {
+            xx: zero_speeds_unless_requested(
+                [
+                    p.longitude_deg,
+                    p.latitude_deg,
+                    p.distance_au,
+                    p.longitude_speed_deg_per_tdb_day,
+                    p.latitude_speed_deg_per_tdb_day,
+                    p.distance_speed_au_per_tdb_day,
+                ],
+                flags,
+            ),
+            rflag: (flags & (FLAG_SPEED | FLAG_NOGDEFL)) | FLAG_JPLEPH,
+            time_source: "TDB_INPUT".to_string(),
+            notes,
+        })
+    }
+
+    /// Same explicit ICRS entry at UT under the engine's current time policy.
+    #[napi]
+    pub fn fixstar_explicit_ut(
+        &mut self,
+        astrometry: ExplicitStarAstrometry,
+        rv_km_s: Option<f64>,
+        jd_ut: f64,
+        flags: i32,
+    ) -> Result<CalcResult> {
+        let (tdb, _, source) = self.epoch_from_ut(jd_ut)?;
+        let mut result = self.fixstar_explicit_tdb(astrometry, rv_km_s, tdb.0, flags)?;
         result.time_source = source;
         Ok(result)
     }

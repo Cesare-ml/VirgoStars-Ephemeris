@@ -294,7 +294,65 @@ fn delaunay_arguments(t: f64) -> [f64; 5] {
 pub fn iau2000b_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError> {
     let t = validate_tt_jd(tt_jd)?;
     let a = delaunay_arguments(t);
+    Ok(evaluate_nutation_series(tt_jd, t, a))
+}
 
+/// Experimental extrapolation of the 77-term series using full IERS 2003
+/// polynomial fundamental arguments. This is not standard IAU 2000B and has no
+/// stated physical accuracy outside its modern epoch. Validated only for
+/// implementation agreement on explicit samples, never selected implicitly.
+pub fn experimental_extrapolated_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError> {
+    if !tt_jd.is_finite() {
+        return Err(OrientationError::NonFinite { field: "tt_jd" });
+    }
+    let epj = 2000.0 + (tt_jd - J2000_TT_JD) / 365.25;
+    if !(0.0..=5001.0).contains(&epj) {
+        return Err(OrientationError::UnsupportedEpoch { epoch_tt_jd: tt_jd });
+    }
+    let t = (tt_jd - J2000_TT_JD) / DAYS_PER_JULIAN_CENTURY;
+    let coefficients: [[f64; 5]; 5] = [
+        [
+            485868.249036,
+            1717915923.2178,
+            31.8792,
+            0.051635,
+            -0.00024470,
+        ],
+        [
+            1287104.793048,
+            129596581.0481,
+            -0.5532,
+            0.000136,
+            -0.00001149,
+        ],
+        [
+            335779.526232,
+            1739527262.8478,
+            -12.7512,
+            -0.001037,
+            0.00000417,
+        ],
+        [
+            1072260.703692,
+            1602961601.2090,
+            -6.3706,
+            0.006593,
+            -0.00003169,
+        ],
+        [450160.398036, -6962890.5431, 7.4722, 0.007702, -0.00005939],
+    ];
+    let args = std::array::from_fn(|i| {
+        coefficients[i]
+            .iter()
+            .rev()
+            .fold(0.0, |acc, coefficient| acc * t + coefficient)
+            .rem_euclid(TURN_ARCSEC)
+            * ARCSEC_TO_RAD
+    });
+    Ok(evaluate_nutation_series(tt_jd, t, args))
+}
+
+fn evaluate_nutation_series(tt_jd: f64, t: f64, a: [f64; 5]) -> NutationAngles {
     let mut longitude_sum = 0.0;
     let mut obliquity_sum = 0.0;
 
@@ -314,14 +372,14 @@ pub fn iau2000b_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError>
     let d_psi_rad = longitude_sum * UNIT_TO_RAD - 0.135 * MILLIARCSEC_TO_RAD;
     let d_epsilon_rad = obliquity_sum * UNIT_TO_RAD + 0.388 * MILLIARCSEC_TO_RAD;
 
-    Ok(NutationAngles {
+    NutationAngles {
         tt_jd,
         d_psi_rad,
         d_epsilon_rad,
         d_psi_arcsec: d_psi_rad / ARCSEC_TO_RAD,
         d_epsilon_arcsec: d_epsilon_rad / ARCSEC_TO_RAD,
         terms: IAU2000B_TERMS.len(),
-    })
+    }
 }
 
 fn poly(t: f64, coefficients: &[f64]) -> f64 {

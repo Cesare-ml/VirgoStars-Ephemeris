@@ -1,6 +1,8 @@
 # Rust build output
 /target/
 **/target/
+# Caller-supplied data and generated local diagnostics, not distributed.
+/local-data/
 *.rs.bk
 
 # External kernels and Swiss ephemeris data are not distributed here.
