@@ -98,6 +98,21 @@ test('Swiss magnitude discrepancies are surfaced only for the affected lookup', 
   assert.equal(facade.swe_fixstar_mag('Example').compatibilityWarning,undefined);
 });
 
+test('nearby designations resolve to distinct objects and preserve lookup warnings', () => {
+  const input=fixture();
+  input.stars[0].aliases=['Example three'];
+  input.stars.push({...input.stars[0],name:'Example four',aliases:[],hip:456,
+    lookupWarnings:[{name:'Example four',code:'SWISS_RETURNED_DIFFERENT_NAME',detail:'Reference uses a name assigned to the other object.'}]});
+  const calls=[];
+  const engine={fixstarUt:(hip,rv,jd,flags)=>{calls.push({hip,rv,jd,flags});return {xx:[hip,0,1,0,0,0],rflag:1};}};
+  const facade=createSwissShapedFacade(engine,{starCatalog:prepareStarCatalog(input).stars});
+  const a=facade.swe_fixstar_ut('Example three',2451545,0),b=facade.swe_fixstar_ut('Example four',2451545,0);
+  assert.equal(a.longitude,123);assert.equal(b.longitude,456);
+  assert.deepEqual(calls.map(c=>c.hip),[123,456]);
+  assert.equal(a.compatibilityWarning,undefined);
+  assert.equal(b.compatibilityWarning.code,'SWISS_RETURNED_DIFFERENT_NAME');
+});
+
 test('coverage reports aliases, missing names and explicit catalog assumptions without approving them', () => {
   const manifest = fixture();
   manifest.stars.push({ name: 'Second', aliases: [], hip: 456, identitySource: 'Fictional', qualityDecision: 'Fictional',

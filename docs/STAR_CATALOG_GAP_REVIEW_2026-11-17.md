@@ -1,5 +1,8 @@
 # Stellar lookup gap review — 2026-11-17
 
+**Follow-up:** the [component and designation review](STAR_COMPONENT_DESIGNATIONS_2026-11-17.md)
+adds six local designations with explicit identity and compatibility notes.
+
 **Experimental, caller-asserted candidates only.** This continues the
 [catalog recovery](STAR_CATALOG_RECOVERY_2026-11-17.md). No main-server
 activation, full-catalog approval or scientific accuracy guarantee is implied.
