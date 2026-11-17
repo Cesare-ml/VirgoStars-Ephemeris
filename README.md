@@ -63,6 +63,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [MVP-1 comparison with JPL Horizons: separations to 8 µas, frame difference understood](docs/MVP1_HORIZONS_COMPARISON_2026-11-16.md)
 - [MVP-1 Swiss-style facade shape verified against swisseph 0.5.17 (listed calls)](docs/MVP1_SWISSEPH_SHAPE_2026-11-16.md)
 - [MVP-1 measured ΔT (USNO files supplied by the caller) for UT inputs; Moon within 0.02″ of the reference 1972–2018](docs/MVP1_DELTA_T_MEASURED_2026-11-16.md)
+- [Experimental polar Ascendant rising-branch correction, auxiliary angles preserved; scientific review pending](docs/HOUSE_ASCENDANT_POLAR_BRANCH_2026-11-18.md)
 - [Heliocentric and equatorial output compared with swisseph 0.5.17](docs/MVP1_HELIOCENTRIC_EQUATORIAL_2026-11-16.md)
 - [Lunar nodes and apogees (bodies 10-13) compared with swisseph 0.5.17](docs/MVP2_LUNAR_POINTS_2026-11-16.md)
 - [Chiron from a JPL small-body SPK (new type 21 reader), compared with Horizons and swisseph](docs/MVP2_CHIRON_2026-11-16.md)
