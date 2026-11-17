@@ -1,5 +1,8 @@
 # Pulsar and historical names — local review, 2026-11-17
 
+For subsequent local candidates see
+[STAR_CATALOG_K01PUP_ETACAR_2026-11-17.md](STAR_CATALOG_K01PUP_ETACAR_2026-11-17.md).
+
 **Experimental caller-supplied catalog; not a production release.** Names and
 measurements below are local assertions, not bundled third-party datasets.
 
