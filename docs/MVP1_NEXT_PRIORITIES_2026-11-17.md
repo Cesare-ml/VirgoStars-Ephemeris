@@ -1,5 +1,10 @@
 # MVP 1 — status and proposed priorities, 2026-11-17
 
+**Owner update:** the requested planetary range is now 13000 BCE through
+3999 CE. An [initial extended-range experiment and diagnostics](PLANET_VALIDATION_13000BCE_3999_2026-11-17.md)
+supersede the narrower year 0–3000 goal in the historical proposal below. The
+extension is experimental and has not passed scientific acceptance.
+
 **Status: experimental library and locally integrated Desktop provider; no
 scientific acceptance or main-server replacement.** This is a work order and
 acceptance proposal based on the current source and existing local evidence,
