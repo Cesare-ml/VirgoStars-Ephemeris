@@ -16,6 +16,7 @@
 //!
 //! This is calendar arithmetic on a specified time scale, not a conversion
 //! between time scales. UTC and leap seconds are deliberately not supported.
+// Modification (2026-11-15): preserve canonical civil minute labels across split-JD round-trips.
 
 use std::error::Error;
 use std::fmt;
@@ -276,10 +277,28 @@ impl JulianDate {
                 i64::from(month_days(calendar, lo, month).expect("valid calendar month"));
             month += 1;
         }
-        let seconds = self.midnight_fraction * SECONDS_PER_DAY;
+        let mut seconds = self.midnight_fraction * SECONDS_PER_DAY;
         if seconds >= SECONDS_PER_DAY {
             return Err(CalendarError::UnrepresentableTime);
         }
+
+        // A civil minute tick converted to a day fraction and back can land
+        // a few binary64 ULPs below the exact minute (for example 00:13:00
+        // may decode as 00:12:59.999999999999886). Snap only values within
+        // four ULPs of one normalized day of an in-day minute boundary.
+        // This is below the resolution needed to distinguish such inputs
+        // from the exact tick; ordinary just-before-minute instants remain
+        // unchanged. The final 24:00 boundary is deliberately not snapped:
+        // a JulianDate stores one civil day only and must not decode as hour 24.
+        let nearest_minute = (seconds / 60.0).round();
+        let minute_tick = nearest_minute * 60.0;
+        let minute_tick_tolerance = 4.0 * f64::EPSILON * SECONDS_PER_DAY;
+        if (0.0..1440.0).contains(&nearest_minute)
+            && (seconds - minute_tick).abs() <= minute_tick_tolerance
+        {
+            seconds = minute_tick;
+        }
+
         let hour = (seconds / 3600.0).floor() as u8;
         let remaining = seconds - f64::from(hour) * 3600.0;
         let minute = (remaining / 60.0).floor() as u8;

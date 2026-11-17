@@ -15,6 +15,7 @@
 //! Calendar boundary regression tests with externally published Julian-day anchors.
 //!
 //! Calendar arithmetic only; no UTC/leap-second or dynamical-time conversion.
+// Modification (2026-11-15): cover canonical minute ticks and just-before-minute boundaries.
 
 use virgostars_ephemeris_core::calendar::{
     Calendar, CalendarDateTime, CalendarError, JulianDate, TimeScale,
@@ -148,5 +149,75 @@ fn invalid_calendar_fields_and_fractional_julian_dates_are_rejected() {
             JulianDate::new(2_451_545, bad, TimeScale::Tt),
             Err(CalendarError::InvalidFraction)
         );
+    }
+}
+
+#[test]
+fn every_exact_minute_tick_round_trips_canonically_for_both_calendars_and_all_scales() {
+    for calendar in [Calendar::ProlepticGregorian, Calendar::ProlepticJulian] {
+        for scale in [
+            TimeScale::Tai,
+            TimeScale::Tt,
+            TimeScale::Tdb,
+            TimeScale::Ut1,
+        ] {
+            for minute_of_day in 0..(24 * 60) {
+                let original = CalendarDateTime {
+                    year: 2026,
+                    month: 11,
+                    day: 15,
+                    hour: (minute_of_day / 60) as u8,
+                    minute: (minute_of_day % 60) as u8,
+                    second: 0.0,
+                    scale,
+                };
+                let recovered = original
+                    .to_julian_date(calendar)
+                    .unwrap()
+                    .to_calendar(calendar)
+                    .unwrap();
+                assert_eq!(
+                    recovered, original,
+                    "calendar={calendar:?}, scale={scale:?}, minute_of_day={minute_of_day}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn just_before_minute_is_not_rounded_forward_to_the_next_minute() {
+    for calendar in [Calendar::ProlepticGregorian, Calendar::ProlepticJulian] {
+        for scale in [
+            TimeScale::Tai,
+            TimeScale::Tt,
+            TimeScale::Tdb,
+            TimeScale::Ut1,
+        ] {
+            let just_before = CalendarDateTime {
+                year: 2026,
+                month: 11,
+                day: 15,
+                hour: 0,
+                minute: 12,
+                second: 59.999_999,
+                scale,
+            };
+            let recovered = just_before
+                .to_julian_date(calendar)
+                .unwrap()
+                .to_calendar(calendar)
+                .unwrap();
+            assert_eq!(recovered.hour, 0, "calendar={calendar:?}, scale={scale:?}");
+            assert_eq!(
+                recovered.minute, 12,
+                "calendar={calendar:?}, scale={scale:?}"
+            );
+            assert!(
+                recovered.second >= 59.999_998 && recovered.second < 60.0,
+                "calendar={calendar:?}, scale={scale:?}, got {}",
+                recovered.second
+            );
+        }
     }
 }
