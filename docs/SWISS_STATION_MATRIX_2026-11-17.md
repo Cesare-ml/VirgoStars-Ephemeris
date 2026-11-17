@@ -4,6 +4,9 @@
 extends [the initial eight station comparisons](SWISS_APPARENT_RATE_DISCREPANCIES_2026-11-17.md).
 No engine behavior, event API or production configuration is changed.
 
+The [subsequent numerical-stability investigation](STATION_NUMERICAL_STABILITY_2026-11-17.md)
+examines short-window fluctuations and Horizons direction derivatives.
+
 ## Scope and method
 
 For each of Mercury, Venus and the Mars–Pluto system barycenters, we searched
