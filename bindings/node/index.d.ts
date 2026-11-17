@@ -238,6 +238,17 @@ export interface StarCatalogBase {
   lookupWarnings?: StarLookupWarning[];
   radialVelocityKmS: number | null;
   magnitude: number | null;
+  /** Optional caller-asserted provenance for an approximate integrated magnitude. */
+  magnitudeInfo?: StarMagnitudeInfo;
+}
+
+export interface StarMagnitudeInfo {
+  kind: 'INTEGRATED_APPARENT';
+  band: 'VISUAL' | 'UNSPECIFIED';
+  quality: 'APPROXIMATE';
+  aperture: 'UNSPECIFIED';
+  source: string;
+  status?: 'CALLER_ASSERTED';
 }
 
 export type StarCatalogEntry = StarCatalogBase & (

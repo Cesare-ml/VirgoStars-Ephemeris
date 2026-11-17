@@ -13,6 +13,19 @@ function nonempty(value, label) {
   return value.trim();
 }
 
+/** Explicit provenance for approximate integrated brightness, asserted by the caller. */
+function validateMagnitudeInfo(info, magnitude, label = 'magnitudeInfo') {
+  if (info === undefined) return undefined;
+  if (!info || typeof info !== 'object' || Array.isArray(info) || !Number.isFinite(magnitude)
+      || info.kind !== 'INTEGRATED_APPARENT' || !['VISUAL', 'UNSPECIFIED'].includes(info.band)
+      || info.quality !== 'APPROXIMATE' || info.aperture !== 'UNSPECIFIED'
+      || typeof info.source !== 'string' || !info.source.trim() || info.source.length > 500
+      || Object.keys(info).some(key => !['kind','band','quality','aperture','source','status'].includes(key))
+      || (info.status !== undefined && info.status !== 'CALLER_ASSERTED')) fail(`${label} is invalid`);
+  return { kind:info.kind, band:info.band, quality:info.quality, aperture:info.aperture,
+    source:info.source.trim(), status:'CALLER_ASSERTED' };
+}
+
 /** Warnings describe a caller-asserted lookup difference for a specific name. */
 function validateLookupWarnings(warnings, names, label = 'lookupWarnings') {
   if (warnings === undefined) return undefined;
@@ -106,9 +119,11 @@ function prepareStarCatalog(manifest) {
         nonempty(entry[source], `${label}.${source}`);
       }
     }
+    const magnitudeInfo = validateMagnitudeInfo(entry.magnitudeInfo, entry.magnitude, `${label}.magnitudeInfo`);
     return { name, aliases, ...(displayName === undefined ? {} : { displayName }),
       ...(entry.qualityTier === undefined ? {} : { qualityTier: entry.qualityTier }),
       ...(lookupWarnings === undefined ? {} : { lookupWarnings }),
+      ...(magnitudeInfo === undefined ? {} : { magnitudeInfo }),
       ...(direct ? {sourceId, astrometry} : {hip:entry.hip}), radialVelocityKmS: entry.radialVelocityKmS, magnitude: entry.magnitude };
   });
   return { stars, hips: [...hips], qualityPolicy: manifest.qualityPolicy, reviewer, astrometrySource, dataUseDecision };
@@ -151,4 +166,4 @@ function auditStarCatalogCoverage(manifest, requestedNames) {
   };
 }
 
-module.exports = { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry };
+module.exports = { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry, validateMagnitudeInfo };
