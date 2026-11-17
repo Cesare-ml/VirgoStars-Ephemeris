@@ -113,7 +113,9 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let summary = result?;
     println!(
-        "stored_jd_tdb=[{}, {}] records={} bytes={} output={}",
+        "requested_jd_tdb=[{}, {}) stored_jd_tdb=[{}, {}] records={} bytes={} output={}",
+        summary.requested_start_tdb.0,
+        summary.requested_end_exclusive_tdb.0,
         summary.stored_start_tdb.0,
         summary.stored_end_tdb.0,
         summary.coefficient_records,
