@@ -42,6 +42,24 @@ jobs:
       - name: Run standalone JavaScript regression tests
         run: npm test
 
+  node-binding:
+    name: Native Node binding tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: bindings/node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build native binding with locked dependencies
+        run: npm run build
+      - name: Run Node binding tests
+        run: npm test
+
   rust:
     name: Rust core checks (when available)
     runs-on: ubuntu-latest
