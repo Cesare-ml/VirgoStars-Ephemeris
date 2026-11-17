@@ -1,5 +1,8 @@
 # Experimental cluster magnitudes and additional designations — 2026-11-17
 
+For the subsequent local identity review see
+[STAR_CATALOG_PULSAR_AND_NAMES_2026-11-17.md](STAR_CATALOG_PULSAR_AND_NAMES_2026-11-17.md).
+
 **Local experimental work; the Swiss inventory and stellar workflow remain incomplete.**
 These caller-supplied manifests and reports are ignored by Git and are not
 activated in the main server. A covered lookup is not a validated object.
