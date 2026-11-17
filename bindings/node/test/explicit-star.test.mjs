@@ -22,6 +22,16 @@ test('schema /2 accepts explicit ICRS inputs and rejects ambiguous or invalid as
     m=>{m.stars[0].astrometry={...astro,parallaxMas:0};},m=>{m.stars[0].astrometry={...astro,rightAscensionDeg:360};},
   ]){const m=manifest();mutate(m);assert.throws(()=>prepareStarCatalog(m),e=>e.code==='E_CATALOG');}
 });
+test('explicit object center retains its warning and reports missing magnitude',()=>{
+  const input=manifest(),star=input.stars[0];star.displayName='Fictional cluster center';star.displayNameSource='fixture';
+  star.magnitude=null;delete star.magnitudeSource;star.magnitudeMissingReason='integrated magnitude unavailable';
+  star.lookupWarnings=[{name:'Direct alias',code:'SWISS_POSITION_MISMATCH',detail:'fictional center differs from reference'}];
+  const engine={fixstarExplicitUt:()=>({xx:[30,15,1,0,0,0],rflag:1})};
+  const facade=createSwissShapedFacade(engine,{starCatalog:prepareStarCatalog(input).stars});
+  const result=facade.swe_fixstar_ut('Direct alias',2451545,0);
+  assert.equal(result.name,'Fictional cluster center');assert.equal(result.compatibilityWarning.code,'SWISS_POSITION_MISMATCH');
+  assert.equal(facade.swe_fixstar_mag('Direct alias').code,'E_STAR_MAGNITUDE');
+});
 const {DE441_PATH,HIP2_PATH}=process.env;
 test('explicit astrometry follows the same Rust calculation as an equivalent HIP2 record',
   {skip:DE441_PATH&&HIP2_PATH?false:'DE441_PATH and HIP2_PATH required'},()=>{
