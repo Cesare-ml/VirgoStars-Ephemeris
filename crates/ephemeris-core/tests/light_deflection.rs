@@ -11,6 +11,7 @@
 // Contributors retain applicable rights in their own contributions under the terms of this License.
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+// Modification (2026-11-18): add a near-limb analytic rate sensitivity check.
 //! Contract tests for first-order solar light deflection.
 //!
 //! The analytic checks follow the closed form for a source at infinity:
@@ -66,6 +67,26 @@ fn ninety_degrees_at_one_au_is_four_milliarcseconds() {
     let (p, q, e) = geometry(std::f64::consts::FRAC_PI_2);
     let arcsec = norm(solar_deflection_delta(p, q, e, 1.0).unwrap()) * 206_264.806_247;
     assert!((arcsec - 0.004_072).abs() < 1.0e-5, "{arcsec}");
+}
+
+#[test]
+fn near_limb_centered_rate_converges_to_closed_form_derivative() {
+    // Synthetic source at infinity with linearly changing elongation. For
+    // A=2GM/(c² E), d[A cot(psi/2)]/dt = -A psi_dot/(2 sin²(psi/2)).
+    // This establishes stencil sensitivity, not the accuracy of any real ray.
+    let psi = 0.267_f64.to_radians();
+    let psi_dot = 1.0_f64.to_radians();
+    let amplitude = |t: f64| {
+        let (p, q, e) = geometry(psi + psi_dot * t);
+        norm(solar_deflection_delta(p, q, e, 1.0).unwrap())
+    };
+    let exact = -SUN_SCHWARZSCHILD_RADIUS_AU * psi_dot / (2.0 * (psi / 2.0).sin().powi(2));
+    let centered = |h: f64| (amplitude(h) - amplitude(-h)) / (2.0 * h);
+    let h = 1.0 / 256.0;
+    let coarse = (centered(h) - exact).abs();
+    let fine = (centered(h / 4.0) - exact).abs();
+    assert!(coarse > 1e-11, "coarse error unexpectedly small: {coarse}");
+    assert!(fine < coarse * 0.07, "coarse={coarse}, fine={fine}");
 }
 
 #[test]

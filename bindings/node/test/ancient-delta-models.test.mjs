@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const {parabolas}=createRequire(import.meta.url)('../scripts/audit-ancient-delta-models.cjs');
-const {swissAtTt}=createRequire(import.meta.url)('../scripts/compare-horizons-ancient-deltat.cjs');
+const {swissAtTt,yearsForGrid}=createRequire(import.meta.url)('../scripts/compare-horizons-ancient-deltat.cjs');
 test('published exploratory parabolas preserve their mathematical anchors',()=>{
   assert.equal(parabolas(1820).espenakMeeus2006Seconds,-20);
   assert.equal(parabolas(1825).stephenson2016Seconds,-320);
@@ -18,4 +18,13 @@ test('fixed-TT inversion evaluates Delta T at the implied UT1 epoch',()=>{
   const result=swissAtTt(jd,swiss);
   assert.ok(Math.abs(result-3600/(1+10/86400))<1e-5);
   assert.throws(()=>swissAtTt(jd,{swe_deltat:()=>({delta:NaN})}),/invalid/);
+});
+
+test('dense Horizons grid is ordered, covers both endpoints, and rejects unknown grids',()=>{
+  const years=yearsForGrid('dense');
+  assert.equal(years.length,39);
+  assert.equal(years[0],-9998);
+  assert.equal(years.at(-1),-719);
+  assert.ok(years.slice(1).every((y,i)=>y>years[i]));
+  assert.equal(yearsForGrid('unknown'),null);
 });

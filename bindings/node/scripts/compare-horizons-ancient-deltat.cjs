@@ -1,11 +1,13 @@
 'use strict';
 // SPDX-License-Identifier: CPAL-1.0. Historical model comparison, not truth.
+// Modification (2026-11-18): add an optional denser fixed-TT epoch grid.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {julday}=require('../index.js');
 const {parseHistoricalDeltaT}=require('./compare-horizons-historical-deltat.cjs');
 const {deltaAtTt}=require('./compare-historical-station-ut1.cjs');
 const {parabolas}=require('./audit-ancient-delta-models.cjs');
-const years=[-9998,-9000,-5000,-2000,-1000,-719];
+const yearsForGrid=grid=>grid==='baseline'?[-9998,-9000,-5000,-2000,-1000,-719]:
+  grid==='dense'?[-9998,...Array.from({length:37},(_,i)=>-9750+i*250),-719]:null;
 async function sha(file){const h=crypto.createHash('sha256');for await(const c of fs.createReadStream(file))h.update(c);return h.digest('hex');}
 function swissAtTt(jd,swiss){
   let delta=swiss.swe_deltat(jd)?.delta*86400;
@@ -19,9 +21,10 @@ function swissAtTt(jd,swiss){
   throw new Error('Swiss Delta T inversion did not converge');
 }
 async function main(){
-  const [kernel,expected,swissPackage,out,...extra]=process.argv.slice(2);
+  const [kernel,expected,swissPackage,out,grid='baseline',...extra]=process.argv.slice(2);
+  const years=yearsForGrid(grid);
   if(!kernel||!/^[a-f0-9]{64}$/.test(expected||'')||!swissPackage||!out||extra.length
-      ||path.resolve(kernel)===path.resolve(out)||fs.existsSync(out))throw new Error('usage: <de441> <sha256> <swisseph> <new-report>');
+      ||!years||path.resolve(kernel)===path.resolve(out)||fs.existsSync(out))throw new Error('usage: <de441> <sha256> <swisseph> <new-report> [baseline|dense]');
   if(await sha(kernel)!==expected)throw new Error('kernel hash mismatch');
   const swiss=require(path.resolve(swissPackage));swiss.swe_set_ephe_path(path.dirname(path.resolve(kernel)));swiss.swe_set_jpl_file(path.basename(kernel));
   const epochs=years.map(y=>julday(y,7,1,12,true));
@@ -41,8 +44,8 @@ async function main(){
   });
   if(await sha(kernel)!==expected)throw new Error('kernel changed');
   const notes='Fixed TT instants, Horizons quantity 30 is approximately TT−UT1 before 1962; models may share observations. NASA 2006 parabola before -1999 and 2016 parabola before its fitted era are extrapolations, not uncertainty bounds or observations. Proleptic Gregorian decimal year inferred at UT1.';
-  fs.writeFileSync(out,JSON.stringify({schema:'virgostars-horizons-ancient-deltat/1',status:'EXPLORATORY',kernelSha256:expected,notes,url,raw,rows},null,2)+'\n',{flag:'wx'});
+  fs.writeFileSync(out,JSON.stringify({schema:'virgostars-horizons-ancient-deltat/1',status:'EXPLORATORY',grid,kernelSha256:expected,notes,url,raw,rows},null,2)+'\n',{flag:'wx'});
   console.log(JSON.stringify({cases:rows.length,first:rows[0],last:rows.at(-1)}));
 }
-module.exports={swissAtTt};
+module.exports={swissAtTt,yearsForGrid};
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1});
