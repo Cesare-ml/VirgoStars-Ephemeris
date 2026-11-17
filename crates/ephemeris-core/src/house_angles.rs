@@ -170,9 +170,7 @@ pub fn extra_angles_from_armc(
     // Do not silently change independently reference-fitted *extra points*:
     // several of their auxiliary latitudes are polar even for tropical sites.
     // Their traditional branch requires its own independent polar validation.
-    let asc = |armc: f64, lat: f64| {
-        traditional_horizon_intersection(armc, true_obliquity_deg, lat)
-    };
+    let asc = |armc: f64, lat: f64| traditional_horizon_intersection(armc, true_obliquity_deg, lat);
     let mut vertex = asc(armc_deg + 180.0, 90.0 - latitude_deg);
     // Within the tropics the ecliptic crosses the prime vertical twice: the vertex is
     // the western crossing, i.e. the one that is not east of the Midheaven.
