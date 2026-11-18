@@ -29,6 +29,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Sintesi italiana della decisione architetturale](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md#sintesi-italiana)
 - [Experimental DE441 reader](docs/DE441.md)
 - [Experimental classic-DE441 offline slice exporter for mobile packages](docs/DE441_MOBILE_SLICE_EXPORT_2026-11-18.md)
+- [Local DE441 mobile pack builder and SHA-256 manifest helper](scripts/build_de441_mobile_packs.py)
 - [Experimental Rust DAF/SPK metadata index](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [Experimental read-only SPK descriptor coverage inspector (not JPL-validated)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
 - [Experimental offline SPK geometric target/center state query CLI (not independent JPL validation)](docs/SPK_OFFLINE_STATE_QUERY_2026-11-14.md)
