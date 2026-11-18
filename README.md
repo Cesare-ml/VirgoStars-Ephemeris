@@ -15,6 +15,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 ## Read first
 
+- [MVP 1: pacchetto pratico e API planetaria](docs/MVP1_PACCHETTO_PRATICO_2026-11-18.md)
 - [USNO ΔT: source-error provenance and missing values](docs/USNO_DELTAT_ERROR_PROVENANCE_2026-11-18.md)
 - [Bounded historical ΔT estimates for BCE dates](docs/HISTORICAL_DELTAT_NASA_BCE_2026-11-18.md)
 - [MVP 1 pianeti: decisioni e tre gruppi di chiusura](docs/MVP1_PIANETI_CHIUSURA_2026-11-18.md)

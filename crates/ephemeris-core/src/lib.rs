@@ -84,3 +84,4 @@ pub mod explicit_delta_t;
 pub mod historical_delta_t_scenarios;
 pub mod historical_rate_candidate;
 pub mod long_term_precession;
+pub mod mvp_planets;
