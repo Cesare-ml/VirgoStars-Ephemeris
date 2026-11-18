@@ -1,5 +1,8 @@
 'use strict';
 // SPDX-License-Identifier: CPAL-1.0. Small-rotation diagnostic only.
+// Modification (2026-11-18): clarify limitations of the single linearization.
+// A single linearized fit can leave second-order residuals for ancient frames;
+// use the iterative audit before interpreting those residuals.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{execFileSync}=require('node:child_process');
 const {parse}=require('./compare-horizons-orientation-components.cjs');
 const {unit,separation}=require('./compare-horizons-frame-isolation.cjs');
@@ -31,7 +34,7 @@ async function main(){
     const meanFit=fitSmallRotation(mean,horizon),trueFit=fitSmallRotation(actual,horizon);
     return {year:record.year,jdTt:record.jdTt,meanFit,trueFit,fitDifferenceArcsec:Math.hypot(...meanFit.rotationArcsec.map((x,j)=>x-trueFit.rotationArcsec[j]))};});
   if(await sha(source)!==sourceHash)throw new Error('source changed');
-  fs.writeFileSync(out,JSON.stringify({schema:'horizons-equatorial-frame-fit/1',status:'EXPLORATORY',sourceSha256:sourceHash,notes:'Least-squares first-order rotation from local mean or true apparent equatorial axes to Horizons true equatorial coordinates. Three same-epoch directions, with conditioning and exact-rotation residual diagnostics. Mean fit still includes Horizons nutation; not a pure precession error.',rows},null,2)+'\n',{flag:'wx'});
+  fs.writeFileSync(out,JSON.stringify({schema:'horizons-equatorial-frame-fit/1',status:'EXPLORATORY',sourceSha256:sourceHash,notes:'Least-squares first-order rotation from local mean or true apparent equatorial axes to Horizons true equatorial coordinates. Three same-epoch directions, with conditioning and exact-rotation residual diagnostics. A single linearization leaves second-order residuals at large rotations. Mean fit still includes Horizons nutation; not a pure precession error.',rows},null,2)+'\n',{flag:'wx'});
   console.log(JSON.stringify(rows));
 }
 module.exports={fitSmallRotation};
