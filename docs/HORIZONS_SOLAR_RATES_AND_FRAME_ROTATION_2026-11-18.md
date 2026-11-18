@@ -4,6 +4,8 @@
 nutation audit](APPARENT_SOLAR_RATE_AND_LOCAL_NUTATION_2026-11-18.md). No
 production algorithm, public API, star catalog or server activation changes.
 
+Continuation: [dense Horizons rate fits and interleaved holdout](HORIZONS_DENSE_RATE_HOLDOUT_2026-11-18.md).
+
 ## Apparent speeds from Horizons positions
 
 Fourteen geocentric, airless apparent ICRF cases were selected before querying
