@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 //! Practical opt-in snapshot at one explicit UT1 and ΔT.
 //!
-//! Long-term lunar points are experimental. House angles and solar events
-//! retain their modern orientation guards and report errors for older dates.
+//! Long-term lunar points are experimental. The default snapshot retains the
+//! modern house and solar guards; the named experimental snapshot opts into
+//! long-term orientation for those calculations.
 //! This module neither supplies house cusps nor converts civil time to UT1.
 
 use crate::de441::De441;
 use crate::mvp_lunar::{lunar_points_ut1, LunarSet, LunarSetError, MVP_LUNAR_POINTS};
 use crate::mvp_planets::{planets_ut1, PlanetaryError, PlanetarySet, PlanetaryTime, MVP_PLANETS};
 use crate::mvp_site::{
-    house_angles_ut1, solar_event_ut1, ExplicitHouseAngles, SiteError, SolarEvent,
+    experimental_house_angles_ut1, experimental_solar_event_ut1, house_angles_ut1, solar_event_ut1,
+    ExplicitHouseAngles, SiteError, SolarEvent,
 };
 use crate::rise_transit::{Atmosphere, Event, Site};
 use std::{
@@ -69,12 +71,42 @@ pub fn snapshot_ut1<R: Read + Seek>(
     site: &Site,
     solar: Option<SolarSearch>,
 ) -> Result<MvpSnapshot, SnapshotError> {
+    snapshot_with_orientation(ephemeris, time, site, solar, false)
+}
+
+/// Opt into experimental long-term lunar, house and solar orientation.
+/// No physical accuracy or civil-time guarantee is implied by date coverage.
+pub fn experimental_snapshot_ut1<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    time: PlanetaryTime<'_>,
+    site: &Site,
+    solar: Option<SolarSearch>,
+) -> Result<MvpSnapshot, SnapshotError> {
+    snapshot_with_orientation(ephemeris, time, site, solar, true)
+}
+
+fn snapshot_with_orientation<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    time: PlanetaryTime<'_>,
+    site: &Site,
+    solar: Option<SolarSearch>,
+    historical: bool,
+) -> Result<MvpSnapshot, SnapshotError> {
     let planets = planets_ut1(ephemeris, &MVP_PLANETS, time).map_err(SnapshotError::Planets)?;
     let lunar =
         lunar_points_ut1(ephemeris, &MVP_LUNAR_POINTS, time).map_err(SnapshotError::Lunar)?;
-    let house_angles = house_angles_ut1(time, site.latitude_deg, site.longitude_deg_east);
+    let house_angles = if historical {
+        experimental_house_angles_ut1(time, site.latitude_deg, site.longitude_deg_east)
+    } else {
+        house_angles_ut1(time, site.latitude_deg, site.longitude_deg_east)
+    };
     let sunrise = solar.map(|search| {
-        solar_event_ut1(
+        let calculate = if historical {
+            experimental_solar_event_ut1
+        } else {
+            solar_event_ut1
+        };
+        calculate(
             ephemeris,
             time,
             Event::Rise,
@@ -84,7 +116,12 @@ pub fn snapshot_ut1<R: Read + Seek>(
         )
     });
     let sunset = solar.map(|search| {
-        solar_event_ut1(
+        let calculate = if historical {
+            experimental_solar_event_ut1
+        } else {
+            solar_event_ut1
+        };
+        calculate(
             ephemeris,
             time,
             Event::Set,

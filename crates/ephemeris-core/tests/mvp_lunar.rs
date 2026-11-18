@@ -55,6 +55,21 @@ fn long_term_lunar_set_uses_one_epoch_and_preserves_modern_guard() {
                 assert!(difference.abs() < 0.05, "{point:?}: {difference}");
             }
         }
+        // Swiss 2.09.03 JPL, same TT; four samples, not a continuous guarantee.
+        let reference = match year {
+            -12999 => (84.95809235737663, 6.16551291946851),
+            0 => (278.18122240010126, 257.3323554508416),
+            2000 => (114.61709462648383, 282.8482666337974),
+            3999 => (332.10720611684144, 254.06759713837974),
+            _ => unreachable!(),
+        };
+        for (actual, expected) in [
+            (set.positions[1].ecliptic.longitude_deg, reference.0),
+            (set.positions[3].ecliptic.longitude_deg, reference.1),
+        ] {
+            let error = ((actual - expected + 180.0).rem_euclid(360.0) - 180.0).abs() * 3600.0;
+            assert!(error < 1.0, "year {year}: {error} arcseconds");
+        }
         if year == 0 {
             assert!(lunar_point(
                 Some(&mut eph),

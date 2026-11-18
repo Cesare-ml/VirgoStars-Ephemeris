@@ -3,7 +3,9 @@ use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
 use virgostars_ephemeris_core::de441::De441;
 use virgostars_ephemeris_core::mvp_planets::PlanetaryTime;
-use virgostars_ephemeris_core::mvp_snapshot::{snapshot_ut1, SolarSearch};
+use virgostars_ephemeris_core::mvp_snapshot::{
+    experimental_snapshot_ut1, snapshot_ut1, SolarSearch,
+};
 use virgostars_ephemeris_core::rise_transit::{Atmosphere, Site};
 
 #[test]
@@ -58,6 +60,21 @@ fn snapshot_reports_results_and_unsupported_site_data_explicitly() {
     assert!(ancient.house_angles.is_err());
     assert!(ancient.sunrise.unwrap().is_err());
     assert!(ancient.sunset.unwrap().is_err());
+    for year in [-12999, 0, 2000, 3999] {
+        let snapshot =
+            experimental_snapshot_ut1(&mut eph, time(jd(year)), &site, Some(solar)).unwrap();
+        assert_eq!(snapshot.planets.positions.len(), 10);
+        assert_eq!(snapshot.lunar.positions.len(), 4);
+        assert!(snapshot.house_angles.is_ok(), "house angles: {year}");
+        assert!(
+            snapshot.sunrise.unwrap().unwrap().jd_ut1.is_some(),
+            "sunrise: {year}"
+        );
+        assert!(
+            snapshot.sunset.unwrap().unwrap().jd_ut1.is_some(),
+            "sunset: {year}"
+        );
+    }
     let without_solar = snapshot_ut1(&mut eph, time(jd(2000)), &site, None).unwrap();
     assert!(without_solar.sunrise.is_none() && without_solar.sunset.is_none());
 }

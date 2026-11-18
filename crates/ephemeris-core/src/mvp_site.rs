@@ -1,19 +1,26 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 //! House angles and solar rise/set using the shared explicit UT1/ΔT input.
-//! Existing modern orientation guards still apply: this does not claim ancient
-//! house or horizon coverage. No civil-time conversion is performed.
+//! The default functions retain modern orientation guards; separately named
+//! experimental functions use the long-term orientation. No civil-time
+//! conversion is performed.
 
 use crate::apparent_ecliptic_of_date::{
-    geocentric_apparent_six_fields_many_with_options, ApparentError, ApparentFrame, ApparentOptions,
+    experimental_long_term_apparent_direct_obliquity,
+    geocentric_apparent_six_fields_many_with_options, ApparentError, ApparentFrame,
+    ApparentOptions,
 };
 use crate::de441::{Body, De441};
+use crate::earth_orientation::{experimental_extrapolated_nutation, OrientationError};
 use crate::explicit_delta_t::{
     ut1_to_tdb_with_explicit_delta_t, ExplicitDeltaTEpoch, ExplicitDeltaTError,
 };
+use crate::historical_orientation::{experimental_gast, experimental_house_angles};
+use crate::horizon::{local_apparent_sidereal_deg, HorizonError};
 use crate::house_angles::{house_angles, HouseAngles, HouseAnglesError};
+use crate::long_term_precession::experimental_direct_obliquity;
 use crate::mvp_planets::PlanetaryTime;
 use crate::rise_transit::{
-    find_event, Atmosphere, Disc, Event, Limb, Request, RiseError, Site, SkyPosition,
+    find_event_with_sidereal, Atmosphere, Disc, Event, Limb, Request, RiseError, Site, SkyPosition,
 };
 use std::{
     error::Error,
@@ -25,12 +32,14 @@ use std::{
 pub enum SolarPositionError {
     Time(ExplicitDeltaTError),
     Apparent(ApparentError),
+    Orientation(OrientationError),
 }
 impl fmt::Display for SolarPositionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Time(e) => write!(f, "{e}"),
             Self::Apparent(e) => write!(f, "{e}"),
+            Self::Orientation(e) => write!(f, "{e}"),
         }
     }
 }
@@ -89,6 +98,24 @@ pub fn house_angles_ut1(
     })
 }
 
+/// Explicit opt-in to experimental long-term house angles. The secular
+/// solar and orientation models are extrapolated at remote epochs.
+pub fn experimental_house_angles_ut1(
+    time: PlanetaryTime<'_>,
+    latitude_deg: f64,
+    longitude_deg_east: f64,
+) -> Result<ExplicitHouseAngles, SiteError> {
+    let epoch = resolve(&time)?;
+    let angles =
+        experimental_house_angles(epoch.jd_ut1, epoch.jd_tt, latitude_deg, longitude_deg_east)
+            .map_err(SiteError::House)?;
+    Ok(ExplicitHouseAngles {
+        epoch,
+        delta_t_source: time.source.trim().to_owned(),
+        angles,
+    })
+}
+
 #[derive(Debug)]
 pub struct SolarEvent {
     /// `None` when no crossing occurs in the requested window (e.g. polar day).
@@ -110,6 +137,31 @@ pub fn solar_event_ut1<R: Read + Seek>(
     atmosphere: &Atmosphere,
     search_days: f64,
 ) -> Result<SolarEvent, SiteError> {
+    solar_event_with_orientation(ephemeris, time, event, site, atmosphere, search_days, false)
+}
+
+/// Explicit opt-in to long-term experimental solar and sidereal orientation.
+/// Other rise/set conventions and the constant ΔT assumption match the modern path.
+pub fn experimental_solar_event_ut1<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    time: PlanetaryTime<'_>,
+    event: Event,
+    site: &Site,
+    atmosphere: &Atmosphere,
+    search_days: f64,
+) -> Result<SolarEvent, SiteError> {
+    solar_event_with_orientation(ephemeris, time, event, site, atmosphere, search_days, true)
+}
+
+fn solar_event_with_orientation<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    time: PlanetaryTime<'_>,
+    event: Event,
+    site: &Site,
+    atmosphere: &Atmosphere,
+    search_days: f64,
+    historical: bool,
+) -> Result<SolarEvent, SiteError> {
     if !matches!(event, Event::Rise | Event::Set) {
         return Err(SiteError::InvalidEvent);
     }
@@ -129,7 +181,7 @@ pub fn solar_event_ut1<R: Read + Seek>(
         frame: ApparentFrame::TrueEquatorOfDate,
         ..ApparentOptions::default()
     };
-    let result = find_event(
+    let result = find_event_with_sidereal(
         |ut| {
             let current = ut1_to_tdb_with_explicit_delta_t(
                 ut,
@@ -137,6 +189,31 @@ pub fn solar_event_ut1<R: Read + Seek>(
                 time.uncertainty_seconds,
             )
             .map_err(SolarPositionError::Time)?;
+            if historical {
+                let fields = experimental_long_term_apparent_direct_obliquity(
+                    ephemeris,
+                    Body::Sun,
+                    current.jd_tdb,
+                )
+                .map_err(SolarPositionError::Apparent)?;
+                let eps = experimental_direct_obliquity(current.jd_tt)
+                    .map_err(SolarPositionError::Orientation)?
+                    + experimental_extrapolated_nutation(current.jd_tt)
+                        .map_err(SolarPositionError::Orientation)?
+                        .d_epsilon_rad;
+                let (lon, lat) = (
+                    fields.longitude_deg.to_radians(),
+                    fields.latitude_deg.to_radians(),
+                );
+                let (x, y, z) = (lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin());
+                let (y_eq, z_eq) = (y * eps.cos() - z * eps.sin(), y * eps.sin() + z * eps.cos());
+                return Ok(SkyPosition {
+                    tt_jd: current.jd_tt,
+                    right_ascension_deg: y_eq.atan2(x).to_degrees().rem_euclid(360.0),
+                    declination_deg: z_eq.atan2(x.hypot(y_eq)).to_degrees(),
+                    distance_au: fields.distance_au,
+                });
+            }
             let rows = geocentric_apparent_six_fields_many_with_options(
                 ephemeris,
                 &[Body::Sun],
@@ -151,6 +228,15 @@ pub fn solar_event_ut1<R: Read + Seek>(
                 declination_deg: fields.latitude_deg,
                 distance_au: fields.distance_au,
             })
+        },
+        |ut, tt, lon| {
+            if historical {
+                experimental_gast(ut, tt)
+                    .map(|gast| (gast.to_degrees() + lon).rem_euclid(360.0))
+                    .map_err(HorizonError::Orientation)
+            } else {
+                local_apparent_sidereal_deg(ut, tt, lon)
+            }
         },
         site,
         atmosphere,
