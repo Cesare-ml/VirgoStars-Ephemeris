@@ -1,5 +1,7 @@
 # Ancient nutation: arguments and model comparisons
 
+Follow-up: [sampled planetary direction sensitivity](ANCIENT_NUTATION_DIRECTION_IMPACT_2026-11-18.md).
+
 **Status: exploratory numerical/model comparison, not an estimate of the
 physical ancient Earth orientation or an MVP accuracy bound.** Stars and the
 main-server migration remain paused. This continues the earlier
