@@ -357,6 +357,19 @@ impl<R: Read + Seek> De441<R> {
         (JulianDateTdb(self.start), JulianDateTdb(self.end))
     }
 
+    /// The original classic-DE441 coefficient record width in TDB days.
+    ///
+    /// Modification 2026-11-18: expose read-only metadata for offline mobile
+    /// slice parity validation. No change to interpolation or source data.
+    pub fn record_step_days(&self) -> f64 {
+        self.step
+    }
+
+    /// Count of coefficient records, excluding the two classic header records.
+    pub fn coefficient_record_count(&self) -> usize {
+        self.record_count
+    }
+
     /// Stream a self-contained classic-DE441 slice without changing any
     /// source Chebyshev coefficient. The requested interval is half-open in
     /// Julian Date TDB; stored coverage expands to full source records.
