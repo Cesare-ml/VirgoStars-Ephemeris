@@ -114,6 +114,13 @@ class MobilePackTests(unittest.TestCase):
 
             def fake_run(command, **kwargs):
                 self.assertEqual(command[1:4], ["run", "--offline", "--locked"])
+                if "verify_de441_classic_slice" in command:
+                    self.assertEqual(Path(command[-1]).name, "de441-core.eph")
+                    text = (
+                        "parity_ok records=1 epochs=3 state_pairs=42 "
+                        "jd_tdb=[2305440, 2488440]"
+                    )
+                    return type("Completed", (), {"returncode": 0, "stdout": text, "stderr": ""})()
                 output = Path(command[command.index("--") + 2])
                 synthetic_classic(output, 2305440.0, 2488440.0, 1)
                 text = (
@@ -126,14 +133,50 @@ class MobilePackTests(unittest.TestCase):
             with patch.object(mobile.subprocess, "run", side_effect=fake_run) as invoked:
                 manifest = mobile.build(source, destination, {"core"},
                                         hashlib.sha256(source.read_bytes()).hexdigest(), "cargo")
-            self.assertEqual(invoked.call_count, 1)
+            self.assertEqual(invoked.call_count, 2)
             document = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(document["source"]["sha256"], mobile.sha256_file(source))
             self.assertEqual(document["distribution_rights"], "review_pending")
             self.assertEqual([p["status"] for p in document["packages"]].count("built"), 1)
+            self.assertEqual(document["packages"][0]["artifact"]["parity"]["compared_state_pairs"], 42)
             self.assertEqual(mobile.verify(manifest), 1)
             with self.assertRaises(FileExistsError):
                 mobile.build(source, destination, {"core"}, None, "cargo")
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["packages"][0]["artifact"].pop("parity")
+            with self.assertRaisesRegex(ValueError, "parity"):
+                unverified = destination / "tampered-manifest.json"
+                unverified.write_text(json.dumps(data), encoding="utf-8")
+                mobile.verify(unverified)
+
+    def test_parity_tool_rejects_wrong_result_or_process_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            summary = {
+                "coefficient_records": 2,
+                "stored_start_jd_tdb": 2305440.0,
+                "stored_end_jd_tdb": 2488440.0,
+            }
+            result = type("Completed", (), {
+                "returncode": 0,
+                "stdout": "parity_ok records=2 epochs=6 state_pairs=84 jd_tdb=[2305440, 2488440]",
+                "stderr": "",
+            })()
+            with patch.object(mobile.subprocess, "run", return_value=result):
+                success = mobile.verify_source_parity(folder / "source.eph",
+                                                      folder / "slice.eph", summary, "cargo")
+                self.assertFalse(success["independent_jpl_validation"])
+            result.stdout = "parity_ok records=2 epochs=6 state_pairs=83 jd_tdb=[2305440, 2488440]"
+            with patch.object(mobile.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(ValueError, "summary disagrees"):
+                    mobile.verify_source_parity(folder / "source.eph",
+                                                folder / "slice.eph", summary, "cargo")
+            result.returncode = 2
+            result.stderr = "mismatched Mars"
+            with patch.object(mobile.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(RuntimeError, "mismatched Mars"):
+                    mobile.verify_source_parity(folder / "source.eph",
+                                                folder / "slice.eph", summary, "cargo")
 
 
 if __name__ == "__main__":
