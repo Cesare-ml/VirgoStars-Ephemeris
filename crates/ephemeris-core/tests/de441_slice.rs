@@ -61,6 +61,8 @@ fn fixture(records: usize) -> Vec<u8> {
 fn slices_whole_source_records_and_preserves_geometric_states() {
     let original = fixture(5);
     let mut source = De441::new(Cursor::new(original.clone())).unwrap();
+    assert_eq!(source.record_step_days(), STEP);
+    assert_eq!(source.coefficient_record_count(), 5);
     let mut output = Vec::new();
     let summary = source
         .write_slice(JulianDateTdb(1033.0), JulianDateTdb(1095.0), &mut output)
@@ -74,6 +76,8 @@ fn slices_whole_source_records_and_preserves_geometric_states() {
     assert_eq!(&output[SIZE * 2..], &original[SIZE * 3..SIZE * 5]);
 
     let mut slice = De441::new(Cursor::new(output)).unwrap();
+    assert_eq!(slice.record_step_days(), STEP);
+    assert_eq!(slice.coefficient_record_count(), 2);
     assert_eq!(
         slice.coverage(),
         (JulianDateTdb(1032.0), JulianDateTdb(1096.0))
