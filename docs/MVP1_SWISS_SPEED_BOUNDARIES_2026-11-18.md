@@ -61,6 +61,10 @@ alla velocità pubblicata in 102 dei 114 campioni: RMS da circa 2,08×10⁻⁵ a
 non corregge le velocità angolari o le quattro stazioni. Non è stata applicata
 al core né proposta come precisione garantita.
 
+Un successivo [esperimento radiale nel core](EXPERIMENTAL_RADIAL_RATE_CANDIDATE_2026-11-18.md)
+restituisce separatamente un candidato e lascia invariata la derivata. Il Sole
+è escluso esplicitamente; le velocità angolari e le stazioni restano aperte.
+
 ## Riproduzione e gate
 
 ```text
@@ -85,3 +89,11 @@ compatibile con il riferimento scelto, preservando il contratto della derivata
 attuale; verificare separatamente componenti angolari e radiale, le quattro
 stazioni fallite e casi non usati per formulare la correzione. Stabilire le
 tolleranze mancanti prima di dichiarare chiuso questo gruppo della MVP.
+
+Il successivo [candidato sperimentale di velocità in longitudine](EXPERIMENTAL_LONGITUDE_RATE_CANDIDATE_2026-11-18.md)
+concorda nei segni delle 96 stazioni campionate, incluse le quattro già fallite.
+È ancora separato dalle API standard e non chiude il gate delle velocità.
+
+Il [percorso sperimentale combinato](EXPERIMENTAL_COMBINED_SWISS_RATES_2026-11-18.md)
+riunisce i candidati in longitudine e distanza, preservando la base originale;
+latitudine e criteri di accettazione restano da completare.
