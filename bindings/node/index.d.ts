@@ -1,4 +1,5 @@
 // Types for the experimental VirgoStars-Ephemeris Node binding.
+// Modification (2026-11-18): declare opt-in analytic deflection diagnostic.
 
 export interface CalcResult {
   /** [lon deg, lat deg, dist AU, dlon deg/day, dlat deg/day, ddist AU/day]; speeds are 0 unless SEFLG_SPEED. */
@@ -68,6 +69,8 @@ export class Engine {
   geometricStateTdb(jdTdb: number, ipl: number): GeometricStateResult;
   /** Experimental airless apparent vector with light-time, solar deflection and aberration. */
   experimentalApparentIcrfTdb(jdTdb: number, ipl: number): ApparentIcrfResult;
+  /** Experimental analytic deflection velocity, unrefined emission time; floor guard can raise E_DEFLECTION_BOUNDARY. */
+  experimentalAnalyticDeflectionIcrfTdb(jdTdb: number, ipl: number): ApparentIcrfResult;
   /** Experimental mean ecliptic of date; nutation is not included. */
   experimentalLongTermMeanEclipticTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
   /** Experimental apparent position; extrapolated nutation has no established long-range accuracy. */

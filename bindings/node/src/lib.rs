@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): expose opt-in direct-obliquity TDB and UT1 methods.
+// Modification (2026-11-18): expose opt-in analytic solar-deflection ICRF diagnostic.
 
 //! Thin Node.js (N-API) binding over `virgostars-ephemeris-core`.
 //!
@@ -33,6 +34,11 @@ use std::io::BufReader;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+
+use virgostars_ephemeris_core::experimental_analytic_apparent::{
+    experimental_analytic_apparent_icrf, ExperimentalAnalyticApparentError,
+};
+use virgostars_ephemeris_core::light_deflection::AnalyticDeflectionError;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
     applied_corrections, experimental_apparent_icrf,
@@ -882,6 +888,53 @@ impl Engine {
                     .to_string(),
                 "first-order sub-ULP emission-time refinement; emission JD remains rounded"
                     .to_string(),
+            ],
+        })
+    }
+
+    /// Diagnostic only: analytic solar-deflection rates with an explicit floor error.
+    #[napi]
+    pub fn experimental_analytic_deflection_icrf_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<ApparentIcrfResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail(
+                "E_UNSUPPORTED_BODY",
+                "geocentric target must be 0..=9",
+            ));
+        }
+        let target = body_from_ipl(ipl)?;
+        let state =
+            experimental_analytic_apparent_icrf(&mut self.ephemeris, target, JulianDateTdb(jd_tdb))
+                .map_err(|e| {
+                    if matches!(
+                        &e,
+                        ExperimentalAnalyticApparentError::Deflection(
+                            AnalyticDeflectionError::NonDifferentiableFloor { .. }
+                        )
+                    ) {
+                        fail("E_DEFLECTION_BOUNDARY", e)
+                    } else {
+                        fail("E_CALC", e)
+                    }
+                })?;
+        Ok(ApparentIcrfResult {
+            jd_tdb,
+            target: format!("{target:?}"),
+            center: "Earth".to_string(),
+            frame: "ICRF".to_string(),
+            position_km: state.position_km.to_vec(),
+            velocity_km_per_day: state.velocity_km_per_tdb_day.to_vec(),
+            notes: vec![
+                "EXPERIMENTAL analytic solar-deflection velocity; accuracy not established, especially near the Sun".to_string(),
+                "TDB input; Earth-centered ICRF; light-time and annual aberration; airless".to_string(),
+                "unrefined single-f64 emission JD; rates per TDB day; no UTC or local time".to_string(),
+                "non-differentiable solar denominator floor returns E_DEFLECTION_BOUNDARY; no fallback".to_string(),
             ],
         })
     }

@@ -2,6 +2,7 @@
 // VirgoStars-Ephemeris Node binding: loader, constants and a Swiss-shaped facade.
 // Experimental. No astronomy is computed here; see src/lib.rs and the Rust core.
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
+// Modification (2026-11-18): expose opt-in analytic deflection diagnostic.
 
 const path = require('node:path');
 const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry, validateMagnitudeInfo } = require('./star-catalog.js');
@@ -103,6 +104,11 @@ class Engine {
   /** Experimental corrected Earth-centered ICRF vector, TDB input. */
   experimentalApparentIcrfTdb(jdTdb, ipl) {
     return this._call(() => this._native.experimentalApparentIcrfTdb(jdTdb, ipl));
+  }
+
+  /** Opt-in ICRF experiment with analytic solar-deflection velocity. */
+  experimentalAnalyticDeflectionIcrfTdb(jdTdb, ipl) {
+    return this._call(() => this._native.experimentalAnalyticDeflectionIcrfTdb(jdTdb, ipl));
   }
 
   /** Experimental corrected direction, mean ecliptic of date; nutation omitted. */
