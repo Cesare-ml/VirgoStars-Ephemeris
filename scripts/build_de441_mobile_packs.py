@@ -47,6 +47,10 @@ EXPORT_OUTPUT = re.compile(
     r"stored_jd_tdb=\[([^,]+), ([^]]+)\] "
     r"records=(\d+) bytes=(\d+) output=(.+)$"
 )
+PARITY_OUTPUT = re.compile(
+    r"^parity_ok records=(\d+) epochs=(\d+) state_pairs=(\d+) "
+    r"jd_tdb=\[([^,]+), ([^]]+)\]$"
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -167,6 +171,44 @@ def parse_export_summary(stdout: str, expected_path: Path) -> dict:
     }
 
 
+def verify_source_parity(source: Path, artifact_path: Path, summary: dict,
+                         cargo: str) -> dict:
+    """Call the canonical Rust evaluator across every record and main body."""
+    command = [
+        cargo, "run", "--offline", "--locked", "-p",
+        "virgostars-ephemeris-core", "--example", "verify_de441_classic_slice",
+        "--", str(source), str(artifact_path),
+    ]
+    result = subprocess.run(
+        command, cwd=ROOT, capture_output=True, text=True, check=False
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"source/slice parity failed for {artifact_path.name}: {result.stderr.strip()}"
+        )
+    lines = result.stdout.strip().splitlines()
+    if not lines or not (match := PARITY_OUTPUT.fullmatch(lines[-1])):
+        raise ValueError(f"Rust parity tool returned no recognized summary for {artifact_path.name}")
+    records, epochs, state_pairs = map(int, match.group(1, 2, 3))
+    start, end = float(match.group(4)), float(match.group(5))
+    if (
+        records != summary["coefficient_records"]
+        or epochs < records * 3
+        or state_pairs != epochs * 14
+        or (start, end) != (
+            summary["stored_start_jd_tdb"],
+            summary["stored_end_jd_tdb"],
+        )
+    ):
+        raise ValueError(f"Rust parity summary disagrees with slice for {artifact_path.name}")
+    return {
+        "status": "pass_against_same_source",
+        "compared_epochs": epochs,
+        "compared_state_pairs": state_pairs,
+        "independent_jpl_validation": False,
+    }
+
+
 def build(source: Path, destination: Path, selected: set[str],
           expected_source_sha256: str | None, cargo: str) -> Path:
     if not source.is_file():
@@ -219,7 +261,13 @@ def build(source: Path, destination: Path, selected: set[str],
                 },
             )
             verify_artifact(destination, entry["artifact"])
-            print(f"{pack_id}: {summary['bytes']} bytes; SHA-256 verified", flush=True)
+            entry["artifact"]["parity"] = verify_source_parity(
+                source, path, summary, cargo
+            )
+            print(
+                f"{pack_id}: {summary['bytes']} bytes; SHA-256 and source/slice parity verified",
+                flush=True,
+            )
         packages.append(entry)
 
     # Guard against a source edit during extraction, including same-size edits.
@@ -264,7 +312,18 @@ def verify(manifest: Path) -> int:
         ):
             raise ValueError(f"incorrect temporal inventory for {pack_id}")
         if entry["status"] == "built":
-            verify_artifact(manifest.parent, entry["artifact"])
+            artifact = entry["artifact"]
+            verify_artifact(manifest.parent, artifact)
+            parity = artifact.get("parity")
+            if (
+                not isinstance(parity, dict)
+                or parity.get("status") != "pass_against_same_source"
+                or parity.get("independent_jpl_validation") is not False
+                or not isinstance(parity.get("compared_epochs"), int)
+                or parity["compared_epochs"] < artifact["coefficient_records"] * 3
+                or parity.get("compared_state_pairs") != parity["compared_epochs"] * 14
+            ):
+                raise ValueError(f"missing/invalid source parity result for {pack_id}")
             built += 1
         elif entry["status"] != "not_built":
             raise ValueError(f"invalid status: {entry['status']}")
