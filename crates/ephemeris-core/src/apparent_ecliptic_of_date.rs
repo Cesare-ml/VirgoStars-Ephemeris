@@ -15,6 +15,7 @@
 // Modification (2026-11-18): add an isolated experimental longitude-rate hypothesis.
 // Modification (2026-11-18): add a separately labeled radial-rate experiment.
 // Modification (2026-11-18): expose the two experiments together, without replacing derivatives.
+// Modification (2026-11-18): add a separate empirical latitude-rate candidate.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -583,6 +584,56 @@ fn longitude_rate_candidate_correction(
     Ok(correction)
 }
 
+/// Empirical latitude candidate alongside the unchanged position derivative.
+#[derive(Clone, Copy, Debug)]
+pub struct ExperimentalLatitudeRateCandidate {
+    pub base: FixedSixFieldsDegreesAu,
+    pub correction_deg_per_tdb_day: f64,
+    pub candidate_deg_per_tdb_day: f64,
+}
+
+/// Diagnostic hypothesis `sin(longitude) * d(dEpsilon)/dt`, with the
+/// independently implemented extrapolated nutation series. The candidate is
+/// not a position derivative or a statement about reference implementation.
+pub fn experimental_latitude_rate_candidate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<ExperimentalLatitudeRateCandidate, ApparentError> {
+    let base =
+        experimental_long_term_apparent_direct_obliquity(ephemeris, target, reception_epoch)?;
+    let tt = tdb_to_tt_jd(reception_epoch.0)?;
+    let before = tt - MATRIX_RATE_HALF_STEP_DAYS;
+    let after = tt + MATRIX_RATE_HALF_STEP_DAYS;
+    let rate = (experimental_extrapolated_nutation(after)?.d_epsilon_rad
+        - experimental_extrapolated_nutation(before)?.d_epsilon_rad)
+        / (after - before);
+    let correction = latitude_rate_candidate_correction(base.longitude_deg, rate)?;
+    let candidate = base.latitude_speed_deg_per_tdb_day + correction;
+    if !candidate.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(ExperimentalLatitudeRateCandidate {
+        base,
+        correction_deg_per_tdb_day: correction,
+        candidate_deg_per_tdb_day: candidate,
+    })
+}
+
+fn latitude_rate_candidate_correction(
+    lon_deg: f64,
+    epsilon_rate_rad_day: f64,
+) -> Result<f64, ApparentError> {
+    if !lon_deg.is_finite() || !epsilon_rate_rad_day.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    let correction = lon_deg.to_radians().sin() * epsilon_rate_rad_day.to_degrees();
+    if !correction.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(correction)
+}
+
 /// A diagnostic candidate, separate from the derivative in `base`.
 /// The candidate is not asserted to be a position derivative or Swiss parity.
 #[derive(Clone, Copy, Debug)]
@@ -682,6 +733,37 @@ pub fn experimental_combined_rate_candidate<R: Read + Seek>(
         longitude_deg_per_tdb_day: longitude.candidate_deg_per_tdb_day,
         radial_au_per_tdb_day: radial.candidate_au_per_tdb_day,
         radial_correction_applied: radial.correction_applied,
+    })
+}
+
+/// The three-rate diagnostic preserves the original six fields separately.
+#[derive(Clone, Copy, Debug)]
+pub struct ExperimentalThreeRateCandidate {
+    pub base: FixedSixFieldsDegreesAu,
+    pub longitude_deg_per_tdb_day: f64,
+    pub latitude_deg_per_tdb_day: f64,
+    pub radial_au_per_tdb_day: f64,
+    pub radial_correction_applied: bool,
+}
+
+/// Combine all three diagnostic rate candidates; no default is changed.
+/// The candidates are not derivatives and are not certified Swiss parity.
+pub fn experimental_three_rate_candidate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<ExperimentalThreeRateCandidate, ApparentError> {
+    let combined = experimental_combined_rate_candidate(ephemeris, target, reception_epoch)?;
+    let latitude = experimental_latitude_rate_candidate(ephemeris, target, reception_epoch)?;
+    if combined.base != latitude.base {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(ExperimentalThreeRateCandidate {
+        base: combined.base,
+        longitude_deg_per_tdb_day: combined.longitude_deg_per_tdb_day,
+        latitude_deg_per_tdb_day: latitude.candidate_deg_per_tdb_day,
+        radial_au_per_tdb_day: combined.radial_au_per_tdb_day,
+        radial_correction_applied: combined.radial_correction_applied,
     })
 }
 
@@ -999,5 +1081,23 @@ mod radial_candidate_tests {
         assert!(
             radial_rate_candidate_correction([f64::MAX, 0.0, 0.0], [f64::MAX, 0.0, 0.0]).is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod latitude_candidate_tests {
+    use super::*;
+
+    #[test]
+    fn projection_respects_sign_and_rejects_invalid_inputs() {
+        let degree = 1.0_f64.to_radians();
+        assert!((latitude_rate_candidate_correction(90.0, degree).unwrap() - 1.0).abs() < 1e-12);
+        assert!((latitude_rate_candidate_correction(270.0, degree).unwrap() + 1.0).abs() < 1e-12);
+        assert_eq!(
+            latitude_rate_candidate_correction(0.0, degree).unwrap(),
+            0.0
+        );
+        assert!(latitude_rate_candidate_correction(f64::NAN, degree).is_err());
+        assert!(latitude_rate_candidate_correction(0.0, f64::INFINITY).is_err());
     }
 }

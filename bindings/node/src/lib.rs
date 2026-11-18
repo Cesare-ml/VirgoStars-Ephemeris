@@ -43,9 +43,10 @@ use virgostars_ephemeris_core::light_deflection::AnalyticDeflectionError;
 
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
     applied_corrections, experimental_apparent_icrf, experimental_combined_rate_candidate,
-    experimental_long_term_apparent_direct_obliquity, experimental_long_term_apparent_ecliptic,
-    experimental_long_term_mean_ecliptic, experimental_longitude_rate_candidate,
-    experimental_radial_rate_candidate, geocentric_apparent_six_fields_many_with_options,
+    experimental_latitude_rate_candidate, experimental_long_term_apparent_direct_obliquity,
+    experimental_long_term_apparent_ecliptic, experimental_long_term_mean_ecliptic,
+    experimental_longitude_rate_candidate, experimental_radial_rate_candidate,
+    experimental_three_rate_candidate, geocentric_apparent_six_fields_many_with_options,
     small_body_apparent_six_fields, tdb_to_tt_jd, ApparentCenter, ApparentFrame, ApparentOptions,
 };
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
@@ -156,6 +157,15 @@ pub struct LongTermExperimentalResult {
 /// Diagnostic candidate distinct from the six original derivative fields.
 #[napi(object)]
 pub struct ExperimentalLongitudeRateResult {
+    pub base: LongTermExperimentalResult,
+    pub correction_deg_per_tdb_day: f64,
+    pub candidate_deg_per_tdb_day: f64,
+    pub notes: Vec<String>,
+}
+
+/// Diagnostic latitude candidate distinct from the original derivative.
+#[napi(object)]
+pub struct ExperimentalLatitudeRateResult {
     pub base: LongTermExperimentalResult,
     pub correction_deg_per_tdb_day: f64,
     pub candidate_deg_per_tdb_day: f64,
@@ -1217,6 +1227,73 @@ impl Engine {
             candidate_xx,
             radial_correction_applied: result.radial_correction_applied,
             notes: vec!["EXPERIMENTAL COMBINED RATE CANDIDATES: not position derivatives; Swiss compatibility not established".to_string(), "latitude speed remains the original derivative; radial correction excludes Sun".to_string()],
+        })
+    }
+
+    /// Experimental latitude diagnostic; does not replace any existing output.
+    #[napi]
+    pub fn experimental_latitude_rate_candidate_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<ExperimentalLatitudeRateResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let result = experimental_latitude_rate_candidate(
+            &mut self.ephemeris,
+            target,
+            JulianDateTdb(jd_tdb),
+        )
+        .map_err(|e| fail("E_CALC", e))?;
+        let f = result.base;
+        Ok(ExperimentalLatitudeRateResult {
+            base: LongTermExperimentalResult { xx: vec![f.longitude_deg, f.latitude_deg, f.distance_au, f.longitude_speed_deg_per_tdb_day, f.latitude_speed_deg_per_tdb_day, f.distance_speed_au_per_tdb_day], target: format!("{target:?}"), time_source: "TDB_INPUT".to_string(), notes: vec!["EXPERIMENTAL MIXED FRAME; base rates remain position derivatives".to_string()] },
+            correction_deg_per_tdb_day: result.correction_deg_per_tdb_day,
+            candidate_deg_per_tdb_day: result.candidate_deg_per_tdb_day,
+            notes: vec!["EXPERIMENTAL EMPIRICAL LATITUDE CANDIDATE: not a position derivative; Swiss compatibility not established".to_string()],
+        })
+    }
+
+    /// All three rate candidates, separate from base derivatives and standard APIs.
+    #[napi]
+    pub fn experimental_three_rate_candidate_tdb(
+        &mut self,
+        jd_tdb: f64,
+        ipl: i32,
+    ) -> Result<ExperimentalCombinedRateResult> {
+        if !jd_tdb.is_finite() {
+            return Err(fail("E_RANGE", "non-finite Julian date"));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let result =
+            experimental_three_rate_candidate(&mut self.ephemeris, target, JulianDateTdb(jd_tdb))
+                .map_err(|e| fail("E_CALC", e))?;
+        let f = result.base;
+        let xx = vec![
+            f.longitude_deg,
+            f.latitude_deg,
+            f.distance_au,
+            f.longitude_speed_deg_per_tdb_day,
+            f.latitude_speed_deg_per_tdb_day,
+            f.distance_speed_au_per_tdb_day,
+        ];
+        let mut candidate_xx = xx.clone();
+        candidate_xx[3] = result.longitude_deg_per_tdb_day;
+        candidate_xx[4] = result.latitude_deg_per_tdb_day;
+        candidate_xx[5] = result.radial_au_per_tdb_day;
+        Ok(ExperimentalCombinedRateResult {
+            base: LongTermExperimentalResult { xx, target: format!("{target:?}"), time_source: "TDB_INPUT".to_string(), notes: vec!["EXPERIMENTAL MIXED FRAME; base rates remain position derivatives".to_string()] },
+            candidate_xx,
+            radial_correction_applied: result.radial_correction_applied,
+            notes: vec!["EXPERIMENTAL THREE-RATE CANDIDATES: not position derivatives; Swiss compatibility not established".to_string(), "radial correction excludes Sun".to_string()],
         })
     }
 
