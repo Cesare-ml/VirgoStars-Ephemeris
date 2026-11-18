@@ -127,6 +127,11 @@ class Engine {
     return this._call(() => this._native.experimentalLongTermDirectObliquityTdb(jdTdb, ipl));
   }
 
+  /** Experimental numerical longitude-rate hypothesis, separate from base derivatives. */
+  experimentalLongitudeRateCandidateTdb(jdTdb, ipl) {
+    return this._call(() => this._native.experimentalLongitudeRateCandidateTdb(jdTdb, ipl));
+  }
+
   /** Explicit caller Delta T: UT1 input is not UTC or local civil time. */
   experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
     return this._call(() => this._native.experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));
