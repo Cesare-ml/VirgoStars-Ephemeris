@@ -36,6 +36,9 @@ pub mod chebyshev;
 pub mod coordinates;
 pub mod de441;
 pub mod de441_epoch_bridge;
+// Modification (2026-11-18): explicit geometric ICRF -> true ecliptic-of-date
+// position only; this is not apparent astronomy or a zodiac/chart pipeline.
+pub mod de441_geometric_date;
 // Modification (2026-11-18): select self-contained DE441 mobile slices in
 // the Rust core; application download/uninstall policy remains external.
 pub mod de441_pack_manager;
