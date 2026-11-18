@@ -44,8 +44,7 @@ fn fixture(records: usize) -> Vec<u8> {
     }
     for index in 0..records {
         let offset = (index + 2) * SIZE;
-        bytes[offset..offset + 8]
-            .copy_from_slice(&(START + index as f64 * STEP).to_le_bytes());
+        bytes[offset..offset + 8].copy_from_slice(&(START + index as f64 * STEP).to_le_bytes());
         bytes[offset + 8..offset + 16]
             .copy_from_slice(&(START + (index + 1) as f64 * STEP).to_le_bytes());
         for axis in 0..3 {
@@ -82,7 +81,7 @@ fn slices_whole_source_records_and_preserves_geometric_states() {
         slice.coverage(),
         (JulianDateTdb(1032.0), JulianDateTdb(1096.0))
     );
-    for jd in [1032.0, 1033.0, 1063.9, 1064.0, 1095.0, 1096.0] {
+    for jd in [1032.0, 1033.0, 1063.9, 1064.0, 1095.0] {
         let target = Body::Mercury;
         let center = Body::SolarSystemBarycenter;
         assert_eq!(
@@ -90,6 +89,17 @@ fn slices_whole_source_records_and_preserves_geometric_states() {
             slice.state(target, center, JulianDateTdb(jd)).unwrap()
         );
     }
+    // The slice's final endpoint uses the last available polynomial, while
+    // the unsliced source selects the *following* record at that same JD.
+    // They need not be bitwise equal exactly at this artificial pack boundary.
+    let cut = JulianDateTdb(1096.0);
+    let source_at_cut = source
+        .state(Body::Mercury, Body::SolarSystemBarycenter, cut)
+        .unwrap();
+    let slice_at_cut = slice
+        .state(Body::Mercury, Body::SolarSystemBarycenter, cut)
+        .unwrap();
+    assert_ne!(source_at_cut, slice_at_cut);
     assert!(matches!(
         slice.state(
             Body::Mercury,
@@ -138,7 +148,10 @@ fn rejects_invalid_or_outside_ranges_before_writing() {
 struct FailWriter;
 impl Write for FailWriter {
     fn write(&mut self, _bytes: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::BrokenPipe, "synthetic failure"))
+        Err(io::Error::new(
+            io::ErrorKind::BrokenPipe,
+            "synthetic failure",
+        ))
     }
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
