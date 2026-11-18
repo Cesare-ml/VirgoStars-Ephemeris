@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 // Modification (2026-11-18): diagnose normalized-position rate and guard crossings.
 // Modification (2026-11-18): distinguish sampled guard crossings by stencil.
+// Modification (2026-11-18): compare complete experimental ICRF rates.
 //! Exploratory derivatives of the existing deflection model, not a production
 //! correction or a physical accuracy claim. Input CSV: body ID,TDB JD.
 use std::error::Error;
 use std::io::{self, BufRead};
+use virgostars_ephemeris_core::aberration_state::aberrate_light_time_state;
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::light_deflection::{
     deflect_light_time_state_by_sun, solar_deflection_delta, SUN_SCHWARZSCHILD_RADIUS_AU,
@@ -141,6 +143,88 @@ fn fourth_normalized(a: &[Geometry; 4], h: f64) -> V {
         (values[0][i] - 8.0 * values[1][i] + 8.0 * values[2][i] - values[3][i]) / (12.0 * h)
     })
 }
+
+// Keep the existing position, replace only the deflection derivative in an
+// isolated candidate, then pass it through the same aberration calculation.
+fn apparent_icrf(
+    eph: &mut De441<std::fs::File>,
+    g: &Geometry,
+    candidate: bool,
+) -> Result<(V, V), Box<dyn Error>> {
+    let mut def = deflect_light_time_state_by_sun(eph, &g.lt)?;
+    if candidate {
+        let dd = g.analytic.ok_or("candidate unavailable at floor")?;
+        let (p, pd, r, rd) = unit_rate(g.lt.position_km, g.lt.velocity_km_per_day);
+        let (correction, correction_rate) = normalized_correction(p, pd, g.delta, dd);
+        def.velocity_km_per_day = add(
+            scale(add(p, correction), rd),
+            scale(add(pd, correction_rate), r),
+        );
+    }
+    let earth = eph.state_with_acceleration(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        g.lt.observation_epoch,
+    )?;
+    let state = aberrate_light_time_state(
+        &def,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )?;
+    let (u, ud, _, _) = unit_rate(state.position_km, state.velocity_km_per_tdb_day);
+    Ok((u, ud))
+}
+
+fn apparent_without_deflection(
+    eph: &mut De441<std::fs::File>,
+    g: &Geometry,
+) -> Result<(V, V), Box<dyn Error>> {
+    let earth = eph.state_with_acceleration(
+        Body::Earth,
+        Body::SolarSystemBarycenter,
+        g.lt.observation_epoch,
+    )?;
+    let state = aberrate_light_time_state(
+        &g.lt,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )?;
+    let (u, ud, _, _) = unit_rate(state.position_km, state.velocity_km_per_tdb_day);
+    Ok((u, ud))
+}
+
+fn fourth_apparent_increment(
+    eph: &mut De441<std::fs::File>,
+    samples: &[Geometry; 4],
+    h: f64,
+) -> Result<V, Box<dyn Error>> {
+    let mut values = [[0.0; 3]; 4];
+    for (i, g) in samples.iter().enumerate() {
+        values[i] = sub(
+            apparent_icrf(eph, g, false)?.0,
+            apparent_without_deflection(eph, g)?.0,
+        );
+    }
+    Ok(std::array::from_fn(|i| {
+        (values[0][i] - 8.0 * values[1][i] + 8.0 * values[2][i] - values[3][i]) / (12.0 * h)
+    }))
+}
+
+fn fourth_apparent(
+    eph: &mut De441<std::fs::File>,
+    samples: &[Geometry; 4],
+    h: f64,
+) -> Result<V, Box<dyn Error>> {
+    let values = [
+        apparent_icrf(eph, &samples[0], false)?.0,
+        apparent_icrf(eph, &samples[1], false)?.0,
+        apparent_icrf(eph, &samples[2], false)?.0,
+        apparent_icrf(eph, &samples[3], false)?.0,
+    ];
+    Ok(std::array::from_fn(|i| {
+        (values[0][i] - 8.0 * values[1][i] + 8.0 * values[2][i] - values[3][i]) / (12.0 * h)
+    }))
+}
 fn sample(
     eph: &mut De441<std::fs::File>,
     target: Body,
@@ -165,14 +249,23 @@ fn crosses_floor(a: &[Geometry; 4], center: f64) -> bool {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 2
-        && !(args.len() == 3 && ["--normalized", "--floor-details"].contains(&args[2].as_str()))
+        && !(args.len() == 3
+            && [
+                "--normalized",
+                "--floor-details",
+                "--apparent-icrf",
+                "--apparent-increment",
+            ]
+            .contains(&args[2].as_str()))
     {
         return Err(
-            "usage: compare_deflection_rate_candidates <de441> [--normalized|--floor-details] < cases.csv".into(),
+            "usage: compare_deflection_rate_candidates <de441> [--normalized|--floor-details|--apparent-icrf|--apparent-increment] < cases.csv".into(),
         );
     }
     let normalized = args.len() == 3;
     let floor_details = args.len() == 3 && args[2] == "--floor-details";
+    let apparent = args.len() == 3 && args[2] == "--apparent-icrf";
+    let increment = args.len() == 3 && args[2] == "--apparent-increment";
     let mut eph = De441::open(&args[1])?;
     if floor_details {
         println!("body,jd_tdb,denominator,old_crosses,fine_crosses,finer_crosses,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
@@ -198,13 +291,43 @@ fn main() -> Result<(), Box<dyn Error>> {
         let reference = fourth(&fine, 1.0 / 2048.0);
         let check = fourth(&finer, 1.0 / 4096.0);
         let old_rate = scale(sub(old[2].delta, old[1].delta), 128.0);
-        let crossing = crosses_floor(&old, c.denom)
+        let mut crossing = crosses_floor(&old, c.denom)
             || crosses_floor(&fine, c.denom)
             || crosses_floor(&finer, c.denom);
         let Some(candidate) = c.analytic else {
             continue;
         };
-        let (old_error, candidate_error, reference_disagreement) = if normalized {
+        let (old_error, candidate_error, reference_disagreement) = if increment {
+            let a = fourth_apparent_increment(&mut eph, &fine, 1.0 / 2048.0)?;
+            let b = fourth_apparent_increment(&mut eph, &finer, 1.0 / 4096.0)?;
+            let (u, old_velocity) = apparent_icrf(&mut eph, &c, false)?;
+            let (v, new_velocity) = apparent_icrf(&mut eph, &c, true)?;
+            let (_, unperturbed) = apparent_without_deflection(&mut eph, &c)?;
+            if norm(sub(u, v)) > 1e-14 {
+                return Err("candidate changed apparent position".into());
+            }
+            (
+                norm(sub(sub(old_velocity, unperturbed), a)),
+                norm(sub(sub(new_velocity, unperturbed), a)),
+                norm(sub(a, b)),
+            )
+        } else if apparent {
+            let coarse = sample(&mut eph, target, jd, 1.0 / 512.0)?;
+            let refined = sample(&mut eph, target, jd, 1.0 / 1024.0)?;
+            crossing |= crosses_floor(&coarse, c.denom) || crosses_floor(&refined, c.denom);
+            let a = fourth_apparent(&mut eph, &coarse, 1.0 / 512.0)?;
+            let b = fourth_apparent(&mut eph, &refined, 1.0 / 1024.0)?;
+            let (u, old_velocity) = apparent_icrf(&mut eph, &c, false)?;
+            let (v, new_velocity) = apparent_icrf(&mut eph, &c, true)?;
+            if norm(sub(u, v)) > 1e-14 {
+                return Err("candidate changed apparent position".into());
+            }
+            (
+                norm(sub(old_velocity, a)),
+                norm(sub(new_velocity, a)),
+                norm(sub(a, b)),
+            )
+        } else if normalized {
             let (p, pd, range, _) = unit_rate(c.lt.position_km, c.lt.velocity_km_per_day);
             let (_, candidate_rate) = normalized_correction(p, pd, c.delta, candidate);
             let def = deflect_light_time_state_by_sun(&mut eph, &c.lt)?;
@@ -352,5 +475,26 @@ mod tests {
         let h = 1e-4;
         let numeric = scale(sub(position(h), position(-h)), 1.0 / (2.0 * h));
         assert!(norm(sub(expected_velocity, numeric)) < 1e-8);
+    }
+
+    #[test]
+    #[ignore = "requires classic DE441 in DE441_PATH; numerical consistency only"]
+    fn real_de441_apparent_rate_candidate_is_consistent_for_sampled_near_sun_case() {
+        let path = std::env::var_os("DE441_PATH").expect("DE441_PATH required");
+        let mut eph = De441::open(path).unwrap();
+        let target = Body::JupiterBarycenter;
+        let jd = -1_474_550.0;
+        let center = geometry(&mut eph, target, jd).unwrap();
+        let a = sample(&mut eph, target, jd, 1.0 / 512.0).unwrap();
+        let b = sample(&mut eph, target, jd, 1.0 / 1024.0).unwrap();
+        assert!(!crosses_floor(&a, center.denom) && !crosses_floor(&b, center.denom));
+        let ra = fourth_apparent(&mut eph, &a, 1.0 / 512.0).unwrap();
+        let rb = fourth_apparent(&mut eph, &b, 1.0 / 1024.0).unwrap();
+        let (u, old) = apparent_icrf(&mut eph, &center, false).unwrap();
+        let (v, new) = apparent_icrf(&mut eph, &center, true).unwrap();
+        let old_error = norm(sub(old, ra));
+        assert!(norm(sub(u, v)) < 1e-14);
+        assert!(norm(sub(ra, rb)) < old_error * 0.05);
+        assert!(norm(sub(new, ra)) < old_error * 0.05);
     }
 }

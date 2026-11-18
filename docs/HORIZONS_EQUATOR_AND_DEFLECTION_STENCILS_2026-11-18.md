@@ -4,6 +4,8 @@
 Horizons frame audit](NORMALIZED_DEFLECTION_AND_HORIZONS_FRAME_2026-11-18.md).
 No production calculation, API, star catalog or server activation changes.
 
+Continuation: [apparent ICRF speed and local nutation sensitivity](APPARENT_SOLAR_RATE_AND_LOCAL_NUTATION_2026-11-18.md).
+
 ## Distinguishing equator and ecliptic
 
 For seven fixed TT dates from astronomical year −9998 through 2000, obtain
