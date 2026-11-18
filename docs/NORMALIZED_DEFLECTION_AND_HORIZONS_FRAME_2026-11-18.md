@@ -4,6 +4,8 @@
 stellar catalog, or server has been changed. This continues the
 [solar-deflection candidate and ancient-reference audit](SOLAR_DEFLECTION_RATE_CANDIDATE_2026-11-18.md).
 
+Continuation: [equatorial comparison and individual floor stencils](HORIZONS_EQUATOR_AND_DEFLECTION_STENCILS_2026-11-18.md).
+
 ## Normalized correction and real DE441 cases
 
 The production deflected position has the form `R normalize(p + δ)`, with
