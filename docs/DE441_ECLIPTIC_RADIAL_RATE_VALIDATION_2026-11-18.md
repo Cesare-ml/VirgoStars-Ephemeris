@@ -2,6 +2,8 @@
 
 **Result: the sampled standard Rust apparent ecliptic and radial rates agree with derivatives of JPL Horizons positions and ranges within the predeclared diagnostic limits. Direct Horizons Q20 radial rates do not consistently agree with the derivative of Horizons' own ranges.** No app engine is activated. This is an implementation comparison using the same DE441 orbit, not an independent estimate of the orbit's physical accuracy. The sample, separate comparisons and thresholds were fixed in [the plan](DE441_ECLIPTIC_RADIAL_RATE_PLAN_2026-11-18.md) before requesting the reference data.
 
+Follow-up: [station and boundary tests](STATIONS_BOUNDARY_RATE_VALIDATION_2026-11-18.md) found and corrected reference-stencil timing in the audit scripts. An offline TT-weighted replay of the 90 cases below preserved the reported maxima and failures; the new boundary samples were sensitive to this correction.
+
 ## Reference and method
 
 Use 90 geocentric target/date cases: Sun 10, Moon 301, Mercury 199, Venus 299 and Mars–Pluto **system barycenters** 4–9, each at July 1 12:00 TDB in 1901, 1925, 1950, 1975, 2000, 2025, 2050, 2075 and 2099. The standard Rust `geocentric_apparent_six_fields` uses the local classic DE441, light time, solar deflection, annual aberration, and IAU 2006/2000B true ecliptic of date. Its input and output speeds are per TDB day.

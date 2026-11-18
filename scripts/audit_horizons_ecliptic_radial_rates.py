@@ -117,7 +117,10 @@ def main():
         sources.append({'target': name, 'url': url, 'raw': raw})
         for n, (year, center) in enumerate(zip(YEARS, epochs)):
             group = ref[n * 7:n * 7 + 7]
-            local_jds = jds[n * 7:n * 7 + 7]
+            # Use the actual nine-decimal TT epochs sent to Horizons for the
+            # derivative weights. Unrounded TDB offsets are not identical to
+            # these samples, especially at short steps and f64 JD precision.
+            local_jds = tts[n * 7:n * 7 + 7]
             lon0 = group[3]['lon']
             lons = [lon0 + ((x['lon'] - lon0 + 180.0) % 360.0 - 180.0) for x in group]
             lat = [x['lat'] for x in group]
@@ -129,7 +132,7 @@ def main():
                 raise SystemExit('nonfinite Rust rates')
             stencils = []
             for h, points in ((0.02, [1, 2, 4, 5]), (0.04, [0, 1, 5, 6])):
-                d = [four_point(series, local_jds, points, center) for series in (lons, lat, distance)]
+                d = [four_point(series, local_jds, points, local_jds[3]) for series in (lons, lat, distance)]
                 stencils.append({'halfStepDays': h, 'reference': d, 'longitudeErrorArcsecDay': (got[0] - d[0]) * 3600,
                                  'latitudeErrorArcsecDay': (got[1] - d[1]) * 3600, 'radialErrorAuDay': got[2] - d[2],
                                  'q20MinusRangeDerivativeKmS': group[3]['rateKmS'] - d[2] * AU_KM / 86400.0})
@@ -147,6 +150,7 @@ def main():
                'radialAuDay': result('radialErrorAuDay', 5e-10), 'q20DirectVsRangeDerivativeKmS': result('q20MinusRangeDerivativeKmS', 0.001),
                'longitudeSignMismatches': sum(any(r['rustRates'][0] * s['reference'][0] < 0 for s in r['stencils']) for r in records)}
     doc = {'schema': 'horizons-erfa-ecliptic-radial-rates/1', 'status': 'EXPLORATORY', 'capturedUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           'referenceDerivativeScale': 'TT day (actual requested TT epochs)', 'rustDerivativeScale': 'TDB day',
            'kernelSha256': expected, 'binarySha256': executable_hash, 'erfaVersion': erfa.__version__, 'summary': summary,
            'records': records, 'sources': sources}
     with out.open('x', encoding='utf8', newline='\n') as destination:
