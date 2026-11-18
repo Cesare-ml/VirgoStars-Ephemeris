@@ -52,7 +52,6 @@ def main():
         raise SystemExit('unexpected manager source')
     work.mkdir(parents=True, exist_ok=False)
     (work / 'src').mkdir()
-    (work / 'src' / 'pack_manager.rs').write_bytes(manager)
     (work / 'src' / 'main.rs').write_bytes((repo / 'audits' / 'multipack_boundary.rs').read_bytes())
     (work / 'Cargo.toml').write_text('[package]\nname = "provider-boundary-audit"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n\n[dependencies]\nvirgostars-ephemeris-core = { path = ' + json.dumps((repo / 'crates/ephemeris-core').as_posix()) + ' }\n', encoding='utf8')
     (work / 'corrupt-test-only.eph').write_bytes(b'not a DE441 file')
@@ -64,6 +63,8 @@ def main():
     receipt = {'managerCommit': MANAGER_COMMIT, 'managerBlobSha256': hashlib.sha256(manager).hexdigest(),
                'orientationCommit': subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(),
                'apparentModuleSha256': sha(repo / 'crates/ephemeris-core/src/apparent_ecliptic_of_date.rs'),
+               'managerModuleSha256': sha(repo / 'crates/ephemeris-core/src/de441_pack_manager.rs'),
+               'lightTimeModuleSha256': sha(repo / 'crates/ephemeris-core/src/light_time.rs'),
                'auditSourceSha256': sha(repo / 'audits' / 'multipack_boundary.rs'),
                'inputs': [{'path': str(p), 'sha256': h, 'bytes': n} for p, h, n in sources],
                'command': command, 'exitCode': result.returncode, 'resultsSha256': sha(work / 'results.csv'),

@@ -27,14 +27,22 @@ impl ExperimentalLongTermStateProvider for Provider {
         let position = match body {
             Body::Earth => [149_597_870.7, 0.0, 0.0],
             Body::Sun => [0.0, 0.0, 0.0],
-            _ => [250_000_000.0, 100_000_000.0, 10_000_000.0],
+            _ => [
+                250_000_000.0,
+                100_000_000.0 + 1_000_000.0 * (epoch.0 - BOUNDARY),
+                10_000_000.0,
+            ],
         };
         Ok(StateVector {
             target: body,
             center: Body::SolarSystemBarycenter,
             epoch,
             position_km: position,
-            velocity_km_per_day: [0.0; 3],
+            velocity_km_per_day: if matches!(body, Body::Earth | Body::Sun) {
+                [0.0; 3]
+            } else {
+                [0.0, 1_000_000.0, 0.0]
+            },
         })
     }
     fn state_with_acceleration(
@@ -116,15 +124,24 @@ fn preserves_provider_error_for_reception_and_deflection_stencil() {
     ));
 }
 #[test]
-fn refuses_refinement_at_logical_boundary() {
-    let mut p = provider();
-    p.narrow = true;
-    assert!(matches!(
-        experimental_long_term_apparent_with_provider(
+fn refinement_at_inclusive_start_accepts_inward_and_rejects_outward_shifts() {
+    let mut accepted = 0;
+    let mut refused = 0;
+    for index in 0..1000 {
+        let mut p = provider();
+        p.narrow = true;
+        match experimental_long_term_apparent_with_provider(
             &mut p,
             Body::MarsBarycenter,
-            JulianDateTdb(BOUNDARY - 0.1)
-        ),
-        Err(ExperimentalProviderApparentError::UnsafeRefinementBoundary)
-    ));
+            JulianDateTdb(BOUNDARY - 0.1 + f64::from(index) * 0.000001),
+        ) {
+            Ok(_) => accepted += 1,
+            Err(ExperimentalProviderApparentError::UnsafeRefinementBoundary) => refused += 1,
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+    assert!(
+        accepted > 0 && refused > 0,
+        "accepted={accepted}, refused={refused}"
+    );
 }
