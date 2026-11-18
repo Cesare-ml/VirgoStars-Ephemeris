@@ -70,3 +70,7 @@ The earlier Horizons comparison used DE441 as well, and its fitted rates have
 method-dependent uncertainty. Further independent comparisons and a decision
 on emission-time precision and behavior across the clamp are required before
 considering any change to the ordinary path.
+
+The subsequent [controlled emission/deflection matrix](EMISSION_DEFLECTION_MATRIX_2026-11-18.md)
+adds a separate refined-emission Rust experiment and quantifies both changes
+on the existing Horizons sample. The original unrefined function is unchanged.
