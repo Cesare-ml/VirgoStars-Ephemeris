@@ -26,6 +26,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Planetary fixed-axis checks and ancient frame decomposition](docs/PLANET_FRAME_GRID_13000BCE_3999_2026-11-18.md)
 - [Swiss-based decomposition of ancient ecliptic conventions](docs/SWISS_ANCIENT_FRAME_DECOMPOSITION_2026-11-18.md)
 - [Ancient nutation: ERFA and Swiss argument comparison](docs/ANCIENT_NUTATION_ARGUMENT_AUDIT_2026-11-18.md)
+- [Planetary direction sensitivity to ancient nutation arguments](docs/ANCIENT_NUTATION_DIRECTION_IMPACT_2026-11-18.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
