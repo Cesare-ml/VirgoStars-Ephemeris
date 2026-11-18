@@ -289,6 +289,15 @@ export function createHouseAngleProvider(): Readonly<{
     trueObliquityDeg: number;
   }>;
 }>;
+/** Experimental long-term orientation. The caller supplies UT1 and TT. */
+export function createExperimentalHistoricalHouseAngleProvider(): Readonly<{
+  calculateHouseAngles(input: {ut1JulianDay: number; ttJulianDay: number;
+    latitudeDeg: number; longitudeDegEast: number}): Readonly<{
+      model: 'EXPERIMENTAL_LONG_TERM_SIDEREAL_TIME'; ut1JulianDay: number;
+      ttJulianDay: number; latitudeDeg: number; longitudeDegEast: number;
+      armcDeg: number; ascendantDeg: number; midheavenDeg: number; trueObliquityDeg: number;
+    }>;
+}>;
 export const constants: Readonly<Record<string, number>>;
 
 export interface SwissShapedResult {
