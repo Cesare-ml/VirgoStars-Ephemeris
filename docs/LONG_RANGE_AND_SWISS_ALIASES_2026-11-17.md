@@ -1,5 +1,8 @@
 # Long-range apparent experiment and catalog expansion — 2026-11-17
 
+Follow-up: [ancient nutation argument audit](ANCIENT_NUTATION_ARGUMENT_AUDIT_2026-11-18.md)
+compares both nutation components and explicitly separates linear and full arguments.
+
 **Status: experimental/local; not a validated 0–5000 production ephemeris.**
 The existing `calcTdb`/`calcUt` guard and the requirement to cover all Swiss
 stars before using the engine on the main server remain unchanged.
