@@ -63,6 +63,7 @@ def main():
     verify()
     receipt = {'managerCommit': MANAGER_COMMIT, 'managerBlobSha256': hashlib.sha256(manager).hexdigest(),
                'orientationCommit': subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(),
+               'apparentModuleSha256': sha(repo / 'crates/ephemeris-core/src/apparent_ecliptic_of_date.rs'),
                'auditSourceSha256': sha(repo / 'audits' / 'multipack_boundary.rs'),
                'inputs': [{'path': str(p), 'sha256': h, 'bytes': n} for p, h, n in sources],
                'command': command, 'exitCode': result.returncode, 'resultsSha256': sha(work / 'results.csv'),
