@@ -29,6 +29,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Planetary direction sensitivity to ancient nutation arguments](docs/ANCIENT_NUTATION_DIRECTION_IMPACT_2026-11-18.md)
 - [Long-term mean axes and planetary direction conformance against ERFA](docs/ERFA_LONG_TERM_AXES_GRID_2026-11-18.md)
 - [New-date Horizons holdout for planetary directions](docs/HORIZONS_PLANET_HOLDOUT_2026-11-18.md)
+- [TT–TDB model sensitivity for the Horizons holdout](docs/HORIZONS_TT_TDB_SENSITIVITY_2026-11-18.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
