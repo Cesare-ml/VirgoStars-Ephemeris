@@ -95,6 +95,40 @@ fn predictions_start_after_the_last_observation_and_are_flagged() {
 }
 
 #[test]
+fn missing_or_invalid_source_errors_are_not_promoted_to_known_uncertainty() {
+    let table = table();
+    let monthly_jd = table.last_measured_jd_ut();
+    let first_prediction = 2_400_000.5 + 41925.0;
+    let between = table
+        .delta_t((monthly_jd + first_prediction) / 2.0)
+        .unwrap();
+    assert_eq!(between.kind, DeltaTKind::Predicted);
+    assert_eq!(between.uncertainty_seconds, None);
+    assert_eq!(
+        table.delta_t(first_prediction).unwrap().uncertainty_seconds,
+        Some(0.001)
+    );
+    for invalid in ["-0.1", "NaN", "not-a-number"] {
+        let preds = PREDS.replace("0.300", invalid);
+        assert!(matches!(
+            DeltaTTable::from_usno(MONTHLY, HISTORIC, Some(&preds)),
+            Err(DeltaTTableError::Parse {
+                file: "deltat.preds",
+                ..
+            })
+        ));
+    }
+    let history = HISTORIC.replace("29.15    0.10", "29.15    -0.10");
+    assert!(matches!(
+        DeltaTTable::from_usno(MONTHLY, &history, None),
+        Err(DeltaTTableError::Parse {
+            file: "historic_deltat.data",
+            ..
+        })
+    ));
+}
+
+#[test]
 fn nothing_is_extrapolated_and_bad_input_is_rejected() {
     let t = table();
     assert!(matches!(

@@ -35,6 +35,8 @@
 //!   interpolated source-reported error when available. `Measured` identifies
 //!   the non-prediction table; it does not imply direct atomic-clock
 //!   observations in centuries reconstructed from historical evidence.
+//!   Between points an error is returned only if both endpoints report one;
+//!   it remains a source statistic, not a bound on the interpolation error.
 //! - The decimal year of the historic file is converted with the Julian-year
 //!   convention `JD = 2451545.0 + (year − 2000)·365.25`. The source file does
 //!   not specify this mapping. Relative to Gregorian calendar-year fractions,
@@ -186,6 +188,7 @@ fn parse_historic(text: &str) -> Result<Vec<Point>, DeltaTTableError> {
         if !first.is_finite()
             || !delta.is_finite()
             || !error.is_finite()
+            || error < 0.0
             || !(1000.0..3000.0).contains(&first)
         {
             return Err(bad());
@@ -215,7 +218,16 @@ fn parse_preds(text: &str) -> Result<Vec<Point>, DeltaTTableError> {
             return Err(bad());
         }
         let delta: f64 = fields[2].parse().map_err(|_| bad())?;
-        let error = fields.get(4).and_then(|f| f.parse::<f64>().ok());
+        let error = match fields.get(4).copied() {
+            Some("") | None => None,
+            Some(value) => {
+                let parsed: f64 = value.parse().map_err(|_| bad())?;
+                if !parsed.is_finite() || parsed < 0.0 {
+                    return Err(bad());
+                }
+                Some(parsed)
+            }
+        };
         if !mjd.is_finite() || !delta.is_finite() {
             return Err(bad());
         }
@@ -316,8 +328,7 @@ impl DeltaTTable {
         } else {
             let uncertainty = match (a.uncertainty_seconds, b.uncertainty_seconds) {
                 (Some(x), Some(y)) => Some(x + (y - x) * weight),
-                (Some(x), None) | (None, Some(x)) => Some(x),
-                (None, None) => None,
+                _ => None,
             };
             let kind = if a.kind == DeltaTKind::Predicted || b.kind == DeltaTKind::Predicted {
                 DeltaTKind::Predicted

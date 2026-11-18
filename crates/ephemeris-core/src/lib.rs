@@ -79,6 +79,7 @@ pub use error::{EphemerisError, Result};
 pub use state::{ChebyshevPositionRecord, StateVectorKm, Vector3};
 pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY};
 pub mod delta_t_long_range;
+pub mod delta_t_spline;
 pub mod experimental_analytic_apparent;
 pub mod explicit_delta_t;
 mod fairhead_coefficients;
