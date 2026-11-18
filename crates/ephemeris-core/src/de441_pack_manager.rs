@@ -80,7 +80,10 @@ pub enum De441PackError {
     InvalidCatalog(&'static str),
     InvalidEpoch(JulianDateTdb),
     NoPackForEpoch(JulianDateTdb),
-    MissingPack { id: String, path: PathBuf },
+    MissingPack {
+        id: String,
+        path: PathBuf,
+    },
     InvalidPackCoverage {
         id: String,
         expected_start: JulianDateTdb,
@@ -88,7 +91,10 @@ pub enum De441PackError {
         actual_start: JulianDateTdb,
         actual_end: JulianDateTdb,
     },
-    Reader { id: String, source: De441Error },
+    Reader {
+        id: String,
+        source: De441Error,
+    },
 }
 
 impl fmt::Display for De441PackError {
@@ -407,6 +413,8 @@ impl De441PackManager {
         center: Body,
         epoch: JulianDateTdb,
     ) -> Result<StateVectorWithAcceleration, De441PackError> {
-        self.for_epoch(epoch, |reader| reader.state_with_acceleration(target, center, epoch))
+        self.for_epoch(epoch, |reader| {
+            reader.state_with_acceleration(target, center, epoch)
+        })
     }
 }

@@ -98,12 +98,7 @@ fn write_file(path: &Path, bytes: &[u8]) {
     output.flush().unwrap();
 }
 
-fn make_pack(
-    source: &mut De441<Cursor<Vec<u8>>>,
-    path: &Path,
-    start: f64,
-    end: f64,
-) {
+fn make_pack(source: &mut De441<Cursor<Vec<u8>>>, path: &Path, start: f64, end: f64) {
     let mut bytes = Vec::new();
     source
         .write_slice(JulianDateTdb(start), JulianDateTdb(end), &mut bytes)
@@ -121,7 +116,10 @@ fn mobile_catalog_matches_all_ten_manifest_intervals_and_exact_boundaries() {
     let manager = De441PackManager::from_mobile_directory(&directory.0).unwrap();
     let inventory = manager.inventory();
     assert_eq!(inventory.len(), 10);
-    assert_eq!(inventory.iter().filter(|item| item.spec.required).count(), 1);
+    assert_eq!(
+        inventory.iter().filter(|item| item.spec.required).count(),
+        1
+    );
     assert!(inventory.iter().all(|item| !item.installed));
     let years_and_jds = [
         ("history-0000-0199", 1721059.5),
@@ -165,7 +163,10 @@ fn chooses_correct_slice_at_boundary_and_preserves_source_vectors() {
         spec("previous", &previous, 1000.0, 1064.0),
     ])
     .unwrap();
-    assert_eq!(manager.select_pack(JulianDateTdb(1064.0)).unwrap().id, "next");
+    assert_eq!(
+        manager.select_pack(JulianDateTdb(1064.0)).unwrap().id,
+        "next"
+    );
     for jd in [1000.0, 1032.0, 1063.9, 1064.0, 1095.9, 1096.0, 1127.9] {
         let epoch = JulianDateTdb(jd);
         let expected = source
@@ -176,17 +177,28 @@ fn chooses_correct_slice_at_boundary_and_preserves_source_vectors() {
             .unwrap();
         assert_eq!(actual, expected);
         let batch = manager
-            .states_at(&[Body::Mercury, Body::Mercury], Body::SolarSystemBarycenter, epoch)
+            .states_at(
+                &[Body::Mercury, Body::Mercury],
+                Body::SolarSystemBarycenter,
+                epoch,
+            )
             .unwrap();
         assert_eq!(batch, vec![expected, expected]);
         let acceleration = manager
             .state_with_acceleration(Body::Mercury, Body::SolarSystemBarycenter, epoch)
             .unwrap();
         assert_eq!(acceleration.position_km, expected.position_km);
-        assert_eq!(acceleration.velocity_km_per_day, expected.velocity_km_per_day);
+        assert_eq!(
+            acceleration.velocity_km_per_day,
+            expected.velocity_km_per_day
+        );
     }
     assert!(matches!(
-        manager.state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1128.0)),
+        manager.state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1128.0)
+        ),
         Err(De441PackError::NoPackForEpoch(_))
     ));
 }
@@ -203,23 +215,48 @@ fn missing_optional_pack_can_be_added_and_removed_without_restarting() {
         spec("history", &optional, 1064.0, 1128.0),
     ])
     .unwrap();
-    assert_eq!(manager.inventory().iter().filter(|p| p.installed).count(), 1);
+    assert_eq!(
+        manager.inventory().iter().filter(|p| p.installed).count(),
+        1
+    );
     assert!(matches!(
         manager.state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1064.0)),
         Err(De441PackError::MissingPack { id, .. }) if id == "history"
     ));
     make_pack(&mut source, &optional, 1064.0, 1128.0);
-    assert_eq!(manager.inventory().iter().filter(|p| p.installed).count(), 2);
-    manager.state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1064.0)).unwrap();
+    assert_eq!(
+        manager.inventory().iter().filter(|p| p.installed).count(),
+        2
+    );
+    manager
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1064.0),
+        )
+        .unwrap();
     manager.unload();
     fs::remove_file(&optional).unwrap();
-    assert_eq!(manager.inventory().iter().filter(|p| p.installed).count(), 1);
+    assert_eq!(
+        manager.inventory().iter().filter(|p| p.installed).count(),
+        1
+    );
     assert!(matches!(
-        manager.state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1064.0)),
+        manager.state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1064.0)
+        ),
         Err(De441PackError::MissingPack { .. })
     ));
     // No implicit fallback from missing history to an available core file.
-    manager.state(Body::Mercury, Body::SolarSystemBarycenter, JulianDateTdb(1000.0)).unwrap();
+    manager
+        .state(
+            Body::Mercury,
+            Body::SolarSystemBarycenter,
+            JulianDateTdb(1000.0),
+        )
+        .unwrap();
 }
 
 #[test]
@@ -287,7 +324,10 @@ fn complete_classic_file_uses_original_inclusive_final_endpoint() {
     write_file(&path, &fixture(5));
     let mut manager = De441PackManager::from_full_file(&path).unwrap();
     assert_eq!(manager.inventory().len(), 1);
-    assert_eq!(manager.select_pack(JulianDateTdb(1160.0)).unwrap().id, "full-de441");
+    assert_eq!(
+        manager.select_pack(JulianDateTdb(1160.0)).unwrap().id,
+        "full-de441"
+    );
     let state = manager
         .state(
             Body::Mercury,
