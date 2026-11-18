@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
+// Modification (2026-11-18): expose long-term apparent equatorial directions.
 //! One explicit UT1 instant to an ordered set of apparent planetary results.
 //!
 //! This packages the existing experimental long-range path; it does not infer
@@ -18,9 +19,11 @@ use crate::calendar::{Calendar, JulianDate, TimeScale};
 use crate::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
 use crate::de441::{Body, De441};
 use crate::delta_t_long_range::espenak_meeus_2006_extended;
+use crate::earth_orientation::{experimental_extrapolated_nutation, OrientationError};
 use crate::explicit_delta_t::{
     ut1_to_tdb_with_explicit_delta_t, ExplicitDeltaTEpoch, ExplicitDeltaTError,
 };
+use crate::long_term_precession::experimental_direct_obliquity;
 
 /// The complete planetary set supported by this API, in display order.
 pub const MVP_PLANETS: [Body; 10] = [
@@ -110,6 +113,67 @@ impl PlanetaryTime<'static> {
 pub struct PlanetaryPosition {
     pub body: Body,
     pub rates: ExperimentalThreeRateCandidate,
+    /// Geocentric apparent equatorial coordinates of date, degrees.
+    pub equatorial: EquatorialPosition,
+}
+
+/// Equatorial direction of the same apparent ecliptic position. No rates are
+/// supplied: the experimental ecliptic rates use a compatibility candidate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EquatorialPosition {
+    pub right_ascension_deg: f64,
+    pub declination_deg: f64,
+}
+
+#[derive(Debug)]
+pub enum EquatorialError {
+    InvalidDirection,
+    UndefinedRightAscension,
+    Orientation(OrientationError),
+}
+impl fmt::Display for EquatorialError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidDirection => write!(f, "invalid ecliptic direction"),
+            Self::UndefinedRightAscension => write!(f, "right ascension is undefined at the pole"),
+            Self::Orientation(error) => write!(f, "{error}"),
+        }
+    }
+}
+impl Error for EquatorialError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Orientation(error) => Some(error),
+            Self::InvalidDirection | Self::UndefinedRightAscension => None,
+        }
+    }
+}
+
+/// Rotate an apparent ecliptic direction of date into the apparent equator of
+/// the same date using the experimental long-term true obliquity. Input is TT.
+pub fn experimental_equatorial_from_ecliptic(
+    longitude_deg: f64,
+    latitude_deg: f64,
+    jd_tt: f64,
+) -> Result<EquatorialPosition, EquatorialError> {
+    if !longitude_deg.is_finite() || !latitude_deg.is_finite() || latitude_deg.abs() > 90.0 {
+        return Err(EquatorialError::InvalidDirection);
+    }
+    let eps = experimental_direct_obliquity(jd_tt).map_err(EquatorialError::Orientation)?
+        + experimental_extrapolated_nutation(jd_tt)
+            .map_err(EquatorialError::Orientation)?
+            .d_epsilon_rad;
+    let (lon, lat) = (longitude_deg.to_radians(), latitude_deg.to_radians());
+    let (x, y, z) = (lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin());
+    let (y_eq, z_eq) = (y * eps.cos() - z * eps.sin(), y * eps.sin() + z * eps.cos());
+    if x.hypot(y_eq) < 1e-14 {
+        return Err(EquatorialError::UndefinedRightAscension);
+    }
+    let ra = y_eq.atan2(x).to_degrees().rem_euclid(360.0);
+    Ok(EquatorialPosition {
+        right_ascension_deg: if ra >= 360.0 { 0.0 } else { ra },
+        declination_deg: z_eq.atan2(x.hypot(y_eq)).to_degrees(),
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -124,6 +188,7 @@ pub enum PlanetaryError {
     InvalidTargets,
     InvalidSource,
     Time(ExplicitDeltaTError),
+    Orientation(EquatorialError),
     Calculation { body: Body, source: ApparentError },
 }
 
@@ -133,6 +198,7 @@ impl fmt::Display for PlanetaryError {
             Self::InvalidTargets => write!(f, "select 1–10 distinct supported planets"),
             Self::InvalidSource => write!(f, "a Delta T source label (1..200 bytes) is required"),
             Self::Time(error) => write!(f, "explicit time: {error}"),
+            Self::Orientation(error) => write!(f, "equatorial orientation: {error}"),
             Self::Calculation { body, source } => write!(f, "{body:?}: {source}"),
         }
     }
@@ -142,6 +208,7 @@ impl Error for PlanetaryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Time(error) => Some(error),
+            Self::Orientation(error) => Some(error),
             Self::Calculation { source, .. } => Some(source),
             _ => None,
         }
@@ -185,7 +252,17 @@ pub fn planets_ut1<R: Read + Seek>(
     for &body in targets {
         let rates = experimental_three_rate_candidate(ephemeris, body, epoch.jd_tdb)
             .map_err(|source| PlanetaryError::Calculation { body, source })?;
-        positions.push(PlanetaryPosition { body, rates });
+        let equatorial = experimental_equatorial_from_ecliptic(
+            rates.base.longitude_deg,
+            rates.base.latitude_deg,
+            epoch.jd_tt,
+        )
+        .map_err(PlanetaryError::Orientation)?;
+        positions.push(PlanetaryPosition {
+            body,
+            rates,
+            equatorial,
+        });
     }
     Ok(PlanetarySet {
         epoch,
@@ -197,6 +274,40 @@ pub fn planets_ut1<R: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn equatorial_rotation_preserves_equinox_and_solstice_directions() {
+        let jd_tt = 2_451_545.0;
+        let equinox = experimental_equatorial_from_ecliptic(0.0, 0.0, jd_tt).unwrap();
+        assert_eq!(equinox.right_ascension_deg, 0.0);
+        assert_eq!(equinox.declination_deg, 0.0);
+        let north = experimental_equatorial_from_ecliptic(90.0, 0.0, jd_tt).unwrap();
+        let south = experimental_equatorial_from_ecliptic(270.0, 0.0, jd_tt).unwrap();
+        assert!((north.right_ascension_deg - 90.0).abs() < 1e-12);
+        assert!((south.right_ascension_deg - 270.0).abs() < 1e-12);
+        assert!((23.0..24.0).contains(&north.declination_deg));
+        assert!((north.declination_deg + south.declination_deg).abs() < 1e-12);
+        assert!(matches!(
+            experimental_equatorial_from_ecliptic(0.0, 91.0, jd_tt),
+            Err(EquatorialError::InvalidDirection)
+        ));
+        assert!(matches!(
+            experimental_equatorial_from_ecliptic(f64::NAN, 0.0, jd_tt),
+            Err(EquatorialError::InvalidDirection)
+        ));
+        assert!(matches!(
+            experimental_equatorial_from_ecliptic(0.0, 0.0, f64::NAN),
+            Err(EquatorialError::Orientation(_))
+        ));
+        let eps = experimental_direct_obliquity(jd_tt).unwrap()
+            + experimental_extrapolated_nutation(jd_tt)
+                .unwrap()
+                .d_epsilon_rad;
+        assert!(matches!(
+            experimental_equatorial_from_ecliptic(90.0, 90.0 - eps.to_degrees(), jd_tt),
+            Err(EquatorialError::UndefinedRightAscension)
+        ));
+    }
 
     #[test]
     fn validates_planet_selection() {

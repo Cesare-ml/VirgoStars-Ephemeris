@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
+// Modification (2026-11-18): check historical and modern equatorial outputs.
+use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
+    geocentric_apparent_six_fields_many_with_options, ApparentFrame, ApparentOptions,
+};
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
 use virgostars_ephemeris_core::de441::{Body, De441};
@@ -38,6 +42,8 @@ fn full_set_reuses_existing_long_range_results_and_rejects_bad_input() {
         for (position, target) in set.positions.iter().zip(MVP_PLANETS) {
             assert_eq!(position.body, target);
             assert!(position.rates.base.longitude_deg.is_finite());
+            assert!((0.0..360.0).contains(&position.equatorial.right_ascension_deg));
+            assert!((-90.0..=90.0).contains(&position.equatorial.declination_deg));
         }
         let expected =
             historical_three_rate_candidate(&mut eph, Body::Moon, jd, 100.0, 10.0, "synthetic")
@@ -52,6 +58,26 @@ fn full_set_reuses_existing_long_range_results_and_rejects_bad_input() {
     let modeled = planets_ut1(&mut eph, &[Body::Sun, Body::Moon], model).unwrap();
     assert_eq!(modeled.delta_t_source, "Espenak-Meeus 2006");
     assert_eq!(modeled.positions.len(), 2);
+    // A modern-date sanity check against the separate existing equatorial path.
+    // This is a same-engine comparison, not an independent accuracy validation.
+    let eq = geocentric_apparent_six_fields_many_with_options(
+        &mut eph,
+        &[Body::Sun, Body::Moon],
+        modeled.epoch.jd_tdb,
+        ApparentOptions {
+            frame: ApparentFrame::TrueEquatorOfDate,
+            ..ApparentOptions::default()
+        },
+    )
+    .unwrap();
+    for (position, reference) in modeled.positions.iter().zip(eq) {
+        let ra_diff = (position.equatorial.right_ascension_deg - reference.fields.longitude_deg
+            + 180.0)
+            .rem_euclid(360.0)
+            - 180.0;
+        assert!(ra_diff.abs() < 0.01);
+        assert!((position.equatorial.declination_deg - reference.fields.latitude_deg).abs() < 0.01);
+    }
     let time = || PlanetaryTime {
         jd_ut1: 2_451_545.0,
         delta_t_seconds: 64.0,
