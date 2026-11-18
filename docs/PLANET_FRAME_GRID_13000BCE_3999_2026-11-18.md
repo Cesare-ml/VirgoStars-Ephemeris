@@ -1,5 +1,7 @@
 # Planetary positions and ancient frame decomposition
 
+Follow-up: [300 Horizons comparisons at new dates](HORIZONS_PLANET_HOLDOUT_2026-11-18.md).
+
 Follow-up: [Swiss-based ancient frame decomposition](SWISS_ANCIENT_FRAME_DECOMPOSITION_2026-11-18.md)
 extends the frame-only comparison into the pre-Horizons portion of the range.
 
