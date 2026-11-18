@@ -33,9 +33,7 @@ use std::{error::Error, f64::consts::TAU, fmt};
 
 use crate::de441::{Body, JulianDateTdb, StateVector};
 use crate::de441_pack_manager::{De441PackError, De441PackManager};
-use crate::earth_orientation::{
-    true_ecliptic_of_date_matrix, OrientationError,
-};
+use crate::earth_orientation::{true_ecliptic_of_date_matrix, OrientationError};
 use crate::six_field_units::IAU_AU_KM;
 
 pub const ORIENTATION_MODEL: &str = "IAU_2006_BIAS_PRECESSION_IAU_2000B_NUTATION";
@@ -73,7 +71,9 @@ pub enum GeometricDateError {
 impl fmt::Display for GeometricDateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidGeocentricState => write!(f, "expected a target relative to Earth's center"),
+            Self::InvalidGeocentricState => {
+                write!(f, "expected a target relative to Earth's center")
+            }
             Self::NonFinite => write!(f, "nonfinite geometric ecliptic-of-date input or output"),
             Self::UndefinedLongitude => write!(f, "geocentric direction or longitude undefined"),
             Self::Orientation(error) => write!(f, "date-frame orientation: {error}"),
@@ -104,15 +104,23 @@ pub fn project_geocentric_geometric_state(
     if state.center != Body::Earth || state.target == Body::Earth {
         return Err(GeometricDateError::InvalidGeocentricState);
     }
-    if !state.epoch.0.is_finite() ||
-        state.position_km.iter().chain(state.velocity_km_per_day.iter()).any(|x| !x.is_finite())
+    if !state.epoch.0.is_finite()
+        || state
+            .position_km
+            .iter()
+            .chain(state.velocity_km_per_day.iter())
+            .any(|x| !x.is_finite())
     {
         return Err(GeometricDateError::NonFinite);
     }
     let matrix = true_ecliptic_of_date_matrix(orientation_epoch_tt_jd)
         .map_err(GeometricDateError::Orientation)?;
     let position: [f64; 3] = std::array::from_fn(|row| {
-        matrix[row].iter().zip(state.position_km).map(|(m, x)| (*m) * x).sum::<f64>()
+        matrix[row]
+            .iter()
+            .zip(state.position_km)
+            .map(|(m, x)| (*m) * x)
+            .sum::<f64>()
     });
     if position.iter().any(|x| !x.is_finite()) {
         return Err(GeometricDateError::NonFinite);
@@ -130,8 +138,10 @@ pub fn project_geocentric_geometric_state(
     let longitude_deg = y.atan2(x).rem_euclid(TAU).to_degrees();
     let latitude_deg = z.atan2(planar).to_degrees();
     let distance_au = distance_km / IAU_AU_KM;
-    if [longitude_deg, latitude_deg, distance_au].iter().any(|x| !x.is_finite()) ||
-        distance_au <= 0.0
+    if [longitude_deg, latitude_deg, distance_au]
+        .iter()
+        .any(|x| !x.is_finite())
+        || distance_au <= 0.0
     {
         return Err(GeometricDateError::NonFinite);
     }
@@ -163,7 +173,8 @@ pub fn geocentric_geometric_true_ecliptic_of_date(
     }
     true_ecliptic_of_date_matrix(orientation_epoch_tt_jd)
         .map_err(GeometricDateError::Orientation)?;
-    let state = manager.state(target, Body::Earth, epoch_tdb)
+    let state = manager
+        .state(target, Body::Earth, epoch_tdb)
         .map_err(GeometricDateError::Ephemeris)?;
     project_geocentric_geometric_state(&state, orientation_epoch_tt_jd)
 }

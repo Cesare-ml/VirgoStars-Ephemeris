@@ -69,37 +69,83 @@ fn orientation_of_date_changes_geometric_longitude_without_implying_apparent() {
 }
 
 #[test]
+fn synthetic_geometric_direction_matches_independent_erfa_orientation() {
+    // Reference generated with pyerfa 2.0.1.5: pmat06, nut00b, obl06,
+    // numat, rx(eps+deps). ICRF axes to true ecliptic/equinox of TT date.
+    // Fixed before comparison: 1e-8 degree per angular component. This checks
+    // orientation only, not DE441 interpolation or physical model accuracy.
+    let input = geometric([
+        0.3 * IAU_AU_KM,
+        -0.4 * IAU_AU_KM,
+        0.8660254037844386 * IAU_AU_KM,
+    ]);
+    for (tt, longitude, latitude) in [
+        (2_415_020.0, 354.359_005_744_462_8, 72.491_601_976_577_58),
+        (2_451_545.0, 355.705_486_259_885_7, 72.491_742_162_241_76),
+        (2_488_069.0, 357.066_080_400_851_1, 72.491_982_501_326_55),
+    ] {
+        let actual = project_geocentric_geometric_state(&input, tt).unwrap();
+        let lon_error = (actual.longitude_deg - longitude).abs();
+        let lat_error = (actual.latitude_deg - latitude).abs();
+        println!(
+            "TT {tt}: ERFA residual longitude={lon_error:.3e} deg latitude={lat_error:.3e} deg"
+        );
+        assert!(lon_error < 1e-8 && lat_error < 1e-8);
+        assert!((actual.distance_au - 1.0).abs() < 1e-12);
+    }
+}
+
+#[test]
 fn reject_non_geocentric_states_zero_ranges_and_invalid_floats() {
     let mut state = geometric([1.0, 1.0, 1.0]);
     state.center = Body::SolarSystemBarycenter;
-    assert!(matches!(project_geocentric_geometric_state(&state, 2_451_545.0),
-        Err(GeometricDateError::InvalidGeocentricState)));
+    assert!(matches!(
+        project_geocentric_geometric_state(&state, 2_451_545.0),
+        Err(GeometricDateError::InvalidGeocentricState)
+    ));
 
     state.center = Body::Earth;
     state.target = Body::Earth;
-    assert!(matches!(project_geocentric_geometric_state(&state, 2_451_545.0),
-        Err(GeometricDateError::InvalidGeocentricState)));
+    assert!(matches!(
+        project_geocentric_geometric_state(&state, 2_451_545.0),
+        Err(GeometricDateError::InvalidGeocentricState)
+    ));
 
     let zero = geometric([0.0, 0.0, 0.0]);
-    assert!(matches!(project_geocentric_geometric_state(&zero, 2_451_545.0),
-        Err(GeometricDateError::UndefinedLongitude)));
+    assert!(matches!(
+        project_geocentric_geometric_state(&zero, 2_451_545.0),
+        Err(GeometricDateError::UndefinedLongitude)
+    ));
 
     let nonfinite = geometric([f64::NAN, 1.0, 0.0]);
-    assert!(matches!(project_geocentric_geometric_state(&nonfinite, 2_451_545.0),
-        Err(GeometricDateError::NonFinite)));
+    assert!(matches!(
+        project_geocentric_geometric_state(&nonfinite, 2_451_545.0),
+        Err(GeometricDateError::NonFinite)
+    ));
 
-    let overflow = geometric([1e308, 1e308, 1e308]);
-    assert!(matches!(project_geocentric_geometric_state(&overflow, 2_451_545.0),
-        Err(GeometricDateError::NonFinite)));
+    // Each input remains finite, but the vector norm necessarily overflows.
+    let overflow = geometric([f64::MAX, f64::MAX, f64::MAX]);
+    assert!(matches!(
+        project_geocentric_geometric_state(&overflow, 2_451_545.0),
+        Err(GeometricDateError::NonFinite)
+    ));
 }
 
 #[test]
 fn tt_coverage_is_a_hard_gate_even_when_tdb_is_valid() {
     let state = geometric([IAU_AU_KM, 0.0, 0.0]);
-    assert!(matches!(project_geocentric_geometric_state(&state, 2_400_000.0),
-        Err(GeometricDateError::Orientation(OrientationError::UnsupportedEpoch { .. }))));
-    assert!(matches!(project_geocentric_geometric_state(&state, f64::NAN),
-        Err(GeometricDateError::Orientation(OrientationError::NonFinite { .. }))));
+    assert!(matches!(
+        project_geocentric_geometric_state(&state, 2_400_000.0),
+        Err(GeometricDateError::Orientation(
+            OrientationError::UnsupportedEpoch { .. }
+        ))
+    ));
+    assert!(matches!(
+        project_geocentric_geometric_state(&state, f64::NAN),
+        Err(GeometricDateError::Orientation(
+            OrientationError::NonFinite { .. }
+        ))
+    ));
 }
 
 #[test]
@@ -108,19 +154,66 @@ fn manager_adapter_requires_a_real_pack_and_never_falls_back() {
         .join("virgostars-geometric-date-test-no-packs")
         .join(format!("pid-{}", std::process::id()));
     let mut manager = De441PackManager::from_mobile_directory(missing_directory).unwrap();
-    let err = geocentric_geometric_true_ecliptic_of_date(
-        &mut manager, Body::Sun, J2000_TDB, 2_451_545.0,
-    ).unwrap_err();
-    assert!(matches!(err, GeometricDateError::Ephemeris(De441PackError::MissingPack { .. })));
+    let err =
+        geocentric_geometric_true_ecliptic_of_date(&mut manager, Body::Sun, J2000_TDB, 2_451_545.0)
+            .unwrap_err();
+    assert!(matches!(
+        err,
+        GeometricDateError::Ephemeris(De441PackError::MissingPack { .. })
+    ));
 }
 
 #[test]
 fn invalid_orientation_and_earth_target_stop_before_pack_io() {
     let mut manager = De441PackManager::from_mobile_directory("unread-test-directory").unwrap();
-    assert!(matches!(geocentric_geometric_true_ecliptic_of_date(
-        &mut manager, Body::Earth, J2000_TDB, 2_451_545.0,
-    ), Err(GeometricDateError::InvalidGeocentricState)));
-    assert!(matches!(geocentric_geometric_true_ecliptic_of_date(
-        &mut manager, Body::Sun, J2000_TDB, 2_400_000.0,
-    ), Err(GeometricDateError::Orientation(OrientationError::UnsupportedEpoch { .. }))));
+    assert!(matches!(
+        geocentric_geometric_true_ecliptic_of_date(
+            &mut manager,
+            Body::Earth,
+            J2000_TDB,
+            2_451_545.0,
+        ),
+        Err(GeometricDateError::InvalidGeocentricState)
+    ));
+    assert!(matches!(
+        geocentric_geometric_true_ecliptic_of_date(&mut manager, Body::Sun, J2000_TDB, 2_400_000.0,),
+        Err(GeometricDateError::Orientation(
+            OrientationError::UnsupportedEpoch { .. }
+        ))
+    ));
+}
+
+// Modification 2026-11-18: offline, caller-supplied data integration test.
+// This tests slice identity with the same source, not independent accuracy.
+#[test]
+#[ignore = "requires DE441_PATH and DE441_PACKS_DIR with locally held DE441 data"]
+fn real_packs_match_source_on_both_sides_of_logical_boundaries() {
+    use virgostars_ephemeris_core::de441::De441;
+    let source_path = std::env::var_os("DE441_PATH").expect("DE441_PATH");
+    let packs_dir = std::env::var_os("DE441_PACKS_DIR").expect("DE441_PACKS_DIR");
+    let mut source = De441::open(source_path).unwrap();
+    let mut manager = De441PackManager::from_mobile_directory(packs_dir).unwrap();
+    let inventory = manager.inventory();
+    assert_eq!(inventory.len(), 10);
+    assert!(inventory.iter().all(|pack| pack.installed));
+    for pack in &inventory {
+        let epoch = pack.spec.start_tdb;
+        assert_eq!(manager.select_pack(epoch).unwrap().id, pack.spec.id);
+        let actual = manager.state(Body::Sun, Body::Earth, epoch).unwrap();
+        let expected = source.state(Body::Sun, Body::Earth, epoch).unwrap();
+        assert_eq!(actual, expected);
+        let before_end = JulianDateTdb(f64::from_bits(pack.spec.end_tdb.0.to_bits() - 1));
+        assert_eq!(manager.select_pack(before_end).unwrap().id, pack.spec.id);
+        assert_eq!(
+            manager.state(Body::Sun, Body::Earth, before_end).unwrap(),
+            source.state(Body::Sun, Body::Earth, before_end).unwrap()
+        );
+    }
+    let result =
+        geocentric_geometric_true_ecliptic_of_date(&mut manager, Body::Sun, J2000_TDB, 2_451_545.0)
+            .unwrap();
+    println!(
+        "J2000 Sun/Earth geometric true ecliptic: longitude={} deg latitude={} deg distance={} km",
+        result.longitude_deg, result.latitude_deg, result.distance_km
+    );
 }
