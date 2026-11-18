@@ -5,6 +5,8 @@ stencil audit](HORIZONS_EQUATOR_AND_DEFLECTION_STENCILS_2026-11-18.md).
 The candidate is an offline example, not a production or public API change.
 Stars and main-server migration remain paused.
 
+Continuation: [Horizons sampled speeds and equatorial frame fit](HORIZONS_SOLAR_RATES_AND_FRAME_ROTATION_2026-11-18.md).
+
 ## Apparent ICRF speed through aberration
 
 For the existing real DE441 grids (121 rows / 105 distinct body-epoch pairs,

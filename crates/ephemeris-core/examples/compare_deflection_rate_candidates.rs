@@ -2,6 +2,7 @@
 // Modification (2026-11-18): diagnose normalized-position rate and guard crossings.
 // Modification (2026-11-18): distinguish sampled guard crossings by stencil.
 // Modification (2026-11-18): compare complete experimental ICRF rates.
+// Modification (2026-11-18): expose diagnostic ICRF angles and speeds for Horizons.
 //! Exploratory derivatives of the existing deflection model, not a production
 //! correction or a physical accuracy claim. Input CSV: body ID,TDB JD.
 use std::error::Error;
@@ -193,6 +194,20 @@ fn apparent_without_deflection(
     Ok((u, ud))
 }
 
+fn sky_angles_and_rates(u: V, ud: V) -> Result<[f64; 4], Box<dyn Error>> {
+    let xy2 = u[0] * u[0] + u[1] * u[1];
+    if !xy2.is_finite() || xy2 < 1e-20 {
+        return Err("undefined right ascension".into());
+    }
+    let rho = xy2.sqrt();
+    Ok([
+        u[1].atan2(u[0]).to_degrees().rem_euclid(360.0),
+        u[2].atan2(rho).to_degrees(),
+        (u[0] * ud[1] - u[1] * ud[0]) / rho * AS_PER_RAD,
+        ud[2] / rho * AS_PER_RAD,
+    ])
+}
+
 fn fourth_apparent_increment(
     eph: &mut De441<std::fs::File>,
     samples: &[Geometry; 4],
@@ -255,19 +270,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "--floor-details",
                 "--apparent-icrf",
                 "--apparent-increment",
+                "--apparent-state",
             ]
             .contains(&args[2].as_str()))
     {
         return Err(
-            "usage: compare_deflection_rate_candidates <de441> [--normalized|--floor-details|--apparent-icrf|--apparent-increment] < cases.csv".into(),
+            "usage: compare_deflection_rate_candidates <de441> [--normalized|--floor-details|--apparent-icrf|--apparent-increment|--apparent-state] < cases.csv".into(),
         );
     }
     let normalized = args.len() == 3;
     let floor_details = args.len() == 3 && args[2] == "--floor-details";
     let apparent = args.len() == 3 && args[2] == "--apparent-icrf";
     let increment = args.len() == 3 && args[2] == "--apparent-increment";
+    let apparent_state = args.len() == 3 && args[2] == "--apparent-state";
     let mut eph = De441::open(&args[1])?;
-    if floor_details {
+    if apparent_state {
+        println!("body,jd_tdb,elongation_deg,denominator,ra_deg,dec_deg,old_ra_cosdec_as_day,old_dec_as_day,candidate_ra_cosdec_as_day,candidate_dec_as_day");
+    } else if floor_details {
         println!("body,jd_tdb,denominator,old_crosses,fine_crosses,finer_crosses,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
     } else {
         println!("body,jd_tdb,elongation_deg,denominator,crosses_floor,old_error_as_per_day,analytic_error_as_per_day,reference_disagreement_as_per_day");
@@ -285,6 +304,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("invalid epoch".into());
         }
         let c = geometry(&mut eph, target, jd)?;
+        if apparent_state {
+            let (u, old) = apparent_icrf(&mut eph, &c, false)?;
+            let (v, new) = apparent_icrf(&mut eph, &c, true)?;
+            if norm(sub(u, v)) > 1e-14 {
+                return Err("candidate changed apparent position".into());
+            }
+            let a = sky_angles_and_rates(u, old)?;
+            let b = sky_angles_and_rates(v, new)?;
+            println!(
+                "{id},{jd},{:.12},{:.14e},{:.12},{:.12},{:.12},{:.12},{:.12},{:.12}",
+                c.angle, c.denom, a[0], a[1], a[2], a[3], b[2], b[3]
+            );
+            continue;
+        }
         let old = sample(&mut eph, target, jd, 1.0 / 256.0)?;
         let fine = sample(&mut eph, target, jd, 1.0 / 2048.0)?;
         let finer = sample(&mut eph, target, jd, 1.0 / 4096.0)?;
@@ -378,6 +411,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn apparent_sky_rates_handle_ra_wrap_and_reject_pole() {
+        let omega = 0.01;
+        let v = sky_angles_and_rates([1.0, 0.0, 0.0], [0.0, omega, 0.0]).unwrap();
+        assert!((v[2] - omega * AS_PER_RAD).abs() < 1e-10);
+        assert_eq!(v[3], 0.0);
+        assert!(sky_angles_and_rates([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]).is_err());
+    }
     #[test]
     fn analytic_derivative_matches_synthetic_varying_vectors() {
         for degrees in [0.04_f64, 0.3, 2.0, 30.0, 120.0] {
