@@ -15,6 +15,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 ## Read first
 
+- [Bounded historical ΔT estimates for BCE dates](docs/HISTORICAL_DELTAT_NASA_BCE_2026-11-18.md)
 - [MVP 1 pianeti: decisioni e tre gruppi di chiusura](docs/MVP1_PIANETI_CHIUSURA_2026-11-18.md)
 - [MVP 1: verifica della velocità lunare in longitudine](docs/MVP1_LUNAR_LONGITUDE_SPEED_2026-11-18.md)
 - [MVP 1: cambi di moto campionati e tempo UT1 esplicito](docs/MVP1_STATIONS_AND_HISTORICAL_RATES_2026-11-18.md)
