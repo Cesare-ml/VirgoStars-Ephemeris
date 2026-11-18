@@ -15,6 +15,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 ## Read first
 
+- [Independent DE441 and apparent-pipeline validation, including the failing lunar baseline gate](docs/DE441_INDEPENDENT_VALIDATION_2026-11-18.md)
 - [MVP readiness and remaining acceptance work](docs/MVP_READINESS_2026-11-17.md)
 - [MVP 1 proposed priorities with stellar work paused](docs/MVP1_NEXT_PRIORITIES_2026-11-17.md)
 - [Experimental planetary range 13000 BCE–3999 CE and historical-time diagnostic](docs/PLANET_VALIDATION_13000BCE_3999_2026-11-17.md)
