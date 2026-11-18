@@ -1,5 +1,7 @@
 # New-date Horizons holdout for ancient planetary directions
 
+Follow-up: [TT–TDB model sensitivity](HORIZONS_TT_TDB_SENSITIVITY_2026-11-18.md).
+
 **Status: exploratory implementation comparison, not MVP acceptance or an
 accuracy guarantee.** This extends the [existing planetary frame grid](PLANET_FRAME_GRID_13000BCE_3999_2026-11-18.md)
 with new dates. The stellar catalog and main-server migration remain paused.
