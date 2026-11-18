@@ -19,6 +19,10 @@ Non trasforma controlli campionati in una garanzia di accuratezza fisica.
   garanzia continua fra le date campionate o una misura dell'errore storico.
 - Questo limite riguarda le **posizioni**: non è una tolleranza di velocità,
   un limite sui tempi delle stazioni, né un'incertezza di ΔT.
+- Per le velocità e i cambi di moto, l'utente ha scelto la compatibilità con
+  **la velocità pubblicata da Swiss**, anche quando differisce dalla derivata
+  numerica delle posizioni Swiss. La compatibilità non è ancora raggiunta:
+  si veda [velocità, stazioni ed estremi](MVP1_SWISS_SPEED_BOUNDARIES_2026-11-18.md).
 
 Il perimetro base qui verificato è la direzione apparente geocentrica di
 Sole, Luna, Mercurio, Venere e baricentri dei sistemi Marte–Plutone, con
@@ -66,12 +70,15 @@ che il controllo fallisca davvero, una prova tecnica a 0,001″ ha rilevato
 
 ## Tre gruppi di verifiche rimasti
 
-1. **Velocità, cambi di moto ed estremi.** Usare Swiss come confronto con
+1. **Velocità, cambi di moto ed estremi — aperto.** Usare Swiss come confronto con
    convenzioni esplicite; riutilizzare i risultati già raccolti e chiudere i
    casi mancanti sulla variante direct-obliquity, sui confini e vicino al
    Sole. Definire separatamente unità e tolleranze di velocità e di tempo
    delle stazioni: il limite di posizione di 1″ non le definisce. Le prove
    sulle posizioni e le precedenti stazioni non dimostrano ancora questo gate.
+   Il controllo successivo copre i due estremi e individua quattro disaccordi
+   di segno su 48 stazioni rispetto alla velocità pubblicata: è necessaria una
+   correzione compatibile e la sua verifica, non solo altra documentazione.
 2. **Contratto del tempo storico.** Per le date fuori dalla copertura moderna,
    usare un input UT1/TT/TDB chiaramente identificato e una politica esplicita
    per ΔT e la sua fonte/incertezza. Riutilizzare i test delle tre ipotesi e
