@@ -1,38 +1,15 @@
 // SPDX-License-Identifier: CPAL-1.0
-// Diagnostic only: compiles the unchanged #601 manager against experimental core.
+// Diagnostic only: exercises the integrated experimental pack provider.
 use de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
 use std::{error::Error, io, path::PathBuf};
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
     experimental_long_term_apparent_ecliptic, experimental_long_term_apparent_with_provider,
-    ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
+    ExperimentalProviderApparentError,
 };
 use virgostars_ephemeris_core::light_time::{geocentric_light_time, light_time_with_states};
 pub use virgostars_ephemeris_core::{calendar, de441};
 
-#[allow(dead_code)]
-mod pack_manager;
-use pack_manager::{De441PackError, De441PackManager};
-
-impl ExperimentalLongTermStateProvider for De441PackManager {
-    type Error = De441PackError;
-    fn state(&mut self, body: Body, epoch: JulianDateTdb) -> Result<StateVector, Self::Error> {
-        De441PackManager::state(self, body, Body::SolarSystemBarycenter, epoch)
-    }
-    fn state_with_acceleration(
-        &mut self,
-        body: Body,
-        epoch: JulianDateTdb,
-    ) -> Result<de441::StateVectorWithAcceleration, Self::Error> {
-        De441PackManager::state_with_acceleration(self, body, Body::SolarSystemBarycenter, epoch)
-    }
-    fn logical_coverage(
-        &mut self,
-        epoch: JulianDateTdb,
-    ) -> Result<(JulianDateTdb, JulianDateTdb), Self::Error> {
-        let s = self.select_pack(epoch)?;
-        Ok((s.start_tdb, s.end_tdb))
-    }
-}
+use virgostars_ephemeris_core::de441_pack_manager::{De441PackError, De441PackManager};
 
 fn maxdiff(a: &[f64], b: &[f64]) -> f64 {
     a.iter()

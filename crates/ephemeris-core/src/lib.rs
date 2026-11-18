@@ -42,6 +42,7 @@ pub mod civil_apparent;
 pub mod coordinates;
 pub mod de441;
 pub mod de441_epoch_bridge;
+pub mod de441_pack_manager;
 pub mod delta_t;
 pub mod delta_t_table;
 pub mod earth_orientation;

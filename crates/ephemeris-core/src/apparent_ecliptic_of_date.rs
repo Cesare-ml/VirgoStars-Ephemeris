@@ -82,8 +82,8 @@ use crate::light_deflection::{
     deflect_light_time_state_by_sun, deflect_light_time_state_by_sun_with, DeflectionError,
 };
 use crate::light_time::{
-    geocentric_light_time, heliocentric_light_time, light_time_with_states,
-    refine_emission_rounding,
+    emission_refinement_shift, geocentric_light_time, heliocentric_light_time,
+    light_time_with_states, refine_emission_rounding,
 };
 use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 use crate::six_field_units::{
@@ -605,8 +605,8 @@ pub trait ExperimentalLongTermStateProvider {
 pub enum ExperimentalProviderApparentError<E> {
     Provider(E),
     Apparent(ApparentError),
-    /// Conservatively reject refinement whose sub-ULP correction could cross
-    /// a logical package boundary. This is not a silent model fallback.
+    /// The computed sub-ULP correction crosses the selected logical interval.
+    /// No adjacent-file substitution or model fallback is performed.
     UnsafeRefinementBoundary,
 }
 
@@ -641,12 +641,13 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     let (start, end) = provider
         .logical_coverage(lt.emission_epoch)
         .map_err(Provider)?;
-    let margin = 4.0 * f64::EPSILON * lt.emission_epoch.0.abs();
+    let shift = emission_refinement_shift(&lt, &emission)
+        .map_err(|error| Apparent(AberratedStateError::from(error).into()))?;
     if !start.0.is_finite()
         || !end.0.is_finite()
         || start.0 >= end.0
-        || lt.emission_epoch.0 - start.0 <= margin
-        || end.0 - lt.emission_epoch.0 <= margin
+        || (lt.emission_epoch.0 - start.0) + shift < 0.0
+        || (end.0 - lt.emission_epoch.0) - shift <= 0.0
     {
         return Err(UnsafeRefinementBoundary);
     }
