@@ -46,6 +46,21 @@ impl fmt::Display for ExplicitDeltaTError {
 }
 impl Error for ExplicitDeltaTError {}
 
+/// Return the leading periodic TDB−TT term in seconds before Julian-date
+/// rounding. This is an approximation, not a full relativistic time model.
+pub fn approximate_tdb_minus_tt_seconds(jd_tt: f64) -> Result<f64, ExplicitDeltaTError> {
+    if !jd_tt.is_finite() {
+        return Err(ExplicitDeltaTError::NonFinite);
+    }
+    let t = (jd_tt - 2_451_545.0) / 36_525.0;
+    let mean_anomaly = (357.5291092 + 35_999.0502909 * t).to_radians();
+    let correction = 0.001657 * mean_anomaly.sin();
+    if !mean_anomaly.is_finite() || !correction.is_finite() {
+        return Err(ExplicitDeltaTError::Unrepresentable);
+    }
+    Ok(correction)
+}
+
 /// Convert UT1 to TT and approximate TDB. The approximation is the same leading
 /// periodic TDB-TT term used by the existing apparent pipeline; no accuracy
 /// claim for that approximation over distant epochs is made. Uncertainty is a
@@ -65,10 +80,12 @@ pub fn ut1_to_tdb_with_explicit_delta_t(
         return Err(ExplicitDeltaTError::NegativeUncertainty);
     }
     let jd_tt = jd_ut1 + delta_t_seconds / 86_400.0;
-    let t = (jd_tt - 2_451_545.0) / 36_525.0;
-    let mean_anomaly = (357.5291092 + 35_999.0502909 * t).to_radians();
-    let jd_tdb = jd_tt + 0.001657 * mean_anomaly.sin() / 86_400.0;
-    if ![jd_tt, mean_anomaly, jd_tdb].iter().all(|x| x.is_finite()) {
+    if !jd_tt.is_finite() {
+        return Err(ExplicitDeltaTError::Unrepresentable);
+    }
+    let correction = approximate_tdb_minus_tt_seconds(jd_tt)?;
+    let jd_tdb = jd_tt + correction / 86_400.0;
+    if !jd_tdb.is_finite() {
         return Err(ExplicitDeltaTError::Unrepresentable);
     }
     Ok(ExplicitDeltaTEpoch {

@@ -6,6 +6,9 @@ use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
 use virgostars_ephemeris_core::de441::{
     Body, JulianDateTdb, StateVector, StateVectorWithAcceleration,
 };
+use virgostars_ephemeris_core::historical_delta_t_scenarios::{
+    historical_delta_t_scenarios_with_provider, HistoricalProviderScenarioError, ScenarioSample,
+};
 
 const BOUNDARY: f64 = 2_451_545.0;
 #[derive(Debug, PartialEq)]
@@ -144,4 +147,52 @@ fn refinement_at_inclusive_start_accepts_inward_and_rejects_outward_shifts() {
         accepted > 0 && refused > 0,
         "accepted={accepted}, refused={refused}"
     );
+}
+
+#[test]
+fn historical_scenarios_preserve_explicit_source_time_and_sample_errors() {
+    let result = historical_delta_t_scenarios_with_provider(
+        &mut provider(),
+        Body::Sun,
+        BOUNDARY - 0.1,
+        64.0,
+        30.0,
+        "user supplied",
+    )
+    .unwrap();
+    assert_eq!(result.delta_t_source, "user supplied");
+    assert_eq!(result.lower.epoch.jd_ut1, result.upper.epoch.jd_ut1);
+    assert!(
+        result.lower.epoch.jd_tdb.0 < result.nominal.epoch.jd_tdb.0
+            && result.nominal.epoch.jd_tdb.0 < result.upper.epoch.jd_tdb.0
+    );
+    for bad in ["", " source", "source\n", "\u{7f}"] {
+        assert!(matches!(
+            historical_delta_t_scenarios_with_provider(
+                &mut provider(),
+                Body::Sun,
+                BOUNDARY,
+                64.0,
+                1.0,
+                bad
+            ),
+            Err(HistoricalProviderScenarioError::InvalidSource)
+        ));
+    }
+    let mut failing = provider();
+    failing.fail_next = true;
+    assert!(matches!(
+        historical_delta_t_scenarios_with_provider(
+            &mut failing,
+            Body::Sun,
+            BOUNDARY - 65.0 / 86400.0,
+            64.0,
+            10.0,
+            "test"
+        ),
+        Err(HistoricalProviderScenarioError::Calculation {
+            sample: ScenarioSample::Upper,
+            source: ExperimentalProviderApparentError::Provider(Fault::MissingNext)
+        })
+    ));
 }
