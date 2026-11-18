@@ -3,6 +3,7 @@
 // Experimental. No astronomy is computed here; see src/lib.rs and the Rust core.
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 // Modification (2026-11-18): expose opt-in analytic deflection diagnostic.
+// Modification (2026-11-18): expose explicit historical Delta T scenarios.
 
 const path = require('node:path');
 const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry, validateMagnitudeInfo } = require('./star-catalog.js');
@@ -134,6 +135,16 @@ class Engine {
   /** Explicit UT1, caller Delta T, and the experimental mixed obliquity frame. */
   experimentalLongTermDirectObliquityUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
     return this._call(() => this._native.experimentalLongTermDirectObliquityUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));
+  }
+
+  /** Three fixed-UT1 Delta T samples; not a confidence or position interval. */
+  experimentalLongTermApparentUt1Scenarios(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
+    return this._call(() => this._native.experimentalLongTermApparentUt1Scenarios(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));
+  }
+
+  /** The same explicit samples using the experimental mixed frame. */
+  experimentalLongTermDirectObliquityUt1Scenarios(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
+    return this._call(() => this._native.experimentalLongTermDirectObliquityUt1Scenarios(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));
   }
 
   /** UT Julian date input, converted under the declared time policy. */

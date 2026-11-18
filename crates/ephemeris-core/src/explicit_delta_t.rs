@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
 // Modification 2026-11-17: explicit caller-provided UT1 to TT/TDB conversion.
+// Modification 2026-11-18: convert three explicit Delta T scenarios safely.
 //! No Delta T model is assumed. Input is UT1, not UTC or a local civil time.
 //! Caller supplies TT-UT1 and its uncertainty for this individual epoch.
 
@@ -14,6 +15,14 @@ pub struct ExplicitDeltaTEpoch {
     pub jd_tdb: JulianDateTdb,
     pub delta_t_seconds: f64,
     pub uncertainty_seconds: f64,
+}
+
+/// Three sampled conversions at a fixed UT1, not an uncertainty interval.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExplicitDeltaTScenarios {
+    pub lower: ExplicitDeltaTEpoch,
+    pub nominal: ExplicitDeltaTEpoch,
+    pub upper: ExplicitDeltaTEpoch,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +80,39 @@ pub fn ut1_to_tdb_with_explicit_delta_t(
     })
 }
 
+/// Convert caller-provided Delta T and its plus/minus perturbations at a fixed
+/// UT1. A nonzero perturbation must remain distinguishable in Delta T, TT and
+/// TDB f64 values. The three samples are not bounds on intermediate values.
+pub fn ut1_to_tdb_delta_t_scenarios(
+    jd_ut1: f64,
+    delta_t_seconds: f64,
+    uncertainty_seconds: f64,
+) -> Result<ExplicitDeltaTScenarios, ExplicitDeltaTError> {
+    let nominal = ut1_to_tdb_with_explicit_delta_t(jd_ut1, delta_t_seconds, uncertainty_seconds)?;
+    let lower_delta = delta_t_seconds - uncertainty_seconds;
+    let upper_delta = delta_t_seconds + uncertainty_seconds;
+    if !lower_delta.is_finite() || !upper_delta.is_finite() {
+        return Err(ExplicitDeltaTError::Unrepresentable);
+    }
+    let lower = ut1_to_tdb_with_explicit_delta_t(jd_ut1, lower_delta, uncertainty_seconds)?;
+    let upper = ut1_to_tdb_with_explicit_delta_t(jd_ut1, upper_delta, uncertainty_seconds)?;
+    if uncertainty_seconds > 0.0
+        && !(lower_delta < delta_t_seconds
+            && delta_t_seconds < upper_delta
+            && lower.jd_tt < nominal.jd_tt
+            && nominal.jd_tt < upper.jd_tt
+            && lower.jd_tdb.0 < nominal.jd_tdb.0
+            && nominal.jd_tdb.0 < upper.jd_tdb.0)
+    {
+        return Err(ExplicitDeltaTError::Unrepresentable);
+    }
+    Ok(ExplicitDeltaTScenarios {
+        lower,
+        nominal,
+        upper,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,6 +139,31 @@ mod tests {
         );
         assert_eq!(
             ut1_to_tdb_with_explicit_delta_t(f64::MAX, f64::MAX, 1.0),
+            Err(ExplicitDeltaTError::Unrepresentable)
+        );
+    }
+
+    #[test]
+    fn scenarios_preserve_fixed_ut1_and_reject_collapsed_samples() {
+        let set = ut1_to_tdb_delta_t_scenarios(2_451_545.0, 64.0, 10.0).unwrap();
+        assert_eq!(set.lower.delta_t_seconds, 54.0);
+        assert_eq!(set.nominal.delta_t_seconds, 64.0);
+        assert_eq!(set.upper.delta_t_seconds, 74.0);
+        assert_eq!(set.lower.jd_ut1, set.upper.jd_ut1);
+        assert!(set.lower.jd_tt < set.nominal.jd_tt && set.nominal.jd_tt < set.upper.jd_tt);
+        let zero = ut1_to_tdb_delta_t_scenarios(2_451_545.0, 64.0, 0.0).unwrap();
+        assert_eq!(zero.lower, zero.nominal);
+        assert_eq!(zero.upper, zero.nominal);
+        assert_eq!(
+            ut1_to_tdb_delta_t_scenarios(2_451_545.0, 64.0, -1.0),
+            Err(ExplicitDeltaTError::NegativeUncertainty)
+        );
+        assert_eq!(
+            ut1_to_tdb_delta_t_scenarios(2_451_545.0, 64.0, 1e-12),
+            Err(ExplicitDeltaTError::Unrepresentable)
+        );
+        assert_eq!(
+            ut1_to_tdb_delta_t_scenarios(2_451_545.0, f64::MAX, f64::MAX),
             Err(ExplicitDeltaTError::Unrepresentable)
         );
     }

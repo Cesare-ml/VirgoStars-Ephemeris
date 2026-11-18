@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-18): expose opt-in analytic apparent diagnostic module.
+// Modification (2026-11-18): expose opt-in historical Delta T scenarios.
 
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
@@ -79,4 +80,5 @@ pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY}
 pub mod delta_t_long_range;
 pub mod experimental_analytic_apparent;
 pub mod explicit_delta_t;
+pub mod historical_delta_t_scenarios;
 pub mod long_term_precession;
