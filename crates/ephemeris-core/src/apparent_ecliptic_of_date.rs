@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): add an opt-in direct-obliquity experimental frame.
+// Modification (2026-11-18): clarify the numerical orientation and rate guards.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -52,8 +53,10 @@
 //! - topocentric parallax/diurnal aberration (this is **geocentric**),
 //! - planet-center correction for system barycenters: a barycenter target
 //!   stays a barycenter in the output `target` label,
-//! - epochs outside the IAU 2000B validated range 1900–2100 TT, which fail
-//!   closed with [`ApparentError::Orientation`],
+//! - epochs outside the numerical orientation guard TT JD [2415020, 2488070),
+//!   or without the additional ±0.01 TT-day matrix-rate stencil margin,
+//!   which fail closed with [`ApparentError::Orientation`]. The numerical
+//!   guard is not a validation of physical accuracy over the whole interval,
 //! - any claim of numerical parity with another software package: that
 //!   requires the independent comparison described in the MVP 1 gates.
 

@@ -143,7 +143,7 @@ fn rejects_earth_target_bad_metadata_and_unvalidated_epochs() {
         apparent_ecliptic_of_date_from_aberrated_state(&late, false),
         Err(ApparentError::InvalidIntermediate)
     ));
-    // IAU 2000B is only validated for 1900-2100 TT: fail closed outside it.
+    // The numerical orientation guard is bounded in TT; fail closed outside it.
     for tdb in [2_415_000.0, 2_488_100.0, 1.0e6, 3.0e6] {
         let s = state([1.0e8, 0.0, 0.0], [0.0; 3], tdb);
         assert!(matches!(
