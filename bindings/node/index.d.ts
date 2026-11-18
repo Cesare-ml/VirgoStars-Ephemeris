@@ -67,6 +67,21 @@ export interface ExperimentalCombinedRateResult {
   notes: string[];
 }
 
+/** Explicit caller-provided UT1 and Delta T; uncertainty is not a position bound. */
+export interface HistoricalThreeRateResult {
+  baseXx: number[];
+  candidateXx: number[];
+  target: string;
+  jdUt1: number;
+  jdTt: number;
+  jdTdb: number;
+  deltaTSeconds: number;
+  deltaTUncertaintySeconds: number;
+  deltaTSource: string;
+  radialCorrectionApplied: boolean;
+  notes: string[];
+}
+
 /** Apparent geocentric ICRF vector, light-time range in km and derivative in km/TDB day. */
 export interface ApparentIcrfResult extends GeometricStateResult {
   notes: string[];
@@ -140,6 +155,8 @@ export class Engine {
   experimentalLatitudeRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalLatitudeRateResult;
   /** Three candidate rates; base.xx retains the original position derivatives. */
   experimentalThreeRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalCombinedRateResult;
+  /** UT1 input and caller-supplied Delta T, uncertainty and source. */
+  experimentalThreeRateCandidateUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): HistoricalThreeRateResult;
   /** UT1 and caller-asserted Delta T seconds, uncertainty seconds and source required. */
   experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   /** Experimental mixed frame; UT1 and caller-asserted Delta T, uncertainty and source required. */

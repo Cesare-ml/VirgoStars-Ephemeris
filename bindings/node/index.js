@@ -152,6 +152,17 @@ class Engine {
     return this._call(() => this._native.experimentalThreeRateCandidateTdb(jdTdb, ipl));
   }
 
+  /** UT1 and explicit caller-provided Delta T; no UTC/civil-time inference. */
+  experimentalThreeRateCandidateUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
+    return this._call(() => {
+      if (![jdUt1, deltaTSeconds, uncertaintySeconds].every(Number.isFinite) || typeof source !== 'string') {
+        throw new Error('E_RANGE: UT1, Delta T, uncertainty and source are required');
+      }
+      if (!Number.isInteger(ipl)) throw new Error('E_UNSUPPORTED_BODY: target must be an integer from 0 to 9');
+      return this._native.experimentalThreeRateCandidateUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source);
+    });
+  }
+
   /** Explicit caller Delta T: UT1 input is not UTC or local civil time. */
   experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source) {
     return this._call(() => this._native.experimentalLongTermApparentUt1(jdUt1, ipl, deltaTSeconds, uncertaintySeconds, source));

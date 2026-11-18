@@ -17,6 +17,8 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 
 - [MVP 1 pianeti: decisioni e tre gruppi di chiusura](docs/MVP1_PIANETI_CHIUSURA_2026-11-18.md)
 - [MVP 1: verifica della velocità lunare in longitudine](docs/MVP1_LUNAR_LONGITUDE_SPEED_2026-11-18.md)
+- [MVP 1: cambi di moto campionati e tempo UT1 esplicito](docs/MVP1_STATIONS_AND_HISTORICAL_RATES_2026-11-18.md)
+- [MVP 1: limiti campionati per le velocità](docs/MVP1_SAMPLED_SPEED_ACCEPTANCE_2026-11-18.md)
 - [MVP 1: velocità Swiss, stazioni ed estremi](docs/MVP1_SWISS_SPEED_BOUNDARIES_2026-11-18.md)
 - [MVP readiness and remaining acceptance work](docs/MVP_READINESS_2026-11-17.md)
 - [MVP 1 proposed priorities with stellar work paused](docs/MVP1_NEXT_PRIORITIES_2026-11-17.md)
