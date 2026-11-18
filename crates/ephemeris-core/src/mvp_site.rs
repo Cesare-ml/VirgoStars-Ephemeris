@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
+// Modification (2026-11-18): reuse the shared experimental equatorial rotation.
 //! House angles and solar rise/set using the shared explicit UT1/ΔT input.
 //! The default functions retain modern orientation guards; separately named
 //! experimental functions use the long-term orientation. No civil-time
@@ -10,15 +11,13 @@ use crate::apparent_ecliptic_of_date::{
     ApparentOptions,
 };
 use crate::de441::{Body, De441};
-use crate::earth_orientation::{experimental_extrapolated_nutation, OrientationError};
 use crate::explicit_delta_t::{
     ut1_to_tdb_with_explicit_delta_t, ExplicitDeltaTEpoch, ExplicitDeltaTError,
 };
 use crate::historical_orientation::{experimental_gast, experimental_house_angles};
 use crate::horizon::{local_apparent_sidereal_deg, HorizonError};
 use crate::house_angles::{house_angles, HouseAngles, HouseAnglesError};
-use crate::long_term_precession::experimental_direct_obliquity;
-use crate::mvp_planets::PlanetaryTime;
+use crate::mvp_planets::{experimental_equatorial_from_ecliptic, EquatorialError, PlanetaryTime};
 use crate::rise_transit::{
     find_event_with_sidereal, Atmosphere, Disc, Event, Limb, Request, RiseError, Site, SkyPosition,
 };
@@ -32,7 +31,7 @@ use std::{
 pub enum SolarPositionError {
     Time(ExplicitDeltaTError),
     Apparent(ApparentError),
-    Orientation(OrientationError),
+    Orientation(EquatorialError),
 }
 impl fmt::Display for SolarPositionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -196,21 +195,16 @@ fn solar_event_with_orientation<R: Read + Seek>(
                     current.jd_tdb,
                 )
                 .map_err(SolarPositionError::Apparent)?;
-                let eps = experimental_direct_obliquity(current.jd_tt)
-                    .map_err(SolarPositionError::Orientation)?
-                    + experimental_extrapolated_nutation(current.jd_tt)
-                        .map_err(SolarPositionError::Orientation)?
-                        .d_epsilon_rad;
-                let (lon, lat) = (
-                    fields.longitude_deg.to_radians(),
-                    fields.latitude_deg.to_radians(),
-                );
-                let (x, y, z) = (lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin());
-                let (y_eq, z_eq) = (y * eps.cos() - z * eps.sin(), y * eps.sin() + z * eps.cos());
+                let equatorial = experimental_equatorial_from_ecliptic(
+                    fields.longitude_deg,
+                    fields.latitude_deg,
+                    current.jd_tt,
+                )
+                .map_err(SolarPositionError::Orientation)?;
                 return Ok(SkyPosition {
                     tt_jd: current.jd_tt,
-                    right_ascension_deg: y_eq.atan2(x).to_degrees().rem_euclid(360.0),
-                    declination_deg: z_eq.atan2(x.hypot(y_eq)).to_degrees(),
+                    right_ascension_deg: equatorial.right_ascension_deg,
+                    declination_deg: equatorial.declination_deg,
                     distance_au: fields.distance_au,
                 });
             }

@@ -18,6 +18,13 @@ orientation, lunar and planetary qualifications from the existing MVP apply.
 The optional Espenak–Meeus model is limited to astronomical years −1999..3000;
 outside that range a separately justified Delta T must be supplied.
 
+Each planetary entry also contains an apparent geocentric equatorial direction
+(right ascension and declination in degrees, true equator of date). It comes
+from the same experimental ecliptic direction and long-term true obliquity as
+the solar-event path. Equatorial rates are not supplied. This fills the
+coordinate fields needed by Desktop without adding astronomy to the client;
+the long-term model is still experimental.
+
 `bindings/node.createExperimentalHistoricalHouseAngleProvider()` is an
 independent, opt-in UT1/TT angle provider. It does not load DE441. The separate
 `astrological-functions/historical-house-bridge` consumes it and supplies the
