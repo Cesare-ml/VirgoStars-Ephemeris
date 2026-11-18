@@ -11,6 +11,7 @@
 // Contributors retain applicable rights in their own contributions under the terms of this License.
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
+// Modification (2026-11-18): add isolated experimental analytic-rate API.
 
 //! Gravitational deflection of light by the Sun, applied to a geocentric
 //! light-time state **before** annual aberration.
@@ -58,6 +59,8 @@ use crate::light_time::{light_time_with_states, GeocentricLightTimeState, LightT
 pub const SUN_SCHWARZSCHILD_RADIUS_AU: f64 = 1.974_125_743_36e-8;
 const AU_KM: f64 = 149_597_870.7;
 const DOT_FLOOR: f64 = 1.0e-6;
+/// Experimental guard-band around the nondifferentiable denominator floor.
+pub const ANALYTIC_RATE_FLOOR_GUARD: f64 = 1.0e-12;
 /// Half-step of the finite difference for `dδ/dt`, in TDB days (2⁻⁸).
 pub const DEFLECTION_RATE_HALF_STEP_DAYS: f64 = 1.0 / 256.0;
 
@@ -99,6 +102,43 @@ impl From<LightTimeError> for DeflectionError {
     }
 }
 
+/// Errors from the opt-in analytic deflection-rate experiment.
+#[derive(Debug)]
+pub enum AnalyticDeflectionError {
+    /// Invalid, inconsistent or nonfinite geocentric/barycentric geometry.
+    InvalidGeometry,
+    /// The denominator is within the experimental guard of a derivative kink.
+    NonDifferentiableFloor { denominator: f64 },
+    /// The supplied ephemeris could not provide a required state.
+    Ephemeris(De441Error),
+}
+
+impl fmt::Display for AnalyticDeflectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidGeometry => write!(f, "invalid analytic solar deflection geometry"),
+            Self::NonDifferentiableFloor { denominator } => write!(
+                f,
+                "analytic solar deflection rate is undefined near denominator floor: {denominator}"
+            ),
+            Self::Ephemeris(e) => write!(f, "analytic solar deflection ephemeris: {e}"),
+        }
+    }
+}
+impl Error for AnalyticDeflectionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Ephemeris(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+impl From<De441Error> for AnalyticDeflectionError {
+    fn from(value: De441Error) -> Self {
+        Self::Ephemeris(value)
+    }
+}
+
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
@@ -118,6 +158,140 @@ fn unit(v: [f64; 3]) -> Result<[f64; 3], DeflectionError> {
         return Err(DeflectionError::InvalidGeometry);
     }
     Ok([v[0] / n, v[1] / n, v[2] / n])
+}
+
+fn analytic_unit_rate(
+    p: [f64; 3],
+    v: [f64; 3],
+) -> Result<([f64; 3], [f64; 3], f64, f64), AnalyticDeflectionError> {
+    if p.iter().chain(v.iter()).any(|x| !x.is_finite()) {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    let r = norm(p);
+    if !r.is_finite() || r <= 0.0 {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    let u = p.map(|x| x / r);
+    let rd = dot(u, v);
+    let ud = std::array::from_fn(|i| (v[i] - u[i] * rd) / r);
+    if !rd.is_finite() || ud.iter().any(|x| !x.is_finite()) {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    Ok((u, ud, r, rd))
+}
+
+/// Opt-in derivative of the existing solar model. This is not a physical
+/// accuracy guarantee, especially close to the Sun. The denominator guard
+/// rejects its nondifferentiable boundary; elsewhere its clamped branch is
+/// differentiated as written. The default numerical-rate API is unchanged.
+pub fn experimental_analytic_deflect_sun<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    state: &GeocentricLightTimeState,
+) -> Result<GeocentricLightTimeState, AnalyticDeflectionError> {
+    experimental_analytic_deflect_sun_with(
+        &mut |body, epoch| ephemeris.state(body, Body::SolarSystemBarycenter, epoch),
+        state,
+    )
+}
+
+/// As [`experimental_analytic_deflect_sun`], with a barycentric state provider.
+/// The supplied state must describe a light-time solution observed from Earth;
+/// the provider must return matching target, center and TDB epoch tags.
+pub fn experimental_analytic_deflect_sun_with<F>(
+    states: &mut F,
+    state: &GeocentricLightTimeState,
+) -> Result<GeocentricLightTimeState, AnalyticDeflectionError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
+    if !state.observation_epoch.0.is_finite()
+        || !state.emission_epoch.0.is_finite()
+        || !state.light_time_rate.is_finite()
+        || !state.light_time_seconds.is_finite()
+        || state.light_time_seconds <= 0.0
+        || state.emission_epoch.0 >= state.observation_epoch.0
+        || state.light_time_rate >= 1.0
+        || state.target == Body::Earth
+    {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    let (p, pd, range, radial) = analytic_unit_rate(state.position_km, state.velocity_km_per_day)?;
+    if state.target == Body::Sun {
+        return Ok(*state);
+    }
+    let mut checked = |body, epoch| -> Result<StateVector, AnalyticDeflectionError> {
+        let s = states(body, epoch)?;
+        if s.target != body
+            || s.center != Body::SolarSystemBarycenter
+            || s.epoch != epoch
+            || s.position_km
+                .iter()
+                .chain(s.velocity_km_per_day.iter())
+                .any(|x| !x.is_finite())
+        {
+            return Err(AnalyticDeflectionError::InvalidGeometry);
+        }
+        Ok(s)
+    };
+    let earth = checked(Body::Earth, state.observation_epoch)?;
+    let sun = checked(Body::Sun, state.observation_epoch)?;
+    let source = checked(state.target, state.emission_epoch)?;
+    let sun_emit = checked(Body::Sun, state.emission_epoch)?;
+    let sub = |a: [f64; 3], b: [f64; 3]| std::array::from_fn(|i| a[i] - b[i]);
+    let qv = sub(source.position_km, sun_emit.position_km);
+    let qvd = sub(source.velocity_km_per_day, sun_emit.velocity_km_per_day)
+        .map(|x| x * (1.0 - state.light_time_rate));
+    let (q, qd, _, _) = analytic_unit_rate(qv, qvd)?;
+    let (e, ed, dist, dist_rate) = analytic_unit_rate(
+        sub(earth.position_km, sun.position_km),
+        sub(earth.velocity_km_per_day, sun.velocity_km_per_day),
+    )?;
+    let denominator = dot(q, std::array::from_fn(|i| q[i] + e[i]));
+    if !denominator.is_finite() {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    if (denominator - DOT_FLOOR).abs() <= ANALYTIC_RATE_FLOOR_GUARD {
+        return Err(AnalyticDeflectionError::NonDifferentiableFloor { denominator });
+    }
+    let effective = denominator.max(DOT_FLOOR);
+    let denom_rate = if denominator > DOT_FLOOR {
+        dot(qd, std::array::from_fn(|i| 2.0 * q[i] + e[i])) + dot(q, ed)
+    } else {
+        0.0
+    };
+    let w = SUN_SCHWARZSCHILD_RADIUS_AU / (dist / AU_KM) / effective;
+    let wd = -w * (dist_rate / dist + denom_rate / effective);
+    let eq = cross(e, q);
+    let f = cross(p, eq);
+    let inner_a = cross(ed, q);
+    let inner_b = cross(e, qd);
+    let fd_a = cross(pd, eq);
+    let fd_b = cross(p, std::array::from_fn(|i| inner_a[i] + inner_b[i]));
+    let delta = f.map(|x| x * w);
+    let delta_rate: [f64; 3] = std::array::from_fn(|i| wd * f[i] + w * (fd_a[i] + fd_b[i]));
+    let wdir: [f64; 3] = std::array::from_fn(|i| p[i] + delta[i]);
+    let wn = norm(wdir);
+    if !wn.is_finite() || wn <= 0.0 {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    let u = wdir.map(|x| x / wn);
+    let total_rate: [f64; 3] = std::array::from_fn(|i| pd[i] + delta_rate[i]);
+    let projection = dot(u, total_rate);
+    let position_km = u.map(|x| range * x);
+    let velocity_km_per_day =
+        std::array::from_fn(|i| radial * u[i] + range * (total_rate[i] - u[i] * projection) / wn);
+    if position_km
+        .iter()
+        .chain(velocity_km_per_day.iter())
+        .any(|x| !x.is_finite())
+    {
+        return Err(AnalyticDeflectionError::InvalidGeometry);
+    }
+    Ok(GeocentricLightTimeState {
+        position_km,
+        velocity_km_per_day,
+        ..*state
+    })
 }
 
 /// Direction change `δ = p' − p` for unit vectors `p`, `q`, `e` and the
