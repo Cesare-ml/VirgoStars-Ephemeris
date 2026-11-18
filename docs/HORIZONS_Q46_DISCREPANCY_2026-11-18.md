@@ -2,6 +2,8 @@
 
 **Result: the discrepancy is reproducible and is quantitatively explained, on the sampled cases, by different treatment of correction derivatives. Horizons' internal implementation is not publicly established by these tests.** No production code, app integration or runtime default is changed. This is a follow-up to [the lunar baseline and rate audit](DE441_LUNAR_BASELINE_AND_RATES_2026-11-18.md); its plan was [recorded before the new queries](Q46_INVESTIGATION_PLAN_2026-11-18.md).
 
+Follow-up: [separate aberration and deflection comparisons with ERFA](Q46_ABERRATION_DEFLECTION_ERFA_2026-11-18.md) include a prepared, unsent JPL inquiry and additional explicitly limited numerical evidence.
+
 ## Contract and controls
 
 Horizons [defines Q45 and Q46](https://ssd.jpl.nasa.gov/horizons/manual.html) as airless apparent ICRF coordinates and rates with light-time, solar deflection and stellar aberration; Q46 prints RA rate times cos(dec), and declination rate, in arcseconds/hour. Raw response headers and column labels were checked for the requested target, center, ICRF, TT and DE441. The existing angular conversion explicitly handles the RA wrap and cos(dec), and divides per-TDB-day rates by 24. Inputs to the engine are JD TDB; Horizons requests use approximately corresponding JD TT. The small one-term TT/TDB conversion, printed coordinates and rates, and single-f64 JDs limit this comparison. Both systems use DE441: the computations are independent, the underlying orbital solution is not.
