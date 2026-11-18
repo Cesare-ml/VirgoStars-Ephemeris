@@ -23,6 +23,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Emission refinement versus deflection-rate matrix](docs/EMISSION_DEFLECTION_MATRIX_2026-11-18.md)
 - [Explicit historical ΔT sensitivity scenarios](docs/HISTORICAL_DELTAT_SCENARIOS_2026-11-18.md)
 - [Ancient frame comparison and correction to rotation-fit residuals](docs/HORIZONS_FRAME_EPOCH_HOLDOUT_2026-11-18.md)
+- [Planetary fixed-axis checks and ancient frame decomposition](docs/PLANET_FRAME_GRID_13000BCE_3999_2026-11-18.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)

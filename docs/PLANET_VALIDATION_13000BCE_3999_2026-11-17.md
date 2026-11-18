@@ -5,6 +5,9 @@ Follow-up: [direct-obliquity alternative and ancient ΔT comparisons](ANCIENT_OB
 Further follow-up: [explicit three-sample ΔT sensitivity](HISTORICAL_DELTAT_SCENARIOS_2026-11-18.md)
 is available experimentally; its samples are not positional uncertainty bounds.
 
+Further fixed-axis and frame-decomposition checks, including dates prior to
+the Horizons service limit, are recorded in [the planetary frame grid](PLANET_FRAME_GRID_13000BCE_3999_2026-11-18.md).
+
 **Status: initial experimental implementation and sampled diagnostic; not
 scientifically accepted or enabled on the main server.** The owner requested
 coverage from 13000 BCE to 3999 CE while fixed-star work and production server
