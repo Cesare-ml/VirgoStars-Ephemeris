@@ -27,6 +27,15 @@ Non trasforma controlli campionati in una garanzia di accuratezza fisica.
   per la MVP uno scarto massimo **campionato** di 0,3″/giorno rispetto a Swiss.
   Il [controllo di 194 casi](MVP1_LUNAR_LONGITUDE_SPEED_2026-11-18.md) lo
   soddisfa; non definisce una tolleranza per gli altri corpi o altre componenti.
+- Per i **96 cambi di moto campionati**, l'utente ha accettato un massimo di
+  **15 secondi TDB** rispetto agli zeri numerici delle velocità pubblicate
+  Swiss. Il [controllo riproducibile](MVP1_STATIONS_AND_HISTORICAL_RATES_2026-11-18.md)
+  soddisfa quel limite e verifica i segni; non è un vincolo continuo o una
+  garanzia sugli orari civili storici.
+- Per gli altri campioni di **velocità angolare**, l'utente ha scelto un
+  massimo di **0,1″/giorno**; per i campioni di **velocità radiale**, un
+  massimo di **0,0000005 UA/giorno**. I controlli e i rispettivi perimetri
+  sono descritti nei [criteri campionati](MVP1_SAMPLED_SPEED_ACCEPTANCE_2026-11-18.md).
 
 Il perimetro base qui verificato è la direzione apparente geocentrica di
 Sole, Luna, Mercurio, Venere e baricentri dei sistemi Marte–Plutone, con
@@ -74,7 +83,7 @@ che il controllo fallisca davvero, una prova tecnica a 0,001″ ha rilevato
 
 ## Tre gruppi di verifiche rimasti
 
-1. **Velocità, cambi di moto ed estremi — aperto.** Usare Swiss come confronto con
+1. **Velocità, cambi di moto ed estremi — criteri campionati superati; integrazione aperta.** Usare Swiss come confronto con
    convenzioni esplicite; riutilizzare i risultati già raccolti e chiudere i
    casi mancanti sulla variante direct-obliquity, sui confini e vicino al
    Sole. Definire separatamente unità e tolleranze di velocità e di tempo
@@ -82,16 +91,20 @@ che il controllo fallisca davvero, una prova tecnica a 0,001″ ha rilevato
    sulle posizioni e le precedenti stazioni non dimostrano ancora questo gate.
    Il controllo successivo copre i due estremi e individua quattro disaccordi
    di segno su 48 stazioni rispetto alla velocità pubblicata originale. Un
-   candidato sperimentale li ha corretti nei campioni, ma le tolleranze sulle
-   stazioni e sulle altre velocità restano aperte. La sola velocità lunare in
-   longitudine ha ora superato il controllo campionato a 0,3″/giorno scelto
-   dall'utente; questo non chiude l'intero gruppo.
+   candidato sperimentale li ha corretti nei campioni. I controlli alle soglie
+   scelte dall'utente sono superati per le 96 stazioni, la velocità lunare in
+   longitudine, le altre componenti angolari e le componenti radiali nei
+   rispettivi campioni. Le griglie differiscono e non garantiscono ogni data;
+   la selezione del percorso nel consumer e il controllo end-to-end restano
+   aperti.
 2. **Contratto del tempo storico.** Per le date fuori dalla copertura moderna,
    usare un input UT1/TT/TDB chiaramente identificato e una politica esplicita
    per ΔT e la sua fonte/incertezza. Riutilizzare i test delle tre ipotesi e
    verificare estremi e dati mancanti; non descrivere UTC o un orario civile
-   antico come UT1 esatto. Non serve inventare una precisione storica che le
-   osservazioni non consentono.
+   antico come UT1 esatto. Un nuovo percorso sperimentale collega UT1 e ΔT
+   espliciti ai tre candidati di velocità, ma non sceglie un modello storico
+   o una fonte per il chiamante. Non serve inventare una precisione storica
+   che le osservazioni non consentono.
 3. **Consumo riproducibile in Desktop.** Aggiornare e verificare in modo
    isolato la revisione del core, i dati DE441, gli errori e il contratto delle
    date, poi eseguire i controlli end-to-end sul percorso effettivo. Il

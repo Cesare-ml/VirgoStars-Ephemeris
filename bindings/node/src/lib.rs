@@ -71,6 +71,9 @@ use virgostars_ephemeris_core::hipparcos::{
 use virgostars_ephemeris_core::historical_delta_t_scenarios::{
     historical_delta_t_scenarios, HistoricalScenario, HistoricalScenarioError, ScenarioFrame,
 };
+use virgostars_ephemeris_core::historical_rate_candidate::{
+    historical_three_rate_candidate, HistoricalRateCandidateError,
+};
 use virgostars_ephemeris_core::horizon::{
     ecliptic_to_equatorial, equatorial_to_horizontal, estimated_pressure_hpa,
     extended_apparent_to_true, extended_true_to_apparent, horizontal_to_equatorial,
@@ -187,6 +190,22 @@ pub struct ExperimentalRadialRateResult {
 pub struct ExperimentalCombinedRateResult {
     pub base: LongTermExperimentalResult,
     pub candidate_xx: Vec<f64>,
+    pub radial_correction_applied: bool,
+    pub notes: Vec<String>,
+}
+
+/// Explicit UT1 and caller-supplied Delta T; no civil-time inference.
+#[napi(object)]
+pub struct HistoricalThreeRateResult {
+    pub base_xx: Vec<f64>,
+    pub candidate_xx: Vec<f64>,
+    pub target: String,
+    pub jd_ut1: f64,
+    pub jd_tt: f64,
+    pub jd_tdb: f64,
+    pub delta_t_seconds: f64,
+    pub delta_t_uncertainty_seconds: f64,
+    pub delta_t_source: String,
     pub radial_correction_applied: bool,
     pub notes: Vec<String>,
 }
@@ -1294,6 +1313,63 @@ impl Engine {
             candidate_xx,
             radial_correction_applied: result.radial_correction_applied,
             notes: vec!["EXPERIMENTAL THREE-RATE CANDIDATES: not position derivatives; Swiss compatibility not established".to_string(), "radial correction excludes Sun".to_string()],
+        })
+    }
+
+    /// Caller-provided UT1 and Delta T combined with experimental rate candidates.
+    #[napi]
+    pub fn experimental_three_rate_candidate_ut1(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        uncertainty_seconds: f64,
+        source: String,
+    ) -> Result<HistoricalThreeRateResult> {
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let result = historical_three_rate_candidate(
+            &mut self.ephemeris,
+            target,
+            jd_ut1,
+            delta_t_seconds,
+            uncertainty_seconds,
+            &source,
+        )
+        .map_err(|e| {
+            if matches!(
+                &e,
+                HistoricalRateCandidateError::Time(_) | HistoricalRateCandidateError::InvalidSource
+            ) {
+                fail("E_RANGE", e)
+            } else {
+                fail("E_CALC", e)
+            }
+        })?;
+        let f = result.rates.base;
+        let base_xx = vec![
+            f.longitude_deg,
+            f.latitude_deg,
+            f.distance_au,
+            f.longitude_speed_deg_per_tdb_day,
+            f.latitude_speed_deg_per_tdb_day,
+            f.distance_speed_au_per_tdb_day,
+        ];
+        let mut candidate_xx = base_xx.clone();
+        candidate_xx[3] = result.rates.longitude_deg_per_tdb_day;
+        candidate_xx[4] = result.rates.latitude_deg_per_tdb_day;
+        candidate_xx[5] = result.rates.radial_au_per_tdb_day;
+        Ok(HistoricalThreeRateResult {
+            base_xx, candidate_xx, target: format!("{target:?}"),
+            jd_ut1: result.epoch.jd_ut1, jd_tt: result.epoch.jd_tt, jd_tdb: result.epoch.jd_tdb.0,
+            delta_t_seconds: result.epoch.delta_t_seconds, delta_t_uncertainty_seconds: result.epoch.uncertainty_seconds,
+            delta_t_source: result.delta_t_source, radial_correction_applied: result.rates.radial_correction_applied,
+            notes: vec!["EXPERIMENTAL: UT1 input and caller-asserted Delta T, uncertainty and source; not UTC or local time".to_string(),
+                "Candidate rates are not position derivatives; Swiss compatibility not established".to_string(),
+                "Uncertainty is not converted to a position bound; TDB-TT uses one periodic term".to_string(),
+                "Mixed frame and extrapolated nutation; radial correction excludes Sun".to_string()],
         })
     }
 
