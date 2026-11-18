@@ -535,7 +535,14 @@ fn experimental_long_term_ecliptic<R: Read + Seek>(
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
         .map_err(AberratedStateError::from)?;
     let state = experimental_aberrated_state(ephemeris, target, reception_epoch, &earth)?;
-    finish_experimental_long_term(state, target, reception_epoch, nutation, direct_obliquity)
+    finish_experimental_long_term(
+        state,
+        target,
+        reception_epoch,
+        nutation,
+        direct_obliquity,
+        None,
+    )
 }
 
 fn finish_experimental_long_term(
@@ -544,8 +551,13 @@ fn finish_experimental_long_term(
     reception_epoch: JulianDateTdb,
     nutation: bool,
     direct_obliquity: bool,
+    explicit_tt: Option<f64>,
 ) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
-    let tt = tdb_to_tt_jd(reception_epoch.0)?;
+    let tt = match explicit_tt {
+        Some(value) if value.is_finite() => value,
+        Some(_) => return Err(ApparentError::InvalidIntermediate),
+        None => tdb_to_tt_jd(reception_epoch.0)?,
+    };
     // ICRF to J2000 mean axes via the existing IAU-2006 frame bias.
     let bias = iau2006_bias_precession_matrix(J2000_TT_JD)?;
     let matrix = |date| -> Result<Matrix3x3, OrientationError> {
@@ -617,6 +629,18 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     target: Body,
     reception: JulianDateTdb,
 ) -> Result<FixedSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
+    experimental_long_term_apparent_with_provider_tt(provider, target, reception, None)
+}
+
+// The UT1 scenario caller has already validated and constructed the TT/TDB pair.
+pub(crate) fn experimental_long_term_apparent_with_provider_tt<
+    P: ExperimentalLongTermStateProvider,
+>(
+    provider: &mut P,
+    target: Body,
+    reception: JulianDateTdb,
+    explicit_tt: Option<f64>,
+) -> Result<FixedSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
     use ExperimentalProviderApparentError::{Apparent, Provider, UnsafeRefinementBoundary};
     let earth = provider
         .state_with_acceleration(Body::Earth, reception)
@@ -673,7 +697,8 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     )
     .map_err(|error| Apparent(error.into()))?;
     state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
-    finish_experimental_long_term(state, target, reception, true, false).map_err(Apparent)
+    finish_experimental_long_term(state, target, reception, true, false, explicit_tt)
+        .map_err(Apparent)
 }
 
 /// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch,

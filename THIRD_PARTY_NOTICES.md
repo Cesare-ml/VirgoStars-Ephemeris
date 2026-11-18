@@ -1,5 +1,13 @@
 # Third-party scientific reference data
 
+Modification (2026-11-18): `fairhead_coefficients.rs` contains all 787
+Fairhead–Bretagnon TDB−TT numerical coefficient triples from ERFA 2.0.1
+`src/dtdb.c`, copyright 2013–2023 NumFOCUS Foundation, BSD-3-Clause; full
+conditions and disclaimer: [third_party/ERFA_LICENSE.txt](third_party/ERFA_LICENSE.txt).
+The Rust evaluator implements the same geocentric series and ERFA's stated
+JPL planetary-mass adjustment. Source: <https://github.com/liberfa/erfa/blob/v2.0.1/src/dtdb.c>.
+ERFA is derived with permission from SOFA; SOFA is not responsible for this version.
+
 Modification (2026-11-17): `long_term_precession.rs` uses Vondrak et al.
 long-term pole coefficient tables and a conformance numerical matrix from ERFA
 `ltpecl`, `ltpequ` and `t_ltp`; copyright 2013–2023 NumFOCUS Foundation,

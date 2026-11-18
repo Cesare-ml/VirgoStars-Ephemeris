@@ -4,12 +4,13 @@
 //! civil-time conversion. The long-term frame and TT/TDB model remain experimental.
 use crate::apparent_ecliptic_of_date::{
     experimental_long_term_apparent_direct_obliquity, experimental_long_term_apparent_ecliptic,
-    experimental_long_term_apparent_with_provider, ApparentError,
+    experimental_long_term_apparent_with_provider_tt, ApparentError,
     ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
 };
 use crate::de441::{Body, De441};
 use crate::explicit_delta_t::{
-    ut1_to_tdb_delta_t_scenarios, ExplicitDeltaTEpoch, ExplicitDeltaTError,
+    ut1_to_tdb_delta_t_scenarios, ut1_to_tdb_fairhead_delta_t_scenarios, ExplicitDeltaTEpoch,
+    ExplicitDeltaTError,
 };
 use crate::six_field_units::FixedSixFieldsDegreesAu;
 use std::{
@@ -47,7 +48,10 @@ pub enum HistoricalProviderScenarioError<E> {
 /// Compute all three explicit UT1/Delta-T samples through a per-epoch provider.
 /// UT1 is neither UTC nor a local civil time; no model or source is inferred.
 /// All samples must succeed; source validity and uncertainty interpretation
-/// remain the caller's responsibility. Uses the pole-based experimental frame.
+/// remain the caller's responsibility. Uses the geocentric Fairhead series in
+/// the guarded mobile-pack range and the pole-based experimental frame, with
+/// the explicitly calculated TT used for rotation. The single-reader API
+/// continues to use its existing leading-term conversion.
 pub fn historical_delta_t_scenarios_with_provider<P: ExperimentalLongTermStateProvider>(
     provider: &mut P,
     target: Body,
@@ -63,11 +67,17 @@ pub fn historical_delta_t_scenarios_with_provider<P: ExperimentalLongTermStatePr
     {
         return Err(HistoricalProviderScenarioError::InvalidSource);
     }
-    let epochs = ut1_to_tdb_delta_t_scenarios(jd_ut1, delta_t_seconds, uncertainty_seconds)
-        .map_err(HistoricalProviderScenarioError::Time)?;
+    let epochs =
+        ut1_to_tdb_fairhead_delta_t_scenarios(jd_ut1, delta_t_seconds, uncertainty_seconds)
+            .map_err(HistoricalProviderScenarioError::Time)?;
     let mut calculate = |epoch: ExplicitDeltaTEpoch, sample| {
-        let fields = experimental_long_term_apparent_with_provider(provider, target, epoch.jd_tdb)
-            .map_err(|source| HistoricalProviderScenarioError::Calculation { sample, source })?;
+        let fields = experimental_long_term_apparent_with_provider_tt(
+            provider,
+            target,
+            epoch.jd_tdb,
+            Some(epoch.jd_tt),
+        )
+        .map_err(|source| HistoricalProviderScenarioError::Calculation { sample, source })?;
         Ok(HistoricalScenario { epoch, fields })
     };
     Ok(HistoricalProviderScenarios {

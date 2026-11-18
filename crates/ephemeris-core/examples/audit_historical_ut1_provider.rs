@@ -6,16 +6,41 @@ use std::{
     path::PathBuf,
 };
 use virgostars_ephemeris_core::{
-    apparent_ecliptic_of_date::ExperimentalProviderApparentError,
+    apparent_ecliptic_of_date::{
+        ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
+    },
     calendar::{Calendar, JulianDate, TimeScale},
-    de441::{Body, De441},
+    de441::{Body, De441, De441Error, JulianDateTdb, StateVector, StateVectorWithAcceleration},
     de441_pack_manager::{De441PackError, De441PackManager},
     delta_t_long_range::espenak_meeus_2006_long_range,
     historical_delta_t_scenarios::{
-        historical_delta_t_scenarios, historical_delta_t_scenarios_with_provider,
-        HistoricalProviderScenarioError, ScenarioFrame, ScenarioSample,
+        historical_delta_t_scenarios_with_provider, HistoricalProviderScenarioError, ScenarioSample,
     },
 };
+
+// Full reader with the source's logical coverage; the same scenario path is
+// used to isolate source-vs-slice selection, not to claim independent models.
+struct FullProvider(De441<std::fs::File>);
+impl ExperimentalLongTermStateProvider for FullProvider {
+    type Error = De441Error;
+    fn state(&mut self, body: Body, epoch: JulianDateTdb) -> Result<StateVector, Self::Error> {
+        self.0.state(body, Body::SolarSystemBarycenter, epoch)
+    }
+    fn state_with_acceleration(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVectorWithAcceleration, Self::Error> {
+        self.0
+            .state_with_acceleration(body, Body::SolarSystemBarycenter, epoch)
+    }
+    fn logical_coverage(
+        &mut self,
+        _epoch: JulianDateTdb,
+    ) -> Result<(JulianDateTdb, JulianDateTdb), Self::Error> {
+        Ok((JulianDateTdb(-3027215.5), JulianDateTdb(7930192.5)))
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args_os().collect();
@@ -24,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut manager = De441PackManager::from_mobile_directory(&args[2])?;
     let specs: Vec<_> = manager.inventory().into_iter().map(|x| x.spec).collect();
-    let mut full = De441::open(&args[1])?;
+    let mut full = FullProvider(De441::open(&args[1])?);
     let bodies = [
         Body::Sun,
         Body::Moon,
@@ -55,14 +80,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "Espenak-Meeus-2006-example",
             )
             .map_err(|e| io::Error::other(format!("{e:?}")))?;
-            let b = historical_delta_t_scenarios(
+            let b = historical_delta_t_scenarios_with_provider(
                 &mut full,
                 body,
                 ut1,
                 delta,
                 60.0,
-                ScenarioFrame::PoleBased,
-            )?;
+                "Espenak-Meeus-2006-example",
+            )
+            .map_err(|e| io::Error::other(format!("{e:?}")))?;
             for (label, x, y) in [
                 ("lower", a.lower, b.lower),
                 ("nominal", a.nominal, b.nominal),
@@ -128,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         historical_delta_t_scenarios_with_provider(
             &mut manager,
             Body::Sun,
-            specs[9].end_tdb.0 + 1.0,
+            specs[9].end_tdb.0 + 0.5,
             64.0,
             60.0,
             "illustrative"
@@ -146,13 +172,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             continue;
         }
         let (a, b) = text.split_once(',').ok_or("expected UT1,delta")?;
-        let e = virgostars_ephemeris_core::explicit_delta_t::ut1_to_tdb_with_explicit_delta_t(
+        let e = virgostars_ephemeris_core::explicit_delta_t::ut1_to_tdb_with_fairhead_delta_t(
             a.parse()?,
             b.parse()?,
             0.0,
         )?;
         let correction =
-            virgostars_ephemeris_core::explicit_delta_t::approximate_tdb_minus_tt_seconds(e.jd_tt)?;
+            virgostars_ephemeris_core::fairhead_tdb::geocentric_tdb_minus_tt_seconds(e.jd_tt)
+                .ok_or("TT outside Fairhead model range")?;
         println!(
             "time,{:.17},{:.17},{:.17},{correction:.17}",
             e.jd_ut1, e.jd_tt, e.jd_tdb.0
