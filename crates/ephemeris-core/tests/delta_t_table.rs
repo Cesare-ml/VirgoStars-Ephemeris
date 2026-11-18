@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
+// Modification 2026-11-18: test unknown and invalid source errors (branch c2eccd5).
 //! Tests for the measured ΔT table. Synthetic tables use the exact layout of the
 //! USNO files with fictional numbers; the `#[ignore]` tests read the genuine files
 //! from the directory named by `USNO_DELTAT_DIR` (nothing is bundled).
@@ -91,6 +92,40 @@ fn predictions_start_after_the_last_observation_and_are_flagged() {
     assert!(matches!(
         no_preds.delta_t(2_441_926.0),
         Err(DeltaTTableError::OutOfRange { .. })
+    ));
+}
+
+#[test]
+fn missing_or_invalid_source_errors_are_not_promoted_to_known_uncertainty() {
+    let table = table();
+    let monthly_jd = table.last_measured_jd_ut();
+    let first_prediction = 2_400_000.5 + 41925.0;
+    let between = table
+        .delta_t((monthly_jd + first_prediction) / 2.0)
+        .unwrap();
+    assert_eq!(between.kind, DeltaTKind::Predicted);
+    assert_eq!(between.uncertainty_seconds, None);
+    assert_eq!(
+        table.delta_t(first_prediction).unwrap().uncertainty_seconds,
+        Some(0.001)
+    );
+    for invalid in ["-0.1", "NaN", "not-a-number"] {
+        let preds = PREDS.replace("0.300", invalid);
+        assert!(matches!(
+            DeltaTTable::from_usno(MONTHLY, HISTORIC, Some(&preds)),
+            Err(DeltaTTableError::Parse {
+                file: "deltat.preds",
+                ..
+            })
+        ));
+    }
+    let history = HISTORIC.replace("29.15    0.10", "29.15    -0.10");
+    assert!(matches!(
+        DeltaTTable::from_usno(MONTHLY, &history, None),
+        Err(DeltaTTableError::Parse {
+            file: "historic_deltat.data",
+            ..
+        })
     ));
 }
 
