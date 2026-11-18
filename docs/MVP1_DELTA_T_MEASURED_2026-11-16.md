@@ -8,6 +8,12 @@ The implementation's Julian-year mapping can differ from Gregorian calendar
 year fractions by up to 3.75 days in the supplied 1657–1984.5 file. See
 [the follow-up](PLANET_RATES_AND_HISTORICAL_TIME_2026-11-17.md).
 
+**Correction, 2026-11-18:** references to “1σ” below are not established by
+the USNO file header and should be read as the source's `error` column, with
+unknown confidence interpretation. In the updated experimental branch, an
+interpolation returns no error when either endpoint's error is missing; see
+[the updated candidate audit](DE441_DELTAT_UPDATED_MODEL_VALIDATION_2026-11-18.md).
+
 **Status: Locally tested. Data supplied by the caller; none bundled.** This closes
 the largest known time-scale limitation of the UT entry (`Engine.calcUt`): the
 earlier policy took UT1 = UTC after 1972 and used smoothed polynomial fits before
