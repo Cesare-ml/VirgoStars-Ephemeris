@@ -593,26 +593,6 @@ fn radial_rate_candidate_correction(
     Ok(correction)
 }
 
-#[cfg(test)]
-mod radial_candidate_tests {
-    use super::*;
-
-    #[test]
-    fn projection_respects_sign_and_rejects_invalid_geometry() {
-        let c = crate::aberration::SPEED_OF_LIGHT_KM_PER_DAY;
-        let value = radial_rate_candidate_correction([IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
-        assert!((value - 1.0).abs() < 1e-15);
-        let opposite =
-            radial_rate_candidate_correction([-IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
-        assert!((opposite + 1.0).abs() < 1e-15);
-        assert!(radial_rate_candidate_correction([0.0; 3], [0.0; 3]).is_err());
-        assert!(radial_rate_candidate_correction([f64::NAN, 0.0, 0.0], [0.0; 3]).is_err());
-        assert!(
-            radial_rate_candidate_correction([f64::MAX, 0.0, 0.0], [f64::MAX, 0.0, 0.0]).is_err()
-        );
-    }
-}
-
 fn experimental_long_term_ecliptic<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     target: Body,
@@ -881,4 +861,24 @@ pub fn small_body_apparent_six_fields<R: Read + Seek>(
         }
     };
     apparent_to_degrees_au(&result)
+}
+
+#[cfg(test)]
+mod radial_candidate_tests {
+    use super::*;
+
+    #[test]
+    fn projection_respects_sign_and_rejects_invalid_geometry() {
+        let c = crate::aberration::SPEED_OF_LIGHT_KM_PER_DAY;
+        let value = radial_rate_candidate_correction([IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
+        assert!((value - 1.0).abs() < 1e-15);
+        let opposite =
+            radial_rate_candidate_correction([-IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
+        assert!((opposite + 1.0).abs() < 1e-15);
+        assert!(radial_rate_candidate_correction([0.0; 3], [0.0; 3]).is_err());
+        assert!(radial_rate_candidate_correction([f64::NAN, 0.0, 0.0], [0.0; 3]).is_err());
+        assert!(
+            radial_rate_candidate_correction([f64::MAX, 0.0, 0.0], [f64::MAX, 0.0, 0.0]).is_err()
+        );
+    }
 }
