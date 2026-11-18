@@ -78,6 +78,10 @@ their previous range checks.
 
 ## Local independent implementation checks
 
+The [subsequent dense ERFA grid](ERFA_LONG_TERM_AXES_GRID_2026-11-18.md)
+extends the mean-axis implementation comparison to ancient epochs and
+planetary directions; it does not independently validate physical accuracy.
+
 - ERFA 2.0.1.5 `ltp` and `ltpecl` at six epochs from 0–5000: maximum matrix/
   pole component difference `1.6653345369377348e-16` (test limit `2e-14`).
   This compares independent implementations of the same Vondrak model, not
