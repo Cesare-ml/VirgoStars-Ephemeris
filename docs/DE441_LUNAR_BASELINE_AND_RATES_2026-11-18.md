@@ -2,6 +2,8 @@
 
 **Status: exploratory.** This follows the [independent audit](DE441_INDEPENDENT_VALIDATION_2026-11-18.md). It does not activate an app engine or establish a production accuracy budget. All tests here use the same DE441 solution in two independently implemented programs; they do not independently establish the physical accuracy or provenance of the orbit itself.
 
+Follow-up: [the Q46 discrepancy investigation](HORIZONS_Q46_DISCREPANCY_2026-11-18.md) isolates correction-derivative effects and records both a failed simplified holdout and a subsequent Q1 comparison. It does not claim confirmation of Horizons' internal implementation.
+
 ## Historical and versioned lunar regression
 
 The previous audit found that the original six-field same-engine regression passed at `6835e00e4b4ba5fc52d882a793e2dfa2b2a436aa`, and failed after the light-time convergence change at `ff26f5ab0bcfaed0f0b8b76fbf5c2392de5be400`: 137 of 1,990 rows exceeded at least one existing tolerance, all for the Moon. The old fixture remains unchanged; its Git blob ID is `b7a232a02e0659407df2d4a5a71dafd031f58c00`.
