@@ -37,6 +37,7 @@ pub const MVP_PLANETS: [Body; 10] = [
 ];
 
 /// Caller-provided UT1 and ΔT. Uncertainty is an assertion, not a position bound.
+#[derive(Clone, Copy, Debug)]
 pub struct PlanetaryTime<'a> {
     pub jd_ut1: f64,
     pub delta_t_seconds: f64,

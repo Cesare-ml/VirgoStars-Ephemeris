@@ -12,6 +12,8 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
+// Modification 2026-11-18: permit an explicit sidereal provider for event searches.
+
 //! Rising, setting and meridian transit of a body.
 //!
 //! The module is deliberately free of any ephemeris: the caller supplies a closure
@@ -152,18 +154,22 @@ struct Observed {
     armc_deg: f64,
 }
 
-fn observe<E, F>(
+fn observe<E, F, S>(
     position: &mut F,
+    sidereal: &mut S,
     site: &Site,
     topocentric: bool,
     ut_jd: f64,
 ) -> Result<Observed, RiseError<E>>
 where
     F: FnMut(f64) -> Result<SkyPosition, E>,
+    S: FnMut(f64, f64, f64) -> Result<f64, HorizonError>,
 {
     let sky = position(ut_jd).map_err(RiseError::Position)?;
-    let armc = local_apparent_sidereal_deg(ut_jd, sky.tt_jd, site.longitude_deg_east)
-        .map_err(RiseError::Site)?;
+    let armc = sidereal(ut_jd, sky.tt_jd, site.longitude_deg_east).map_err(RiseError::Site)?;
+    if !armc.is_finite() {
+        return Err(RiseError::Site(HorizonError::NonFinite));
+    }
     let (ra, dec) = (
         sky.right_ascension_deg.to_radians(),
         sky.declination_deg.to_radians(),
@@ -193,8 +199,9 @@ fn wrap_pm180(x: f64) -> f64 {
 }
 
 /// Signed function whose upward zero crossing is the event.
-fn event_function<E, F>(
+fn event_function<E, F, S>(
     position: &mut F,
+    sidereal: &mut S,
     site: &Site,
     request: &Request,
     horizon_true_altitude_deg: f64,
@@ -202,8 +209,9 @@ fn event_function<E, F>(
 ) -> Result<f64, RiseError<E>>
 where
     F: FnMut(f64) -> Result<SkyPosition, E>,
+    S: FnMut(f64, f64, f64) -> Result<f64, HorizonError>,
 {
-    let o = observe(position, site, request.topocentric, ut_jd)?;
+    let o = observe(position, sidereal, site, request.topocentric, ut_jd)?;
     match request.event {
         Event::UpperTransit => Ok(wrap_pm180(o.armc_deg - o.right_ascension_deg)),
         Event::LowerTransit => Ok(wrap_pm180(o.armc_deg - o.right_ascension_deg - 180.0)),
@@ -254,7 +262,7 @@ where
 /// position of the body. Returns the UT of the event, or `None` when nothing
 /// happens within `request.search_days`.
 pub fn find_event<E, F>(
-    mut position: F,
+    position: F,
     site: &Site,
     atmosphere: &Atmosphere,
     request: &Request,
@@ -262,6 +270,31 @@ pub fn find_event<E, F>(
 ) -> Result<Option<f64>, RiseError<E>>
 where
     F: FnMut(f64) -> Result<SkyPosition, E>,
+{
+    find_event_with_sidereal(
+        position,
+        local_apparent_sidereal_deg,
+        site,
+        atmosphere,
+        request,
+        start_ut_jd,
+    )
+}
+
+/// Search with a caller-selected local apparent sidereal-time provider.
+/// The position and sidereal providers must use compatible equatorial frames.
+/// Existing `find_event` continues to use its guarded modern sidereal model.
+pub fn find_event_with_sidereal<E, F, S>(
+    mut position: F,
+    mut sidereal: S,
+    site: &Site,
+    atmosphere: &Atmosphere,
+    request: &Request,
+    start_ut_jd: f64,
+) -> Result<Option<f64>, RiseError<E>>
+where
+    F: FnMut(f64) -> Result<SkyPosition, E>,
+    S: FnMut(f64, f64, f64) -> Result<f64, HorizonError>,
 {
     if !start_ut_jd.is_finite()
         || !site.latitude_deg.is_finite()
@@ -285,7 +318,7 @@ where
     } else {
         0.0
     };
-    let mut f = |t: f64| event_function(&mut position, site, request, horizon, t);
+    let mut f = |t: f64| event_function(&mut position, &mut sidereal, site, request, horizon, t);
     let end = start_ut_jd + request.search_days;
     let steps = (request.search_days / SCAN_STEP_DAYS).ceil() as usize;
     let grazing_possible = matches!(request.event, Event::Rise | Event::Set);
@@ -462,6 +495,37 @@ mod tests {
         assert!(altitude_at(ra, dec, set - 0.01, &SITE) > 0.0);
         assert!(rise > J2000_UT && set > J2000_UT);
         assert!(rise - J2000_UT < 1.01 && set - J2000_UT < 1.01);
+    }
+
+    #[test]
+    fn explicit_sidereal_provider_preserves_default_and_rejects_nonfinite() {
+        let a = find_event(
+            star(101.0, -16.7),
+            &SITE,
+            &AIR,
+            &request(Event::Rise),
+            J2000_UT,
+        )
+        .unwrap();
+        let b = find_event_with_sidereal(
+            star(101.0, -16.7),
+            local_apparent_sidereal_deg,
+            &SITE,
+            &AIR,
+            &request(Event::Rise),
+            J2000_UT,
+        )
+        .unwrap();
+        assert_eq!(a, b);
+        let bad = find_event_with_sidereal(
+            star(101.0, -16.7),
+            |_, _, _| Ok(f64::NAN),
+            &SITE,
+            &AIR,
+            &request(Event::Rise),
+            J2000_UT,
+        );
+        assert!(matches!(bad, Err(RiseError::Site(HorizonError::NonFinite))));
     }
 
     #[test]
