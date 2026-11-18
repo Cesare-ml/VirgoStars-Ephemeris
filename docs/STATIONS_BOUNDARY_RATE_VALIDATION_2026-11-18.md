@@ -2,6 +2,8 @@
 
 **Result: the corrected JPL/ERFA position- and range-derivative comparisons meet the predeclared limits at all sampled station and boundary points. Direct Q20 radial rates fail their separate threshold in some cases.** The first analysis also exposed a bug in the comparison script's treatment of rounded epochs; both the original failure and the replay are retained below. No Mobile engine is enabled. The [sampling plan and limits](STATIONS_BOUNDARY_RATE_PLAN_2026-11-18.md) were fixed before querying Horizons.
 
+Follow-up: [the orientation extension assessment](DE441_ORIENTATION_EXTENSION_ASSESSMENT_2026-11-18.md) evaluates the existing explicit long-term experiment over the package range without changing the ordinary guard.
+
 ## Scope and method
 
 The standard Rust apparent six-field path uses the locally held classic DE441, geocentric apparent positions and true ecliptic of date. JPL Horizons supplies DE441 geocentric airless apparent ICRF Q45 positions and Q20 distances and radial rates. ERFA rotates each Q45 direction at its own TT epoch using the same IAU 2006/2000B orientation model, so the reference derivative includes motion of the frame. Rust and Horizons share DE441; ERFA and Rust share the chosen orientation model. This compares implementations and selected numerical behavior, not the independent physical accuracy of the orbit or Earth orientation.
