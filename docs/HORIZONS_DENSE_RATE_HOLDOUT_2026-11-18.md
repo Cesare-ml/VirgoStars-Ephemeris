@@ -1,5 +1,11 @@
 # Dense Horizons position fits and interleaved holdout
 
+**Correction:** the ancient rotation-fit residuals in the orientation section
+below include a significant one-step linearization artifact. A replay of the
+same data with iterative rotation composition, plus a wider epoch sample, is
+documented in [the frame-fit correction](HORIZONS_FRAME_EPOCH_HOLDOUT_2026-11-18.md).
+The old fit numbers remain as historical results, not physical error estimates.
+
 **Status: exploratory validation.** This continues the [near-solar Horizons
 rate and frame-fit audit](HORIZONS_SOLAR_RATES_AND_FRAME_ROTATION_2026-11-18.md).
 The analytic deflection derivative remains in an offline example; production
