@@ -34,6 +34,12 @@ function expectError(fn, expected) {
   try { fn(); } catch (error) { if (error.code === expected) return expected; throw error; }
   throw new Error(`expected ${expected}`);
 }
+// A published-speed station may precede or follow the position-derivative
+// station. Compare the two speeds directly at each sample; do not require
+// either to have the derivative station's expected sign at those instants.
+function matchingNonzeroSigns(localSigns, publishedSigns) {
+  return Array.isArray(localSigns) && Array.isArray(publishedSigns) && localSigns.length === 2 && publishedSigns.length === 2 && localSigns.every((value, i) => (value === -1 || value === 1) && value === publishedSigns[i]);
+}
 function summary(points, stations) {
   if (!Array.isArray(points) || !points.length || !points.every(r => Number.isInteger(r.body) && r.positionArcsec >= 0 && [r.positionArcsec, r.lonRateSwissArcsecDay, r.lonRateDerivativeArcsecDay, r.latRateSwissArcsecDay, r.latRateDerivativeArcsecDay, r.distanceRateSwissAuDay, r.distanceRateDerivativeAuDay, r.radialCandidateResidualAuDay].every(Number.isFinite)) || !['endpoint', 'near-sun'].every(category => points.some(r => r.category === category)) || !Array.isArray(stations) || !stations.length || !stations.every(r => typeof r.status === 'string' && (r.status !== 'ok' || (typeof r.signsMatch === 'boolean' && typeof r.publishedSignsMatch === 'boolean' && Number.isFinite(r.engineMinusSwissDerivativeSeconds) && (r.engineMinusSwissPublishedSeconds === null || Number.isFinite(r.engineMinusSwissPublishedSeconds)))))) throw new Error('invalid results');
   const maximum = (list, field, abs = false) => {
@@ -107,7 +113,7 @@ function main() {
       let publishedDelta = null, enginePublishedDelta = null;
       try { const pb = bisect(published, lo, hi, 0.00001), p = (pb.lo + pb.hi) / 2; publishedDelta = (p - s) * 86400; enginePublishedDelta = (e - p) * 86400; }
       catch (error) { if (!/not bracketed/.test(error.message)) throw error; }
-      stations.push({ year, body, kind, status: 'ok', jdTdb: s, initial, engineBracket: eb, swissDerivativeBracket: sb, engineMinusSwissDerivativeSeconds: (e - s) * 86400, swissPublishedMinusDerivativeSeconds: publishedDelta, engineMinusSwissPublishedSeconds: enginePublishedDelta, swissSigns, localSigns, publishedSigns, signsMatch: expected.every((v, i) => v === swissSigns[i] && v === localSigns[i]), publishedSignsMatch: expected.every((v, i) => v === publishedSigns[i] && v === localSigns[i]) });
+      stations.push({ year, body, kind, status: 'ok', jdTdb: s, initial, engineBracket: eb, swissDerivativeBracket: sb, engineMinusSwissDerivativeSeconds: (e - s) * 86400, swissPublishedMinusDerivativeSeconds: publishedDelta, engineMinusSwissPublishedSeconds: enginePublishedDelta, swissSigns, localSigns, publishedSigns, signsMatch: expected.every((v, i) => v === swissSigns[i] && v === localSigns[i]), publishedSignsMatch: matchingNonzeroSigns(localSigns, publishedSigns) });
     }
   }
   const first = julday(-12999, 1, 1, 0, true), nextYear = julday(4000, 1, 1, 0, true);
@@ -120,5 +126,5 @@ function main() {
   console.log(JSON.stringify(result.summary));
   if (gateFailed(result.summary)) process.exitCode = 2;
 }
-module.exports = { checkedSwiss, checkedLocal, expectError, summary, gateFailed, tdbToTt };
+module.exports = { checkedSwiss, checkedLocal, expectError, matchingNonzeroSigns, summary, gateFailed, tdbToTt };
 if (require.main === module) { try { main(); } catch (e) { console.error(e.message); process.exitCode = 1; } }

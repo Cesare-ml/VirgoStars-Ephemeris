@@ -39,6 +39,11 @@ orbitale, non validazione indipendente della realtà fisica o della Terra antica
   motore/velocità pubblicata è circa **754 secondi (12 minuti e 34 secondi)**.
   La bisezione usa una larghezza di 0,00001 giorni (0,864 secondi); non prova
   l'unicità fisica della stazione né l'accuratezza storica dell'orario.
+  Il confronto del segno è diretto tra motore e Swiss, anche quando entrambi
+  i campioni cadono dallo stesso lato della stazione pubblicata. Una revisione
+  dello script ha corretto un precedente controllo che richiedeva erroneamente
+  a entrambi i segni Swiss di seguire anche la stazione della derivata; con il
+  motore attuale il risultato rimane 44/48.
 
 Le API ordinarie `calcTdb` rifiutano entrambi gli estremi; il percorso esteso
 è esplicito e sperimentale. Il controllo esteso rifiuta date ben oltre la sua
@@ -73,7 +78,7 @@ tolleranze numeriche distinte per velocità e tempi delle stazioni.
 
 - DE441 SHA-256: `476096486def4e41bfceb29aa27f50784da0bce318902bcf7b88caad058cd4da`.
 - Rapporto geometrie vicino al Sole SHA-256: `1e48b86bc7f4b242c570a503a41b8372e2f9d8d580a4b02d3925def6f41b2b50`.
-- Rapporto di questa prova SHA-256: `4d59ef2888800f591291887d3849854b8042783bb98244acf6155a54fc5cf28d`.
+- Rapporto della prova con confronto di segno corretto SHA-256: `5a56663cf82bca72bb3c6a2e1e2cdc13f703926d600f1d67b5123cc2b28dfd4b`.
 
 Prossima azione: sviluppare nel core una modalità esplicita di velocità
 compatibile con il riferimento scelto, preservando il contratto della derivata

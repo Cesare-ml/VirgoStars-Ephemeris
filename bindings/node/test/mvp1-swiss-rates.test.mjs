@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { checkedSwiss, checkedLocal, expectError, summary, gateFailed } = require('../scripts/validate-mvp1-swiss-rates.cjs');
+const { checkedSwiss, checkedLocal, expectError, matchingNonzeroSigns, summary, gateFailed } = require('../scripts/validate-mvp1-swiss-rates.cjs');
 
 test('the reference must actually return JPL speeds and finite coordinates', () => {
   const reference = { rflag: 257, longitude: 123, latitude: 4, distance: 1, longitudeSpeed: -0.1, latitudeSpeed: 0.2, distanceSpeed: 0.01 };
@@ -17,6 +17,15 @@ test('the reference must actually return JPL speeds and finite coordinates', () 
   assert.equal(expectError(() => { throw Object.assign(new Error(), { code: 'E_CALC' }); }, 'E_CALC'), 'E_CALC');
   assert.throws(() => expectError(() => {}, 'E_CALC'));
   assert.throws(() => expectError(() => { throw Object.assign(new Error(), { code: 'OTHER' }); }, 'E_CALC'));
+});
+
+test('published signs can agree even when the two station times differ', () => {
+  // Around the derivative station, the published-rate station can be outside
+  // the sampled window, so both published signs can be the same.
+  assert.equal(matchingNonzeroSigns([1, 1], [1, 1]), true);
+  assert.equal(matchingNonzeroSigns([1, -1], [1, 1]), false);
+  assert.equal(matchingNonzeroSigns([0, 1], [0, 1]), false);
+  assert.equal(matchingNonzeroSigns([1], [1]), false);
 });
 
 test('station sign disagreements and missing roots fail the finite compatibility gate', () => {
