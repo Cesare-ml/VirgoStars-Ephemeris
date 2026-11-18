@@ -2,6 +2,8 @@
 
 **Status: exploratory independent implementation comparison.** In the sampled cases, changes in the apparent direction due separately to aberration and solar deflection have the magnitudes needed to explain major Q45/Q46 discrepancies. This does not establish Horizons' internal Q46 algorithm. A [draft inquiry to JPL](JPL_HORIZONS_Q46_CLARIFICATION_DRAFT_2026-11-18.md) is prepared and has **not** been sent. The experiment follows the [previous Q46 study](HORIZONS_Q46_DISCREPANCY_2026-11-18.md); its [grid and thresholds](Q46_ERFA_SEPARATION_PLAN_2026-11-18.md) were recorded before the new queries.
 
+Follow-up: [the ecliptic and radial rate comparison](DE441_ECLIPTIC_RADIAL_RATE_VALIDATION_2026-11-18.md) reports passing derivatives of Horizons positions/ranges and a separate failing direct Q20 range-rate check.
+
 ## Method and conditions
 
 For Moon 301, Mercury 199, Venus 299 and Jupiter system barycenter 5 observed from Earth center 399, query Horizons Q1 astrometric, Q45 apparent airless and Q46 rates, ICRF and DE441, at five TDB dates `2451580, 2451620, 2451674, 2451740, 2451820`. Each uses JD TT converted by the existing Rust approximation for Horizons, with samples ±0.005 and ±0.01 TDB day. All outputs are ″/hour in the local ICRF RA/declination tangent basis; the component difference Q45−Q1 is projected on the Q1 center basis, while Q45's own rate uses the Q45 center basis. Q46 is never treated as an independent apparent-position derivative by definition.
