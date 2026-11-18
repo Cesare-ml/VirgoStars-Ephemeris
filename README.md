@@ -20,6 +20,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Experimental planetary range 13000 BCE–3999 CE and historical-time diagnostic](docs/PLANET_VALIDATION_13000BCE_3999_2026-11-17.md)
 - [Experimental direct-obliquity comparison and ancient ΔT models](docs/ANCIENT_OBLIQUITY_AND_DELTAT_2026-11-17.md)
 - [Opt-in analytic solar-deflection rate and its validation limits](docs/EXPERIMENTAL_ANALYTIC_DEFLECTION_2026-11-18.md)
+- [Emission refinement versus deflection-rate matrix](docs/EMISSION_DEFLECTION_MATRIX_2026-11-18.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
