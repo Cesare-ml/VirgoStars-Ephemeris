@@ -1,5 +1,7 @@
 # TT–TDB sensitivity in the Horizons planetary holdout
 
+Follow-up: [Swiss-grid sensitivity including earlier epochs](SWISS_ANCIENT_TT_TDB_SENSITIVITY_2026-11-18.md).
+
 **Status: exploratory model sensitivity; not a physical timing error or MVP
 accuracy bound.** This follows the [300-case Horizons holdout](HORIZONS_PLANET_HOLDOUT_2026-11-18.md).
 The stellar catalog, server migration and ordinary calculation paths remain unchanged.
