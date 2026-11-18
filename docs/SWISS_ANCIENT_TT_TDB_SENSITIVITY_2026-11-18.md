@@ -1,5 +1,7 @@
 # TT–TDB sensitivity before and within the Horizons service interval
 
+Follow-up: [measured DE441 epoch quantization](DE441_ANCIENT_EPOCH_QUANTIZATION_2026-11-18.md).
+
 **Status: exploratory sampled sensitivity, not physical validation or an
 MVP accuracy bound.** This extends the [Horizons timing study](HORIZONS_TT_TDB_SENSITIVITY_2026-11-18.md)
 to the earlier interval using the [recorded Swiss/DE441 grids](SWISS_ANCIENT_FRAME_DECOMPOSITION_2026-11-18.md).
