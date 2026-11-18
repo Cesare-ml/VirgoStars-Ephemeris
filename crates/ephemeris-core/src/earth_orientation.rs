@@ -13,6 +13,7 @@
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
 // Modification (2026-11-17): widen the explicitly experimental nutation guard.
+// Modification (2026-11-18): add an isolated linear-argument nutation diagnostic.
 //! Earth orientation: IAU 2000B nutation, true equator/ecliptic of date and ECL_NUT.
 //!
 //! Provides the 77-term IAU 2000B nutation series (McCarthy & Luzum 2003) with
@@ -302,12 +303,7 @@ pub fn iau2000b_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError>
 pub(crate) const EXPERIMENTAL_MIN_JULIAN_EPOCH: f64 = -13000.0;
 pub(crate) const EXPERIMENTAL_MAX_JULIAN_EPOCH: f64 = 5001.0;
 
-/// Experimental extrapolation of the 77-term series using full IERS 2003
-/// polynomial fundamental arguments. This is not standard IAU 2000B and has no
-/// stated physical accuracy outside its modern epoch. Validated only for
-/// implementation agreement on explicit samples, never selected implicitly.
-/// Guarded Julian epochs −13000 through 5001 are experimental, not an accuracy range.
-pub fn experimental_extrapolated_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError> {
+fn experimental_nutation_centuries(tt_jd: f64) -> Result<f64, OrientationError> {
     if !tt_jd.is_finite() {
         return Err(OrientationError::NonFinite { field: "tt_jd" });
     }
@@ -315,7 +311,25 @@ pub fn experimental_extrapolated_nutation(tt_jd: f64) -> Result<NutationAngles, 
     if !(EXPERIMENTAL_MIN_JULIAN_EPOCH..=EXPERIMENTAL_MAX_JULIAN_EPOCH).contains(&epj) {
         return Err(OrientationError::UnsupportedEpoch { epoch_tt_jd: tt_jd });
     }
-    let t = (tt_jd - J2000_TT_JD) / DAYS_PER_JULIAN_CENTURY;
+    Ok((tt_jd - J2000_TT_JD) / DAYS_PER_JULIAN_CENTURY)
+}
+
+/// Experimental diagnostic: extrapolate the standard 2000B linear arguments.
+/// This is for comparing argument choices, not an accuracy claim or a default.
+pub fn experimental_linear_argument_nutation(
+    tt_jd: f64,
+) -> Result<NutationAngles, OrientationError> {
+    let t = experimental_nutation_centuries(tt_jd)?;
+    Ok(evaluate_nutation_series(tt_jd, t, delaunay_arguments(t)))
+}
+
+/// Experimental extrapolation of the 77-term series using full IERS 2003
+/// polynomial fundamental arguments. This is not standard IAU 2000B and has no
+/// stated physical accuracy outside its modern epoch. Validated only for
+/// implementation agreement on explicit samples, never selected implicitly.
+/// Guarded Julian epochs −13000 through 5001 are experimental, not an accuracy range.
+pub fn experimental_extrapolated_nutation(tt_jd: f64) -> Result<NutationAngles, OrientationError> {
+    let t = experimental_nutation_centuries(tt_jd)?;
     let coefficients: [[f64; 5]; 5] = [
         [
             485868.249036,
