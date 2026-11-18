@@ -4,7 +4,8 @@
 //! civil-time conversion. The long-term frame and TT/TDB model remain experimental.
 use crate::apparent_ecliptic_of_date::{
     experimental_long_term_apparent_direct_obliquity, experimental_long_term_apparent_ecliptic,
-    ApparentError,
+    experimental_long_term_apparent_with_provider, ApparentError,
+    ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
 };
 use crate::de441::{Body, De441};
 use crate::explicit_delta_t::{
@@ -21,6 +22,60 @@ use std::{
 pub enum ScenarioFrame {
     PoleBased,
     DirectObliquity,
+}
+
+/// Pole-based experimental samples with a caller-asserted source label.
+/// The label is not independently verified and the three samples are not bounds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistoricalProviderScenarios {
+    pub lower: HistoricalScenario,
+    pub nominal: HistoricalScenario,
+    pub upper: HistoricalScenario,
+    pub delta_t_source: String,
+}
+
+#[derive(Debug)]
+pub enum HistoricalProviderScenarioError<E> {
+    InvalidSource,
+    Time(ExplicitDeltaTError),
+    Calculation {
+        sample: ScenarioSample,
+        source: ExperimentalProviderApparentError<E>,
+    },
+}
+
+/// Compute all three explicit UT1/Delta-T samples through a per-epoch provider.
+/// UT1 is neither UTC nor a local civil time; no model or source is inferred.
+/// All samples must succeed; source validity and uncertainty interpretation
+/// remain the caller's responsibility. Uses the pole-based experimental frame.
+pub fn historical_delta_t_scenarios_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    target: Body,
+    jd_ut1: f64,
+    delta_t_seconds: f64,
+    uncertainty_seconds: f64,
+    delta_t_source: &str,
+) -> Result<HistoricalProviderScenarios, HistoricalProviderScenarioError<P::Error>> {
+    if delta_t_source.is_empty()
+        || delta_t_source.len() > 128
+        || delta_t_source.trim() != delta_t_source
+        || delta_t_source.chars().any(char::is_control)
+    {
+        return Err(HistoricalProviderScenarioError::InvalidSource);
+    }
+    let epochs = ut1_to_tdb_delta_t_scenarios(jd_ut1, delta_t_seconds, uncertainty_seconds)
+        .map_err(HistoricalProviderScenarioError::Time)?;
+    let mut calculate = |epoch: ExplicitDeltaTEpoch, sample| {
+        let fields = experimental_long_term_apparent_with_provider(provider, target, epoch.jd_tdb)
+            .map_err(|source| HistoricalProviderScenarioError::Calculation { sample, source })?;
+        Ok(HistoricalScenario { epoch, fields })
+    };
+    Ok(HistoricalProviderScenarios {
+        lower: calculate(epochs.lower, ScenarioSample::Lower)?,
+        nominal: calculate(epochs.nominal, ScenarioSample::Nominal)?,
+        upper: calculate(epochs.upper, ScenarioSample::Upper)?,
+        delta_t_source: delta_t_source.to_owned(),
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
