@@ -1,6 +1,7 @@
 # Classic DE441 sliced-file exporter — experimental
 
-**Status: locally implemented, real-file validation pending.** This exporter is
+**Status: locally implemented; one owner-run real-DE441 source/slice parity
+report received, independent JPL validation pending.** This exporter is
 not an Android pack downloader and does not redistribute any JPL data. It is
 the first code step toward [VirgoStars-Ephemeris #599](https://github.com/Cesare-ml/VirgoStars-Ephemeris/issues/599)
 and the [VirgoStars Mobile pack profile](https://github.com/Cesare-ml/virgostars-mobile-app/pull/31).
@@ -42,8 +43,14 @@ is reported; a leftover named partial file can be inspected separately.
 Example for the future package: `... de441-future.eph 2101 2300`.
 The first version preserves all source Chebyshev coefficients, even for
 unneeded series. It does **not** compress or quantize them. The old estimate of
-43–54 MB for the base package is **not a measured result**; obtain the actual
-file size only by running the command on a verified DE441 source.
+43–54 MB for the base package has now been replaced by a **46,599,968-byte
+(46.60 MB) owner-run measured result**. All ten slices together total
+214,130,192 bytes (214.13 MB), versus the provided source's 2,788,676,624
+bytes. The supplied local manifest reports the source fingerprint
+`476096486def4e41bfceb29aa27f50784da0bce318902bcf7b88caad058cd4da`
+and a source-versus-slice parity pass for all ten packages. This is local
+user-provided evidence, **not** an independent JPL/Horizons certification or
+permission to distribute data. The real `.eph` files themselves are not in Git.
 
 ### Offline package builder and integrity manifest
 
@@ -94,6 +101,12 @@ but it does **not** publish a manifest; use a fresh directory for a retry.
 `scientific_validation=real_kernel_and_independent_reference_pending`
 as explicit release gates. Signature verification, server-side approval,
 and an Android cache/download manager are future work.
+The latter status retains its conservative release-gate name despite the
+owner's successful same-source real-kernel parity run.
+
+The Rust core can now route JD TDB queries across those slices using
+[`De441PackManager`](DE441_PACK_MANAGER_2026-11-18.md); downloads and
+uninstall operations still belong in the host application.
 
 ## Scientific and file contract
 
@@ -117,9 +130,10 @@ and an Android cache/download manager are future work.
 
 ## Outstanding acceptance gates
 
-1. Run on a legally sourced **real 2.6 GB-class DE441** file and record source
-   SHA-256, source coverage, physical slice sizes, end-to-end seek latency and
-   original-vs-slice state vectors at a broad sampling of epochs and bodies.
+1. The owner-run **real 2.8 GB-class DE441** pack build has recorded source
+   SHA-256, coverage, physical slice sizes and same-source state comparisons.
+   Independent source provenance, seek-latency benchmarking, and a rerunnable
+   local validation receipt remain open.
 2. Validate source **and slice** against independently generated NAIF/JPL
    reference values, including positions, velocities and every pack boundary.
 3. Review the experimental **local unsigned v1 manifest** and add approved
@@ -143,3 +157,7 @@ existing `LICENSE` and `NOTICE` control.
 helper and synthetic packaging tests, with non-overwriting manifest and
 SHA-256 checks. Python adds no astronomical calculations and this work does
 not complete the scientific or redistribution-rights approval gates.
+
+2026-11-18 follow-up: recorded owner-supplied real-file packaging results and
+linked the separate Rust-only package selection manager. No JPL binaries or
+licenses are distributed as part of this change.
