@@ -1,5 +1,10 @@
 # MVP readiness checkpoint — 2026-11-17
 
+**Current update (2026-11-18):** the owner selected Swiss ecliptic
+compatibility and a 1″ sampled positional tolerance. See the
+[finite planetary closure checklist](MVP1_PIANETI_CHIUSURA_2026-11-18.md).
+The rest of this document is a dated checkpoint, not the current acceptance decision.
+
 **Priority update:** the owner has paused stellar catalog work. See the
 [MVP 1 priorities and acceptance proposal](MVP1_NEXT_PRIORITIES_2026-11-17.md)
 and [stellar pause checkpoint](STAR_CATALOG_PAUSED_2026-11-17.md). The ordered
