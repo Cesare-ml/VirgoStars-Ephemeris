@@ -85,6 +85,12 @@ model have their own limitations and errors.
 
 ## Existing baseline regression — **FAIL**, not silently updated
 
+Follow-up: [the separately versioned lunar regression and expanded Horizons
+rate investigation](DE441_LUNAR_BASELINE_AND_RATES_2026-11-18.md) retain the
+historical fixture and report both the now-passing revised regression and an
+unresolved independent Q46 rate discrepancy. The original result below is
+preserved as the outcome on the tested main commit.
+
 `cargo test --release --offline --test apparent_ecliptic_of_date -- --ignored`
 on the tested main commit yielded **3 passed, 1 failed**. The failure is
 `real_de441_matches_committed_engine_baseline`, an internal historical
