@@ -31,6 +31,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [New-date Horizons holdout for planetary directions](docs/HORIZONS_PLANET_HOLDOUT_2026-11-18.md)
 - [TT–TDB model sensitivity for the Horizons holdout](docs/HORIZONS_TT_TDB_SENSITIVITY_2026-11-18.md)
 - [Ancient Swiss-grid TT–TDB sensitivity](docs/SWISS_ANCIENT_TT_TDB_SENSITIVITY_2026-11-18.md)
+- [DE441 epoch quantization on ancient planetary samples](docs/DE441_ANCIENT_EPOCH_QUANTIZATION_2026-11-18.md)
 - [CPAL-1.0 license, with VirgoStars attribution in Exhibit B](LICENSE)
 - [NOTICE of copyright and third-party exclusions](NOTICE)
 - [Licensing, required attribution and credits](docs/LICENSING_AND_CREDITS.md)
