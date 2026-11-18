@@ -23,6 +23,10 @@ in caso contrario. L'attuale implementazione ricalcola parte della pipeline:
 è progettata per la verifica, non è ancora ottimizzata per un uso intensivo.
 La latitudine non ha una correzione di compatibilità in questo percorso.
 
+Un successivo [candidato sperimentale in latitudine](EXPERIMENTAL_LATITUDE_MOON_RATES_2026-11-18.md)
+è esposto tramite un metodo a tre velocità distinto; questo metodo a due
+velocità mantiene il proprio contratto.
+
 ## Controllo della combinazione
 
 È stato ripetuto il confronto con Swiss 2.09.03/JPL e DE441 locale comune,
