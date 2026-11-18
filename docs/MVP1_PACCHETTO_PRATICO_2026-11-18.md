@@ -30,6 +30,8 @@ I valori di esempio non certificano il tempo storico. Un errore su un corpo inte
 
 ## Nodi, case e alba/tramonto: stesso tempo esplicito
 
+Per un consumatore Rust, `mvp_snapshot::snapshot_ut1` riunisce pianeti, punti lunari e angoli delle case per un sito, con ricerca facoltativa di alba e tramonto. I risultati del sito sono separati e possono contenere un errore o indicare l'assenza dell'evento: il chiamante deve controllarli. Non fornisce le cuspidi astrologiche e non converte l'ora civile in UT1.
+
 - `mvp_lunar::lunar_points_ut1` usa lo stesso `PlanetaryTime` per nodo medio, nodo vero, apogeo medio e apogeo osculante, con coordinate eclittiche ed equatoriali. Per le epoche remote usa esplicitamente il modello sperimentale di orientamento: i polinomi lunari e le velocità non sono ancora stati verificati in modo indipendente su tale intervallo. Il percorso moderno `lunar_point` mantiene i suoi limiti.
 - `mvp_site::house_angles_ut1` restituisce gli angoli astronomici per le case; le cuspidi restano in `astrological-functions`.
 - `mvp_site::solar_event_ut1` calcola alba o tramonto con disco superiore, parallasse e rifrazione secondo il motore esistente; un risultato assente indica che non c'è evento nella finestra richiesta. ΔT viene mantenuto costante durante la ricerca.

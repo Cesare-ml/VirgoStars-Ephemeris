@@ -87,3 +87,4 @@ pub mod long_term_precession;
 pub mod mvp_lunar;
 pub mod mvp_planets;
 pub mod mvp_site;
+pub mod mvp_snapshot;
