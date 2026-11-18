@@ -14,6 +14,7 @@
 // Modification (2026-11-18): expose opt-in analytic apparent diagnostic module.
 // Modification (2026-11-18): expose opt-in historical Delta T scenarios.
 // Modification (2026-11-18): expose opt-in UT1 rate candidates.
+// Modification (2026-11-18): expose explicit historical local-clock conversion.
 
 //! VirgoStars Ephemeris: independent astronomical numerical foundations.
 //!
@@ -81,6 +82,7 @@ pub use time::{JulianDayTdb, TdbSecondsPastJ2000, J2000_JD_TDB, SECONDS_PER_DAY}
 pub mod delta_t_long_range;
 pub mod experimental_analytic_apparent;
 pub mod explicit_delta_t;
+pub mod historical_civil_time;
 pub mod historical_delta_t_scenarios;
 pub mod historical_orientation;
 pub mod historical_rate_candidate;

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: CPAL-1.0. Powered by VirgoStars; see LICENSE.
+// Modification (2026-11-18): exercise the explicit historical local clock path.
+use virgostars_ephemeris_core::calendar::CalendarDateTime;
 use virgostars_ephemeris_core::calendar::{Calendar, TimeScale};
 use virgostars_ephemeris_core::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
 use virgostars_ephemeris_core::de441::De441;
+use virgostars_ephemeris_core::historical_civil_time::{HistoricalCivilInput, HistoricalOffset};
 use virgostars_ephemeris_core::mvp_planets::PlanetaryTime;
 use virgostars_ephemeris_core::mvp_snapshot::{
-    experimental_snapshot_ut1, snapshot_ut1, SolarSearch,
+    experimental_snapshot_from_civil, experimental_snapshot_ut1, snapshot_ut1, SolarSearch,
 };
 use virgostars_ephemeris_core::rise_transit::{Atmosphere, Site};
 
@@ -73,6 +76,37 @@ fn snapshot_reports_results_and_unsupported_site_data_explicitly() {
         assert!(
             snapshot.sunset.unwrap().unwrap().jd_ut1.is_some(),
             "sunset: {year}"
+        );
+        let civil = experimental_snapshot_from_civil(
+            &mut eph,
+            HistoricalCivilInput {
+                local: CalendarDateTime {
+                    year,
+                    month: 3,
+                    day: 20,
+                    hour: 1,
+                    minute: 0,
+                    second: 0.0,
+                    scale: TimeScale::Ut1,
+                },
+                calendar: Calendar::ProlepticGregorian,
+                offset: HistoricalOffset::LocalMeanSolar {
+                    longitude_deg_east: 15.0,
+                },
+                uncertainty_seconds: 60.0,
+            },
+            69.0,
+            2.0,
+            "synthetic",
+            &site,
+            None,
+        )
+        .unwrap();
+        assert_eq!(civil.civil.jd_ut1, jd(year));
+        assert_eq!(civil.snapshot.planets.epoch, snapshot.planets.epoch);
+        assert_eq!(
+            civil.snapshot.planets.positions[0].rates.base.longitude_deg,
+            snapshot.planets.positions[0].rates.base.longitude_deg
         );
     }
     let without_solar = snapshot_ut1(&mut eph, time(jd(2000)), &site, None).unwrap();

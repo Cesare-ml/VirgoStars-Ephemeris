@@ -13,6 +13,7 @@
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): expose opt-in direct-obliquity TDB and UT1 methods.
 // Modification (2026-11-18): expose opt-in analytic solar-deflection ICRF diagnostic.
+// Modification (2026-11-18): expose opt-in long-term house angles.
 // Modification (2026-11-18): expose explicit historical Delta T scenarios.
 
 //! Thin Node.js (N-API) binding over `virgostars-ephemeris-core`.
@@ -510,7 +511,14 @@ fn angles_result(
     time_source: String,
 ) -> Result<HouseAnglesResult> {
     let a = house_angles(ut1, tt, lat, lon).map_err(|e| fail("E_RANGE", e))?;
-    Ok(HouseAnglesResult {
+    Ok(map_house_angles(a, time_source))
+}
+
+fn map_house_angles(
+    a: virgostars_ephemeris_core::house_angles::HouseAngles,
+    time_source: String,
+) -> HouseAnglesResult {
+    HouseAnglesResult {
         ut1_julian_day: a.ut1_jd,
         tt_julian_day: a.tt_jd,
         latitude_deg: a.latitude_deg,
@@ -525,7 +533,28 @@ fn angles_result(
         munkasey_co_ascendant_deg: a.extra.munkasey_co_ascendant_deg,
         munkasey_polar_ascendant_deg: a.extra.munkasey_polar_ascendant_deg,
         time_source,
-    })
+    }
+}
+
+/// Experimental long-term orientation with explicitly supplied UT1 and TT.
+#[napi]
+pub fn experimental_house_angles_explicit(
+    ut1_jd: f64,
+    tt_jd: f64,
+    latitude_deg: f64,
+    longitude_deg_east: f64,
+) -> Result<HouseAnglesResult> {
+    let a = virgostars_ephemeris_core::historical_orientation::experimental_house_angles(
+        ut1_jd,
+        tt_jd,
+        latitude_deg,
+        longitude_deg_east,
+    )
+    .map_err(|e| fail("E_RANGE", e))?;
+    Ok(map_house_angles(
+        a,
+        "EXPLICIT_UT1_TT_EXPERIMENTAL".to_string(),
+    ))
 }
 
 /// House astronomy with **both** UT1 and TT supplied by the caller (no

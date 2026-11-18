@@ -4,6 +4,7 @@
 // Licensed CPAL-1.0 (see LICENSE); "Powered by VirgoStars" attribution applies.
 // Modification (2026-11-18): expose opt-in analytic deflection diagnostic.
 // Modification (2026-11-18): expose explicit historical Delta T scenarios.
+// Modification (2026-11-18): expose opt-in long-term house-angle provider.
 
 const path = require('node:path');
 const { prepareStarCatalog, auditStarCatalogCoverage, validateLookupWarnings, validateExplicitAstrometry, validateMagnitudeInfo } = require('./star-catalog.js');
@@ -343,17 +344,20 @@ function houseAnglesUt(jdUt, latitudeDeg, longitudeDegEast) {
  * Provider for `astrological-functions` (`calculateHouseAngles`): the caller
  * supplies UT1 and TT explicitly, so no time conversion happens here.
  */
-function createHouseAngleProvider() {
+function houseAngleProvider(historical) {
   return Object.freeze({
     calculateHouseAngles({ ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast }) {
       let r;
       try {
-        r = loadNative().houseAnglesExplicit(ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast);
+        const native = loadNative();
+        r = historical
+          ? native.experimentalHouseAnglesExplicit(ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast)
+          : native.houseAnglesExplicit(ut1JulianDay, ttJulianDay, latitudeDeg, longitudeDegEast);
       } catch (error) {
         throw Engine._wrap(error);
       }
       return Object.freeze({
-        model: 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME',
+        model: historical ? 'EXPERIMENTAL_LONG_TERM_SIDEREAL_TIME' : 'IAU2006_2000B_APPROXIMATE_SIDEREAL_TIME',
         ut1JulianDay: r.ut1JulianDay,
         ttJulianDay: r.ttJulianDay,
         latitudeDeg: r.latitudeDeg,
@@ -371,6 +375,10 @@ function createHouseAngleProvider() {
     },
   });
 }
+
+function createHouseAngleProvider() { return houseAngleProvider(false); }
+/** Opt in to the experimental long-term UT1/TT orientation. No kernel needed. */
+function createExperimentalHistoricalHouseAngleProvider() { return houseAngleProvider(true); }
 
 /**
  * Lenient `swe_julday`: month, day and hour overflow arithmetically (month 13 is
@@ -807,6 +815,7 @@ module.exports = {
   revjul,
   houseAnglesUt,
   createHouseAngleProvider,
+  createExperimentalHistoricalHouseAngleProvider,
   constants,
   createSwissShapedFacade,
   createHouseDiagnosticSession,
