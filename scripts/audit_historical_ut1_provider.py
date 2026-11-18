@@ -38,10 +38,17 @@ def main():
     dates=[]
     for year in range(0,2301,25):
         for month in (1,4,7,10):
-            a,b=erfa.cal2jd(year,month,1); dates.append((year,month,float(a+b+0.5)))
+            a,b=erfa.cal2jd(year,month,1); dates.append(('seasonal',year,month,float(a+b+0.5)))
+    for year in range(0,2301):
+        for month in range(1,13):
+            a,b=erfa.cal2jd(year,month,15); dates.append(('monthly',year,month,float(a+b+0.5)))
+    boundaries=sorted({p['artifact'][key] for p in meta['packages'] for key in ('requested_start_jd_tdb','requested_end_exclusive_jd_tdb')})
+    for boundary in boundaries:
+        for offset in (-1.0,0.0,1.0):
+            dates.append(('boundary',None,None,float(boundary+(offset-64.0)/86400.0)))
     out.mkdir(parents=True,exist_ok=False)
     (out/'corrupt-test-only.eph').write_bytes(b'not a DE441 file')
-    input_text=''.join(f'{jd:.17f},64.0\n' for _,_,jd in dates)
+    input_text=''.join(f'{jd:.17f},64.0\n' for _,_,_,jd in dates)
     run=subprocess.run([str(exe),str(kernel),str(packs),str(out/'absent.eph'),str(out/'corrupt-test-only.eph')],input=input_text,text=True,capture_output=True,check=False)
     (out/'stdout.csv').write_text(run.stdout,encoding='utf8')
     (out/'stderr.txt').write_text(run.stderr,encoding='utf8')
@@ -56,11 +63,11 @@ def main():
         else: raise SystemExit('unexpected Rust output')
     if len(cases)!=300 or len(times)!=len(dates) or len(summaries)!=1: raise SystemExit('wrong Rust output count')
     residuals=[]
-    for (year,month,request),(ut1,tt,tdb,model_seconds) in zip(dates,times):
+    for (kind,year,month,request),(ut1,tt,tdb,model_seconds) in zip(dates,times):
         if abs(request-ut1)>1e-9: raise SystemExit('time epoch mismatch')
         erfa_seconds=float(erfa.dtdb(2451545.0,tt-2451545.0,(ut1+0.5)%1,0.0,0.0,0.0))
         difference=(tdb-tt)*86400.0-erfa_seconds
-        residuals.append({'year':year,'month':month,'deltaSeconds':difference,'erfaSeconds':erfa_seconds,
+        residuals.append({'kind':kind,'year':year,'month':month,'ut1':ut1,'tt':tt,'deltaSeconds':difference,'erfaSeconds':erfa_seconds,
                           'modelMinusErfaSeconds':model_seconds-erfa_seconds,
                           'representationMinusModelSeconds':(tdb-tt)*86400.0-model_seconds})
     refs=[]; records=[]
@@ -91,17 +98,24 @@ def main():
     def metric(key,limit):
         worst=max(records,key=lambda x:abs(x[key])); return {'maxAbs':abs(worst[key]),'failures':sum(abs(x[key])>limit for x in records),'limit':limit,'worst':worst}
     worst=max(residuals,key=lambda x:abs(x['deltaSeconds']))
-    summary={'providerCases':len(cases),'rustSummary':summaries[0],
+    cohort_summary={}
+    for kind in ('seasonal','monthly','boundary'):
+        subset=[x for x in residuals if x['kind']==kind]
+        cohort_summary[kind]={'count':len(subset),'modelMaxSeconds':max(abs(x['modelMinusErfaSeconds']) for x in subset),
+                              'representedMaxSeconds':max(abs(x['deltaSeconds']) for x in subset),
+                              'modelFailures':sum(abs(x['modelMinusErfaSeconds'])>1e-9 for x in subset),
+                              'representedFailures':sum(abs(x['deltaSeconds'])>25e-6 for x in subset)}
+    summary={'providerCases':len(cases),'rustSummary':summaries[0],'cohorts':cohort_summary,
              'erfaSamples':len(residuals),'erfaMaxAbsSeconds':abs(worst['deltaSeconds']),'erfaWorst':worst,'erfaLimitSeconds':0.0001,
              'erfaFailures':sum(abs(x['deltaSeconds'])>0.0001 for x in residuals),
              'posthocModelMaxAbsSeconds':max(abs(x['modelMinusErfaSeconds']) for x in residuals),
              'posthocRepresentationMaxAbsSeconds':max(abs(x['representationMinusModelSeconds']) for x in residuals),'jplCases':len(records),
              'longitude':metric('lonArcsec',1.0),'latitude':metric('latArcsec',1.0),'distance':metric('rangeAu',1e-9)}
-    result={'schema':'de441-historical-ut1-provider/1','status':'EXPERIMENTAL','erfaVersion':erfa.__version__,'sourceSha256':EXPECTED_SOURCE,'manifestSha256':inputs[1][1],'binarySha256':inputs[2][1],
+    result={'schema':'de441-historical-ut1-provider/2','status':'EXPERIMENTAL','erfaVersion':erfa.__version__,'sourceSha256':EXPECTED_SOURCE,'manifestSha256':inputs[1][1],'binarySha256':inputs[2][1],
             'summary':summary,'cases':cases,'erfaResiduals':residuals,'records':records,'jplResponses':refs}
     with (out/'report.json').open('x',encoding='utf8',newline='\n') as file: json.dump(result,file,indent=2,allow_nan=False);file.write('\n')
     print(json.dumps(summary))
-    if summary['erfaFailures'] or any(summary[k]['failures'] for k in ('longitude','latitude','distance')): raise SystemExit(1)
+    if summary['erfaFailures'] or any(v['modelFailures'] or v['representedFailures'] for v in cohort_summary.values()) or any(summary[k]['failures'] for k in ('longitude','latitude','distance')): raise SystemExit(1)
 
 
 if __name__=='__main__': main()

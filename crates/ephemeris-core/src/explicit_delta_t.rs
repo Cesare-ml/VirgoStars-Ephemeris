@@ -30,6 +30,7 @@ pub enum ExplicitDeltaTError {
     NonFinite,
     NegativeUncertainty,
     Unrepresentable,
+    ModelOutOfRange,
 }
 impl fmt::Display for ExplicitDeltaTError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,6 +41,7 @@ impl fmt::Display for ExplicitDeltaTError {
                 Self::NonFinite => "UT1, Delta T and uncertainty must be finite",
                 Self::NegativeUncertainty => "Delta T uncertainty must be nonnegative",
                 Self::Unrepresentable => "converted epoch is not representable",
+                Self::ModelOutOfRange => "TT epoch is outside the experimental TDB model range",
             }
         )
     }
@@ -97,6 +99,37 @@ pub fn ut1_to_tdb_with_explicit_delta_t(
     })
 }
 
+/// Experimental geocentric Fairhead series conversion. The existing one-term
+/// API is unchanged; the caller must still provide UT1 and Delta T explicitly.
+pub fn ut1_to_tdb_with_fairhead_delta_t(
+    jd_ut1: f64,
+    delta_t_seconds: f64,
+    uncertainty_seconds: f64,
+) -> Result<ExplicitDeltaTEpoch, ExplicitDeltaTError> {
+    if ![jd_ut1, delta_t_seconds, uncertainty_seconds]
+        .iter()
+        .all(|x| x.is_finite())
+    {
+        return Err(ExplicitDeltaTError::NonFinite);
+    }
+    if uncertainty_seconds < 0.0 {
+        return Err(ExplicitDeltaTError::NegativeUncertainty);
+    }
+    let jd_tt = jd_ut1 + delta_t_seconds / 86_400.0;
+    if !jd_tt.is_finite() {
+        return Err(ExplicitDeltaTError::Unrepresentable);
+    }
+    let correction = crate::fairhead_tdb::geocentric_tdb_minus_tt_seconds(jd_tt)
+        .ok_or(ExplicitDeltaTError::ModelOutOfRange)?;
+    Ok(ExplicitDeltaTEpoch {
+        jd_ut1,
+        jd_tt,
+        jd_tdb: JulianDateTdb(jd_tt + correction / 86_400.0),
+        delta_t_seconds,
+        uncertainty_seconds,
+    })
+}
+
 /// Convert caller-provided Delta T and its plus/minus perturbations at a fixed
 /// UT1. A nonzero perturbation must remain distinguishable in Delta T, TT and
 /// TDB f64 values. The three samples are not bounds on intermediate values.
@@ -105,14 +138,42 @@ pub fn ut1_to_tdb_delta_t_scenarios(
     delta_t_seconds: f64,
     uncertainty_seconds: f64,
 ) -> Result<ExplicitDeltaTScenarios, ExplicitDeltaTError> {
-    let nominal = ut1_to_tdb_with_explicit_delta_t(jd_ut1, delta_t_seconds, uncertainty_seconds)?;
+    scenarios_with(
+        jd_ut1,
+        delta_t_seconds,
+        uncertainty_seconds,
+        ut1_to_tdb_with_explicit_delta_t,
+    )
+}
+
+/// Three explicit scenarios using the experimental geocentric Fairhead model.
+pub fn ut1_to_tdb_fairhead_delta_t_scenarios(
+    jd_ut1: f64,
+    delta_t_seconds: f64,
+    uncertainty_seconds: f64,
+) -> Result<ExplicitDeltaTScenarios, ExplicitDeltaTError> {
+    scenarios_with(
+        jd_ut1,
+        delta_t_seconds,
+        uncertainty_seconds,
+        ut1_to_tdb_with_fairhead_delta_t,
+    )
+}
+
+fn scenarios_with(
+    jd_ut1: f64,
+    delta_t_seconds: f64,
+    uncertainty_seconds: f64,
+    convert: fn(f64, f64, f64) -> Result<ExplicitDeltaTEpoch, ExplicitDeltaTError>,
+) -> Result<ExplicitDeltaTScenarios, ExplicitDeltaTError> {
+    let nominal = convert(jd_ut1, delta_t_seconds, uncertainty_seconds)?;
     let lower_delta = delta_t_seconds - uncertainty_seconds;
     let upper_delta = delta_t_seconds + uncertainty_seconds;
     if !lower_delta.is_finite() || !upper_delta.is_finite() {
         return Err(ExplicitDeltaTError::Unrepresentable);
     }
-    let lower = ut1_to_tdb_with_explicit_delta_t(jd_ut1, lower_delta, uncertainty_seconds)?;
-    let upper = ut1_to_tdb_with_explicit_delta_t(jd_ut1, upper_delta, uncertainty_seconds)?;
+    let lower = convert(jd_ut1, lower_delta, uncertainty_seconds)?;
+    let upper = convert(jd_ut1, upper_delta, uncertainty_seconds)?;
     if uncertainty_seconds > 0.0
         && !(lower_delta < delta_t_seconds
             && delta_t_seconds < upper_delta
@@ -183,5 +244,51 @@ mod tests {
             ut1_to_tdb_delta_t_scenarios(2_451_545.0, f64::MAX, f64::MAX),
             Err(ExplicitDeltaTError::Unrepresentable)
         );
+    }
+
+    #[test]
+    fn fairhead_scenarios_keep_explicit_inputs_and_fail_closed() {
+        let set = ut1_to_tdb_fairhead_delta_t_scenarios(2_451_545.0, 64.0, 10.0).unwrap();
+        assert_eq!(
+            (
+                set.lower.delta_t_seconds,
+                set.nominal.delta_t_seconds,
+                set.upper.delta_t_seconds
+            ),
+            (54.0, 64.0, 74.0)
+        );
+        assert!(
+            set.lower.jd_tdb.0 < set.nominal.jd_tdb.0 && set.nominal.jd_tdb.0 < set.upper.jd_tdb.0
+        );
+        assert_eq!(
+            ut1_to_tdb_with_fairhead_delta_t(f64::NAN, 0.0, 0.0),
+            Err(ExplicitDeltaTError::NonFinite)
+        );
+        assert_eq!(
+            ut1_to_tdb_with_fairhead_delta_t(2_451_545.0, 0.0, -1.0),
+            Err(ExplicitDeltaTError::NegativeUncertainty)
+        );
+        assert_eq!(
+            ut1_to_tdb_with_fairhead_delta_t(1.0, 0.0, 0.0),
+            Err(ExplicitDeltaTError::ModelOutOfRange)
+        );
+        assert_eq!(
+            ut1_to_tdb_fairhead_delta_t_scenarios(2_451_545.0, 64.0, 1e-12),
+            Err(ExplicitDeltaTError::Unrepresentable)
+        );
+    }
+
+    #[test]
+    fn fairhead_corrects_the_legacy_year_75_residual() {
+        // ERFA 2.0.1.5, geocentric dtdb at TT JD 1748727.0007407407.
+        let reference_seconds = -0.001_551_385_369_688_589_4;
+        let legacy = ut1_to_tdb_with_explicit_delta_t(1_748_727.0, 64.0, 0.0).unwrap();
+        let refined = ut1_to_tdb_with_fairhead_delta_t(1_748_727.0, 64.0, 0.0).unwrap();
+        let residual = |epoch: ExplicitDeltaTEpoch| {
+            ((epoch.jd_tdb.0 - epoch.jd_tt) * 86_400.0 - reference_seconds).abs()
+        };
+        assert!(residual(legacy) > 100e-6);
+        assert!(residual(refined) < 25e-6);
+        assert_eq!(legacy.jd_tt, refined.jd_tt);
     }
 }
