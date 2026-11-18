@@ -51,6 +51,10 @@ The standard-library Python helper **does not calculate ephemerides**: it
 invokes the Rust slice exporter, hashes the source and generated packages,
 and writes a local JSON inventory. It never downloads, hosts, replaces or
 publishes any ephemeris data.
+For a full one-command Windows workflow (including the explicitly optional
+official JPL source download, Rust checks, record-by-record source/slice
+numerical comparison and report), see
+[the Windows runbook](DE441_WINDOWS_ONE_SHOT_2026-11-18.md).
 
 ```sh
 python scripts/build_de441_mobile_packs.py plan
@@ -77,7 +81,10 @@ python scripts/build_de441_mobile_packs.py verify --manifest "D:\Data\mobile-cor
 
 Each manifest lists **all ten planned ranges**. Built entries have exact
 requested and record-aligned JD TDB boundaries, byte counts, SHA-256,
-record counts, and file format. Unbuilt entries are explicitly `not_built`
+record counts, file format and the **source/slice Rust parity verdict**.
+That comparator evaluates 14 geometric target/center pairs at three
+deterministic sample epochs per coefficient record, not an independent
+NASA/JPL reference. Unbuilt entries are explicitly `not_built`
 and have no downloadable artifact. Existing output files and manifests
 are never overwritten. A failed batch can leave previously generated files,
 but it does **not** publish a manifest; use a fresh directory for a retry.
