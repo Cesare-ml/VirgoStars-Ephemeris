@@ -1,5 +1,10 @@
 # MVP 1 — status and proposed priorities, 2026-11-17
 
+**Current update (2026-11-18):** the owner selected Swiss ecliptic
+compatibility and a 1″ sampled positional tolerance. See the
+[finite planetary closure checklist](MVP1_PIANETI_CHIUSURA_2026-11-18.md).
+The 2026-11-17 proposal below remains historical and is not a release claim.
+
 **Owner update:** the requested planetary range is now 13000 BCE through
 3999 CE. An [initial extended-range experiment and diagnostics](PLANET_VALIDATION_13000BCE_3999_2026-11-17.md)
 supersede the narrower year 0–3000 goal in the historical proposal below. The
