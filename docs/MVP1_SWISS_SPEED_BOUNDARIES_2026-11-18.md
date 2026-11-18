@@ -61,6 +61,10 @@ alla velocità pubblicata in 102 dei 114 campioni: RMS da circa 2,08×10⁻⁵ a
 non corregge le velocità angolari o le quattro stazioni. Non è stata applicata
 al core né proposta come precisione garantita.
 
+Un successivo [esperimento radiale nel core](EXPERIMENTAL_RADIAL_RATE_CANDIDATE_2026-11-18.md)
+restituisce separatamente un candidato e lascia invariata la derivata. Il Sole
+è escluso esplicitamente; le velocità angolari e le stazioni restano aperte.
+
 ## Riproduzione e gate
 
 ```text
