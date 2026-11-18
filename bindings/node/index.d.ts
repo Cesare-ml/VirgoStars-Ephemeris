@@ -1,5 +1,6 @@
 // Types for the experimental VirgoStars-Ephemeris Node binding.
 // Modification (2026-11-18): declare opt-in analytic deflection diagnostic.
+// Modification (2026-11-18): declare opt-in historical Delta T scenarios.
 
 export interface CalcResult {
   /** [lon deg, lat deg, dist AU, dlon deg/day, dlat deg/day, ddist AU/day]; speeds are 0 unless SEFLG_SPEED. */
@@ -53,6 +54,28 @@ export interface LongTermUt1Result {
   notes: string[];
 }
 
+export interface DeltaTScenarioResult {
+  deltaTSeconds: number;
+  jdTt: number;
+  jdTdb: number;
+  /** Longitude and latitude in degrees, distance in AU, then rates per TDB day. */
+  xx: number[];
+}
+
+/** Three explicit samples, not a position bound or a confidence interval. */
+export interface HistoricalDeltaTScenariosResult {
+  jdUt1: number;
+  target: string;
+  deltaTSeconds: number;
+  deltaTUncertaintySeconds: number;
+  deltaTSource: string;
+  frame: 'POLE_BASED' | 'MIXED_DIRECT_OBLIQUITY';
+  lower: DeltaTScenarioResult;
+  nominal: DeltaTScenarioResult;
+  upper: DeltaTScenarioResult;
+  notes: string[];
+}
+
 export interface LongRangeDeltaTEstimate {
   decimalYear: number;
   seconds: number;
@@ -81,6 +104,10 @@ export class Engine {
   experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   /** Experimental mixed frame; UT1 and caller-asserted Delta T, uncertainty and source required. */
   experimentalLongTermDirectObliquityUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
+  /** Three fixed-UT1 samples at Delta T minus/plus the caller's perturbation. */
+  experimentalLongTermApparentUt1Scenarios(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): HistoricalDeltaTScenariosResult;
+  /** Three samples using the experimental mixed-obliquity frame. */
+  experimentalLongTermDirectObliquityUt1Scenarios(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): HistoricalDeltaTScenariosResult;
   calcUt(jdUt: number, ipl: number, flags?: number): CalcResult;
   loadDeltaT(deltatDataPath: string, historicDeltatPath: string, deltatPredsPath?: string | null): void;
   loadChiron(spkPath: string): void;

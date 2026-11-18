@@ -13,6 +13,7 @@
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): expose opt-in direct-obliquity TDB and UT1 methods.
 // Modification (2026-11-18): expose opt-in analytic solar-deflection ICRF diagnostic.
+// Modification (2026-11-18): expose explicit historical Delta T scenarios.
 
 //! Thin Node.js (N-API) binding over `virgostars-ephemeris-core`.
 //!
@@ -64,6 +65,9 @@ use virgostars_ephemeris_core::fixed_star::{
 };
 use virgostars_ephemeris_core::hipparcos::{
     accepts_experimental_hip2, read_hip2_selected, Hip2QualityPolicy, Hip2Record, RadialVelocity,
+};
+use virgostars_ephemeris_core::historical_delta_t_scenarios::{
+    historical_delta_t_scenarios, HistoricalScenario, HistoricalScenarioError, ScenarioFrame,
 };
 use virgostars_ephemeris_core::horizon::{
     ecliptic_to_equatorial, equatorial_to_horizontal, estimated_pressure_hpa,
@@ -160,6 +164,47 @@ pub struct LongTermUt1Result {
     pub delta_t_uncertainty_seconds: f64,
     pub delta_t_source: String,
     pub notes: Vec<String>,
+}
+
+/// A single explicitly evaluated Delta T scenario.
+#[napi(object)]
+pub struct DeltaTScenarioResult {
+    pub delta_t_seconds: f64,
+    pub jd_tt: f64,
+    pub jd_tdb: f64,
+    pub xx: Vec<f64>,
+}
+
+/// Three fixed-UT1 samples; they are not planetary bounds or a confidence interval.
+#[napi(object)]
+pub struct HistoricalDeltaTScenariosResult {
+    pub jd_ut1: f64,
+    pub target: String,
+    pub delta_t_seconds: f64,
+    pub delta_t_uncertainty_seconds: f64,
+    pub delta_t_source: String,
+    pub frame: String,
+    pub lower: DeltaTScenarioResult,
+    pub nominal: DeltaTScenarioResult,
+    pub upper: DeltaTScenarioResult,
+    pub notes: Vec<String>,
+}
+
+fn delta_t_scenario_result(s: HistoricalScenario) -> DeltaTScenarioResult {
+    let f = s.fields;
+    DeltaTScenarioResult {
+        delta_t_seconds: s.epoch.delta_t_seconds,
+        jd_tt: s.epoch.jd_tt,
+        jd_tdb: s.epoch.jd_tdb.0,
+        xx: vec![
+            f.longitude_deg,
+            f.latitude_deg,
+            f.distance_au,
+            f.longitude_speed_deg_per_tdb_day,
+            f.latitude_speed_deg_per_tdb_day,
+            f.distance_speed_au_per_tdb_day,
+        ],
+    }
 }
 
 /// Old historical/projection model; uncertainty is deliberately not supplied.
@@ -1081,6 +1126,94 @@ impl Engine {
             delta_t_source,
             true,
         )
+    }
+
+    /// Three caller-defined Delta T samples at fixed UT1, not a position bound.
+    #[napi]
+    pub fn experimental_long_term_apparent_ut1_scenarios(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        uncertainty_seconds: f64,
+        source: String,
+    ) -> Result<HistoricalDeltaTScenariosResult> {
+        self.long_term_ut1_scenarios(
+            jd_ut1,
+            ipl,
+            delta_t_seconds,
+            uncertainty_seconds,
+            source,
+            ScenarioFrame::PoleBased,
+        )
+    }
+
+    /// The same three samples in the separately fitted mixed obliquity frame.
+    #[napi]
+    pub fn experimental_long_term_direct_obliquity_ut1_scenarios(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        uncertainty_seconds: f64,
+        source: String,
+    ) -> Result<HistoricalDeltaTScenariosResult> {
+        self.long_term_ut1_scenarios(
+            jd_ut1,
+            ipl,
+            delta_t_seconds,
+            uncertainty_seconds,
+            source,
+            ScenarioFrame::DirectObliquity,
+        )
+    }
+
+    fn long_term_ut1_scenarios(
+        &mut self,
+        jd_ut1: f64,
+        ipl: i32,
+        delta_t_seconds: f64,
+        uncertainty_seconds: f64,
+        source: String,
+        frame: ScenarioFrame,
+    ) -> Result<HistoricalDeltaTScenariosResult> {
+        if source.trim().is_empty() || source.len() > 200 {
+            return Err(fail(
+                "E_RANGE",
+                "a Delta T source label (1..200 bytes) is required",
+            ));
+        }
+        if !(0..=9).contains(&ipl) {
+            return Err(fail("E_UNSUPPORTED_BODY", "target must be 0..=9"));
+        }
+        let target = body_from_ipl(ipl)?;
+        let scenarios = historical_delta_t_scenarios(
+            &mut self.ephemeris,
+            target,
+            jd_ut1,
+            delta_t_seconds,
+            uncertainty_seconds,
+            frame,
+        )
+        .map_err(|e| {
+            if matches!(&e, HistoricalScenarioError::Time(_)) {
+                fail("E_RANGE", e)
+            } else {
+                fail("E_CALC", e)
+            }
+        })?;
+        Ok(HistoricalDeltaTScenariosResult {
+            jd_ut1, target: format!("{target:?}"), delta_t_seconds,
+            delta_t_uncertainty_seconds: uncertainty_seconds, delta_t_source: source.trim().to_owned(),
+            frame: match frame { ScenarioFrame::PoleBased => "POLE_BASED", ScenarioFrame::DirectObliquity => "MIXED_DIRECT_OBLIQUITY" }.to_string(),
+            lower: delta_t_scenario_result(scenarios.lower), nominal: delta_t_scenario_result(scenarios.nominal), upper: delta_t_scenario_result(scenarios.upper),
+            notes: vec![
+                "EXPERIMENTAL: fixed UT1; caller-asserted Delta T, perturbation and source; not UTC or local time".to_string(),
+                "Three samples only; not position bounds, a confidence interval, or a historical measurement".to_string(),
+                "Long-term frame and extrapolated nutation accuracy not established; mixed frame when selected".to_string(),
+                "TT to TDB uses one periodic term; rates per TDB day; all three samples must succeed".to_string(),
+            ],
+        })
     }
 
     fn long_term_ut1(

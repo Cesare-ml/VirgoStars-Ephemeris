@@ -2,6 +2,9 @@
 
 Follow-up: [direct-obliquity alternative and ancient ΔT comparisons](ANCIENT_OBLIQUITY_AND_DELTAT_2026-11-17.md).
 
+Further follow-up: [explicit three-sample ΔT sensitivity](HISTORICAL_DELTAT_SCENARIOS_2026-11-18.md)
+is available experimentally; its samples are not positional uncertainty bounds.
+
 **Status: initial experimental implementation and sampled diagnostic; not
 scientifically accepted or enabled on the main server.** The owner requested
 coverage from 13000 BCE to 3999 CE while fixed-star work and production server
