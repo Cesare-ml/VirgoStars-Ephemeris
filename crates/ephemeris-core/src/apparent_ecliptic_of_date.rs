@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): add an opt-in direct-obliquity experimental frame.
+// Modification (2026-11-18): add a separately labeled radial-rate experiment.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -83,7 +84,7 @@ use crate::light_time::{
 };
 use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 use crate::six_field_units::{
-    fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError,
+    fixed_spherical_to_degrees_au, FixedSixFieldsDegreesAu, UnitConversionError, IAU_AU_KM,
 };
 use crate::spk_type21::SmallBodySpk;
 
@@ -518,6 +519,98 @@ pub fn experimental_long_term_apparent_direct_obliquity<R: Read + Seek>(
     reception_epoch: JulianDateTdb,
 ) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
     experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true, true)
+}
+
+/// A diagnostic candidate, separate from the derivative in `base`.
+/// The candidate is not asserted to be a position derivative or Swiss parity.
+#[derive(Clone, Copy, Debug)]
+pub struct ExperimentalRadialRateCandidate {
+    pub base: FixedSixFieldsDegreesAu,
+    pub correction_au_per_tdb_day: f64,
+    pub candidate_au_per_tdb_day: f64,
+    pub correction_applied: bool,
+}
+
+/// Independently formulated first-order diagnostic: (r · a_Earth) / (c AU),
+/// with the apparent ICRF position in km and barycentric Earth acceleration in
+/// km/TDB day². It modifies no normal calculation and makes no claim about the
+/// implementation of the comparison software. Angular rates are unchanged.
+/// The Sun is explicitly excluded: sampled comparisons worsened systematically.
+pub fn experimental_radial_rate_candidate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<ExperimentalRadialRateCandidate, ApparentError> {
+    let base =
+        experimental_long_term_apparent_direct_obliquity(ephemeris, target, reception_epoch)?;
+    if target == Body::Sun {
+        return Ok(ExperimentalRadialRateCandidate {
+            base,
+            correction_au_per_tdb_day: 0.0,
+            candidate_au_per_tdb_day: base.distance_speed_au_per_tdb_day,
+            correction_applied: false,
+        });
+    }
+    let position = experimental_apparent_icrf(ephemeris, target, reception_epoch)?.position_km;
+    let acceleration = ephemeris
+        .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
+        .map_err(AberratedStateError::from)?
+        .acceleration_km_per_day2;
+    let correction = radial_rate_candidate_correction(position, acceleration)?;
+    let candidate = base.distance_speed_au_per_tdb_day + correction;
+    if !candidate.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(ExperimentalRadialRateCandidate {
+        base,
+        correction_au_per_tdb_day: correction,
+        candidate_au_per_tdb_day: candidate,
+        correction_applied: true,
+    })
+}
+
+fn radial_rate_candidate_correction(
+    position: [f64; 3],
+    acceleration: [f64; 3],
+) -> Result<f64, ApparentError> {
+    if position
+        .iter()
+        .chain(acceleration.iter())
+        .any(|v| !v.is_finite())
+        || position.iter().all(|v| *v == 0.0)
+    {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    let correction = position
+        .iter()
+        .zip(acceleration)
+        .map(|(r, a)| r * a)
+        .sum::<f64>()
+        / (crate::aberration::SPEED_OF_LIGHT_KM_PER_DAY * IAU_AU_KM);
+    if !correction.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(correction)
+}
+
+#[cfg(test)]
+mod radial_candidate_tests {
+    use super::*;
+
+    #[test]
+    fn projection_respects_sign_and_rejects_invalid_geometry() {
+        let c = crate::aberration::SPEED_OF_LIGHT_KM_PER_DAY;
+        let value = radial_rate_candidate_correction([IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
+        assert!((value - 1.0).abs() < 1e-15);
+        let opposite =
+            radial_rate_candidate_correction([-IAU_AU_KM, 0.0, 0.0], [c, 5.0, 0.0]).unwrap();
+        assert!((opposite + 1.0).abs() < 1e-15);
+        assert!(radial_rate_candidate_correction([0.0; 3], [0.0; 3]).is_err());
+        assert!(radial_rate_candidate_correction([f64::NAN, 0.0, 0.0], [0.0; 3]).is_err());
+        assert!(
+            radial_rate_candidate_correction([f64::MAX, 0.0, 0.0], [f64::MAX, 0.0, 0.0]).is_err()
+        );
+    }
 }
 
 fn experimental_long_term_ecliptic<R: Read + Seek>(
