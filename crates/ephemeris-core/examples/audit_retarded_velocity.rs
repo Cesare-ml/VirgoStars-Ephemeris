@@ -2,7 +2,7 @@
 //! Offline diagnostic: light-time velocity and the unretarded-velocity hybrid.
 //! Neither state includes stellar aberration or gravitational deflection.
 //! The hybrid is deliberately not the derivative of the returned position.
-//! Usage: `audit_retarded_velocity KERNEL earth|ssb sun|moon|mercury|jupiter JD_TDB`
+//! Usage: `audit_retarded_velocity KERNEL earth|ssb sun|moon|mercury|venus|jupiter JD_TDB`
 use std::error::Error;
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::light_time::light_time_with_states;
@@ -10,7 +10,7 @@ use virgostars_ephemeris_core::light_time::light_time_with_states;
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 5 {
-        return Err("usage: KERNEL earth|ssb sun|moon|mercury|jupiter JD_TDB".into());
+        return Err("usage: KERNEL earth|ssb sun|moon|mercury|venus|jupiter JD_TDB".into());
     }
     let observer = match args[2].as_str() {
         "earth" => Body::Earth,
@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "sun" => Body::Sun,
         "moon" => Body::Moon,
         "mercury" => Body::Mercury,
+        "venus" => Body::Venus,
         "jupiter" => Body::JupiterBarycenter,
         _ => return Err("unknown target".into()),
     };

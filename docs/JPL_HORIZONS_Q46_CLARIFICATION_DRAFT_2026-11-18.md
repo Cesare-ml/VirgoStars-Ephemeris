@@ -48,6 +48,8 @@ Could you please clarify:
 2. Are the derivatives of the target emission epoch/light time, stellar aberration (including observer acceleration), and solar light deflection included in Q46? If only some terms are included, which ones and at which epochs?
 3. Is Q46 expressed per TT, TDB or another time parameter, and are there accuracy or rounding limits that could explain the example? Is there a preferred Horizons quantity or method for the complete time derivative of Q45?
 
+We have a related Q20 range-rate question. For `COMMAND='199'`, `CENTER='500@399'`, at JD TDB 2442595.0 (approximate JD TT 2442594.999999999), Q20 `deldot` is about 33.7223560 km/s, while a four-point centered derivative of its `delta` range gives about 33.7173940 km/s at both 0.02- and 0.04-day half-steps. The queried JD TT values were `2442594.919999999, 2442594.959999999, 2442594.979999999, 2442594.999999999, 2442595.019999999, 2442595.039999999, 2442595.079999999`, with `QUANTITIES='20,23,45'` and the other settings above. In a local diagnostic the former is close to the line-of-sight projection of `V_target(emission) − V_observer(reception)`, and the latter to the projection including the derivative of emission time. Is that distinction intended in Q20, and which Horizons output is recommended for the full reception-time derivative of apparent range? We can supply the raw tables.
+
 We can supply the full API query, response, the exact finite-difference calculation and further cases if helpful. Thank you for your assistance.
 
 Kind regards,
