@@ -23,6 +23,10 @@ Non trasforma controlli campionati in una garanzia di accuratezza fisica.
   **la velocità pubblicata da Swiss**, anche quando differisce dalla derivata
   numerica delle posizioni Swiss. La compatibilità non è ancora raggiunta:
   si veda [velocità, stazioni ed estremi](MVP1_SWISS_SPEED_BOUNDARIES_2026-11-18.md).
+- Per la **sola velocità in longitudine della Luna**, l'utente ha accettato
+  per la MVP uno scarto massimo **campionato** di 0,3″/giorno rispetto a Swiss.
+  Il [controllo di 194 casi](MVP1_LUNAR_LONGITUDE_SPEED_2026-11-18.md) lo
+  soddisfa; non definisce una tolleranza per gli altri corpi o altre componenti.
 
 Il perimetro base qui verificato è la direzione apparente geocentrica di
 Sole, Luna, Mercurio, Venere e baricentri dei sistemi Marte–Plutone, con
@@ -77,8 +81,11 @@ che il controllo fallisca davvero, una prova tecnica a 0,001″ ha rilevato
    delle stazioni: il limite di posizione di 1″ non le definisce. Le prove
    sulle posizioni e le precedenti stazioni non dimostrano ancora questo gate.
    Il controllo successivo copre i due estremi e individua quattro disaccordi
-   di segno su 48 stazioni rispetto alla velocità pubblicata: è necessaria una
-   correzione compatibile e la sua verifica, non solo altra documentazione.
+   di segno su 48 stazioni rispetto alla velocità pubblicata originale. Un
+   candidato sperimentale li ha corretti nei campioni, ma le tolleranze sulle
+   stazioni e sulle altre velocità restano aperte. La sola velocità lunare in
+   longitudine ha ora superato il controllo campionato a 0,3″/giorno scelto
+   dall'utente; questo non chiude l'intero gruppo.
 2. **Contratto del tempo storico.** Per le date fuori dalla copertura moderna,
    usare un input UT1/TT/TDB chiaramente identificato e una politica esplicita
    per ΔT e la sua fonte/incertezza. Riutilizzare i test delle tre ipotesi e
