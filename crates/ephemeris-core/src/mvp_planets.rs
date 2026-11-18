@@ -2,7 +2,8 @@
 //! One explicit UT1 instant to an ordered set of apparent planetary results.
 //!
 //! This packages the existing experimental long-range path; it does not infer
-//! civil time or ΔT, supply a kernel, or change the standard modern APIs.
+//! civil time, supply a kernel, or change the standard modern APIs. ΔT is either
+//! supplied by the caller or estimated using an explicitly selected model.
 //! Rates follow the Swiss-compatibility candidates and are not derivatives of
 //! the returned positions. Mars through Pluto are system barycentres.
 
@@ -13,7 +14,10 @@ use std::io::{Read, Seek};
 use crate::apparent_ecliptic_of_date::{
     experimental_three_rate_candidate, ApparentError, ExperimentalThreeRateCandidate,
 };
+use crate::calendar::{Calendar, JulianDate, TimeScale};
+use crate::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
 use crate::de441::{Body, De441};
+use crate::delta_t_long_range::espenak_meeus_2006_extended;
 use crate::explicit_delta_t::{
     ut1_to_tdb_with_explicit_delta_t, ExplicitDeltaTEpoch, ExplicitDeltaTError,
 };
@@ -38,6 +42,67 @@ pub struct PlanetaryTime<'a> {
     pub delta_t_seconds: f64,
     pub uncertainty_seconds: f64,
     pub source: &'a str,
+}
+
+/// Invalid input or an instant outside the selected estimate's stated range.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelTimeError {
+    InvalidInput,
+    OutOfRange,
+}
+
+impl fmt::Display for ModelTimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidInput => write!(f, "UT1 and a nonnegative uncertainty must be finite"),
+            Self::OutOfRange => write!(f, "UT1 date is outside years -1999 through 3000"),
+        }
+    }
+}
+impl Error for ModelTimeError {}
+
+impl PlanetaryTime<'static> {
+    /// Opt in to the Espenak–Meeus 2006 estimate for proleptic Gregorian
+    /// astronomical years −1999 through 3000. The caller still supplies the
+    /// uncertainty: the estimate is not an observation or a guaranteed bound.
+    pub fn espenak_meeus_2006(
+        jd_ut1: f64,
+        uncertainty_seconds: f64,
+    ) -> Result<Self, ModelTimeError> {
+        if !jd_ut1.is_finite() || !uncertainty_seconds.is_finite() || uncertainty_seconds < 0.0 {
+            return Err(ModelTimeError::InvalidInput);
+        }
+        let date = JulianDate::from_f64(jd_ut1, TimeScale::Ut1)
+            .and_then(|jd| jd.to_calendar(Calendar::ProlepticGregorian))
+            .map_err(|_| ModelTimeError::OutOfRange)?;
+        if !(-1999..=3000).contains(&date.year) {
+            return Err(ModelTimeError::OutOfRange);
+        }
+        let start = |year| {
+            julday_f64(
+                DecimalHourDateTime {
+                    year,
+                    month: 1,
+                    day: 1,
+                    decimal_hour: 0.0,
+                    scale: TimeScale::Ut1,
+                },
+                Calendar::ProlepticGregorian,
+            )
+            .map_err(|_| ModelTimeError::OutOfRange)
+        };
+        let begin = start(date.year)?;
+        let end = start(date.year + 1)?;
+        let decimal_year = f64::from(date.year) + (jd_ut1 - begin) / (end - begin);
+        let delta_t_seconds =
+            espenak_meeus_2006_extended(decimal_year).map_err(|_| ModelTimeError::OutOfRange)?;
+        Ok(Self {
+            jd_ut1,
+            delta_t_seconds,
+            uncertainty_seconds,
+            source: "Espenak-Meeus 2006",
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -138,5 +203,40 @@ mod tests {
         assert!(validate_targets(&[]).is_err());
         assert!(validate_targets(&[Body::Sun, Body::Sun]).is_err());
         assert!(validate_targets(&[Body::Earth]).is_err());
+    }
+
+    #[test]
+    fn model_time_is_opt_in_bounded_and_preserves_uncertainty() {
+        let year = |y| {
+            julday_f64(
+                DecimalHourDateTime {
+                    year: y,
+                    month: 1,
+                    day: 1,
+                    decimal_hour: 0.0,
+                    scale: TimeScale::Ut1,
+                },
+                Calendar::ProlepticGregorian,
+            )
+            .unwrap()
+        };
+        let y2000 = PlanetaryTime::espenak_meeus_2006(year(2000), 3.0).unwrap();
+        assert!((y2000.delta_t_seconds - 63.86).abs() < 0.01);
+        assert_eq!(y2000.uncertainty_seconds, 3.0);
+        assert_eq!(y2000.source, "Espenak-Meeus 2006");
+        assert!(PlanetaryTime::espenak_meeus_2006(year(-1999), 0.0).is_ok());
+        assert!(PlanetaryTime::espenak_meeus_2006(year(3000), 0.0).is_ok());
+        assert!(matches!(
+            PlanetaryTime::espenak_meeus_2006(year(-2000), 1.0),
+            Err(ModelTimeError::OutOfRange)
+        ));
+        assert!(matches!(
+            PlanetaryTime::espenak_meeus_2006(year(3001), 1.0),
+            Err(ModelTimeError::OutOfRange)
+        ));
+        assert!(matches!(
+            PlanetaryTime::espenak_meeus_2006(year(2000), -1.0),
+            Err(ModelTimeError::InvalidInput)
+        ));
     }
 }

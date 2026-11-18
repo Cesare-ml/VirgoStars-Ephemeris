@@ -48,6 +48,10 @@ fn full_set_reuses_existing_long_range_results_and_rejects_bad_input() {
             expected.rates.longitude_deg_per_tdb_day
         );
     }
+    let model = PlanetaryTime::espenak_meeus_2006(2_451_545.0, 2.0).unwrap();
+    let modeled = planets_ut1(&mut eph, &[Body::Sun, Body::Moon], model).unwrap();
+    assert_eq!(modeled.delta_t_source, "Espenak-Meeus 2006");
+    assert_eq!(modeled.positions.len(), 2);
     let time = || PlanetaryTime {
         jd_ut1: 2_451_545.0,
         delta_t_seconds: 64.0,

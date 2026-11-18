@@ -24,6 +24,8 @@ for position in result.positions {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+In alternativa si può scegliere esplicitamente `PlanetaryTime::espenak_meeus_2006(jd_ut1, uncertainty_seconds)`: usa il modello già presente per gli anni astronomici −1999–3000 e richiede comunque un'incertezza dichiarata. I valori dopo il 2005 sono proiezioni di quella pubblicazione, non osservazioni. Fuori da tale intervallo serve un valore ΔT fornito dal chiamante.
+
 I valori di esempio non certificano il tempo storico. Un errore su un corpo interrompe la richiesta e identifica il corpo; non si restituisce un insieme parziale. È consentita una selezione non vuota, senza duplicati. Il confronto già registrato sulle posizioni e le velocità è campionato, non una garanzia sull'intero intervallo 13000 a.C.–3999 d.C.
 
 ## Mancano per un primo pacchetto completo
