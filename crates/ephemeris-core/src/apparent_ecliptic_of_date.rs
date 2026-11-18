@@ -14,6 +14,7 @@
 // Modification (2026-11-17): add an opt-in direct-obliquity experimental frame.
 // Modification (2026-11-18): add an isolated experimental longitude-rate hypothesis.
 // Modification (2026-11-18): add a separately labeled radial-rate experiment.
+// Modification (2026-11-18): expose the two experiments together, without replacing derivatives.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -652,6 +653,36 @@ fn radial_rate_candidate_correction(
         return Err(ApparentError::InvalidIntermediate);
     }
     Ok(correction)
+}
+
+/// Explicit combination of the existing diagnostics; `base` stays a derivative.
+#[derive(Clone, Copy, Debug)]
+pub struct ExperimentalCombinedRateCandidate {
+    pub base: FixedSixFieldsDegreesAu,
+    pub longitude_deg_per_tdb_day: f64,
+    pub radial_au_per_tdb_day: f64,
+    pub radial_correction_applied: bool,
+}
+
+/// Combines the two empirical candidates without claiming that the resulting
+/// speeds differentiate the returned position. Latitude speed is unchanged.
+/// No Swiss code or runtime dependency is used; results are not certified.
+pub fn experimental_combined_rate_candidate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<ExperimentalCombinedRateCandidate, ApparentError> {
+    let longitude = experimental_longitude_rate_candidate(ephemeris, target, reception_epoch)?;
+    let radial = experimental_radial_rate_candidate(ephemeris, target, reception_epoch)?;
+    if longitude.base != radial.base {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(ExperimentalCombinedRateCandidate {
+        base: longitude.base,
+        longitude_deg_per_tdb_day: longitude.candidate_deg_per_tdb_day,
+        radial_au_per_tdb_day: radial.candidate_au_per_tdb_day,
+        radial_correction_applied: radial.correction_applied,
+    })
 }
 
 fn experimental_long_term_ecliptic<R: Read + Seek>(

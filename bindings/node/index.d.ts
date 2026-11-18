@@ -52,6 +52,14 @@ export interface ExperimentalRadialRateResult {
   notes: string[];
 }
 
+export interface ExperimentalCombinedRateResult {
+  base: LongTermExperimentalResult;
+  /** Original positions and latitude rate; separate experimental longitude and radial rates. */
+  candidateXx: number[];
+  radialCorrectionApplied: boolean;
+  notes: string[];
+}
+
 /** Apparent geocentric ICRF vector, light-time range in km and derivative in km/TDB day. */
 export interface ApparentIcrfResult extends GeometricStateResult {
   notes: string[];
@@ -119,6 +127,8 @@ export class Engine {
   experimentalLongitudeRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalLongitudeRateResult;
   /** Diagnostic only: candidate is not the derivative of the reported position. */
   experimentalRadialRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalRadialRateResult;
+  /** Diagnostic only: candidate rates are not position derivatives. */
+  experimentalCombinedRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalCombinedRateResult;
   /** UT1 and caller-asserted Delta T seconds, uncertainty seconds and source required. */
   experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   /** Experimental mixed frame; UT1 and caller-asserted Delta T, uncertainty and source required. */
