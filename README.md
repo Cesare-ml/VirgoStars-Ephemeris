@@ -32,6 +32,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Local DE441 mobile pack builder and SHA-256 manifest helper](scripts/build_de441_mobile_packs.py)
 - [One-shot DE441 mobile pack build and verification on Windows](docs/DE441_WINDOWS_ONE_SHOT_2026-11-18.md)
 - [Experimental Rust DE441 mobile pack manager and consumer contract](docs/DE441_PACK_MANAGER_2026-11-18.md)
+- [Experimental DE441 geometric true-ecliptic-of-date position-only adapter (not apparent)](docs/DE441_GEOMETRIC_ECLIPTIC_OF_DATE_2026-11-18.md)
 - [Experimental Rust DAF/SPK metadata index](docs/RUST_SPK_DAF_INDEX_2026-11-12.md)
 - [Experimental read-only SPK descriptor coverage inspector (not JPL-validated)](docs/RUST_SPK_LOCAL_COVERAGE_INSPECTOR_2026-11-13.md)
 - [Experimental offline SPK geometric target/center state query CLI (not independent JPL validation)](docs/SPK_OFFLINE_STATE_QUERY_2026-11-14.md)
