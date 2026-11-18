@@ -7,6 +7,10 @@
 //! Values after 2005 are the publication's old projections, not current EOP.
 //! No accuracy or uncertainty estimate is provided by this routine; the caller
 //! must supply an explicit uncertainty separately when using the UT1 API.
+//! The 2026 reference audit reports material disagreement with modern USNO
+//! observations and a published 1514 eclipse constraint; see
+//! `docs/DE441_DELTAT_REFERENCE_VALIDATION_2026-11-18.md`. No model was
+//! silently replaced and the audit does not establish historical truth.
 
 use crate::delta_t::delta_t_seconds_1900_1972;
 use std::{error::Error, fmt};
