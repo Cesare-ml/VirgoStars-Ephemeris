@@ -12,6 +12,8 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 
+// Modification 2026-11-18: add an explicit experimental long-term orientation option.
+
 //! Mathematical lunar points: mean and true (osculating) node, mean and
 //! osculating apogee. These are points defined by the Moon's orbit, not bodies:
 //! they emit no light, so there is no light-time, aberration or deflection.
@@ -53,9 +55,11 @@ use std::io::{Read, Seek};
 use crate::apparent_ecliptic_of_date::{tdb_to_tt_jd, ApparentFrame};
 use crate::de441::{Body, De441, De441Error, JulianDateTdb};
 use crate::earth_orientation::{
-    ecliptic_nutation, iau2000b_nutation, matrix_vector_multiply, true_ecliptic_of_date_matrix,
-    OrientationError,
+    ecliptic_nutation, experimental_extrapolated_nutation, iau2000b_nutation,
+    iau2006_bias_precession_matrix, matrix_multiply, matrix_vector_multiply,
+    true_ecliptic_of_date_matrix, x_rotation, z_rotation, Matrix3x3, OrientationError,
 };
+use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 
 const AU_KM: f64 = 149_597_870.7;
 const J2000_JD: f64 = 2_451_545.0;
@@ -195,6 +199,44 @@ fn mean_perigee_deg(tt_jd: f64) -> f64 {
 
 type Cartesian = [f64; 3];
 
+#[derive(Clone, Copy)]
+enum OrientationMode {
+    Modern,
+    ExperimentalLongTerm,
+}
+
+fn nutation_longitude(tt: f64, mode: OrientationMode) -> Result<f64, OrientationError> {
+    Ok(match mode {
+        OrientationMode::Modern => iau2000b_nutation(tt)?,
+        OrientationMode::ExperimentalLongTerm => experimental_extrapolated_nutation(tt)?,
+    }
+    .d_psi_rad)
+}
+
+fn ecliptic_matrix(tt: f64, mode: OrientationMode) -> Result<Matrix3x3, OrientationError> {
+    match mode {
+        OrientationMode::Modern => true_ecliptic_of_date_matrix(tt),
+        OrientationMode::ExperimentalLongTerm => {
+            let (equator, _) = mean_date_matrices(tt)?;
+            let axes = matrix_multiply(x_rotation(experimental_direct_obliquity(tt)?), equator);
+            let bias = iau2006_bias_precession_matrix(J2000_JD)?;
+            let mean = matrix_multiply(axes, bias);
+            Ok(matrix_multiply(
+                z_rotation(-nutation_longitude(tt, mode)?),
+                mean,
+            ))
+        }
+    }
+}
+
+fn obliquity(tt: f64, mode: OrientationMode) -> Result<f64, OrientationError> {
+    match mode {
+        OrientationMode::Modern => Ok(ecliptic_nutation(tt)?.true_obliquity_rad),
+        OrientationMode::ExperimentalLongTerm => Ok(experimental_direct_obliquity(tt)?
+            + experimental_extrapolated_nutation(tt)?.d_epsilon_rad),
+    }
+}
+
 fn from_spherical(lon_deg: f64, lat_deg: f64, distance_au: f64) -> Cartesian {
     let (lon, lat) = (lon_deg.to_radians(), lat_deg.to_radians());
     [
@@ -210,11 +252,12 @@ fn ecliptic_position<R: Read + Seek>(
     ephemeris: Option<&mut De441<R>>,
     point: LunarPoint,
     tdb: f64,
+    mode: OrientationMode,
 ) -> Result<(f64, f64, f64), LunarPointError> {
     let tt = tdb_to_tt_jd(tdb).map_err(|_| LunarPointError::NonFinite)?;
     match point {
         LunarPoint::MeanNode => {
-            let dpsi = iau2000b_nutation(tt)?.d_psi_rad.to_degrees();
+            let dpsi = nutation_longitude(tt, mode)?.to_degrees();
             Ok((
                 wrap_360(mean_node_deg(tt) + dpsi),
                 0.0,
@@ -222,7 +265,7 @@ fn ecliptic_position<R: Read + Seek>(
             ))
         }
         LunarPoint::MeanApogee => {
-            let dpsi = iau2000b_nutation(tt)?.d_psi_rad.to_degrees();
+            let dpsi = nutation_longitude(tt, mode)?.to_degrees();
             let node = mean_node_deg(tt).to_radians();
             let u = (mean_perigee_deg(tt) + 180.0).to_radians() - node;
             let i = MOON_MEAN_INCLINATION_DEG.to_radians();
@@ -246,7 +289,7 @@ fn ecliptic_position<R: Read + Seek>(
                 emission = tdb - d / SPEED_OF_LIGHT_KM_S / 86_400.0;
             }
             let moon = ephemeris.state(Body::Moon, Body::Earth, JulianDateTdb(emission))?;
-            let matrix = true_ecliptic_of_date_matrix(tt)?;
+            let matrix = ecliptic_matrix(tt, mode)?;
             // The inertial geocentric state, expressed in the axes of the ecliptic of date.
             let r = matrix_vector_multiply(matrix, moon.position_km);
             let v = matrix_vector_multiply(matrix, moon.velocity_km_per_day);
@@ -296,11 +339,12 @@ fn to_frame(
     lon: f64,
     lat: f64,
     distance_au: f64,
+    mode: OrientationMode,
 ) -> Result<(f64, f64, f64), LunarPointError> {
     match frame {
         ApparentFrame::TrueEclipticOfDate => Ok((lon, lat, distance_au)),
         ApparentFrame::TrueEquatorOfDate => {
-            let eps = ecliptic_nutation(tt_jd)?.true_obliquity_rad;
+            let eps = obliquity(tt_jd, mode)?;
             let [x, y, z] = from_spherical(lon, lat, 1.0);
             let (xe, ye, ze) = (
                 x,
@@ -321,20 +365,50 @@ fn sample<R: Read + Seek>(
     point: LunarPoint,
     frame: ApparentFrame,
     tdb: f64,
+    mode: OrientationMode,
 ) -> Result<(f64, f64, f64, f64), LunarPointError> {
     let tt = tdb_to_tt_jd(tdb).map_err(|_| LunarPointError::NonFinite)?;
-    let (lon, lat, dist) = ecliptic_position(ephemeris.as_deref_mut(), point, tdb)?;
-    let (a, b, c) = to_frame(frame, tt, lon, lat, dist)?;
+    let (lon, lat, dist) = ecliptic_position(ephemeris.as_deref_mut(), point, tdb, mode)?;
+    let (a, b, c) = to_frame(frame, tt, lon, lat, dist, mode)?;
     Ok((a, b, c, tt))
 }
 
 /// Compute a lunar point at a TDB epoch. `ephemeris` may be `None` for the two
 /// mean points; the node and apogee of the osculating orbit require it.
 pub fn lunar_point<R: Read + Seek>(
+    ephemeris: Option<&mut De441<R>>,
+    point: LunarPoint,
+    frame: ApparentFrame,
+    tdb: f64,
+) -> Result<LunarPointState, LunarPointError> {
+    lunar_point_with_mode(ephemeris, point, frame, tdb, OrientationMode::Modern)
+}
+
+/// Explicit opt-in long-term extension using the same experimental ecliptic
+/// convention as the planetary candidate. Mean-element polynomials and the
+/// extrapolated orientation are not independently validated for remote dates.
+/// The standard modern API and its guard remain unchanged.
+pub fn experimental_long_term_lunar_point<R: Read + Seek>(
+    ephemeris: Option<&mut De441<R>>,
+    point: LunarPoint,
+    frame: ApparentFrame,
+    tdb: f64,
+) -> Result<LunarPointState, LunarPointError> {
+    lunar_point_with_mode(
+        ephemeris,
+        point,
+        frame,
+        tdb,
+        OrientationMode::ExperimentalLongTerm,
+    )
+}
+
+fn lunar_point_with_mode<R: Read + Seek>(
     mut ephemeris: Option<&mut De441<R>>,
     point: LunarPoint,
     frame: ApparentFrame,
     tdb: f64,
+    mode: OrientationMode,
 ) -> Result<LunarPointState, LunarPointError> {
     if !tdb.is_finite() {
         return Err(LunarPointError::NonFinite);
@@ -343,9 +417,9 @@ pub fn lunar_point<R: Read + Seek>(
         return Err(LunarPointError::EphemerisRequired);
     }
     let h = RATE_HALF_STEP_DAYS;
-    let centre = sample(&mut ephemeris, point, frame, tdb)?;
-    let before = sample(&mut ephemeris, point, frame, tdb - h)?;
-    let after = sample(&mut ephemeris, point, frame, tdb + h)?;
+    let centre = sample(&mut ephemeris, point, frame, tdb, mode)?;
+    let before = sample(&mut ephemeris, point, frame, tdb - h, mode)?;
+    let after = sample(&mut ephemeris, point, frame, tdb + h, mode)?;
     let wrap = |d: f64| (d + 540.0).rem_euclid(360.0) - 180.0;
     Ok(LunarPointState {
         point,

@@ -28,13 +28,21 @@ In alternativa si può scegliere esplicitamente `PlanetaryTime::espenak_meeus_20
 
 I valori di esempio non certificano il tempo storico. Un errore su un corpo interrompe la richiesta e identifica il corpo; non si restituisce un insieme parziale. È consentita una selezione non vuota, senza duplicati. Il confronto già registrato sulle posizioni e le velocità è campionato, non una garanzia sull'intero intervallo 13000 a.C.–3999 d.C.
 
+## Nodi, case e alba/tramonto: stesso tempo esplicito
+
+- `mvp_lunar::lunar_points_ut1` usa lo stesso `PlanetaryTime` per nodo medio, nodo vero, apogeo medio e apogeo osculante, con coordinate eclittiche ed equatoriali. Per le epoche remote usa esplicitamente il modello sperimentale di orientamento: i polinomi lunari e le velocità non sono ancora stati verificati in modo indipendente su tale intervallo. Il percorso moderno `lunar_point` mantiene i suoi limiti.
+- `mvp_site::house_angles_ut1` restituisce gli angoli astronomici per le case; le cuspidi restano in `astrological-functions`.
+- `mvp_site::solar_event_ut1` calcola alba o tramonto con disco superiore, parallasse e rifrazione secondo il motore esistente; un risultato assente indica che non c'è evento nella finestra richiesta. ΔT viene mantenuto costante durante la ricerca.
+
+**Limite attuale:** angoli delle case e alba/tramonto usano ancora il modello di orientamento moderno e rifiutano le date antiche. Il loro collegamento al contratto di tempo non equivale a copertura storica completa. Queste API non convertono ora civile o UTC in UT1.
+
 ## Mancano per un primo pacchetto completo
 
 Sono già presenti nodi e apogei, angoli per le case e la ricerca di alba/tramonto; il binding Node espone già `riseTransUt`. I relativi percorsi di orientamento hanno limiti moderni: la disponibilità di queste funzioni non dimostra la copertura antica richiesta.
 
 1. Collegare il percorso planetario e le scelte di tempo a un'interfaccia di consumo coerente, con esempi e configurazione dei file. Non fare download impliciti.
-2. Estendere il calcolo degli angoli per le case e dei nodi lunari fuori dall'attuale orientamento moderno; mantenere espliciti i limiti dove non funziona ancora. Le cuspidi astrologiche restano in `astrological-functions`.
-3. Collegare il percorso esistente di alba e tramonto al pacchetto coerente e, per date storiche, alle coordinate e al tempo appropriati; mantenere espliciti i casi senza evento.
+2. Estendere il calcolo degli angoli per le case fuori dall'orientamento moderno e verificare il percorso sperimentale dei nodi antichi. Le cuspidi astrologiche restano in `astrological-functions`.
+3. Estendere alba e tramonto alle coordinate e all'orientamento storici, mantenendo espliciti i casi senza evento.
 4. Definire un percorso pratico per l'ora civile storica e una fonte ΔT disponibile o scelta esplicitamente; nessuna conversione automatica inventata per date antiche.
 5. Verificare il pacchetto end-to-end con i dati locali e documentare il perimetro realmente supportato, poi predisporre la distribuzione autorizzata.
 
