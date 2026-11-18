@@ -57,19 +57,54 @@ fn long_term_lunar_set_uses_one_epoch_and_preserves_modern_guard() {
         }
         // Swiss 2.09.03 JPL, same TT; four samples, not a continuous guarantee.
         let reference = match year {
-            -12999 => (84.95809235737663, 6.16551291946851),
-            0 => (278.18122240010126, 257.3323554508416),
-            2000 => (114.61709462648383, 282.8482666337974),
-            3999 => (332.10720611684144, 254.06759713837974),
+            -12999 => (
+                82.68578521281252,
+                84.95809235737663,
+                21.04596812090592,
+                6.16551291946851,
+                -4.5305852366801345,
+            ),
+            0 => (
+                278.15317428689684,
+                278.18122240010126,
+                261.0792235345096,
+                257.3323554508416,
+                -1.5144395199969698,
+            ),
+            2000 => (
+                115.4026739148131,
+                114.61709462648383,
+                283.6707218074333,
+                282.8482666337974,
+                1.0489351082696834,
+            ),
+            3999 => (
+                333.70278375140356,
+                332.10720611684144,
+                257.29312242563276,
+                254.06759713837974,
+                -5.00206993416884,
+            ),
             _ => unreachable!(),
         };
         for (actual, expected) in [
-            (set.positions[1].ecliptic.longitude_deg, reference.0),
-            (set.positions[3].ecliptic.longitude_deg, reference.1),
+            (set.positions[1].ecliptic.longitude_deg, reference.1),
+            (set.positions[3].ecliptic.longitude_deg, reference.3),
         ] {
             let error = ((actual - expected + 180.0).rem_euclid(360.0) - 180.0).abs() * 3600.0;
             assert!(error < 1.0, "year {year}: {error} arcseconds");
         }
+        for (actual, expected) in [
+            (set.positions[0].ecliptic.longitude_deg, reference.0),
+            (set.positions[2].ecliptic.longitude_deg, reference.2),
+        ] {
+            let error = ((actual - expected + 180.0).rem_euclid(360.0) - 180.0).abs() * 3600.0;
+            assert!(
+                error < 10.0,
+                "mean longitude, year {year}: {error} arcseconds"
+            );
+        }
+        assert!((set.positions[2].ecliptic.latitude_deg - reference.4).abs() * 3600.0 < 3.0);
         if year == 0 {
             assert!(lunar_point(
                 Some(&mut eph),
