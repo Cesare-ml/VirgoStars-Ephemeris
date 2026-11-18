@@ -12,6 +12,7 @@
 //
 // [NOTE: The text of this Exhibit A may differ slightly from the text of the notices in the Source Code files of the Original Code. You should use the text of this Exhibit A rather than the text found in the Original Code Source Code for Your Modifications.]
 // Modification (2026-11-17): add an opt-in direct-obliquity experimental frame.
+// Modification (2026-11-18): add an isolated experimental longitude-rate hypothesis.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -520,6 +521,66 @@ pub fn experimental_long_term_apparent_direct_obliquity<R: Read + Seek>(
     experimental_long_term_ecliptic(ephemeris, target, reception_epoch, true, true)
 }
 
+/// Separate numerical candidate; `base` still contains position derivatives.
+#[derive(Clone, Copy, Debug)]
+pub struct ExperimentalLongitudeRateCandidate {
+    pub base: FixedSixFieldsDegreesAu,
+    pub correction_deg_per_tdb_day: f64,
+    pub candidate_deg_per_tdb_day: f64,
+}
+
+/// Empirical diagnostic hypothesis: `-cos(longitude) * tan(latitude) * d(dEpsilon)/dt`.
+/// The nutation obliquity rate is the centered numerical derivative of this
+/// engine's independently implemented extrapolated model. This is not a
+/// position derivative, a claim about Swiss internals, or a certified result.
+pub fn experimental_longitude_rate_candidate<R: Read + Seek>(
+    ephemeris: &mut De441<R>,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+) -> Result<ExperimentalLongitudeRateCandidate, ApparentError> {
+    let base =
+        experimental_long_term_apparent_direct_obliquity(ephemeris, target, reception_epoch)?;
+    let tt = tdb_to_tt_jd(reception_epoch.0)?;
+    let before = tt - MATRIX_RATE_HALF_STEP_DAYS;
+    let after = tt + MATRIX_RATE_HALF_STEP_DAYS;
+    let rate = (experimental_extrapolated_nutation(after)?.d_epsilon_rad
+        - experimental_extrapolated_nutation(before)?.d_epsilon_rad)
+        / (after - before);
+    let correction =
+        longitude_rate_candidate_correction(base.longitude_deg, base.latitude_deg, rate)?;
+    let candidate = base.longitude_speed_deg_per_tdb_day + correction;
+    if !candidate.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(ExperimentalLongitudeRateCandidate {
+        base,
+        correction_deg_per_tdb_day: correction,
+        candidate_deg_per_tdb_day: candidate,
+    })
+}
+
+fn longitude_rate_candidate_correction(
+    lon_deg: f64,
+    lat_deg: f64,
+    epsilon_rate_rad_day: f64,
+) -> Result<f64, ApparentError> {
+    if !lon_deg.is_finite()
+        || !lat_deg.is_finite()
+        || !epsilon_rate_rad_day.is_finite()
+        || lat_deg <= -90.0
+        || lat_deg >= 90.0
+    {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    let correction = -lon_deg.to_radians().cos()
+        * lat_deg.to_radians().tan()
+        * epsilon_rate_rad_day.to_degrees();
+    if !correction.is_finite() {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(correction)
+}
+
 fn experimental_long_term_ecliptic<R: Read + Seek>(
     ephemeris: &mut De441<R>,
     target: Body,
@@ -788,4 +849,31 @@ pub fn small_body_apparent_six_fields<R: Read + Seek>(
         }
     };
     apparent_to_degrees_au(&result)
+}
+
+#[cfg(test)]
+mod longitude_candidate_tests {
+    use super::*;
+
+    #[test]
+    fn projection_has_expected_sign_and_rejects_singular_inputs() {
+        let one_degree = 1.0_f64.to_radians();
+        assert!(
+            (longitude_rate_candidate_correction(0.0, 45.0, one_degree).unwrap() + 1.0).abs()
+                < 1e-12
+        );
+        assert!(
+            (longitude_rate_candidate_correction(180.0, 45.0, one_degree).unwrap() - 1.0).abs()
+                < 1e-12
+        );
+        assert!(
+            longitude_rate_candidate_correction(0.0, 0.0, one_degree)
+                .unwrap()
+                .abs()
+                < 1e-15
+        );
+        assert!(longitude_rate_candidate_correction(0.0, 90.0, one_degree).is_err());
+        assert!(longitude_rate_candidate_correction(0.0, -90.0, one_degree).is_err());
+        assert!(longitude_rate_candidate_correction(f64::NAN, 0.0, one_degree).is_err());
+    }
 }

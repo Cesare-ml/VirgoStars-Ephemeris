@@ -37,6 +37,13 @@ export interface LongTermExperimentalResult {
   notes: string[];
 }
 
+export interface ExperimentalLongitudeRateResult {
+  base: LongTermExperimentalResult;
+  correctionDegPerTdbDay: number;
+  candidateDegPerTdbDay: number;
+  notes: string[];
+}
+
 /** Apparent geocentric ICRF vector, light-time range in km and derivative in km/TDB day. */
 export interface ApparentIcrfResult extends GeometricStateResult {
   notes: string[];
@@ -100,6 +107,8 @@ export class Engine {
   experimentalLongTermApparentTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
   /** Experimental mixed frame with directly fitted obliquity; no accuracy guarantee. */
   experimentalLongTermDirectObliquityTdb(jdTdb: number, ipl: number): LongTermExperimentalResult;
+  /** Diagnostic only: candidate is not the derivative of the reported position. */
+  experimentalLongitudeRateCandidateTdb(jdTdb: number, ipl: number): ExperimentalLongitudeRateResult;
   /** UT1 and caller-asserted Delta T seconds, uncertainty seconds and source required. */
   experimentalLongTermApparentUt1(jdUt1: number, ipl: number, deltaTSeconds: number, uncertaintySeconds: number, source: string): LongTermUt1Result;
   /** Experimental mixed frame; UT1 and caller-asserted Delta T, uncertainty and source required. */

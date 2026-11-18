@@ -85,3 +85,7 @@ compatibile con il riferimento scelto, preservando il contratto della derivata
 attuale; verificare separatamente componenti angolari e radiale, le quattro
 stazioni fallite e casi non usati per formulare la correzione. Stabilire le
 tolleranze mancanti prima di dichiarare chiuso questo gruppo della MVP.
+
+Il successivo [candidato sperimentale di velocità in longitudine](EXPERIMENTAL_LONGITUDE_RATE_CANDIDATE_2026-11-18.md)
+concorda nei segni delle 96 stazioni campionate, incluse le quattro già fallite.
+È ancora separato dalle API standard e non chiude il gate delle velocità.
