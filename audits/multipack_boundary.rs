@@ -1,15 +1,38 @@
 // SPDX-License-Identifier: CPAL-1.0
-// Diagnostic only: compiles the unchanged #601 manager against #626's core.
-// This is not a provider-backed apparent API or mobile integration.
+// Diagnostic only: compiles the unchanged #601 manager against experimental core.
 use de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
 use std::{error::Error, io, path::PathBuf};
-use virgostars_ephemeris_core::apparent_ecliptic_of_date::experimental_long_term_apparent_ecliptic;
+use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
+    experimental_long_term_apparent_ecliptic, experimental_long_term_apparent_with_provider,
+    ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
+};
 use virgostars_ephemeris_core::light_time::{geocentric_light_time, light_time_with_states};
 pub use virgostars_ephemeris_core::{calendar, de441};
 
 #[allow(dead_code)]
 mod pack_manager;
 use pack_manager::{De441PackError, De441PackManager};
+
+impl ExperimentalLongTermStateProvider for De441PackManager {
+    type Error = De441PackError;
+    fn state(&mut self, body: Body, epoch: JulianDateTdb) -> Result<StateVector, Self::Error> {
+        De441PackManager::state(self, body, Body::SolarSystemBarycenter, epoch)
+    }
+    fn state_with_acceleration(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<de441::StateVectorWithAcceleration, Self::Error> {
+        De441PackManager::state_with_acceleration(self, body, Body::SolarSystemBarycenter, epoch)
+    }
+    fn logical_coverage(
+        &mut self,
+        epoch: JulianDateTdb,
+    ) -> Result<(JulianDateTdb, JulianDateTdb), Self::Error> {
+        let s = self.select_pack(epoch)?;
+        Ok((s.start_tdb, s.end_tdb))
+    }
+}
 
 fn maxdiff(a: &[f64], b: &[f64]) -> f64 {
     a.iter()
@@ -93,6 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut max = [0.0_f64; 12];
     let mut continuity_max = [0.0_f64; 3];
     let mut continuity_count = 0;
+    let mut provider_max = [0.0_f64; 6];
     println!("kind,boundary,jd_tdb,body,reception,emission,crossing,position_km,velocity_km_day,acceleration_km_day2,lt_position_km,lt_velocity_km_day,lt_epoch_day,lon_deg,lat_deg,distance_au,lon_rate_deg_day,lat_rate_deg_day,distance_rate_au_day");
     for i in 1..specs.len() {
         let bound = specs[i].start_tdb.0;
@@ -137,6 +161,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                     body,
                     JulianDateTdb(jd),
                 )?);
+                let provider_fields = fields(
+                    experimental_long_term_apparent_with_provider(
+                        &mut manager,
+                        body,
+                        JulianDateTdb(jd),
+                    )
+                    .map_err(|error| io::Error::other(format!("provider failed: {error:?}")))?,
+                );
+                for k in 0..6 {
+                    let difference = if k == 0 {
+                        ((provider_fields[k] - y[k] + 180.0).rem_euclid(360.0) - 180.0).abs()
+                    } else {
+                        (provider_fields[k] - y[k]).abs()
+                    };
+                    provider_max[k] = provider_max[k].max(difference);
+                    if difference > [1e-8, 1e-8, 1e-12, 1e-8, 1e-8, 1e-12][k] {
+                        errors += 1;
+                    }
+                }
                 if offset == -1.0 / 86400.0 {
                     before[body_index] = x;
                 }
@@ -204,6 +247,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             err.contains("MissingPack") && err.contains(&specs[i - 1].id),
             "{err}"
         );
+        assert!(
+            matches!(experimental_long_term_apparent_with_provider(&mut m,Body::PlutoBarycenter,JulianDateTdb(jd)), Err(ExperimentalProviderApparentError::Provider(De441PackError::MissingPack{id,..})) if id==specs[i-1].id)
+        );
         let mut reception_only = De441::open(&specs[i].file_path)?;
         assert!(
             experimental_long_term_apparent_ecliptic(
@@ -219,6 +265,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut m = De441PackManager::from_specs(missing)?;
         assert!(
             matches!(m.state(Body::Earth,Body::SolarSystemBarycenter,JulianDateTdb(jd)),Err(De441PackError::MissingPack{id,..}) if id==specs[i].id)
+        );
+        assert!(
+            matches!(experimental_long_term_apparent_with_provider(&mut m,Body::PlutoBarycenter,JulianDateTdb(jd)), Err(ExperimentalProviderApparentError::Provider(De441PackError::MissingPack{id,..})) if id==specs[i].id)
+        );
+        // The later pack is needed by the positive deflection-rate stencil.
+        assert!(
+            matches!(experimental_long_term_apparent_with_provider(&mut m,Body::PlutoBarycenter,JulianDateTdb(bound-1.0/86400.0)), Err(ExperimentalProviderApparentError::Provider(De441PackError::MissingPack{id,..})) if id==specs[i].id)
         );
         println!("missing,{bound:.9},{},{},ok", specs[i - 1].id, specs[i].id);
     }
@@ -241,7 +294,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         bad.state(Body::Earth, Body::SolarSystemBarycenter, specs[4].start_tdb),
         Err(De441PackError::Reader { .. })
     ));
-    println!("summary,cases={count},crossings={crossings},over_limit_components={errors},missing_prior=9,missing_reception=9,reception_only_ignores_missing_prior=9,invalid_checks=4,continuity_cases={continuity_count},continuity_max={continuity_max:?},max={max:?}");
+    assert!(matches!(
+        experimental_long_term_apparent_with_provider(
+            &mut bad,
+            Body::MarsBarycenter,
+            JulianDateTdb(specs[4].start_tdb.0 + 1.0)
+        ),
+        Err(ExperimentalProviderApparentError::Provider(
+            De441PackError::Reader { .. }
+        ))
+    ));
+    assert!(matches!(
+        experimental_long_term_apparent_with_provider(
+            &mut manager,
+            Body::MarsBarycenter,
+            specs[9].end_tdb
+        ),
+        Err(ExperimentalProviderApparentError::Provider(
+            De441PackError::NoPackForEpoch(_)
+        ))
+    ));
+    println!("summary,cases={count},crossings={crossings},over_limit_components={errors},missing_prior=9,missing_reception=9,missing_deflection_stencil=9,reception_only_ignores_missing_prior=9,invalid_checks=4,continuity_cases={continuity_count},continuity_max={continuity_max:?},provider_max={provider_max:?},max={max:?}");
     if errors != 0 {
         return Err("comparison exceeded declared limit".into());
     }
