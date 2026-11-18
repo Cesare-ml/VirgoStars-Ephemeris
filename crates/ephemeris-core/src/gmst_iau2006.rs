@@ -20,7 +20,7 @@
 //!
 //! Scientific source: IERS Conventions (2010), TN36, Section 5.6,
 //! Equation 5.32 (Capitaine, Wallace & Chapront, IAU 2006).
-//! https://iers-conventions.obspm.fr/conventions_versions.php
+//! <https://iers-conventions.obspm.fr/conventions_versions.php>
 //!
 //! Created 2026-11-11; independent original implementation using published
 //! polynomial coefficients, not code from another astronomical library.
