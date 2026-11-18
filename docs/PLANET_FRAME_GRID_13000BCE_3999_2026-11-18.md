@@ -1,5 +1,8 @@
 # Planetary positions and ancient frame decomposition
 
+Follow-up: [Swiss-based ancient frame decomposition](SWISS_ANCIENT_FRAME_DECOMPOSITION_2026-11-18.md)
+extends the frame-only comparison into the pre-Horizons portion of the range.
+
 **Status: exploratory sampled validation, not MVP acceptance or a continuous
 accuracy guarantee.** The stellar catalog and main-server migration remain
 paused. These checks compare apparent geocentric directions, not speeds,
