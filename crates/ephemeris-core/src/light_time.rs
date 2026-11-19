@@ -19,6 +19,7 @@
 //!
 //! Modified 2026-11-14: reject light-time delays too small to move a
 //! single-f64 TDB emission epoch, rather than mistaking rounding for convergence.
+//! Modified 2026-11-18: expose the same internal refinement shift for logical coverage checks.
 
 use std::error::Error;
 use std::fmt;
@@ -134,27 +135,8 @@ pub(crate) fn refine_emission_rounding(
     {
         return Err(LightTimeError::InvalidGeometry);
     }
-    let range = state.position_km[0]
-        .hypot(state.position_km[1])
-        .hypot(state.position_km[2]);
-    if !range.is_finite() || range == 0.0 || !state.light_time_seconds.is_finite() {
-        return Err(LightTimeError::InvalidGeometry);
-    }
-    let direction = state.position_km.map(|v| v / range);
-    let dot = |a: [f64; 3], b: [f64; 3]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
-    let denom = 1.0 + dot(direction, target.velocity_km_per_day) / C_KM_PER_DAY;
-    if !denom.is_finite() || denom <= 0.0 {
-        return Err(LightTimeError::InvalidGeometry);
-    }
-    // Subtract the two nearby large JDs first: this difference is exact under
-    // Sterbenz's lemma, unlike rounding observation-delay to a single JD.
-    let shift = ((state.observation_epoch.0 - state.emission_epoch.0)
-        - state.light_time_seconds / SECONDS_PER_DAY)
-        / denom;
-    let limit = 4.0 * f64::EPSILON * state.observation_epoch.0.abs();
-    if !shift.is_finite()
-        || shift.abs() > limit
-        || (state.emission_epoch.0 - coverage.0 .0) + shift < 0.0
+    let shift = emission_refinement_shift(&state, &target)?;
+    if (state.emission_epoch.0 - coverage.0 .0) + shift < 0.0
         || (coverage.1 .0 - state.emission_epoch.0) - shift < 0.0
     {
         return Err(LightTimeError::InvalidGeometry);
@@ -169,6 +151,7 @@ pub(crate) fn refine_emission_rounding(
         return Err(LightTimeError::InvalidGeometry);
     }
     let direction = position.map(|v| v / range);
+    let dot = |a: [f64; 3], b: [f64; 3]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
     let denominator = C_KM_PER_DAY + dot(direction, target_velocity);
     if !denominator.is_finite() || denominator <= 0.0 {
         return Err(LightTimeError::InvalidGeometry);
@@ -187,6 +170,35 @@ pub(crate) fn refine_emission_rounding(
         light_time_rate: rate,
         ..state
     })
+}
+
+/// Return the existing first-order sub-ULP correction before rounding the JD.
+pub(crate) fn emission_refinement_shift(
+    state: &GeocentricLightTimeState,
+    target: &StateVectorWithAcceleration,
+) -> Result<f64, LightTimeError> {
+    let range = state.position_km[0]
+        .hypot(state.position_km[1])
+        .hypot(state.position_km[2]);
+    if !range.is_finite() || range == 0.0 || !state.light_time_seconds.is_finite() {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    let direction = state.position_km.map(|v| v / range);
+    let dot = |a: [f64; 3], b: [f64; 3]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+    let denom = 1.0 + dot(direction, target.velocity_km_per_day) / C_KM_PER_DAY;
+    if !denom.is_finite() || denom <= 0.0 {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    // Subtract the two nearby large JDs first: this difference is exact under
+    // Sterbenz's lemma, unlike rounding observation-delay to a single JD.
+    let shift = ((state.observation_epoch.0 - state.emission_epoch.0)
+        - state.light_time_seconds / SECONDS_PER_DAY)
+        / denom;
+    let limit = 4.0 * f64::EPSILON * state.observation_epoch.0.abs();
+    if !shift.is_finite() || shift.abs() > limit {
+        return Err(LightTimeError::InvalidGeometry);
+    }
+    Ok(shift)
 }
 
 /// One-way light-time from `observer` to `target` with a caller-supplied state

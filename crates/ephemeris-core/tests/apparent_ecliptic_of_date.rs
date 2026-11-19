@@ -143,7 +143,7 @@ fn rejects_earth_target_bad_metadata_and_unvalidated_epochs() {
         apparent_ecliptic_of_date_from_aberrated_state(&late, false),
         Err(ApparentError::InvalidIntermediate)
     ));
-    // IAU 2000B is only validated for 1900-2100 TT: fail closed outside it.
+    // The numerical orientation guard is bounded in TT; fail closed outside it.
     for tdb in [2_415_000.0, 2_488_100.0, 1.0e6, 3.0e6] {
         let s = state([1.0e8, 0.0, 0.0], [0.0; 3], tdb);
         assert!(matches!(
@@ -258,18 +258,34 @@ fn real_de441_moon_light_time_converges_across_1900_2100() {
     }
 }
 
-/// Regression baseline produced by this engine itself (not by any other
-/// library): `docs/evidence/mvp1-apparent-baseline-1900-2100.csv`.
+/// Same-engine regression fixtures, not independent scientific references.
+/// The original baseline is retained; lunar rows use the separately versioned
+/// fixture after the light-time convergence change.
 #[test]
 #[ignore = "requires a legally obtained classic DE441 file in DE441_PATH"]
 fn real_de441_matches_committed_engine_baseline() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../docs/evidence/mvp1-apparent-baseline-1900-2100.csv");
     let text = std::fs::read_to_string(path).expect("baseline CSV");
+    let lunar_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/evidence/mvp1-apparent-moon-baseline-2026-11-18.csv");
+    let lunar_text = std::fs::read_to_string(lunar_path).expect("versioned lunar baseline CSV");
+    let mut lunar_rows = std::collections::BTreeMap::new();
+    for line in lunar_text.lines().skip(1) {
+        let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(fields.len(), 8, "invalid lunar row: {line}");
+        assert_eq!(fields[0], "Moon", "unexpected lunar target: {line}");
+        assert!(
+            lunar_rows.insert(fields[1], line).is_none(),
+            "duplicate lunar epoch: {line}"
+        );
+    }
+    assert_eq!(lunar_rows.len(), 199);
     let mut eph = real_kernel();
     let mut rows = 0;
     for line in text.lines().skip(1) {
         let f: Vec<&str> = line.split(',').collect();
+        assert_eq!(f.len(), 8, "invalid historical row: {line}");
         let target = ALL_TARGETS
             .iter()
             .copied()
@@ -289,25 +305,35 @@ fn real_de441_matches_committed_engine_baseline() {
             .expect("known target")
             .0;
         let jd: f64 = f[1].parse().unwrap();
-        let v: Vec<f64> = f[2..8].iter().map(|x| x.parse().unwrap()).collect();
+        let baseline_line = if f[0] == "Moon" {
+            lunar_rows.remove(f[1]).expect("missing lunar epoch")
+        } else {
+            line
+        };
+        let baseline: Vec<&str> = baseline_line.split(',').collect();
+        let v: Vec<f64> = baseline[2..8].iter().map(|x| x.parse().unwrap()).collect();
         let got = geocentric_apparent_six_fields(&mut eph, target, JulianDateTdb(jd)).unwrap();
         let g = got.fields;
-        assert!(wrap_deg(g.longitude_deg - v[0]).abs() < 1e-9, "{line}");
-        assert!((g.latitude_deg - v[1]).abs() < 1e-9, "{line}");
-        assert!((g.distance_au - v[2]).abs() < 1e-12, "{line}");
+        assert!(
+            wrap_deg(g.longitude_deg - v[0]).abs() < 1e-9,
+            "{baseline_line}"
+        );
+        assert!((g.latitude_deg - v[1]).abs() < 1e-9, "{baseline_line}");
+        assert!((g.distance_au - v[2]).abs() < 1e-12, "{baseline_line}");
         assert!(
             (g.longitude_speed_deg_per_tdb_day - v[3]).abs() < 1e-9,
-            "{line}"
+            "{baseline_line}"
         );
         assert!(
             (g.latitude_speed_deg_per_tdb_day - v[4]).abs() < 1e-9,
-            "{line}"
+            "{baseline_line}"
         );
         assert!(
             (g.distance_speed_au_per_tdb_day - v[5]).abs() < 1e-12,
-            "{line}"
+            "{baseline_line}"
         );
         rows += 1;
     }
     assert_eq!(rows, 1990);
+    assert!(lunar_rows.is_empty(), "unused lunar epochs");
 }
