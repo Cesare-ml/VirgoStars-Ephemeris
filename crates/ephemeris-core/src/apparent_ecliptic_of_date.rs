@@ -16,6 +16,8 @@
 // Modification (2026-11-18): add a separately labeled radial-rate experiment.
 // Modification (2026-11-18): expose the two experiments together, without replacing derivatives.
 // Modification (2026-11-18): add a separate empirical latitude-rate candidate.
+// Modification (2026-11-18): clarify the numerical orientation and rate guards.
+// Modification (2026-11-18): add an opt-in provider-backed long-term experiment.
 
 //! Geocentric **apparent** ecliptic-of-date positions and rates (MVP 1, row 1).
 //!
@@ -56,8 +58,10 @@
 //! - topocentric parallax/diurnal aberration (this is **geocentric**),
 //! - planet-center correction for system barycenters: a barycenter target
 //!   stays a barycenter in the output `target` label,
-//! - epochs outside the IAU 2000B validated range 1900–2100 TT, which fail
-//!   closed with [`ApparentError::Orientation`],
+//! - epochs outside the numerical orientation guard TT JD [2415020, 2488070),
+//!   or without the additional ±0.01 TT-day matrix-rate stencil margin,
+//!   which fail closed with [`ApparentError::Orientation`]. The numerical
+//!   guard is not a validation of physical accuracy over the whole interval,
 //! - any claim of numerical parity with another software package: that
 //!   requires the independent comparison described in the MVP 1 gates.
 
@@ -82,8 +86,8 @@ use crate::light_deflection::{
     deflect_light_time_state_by_sun, deflect_light_time_state_by_sun_with, DeflectionError,
 };
 use crate::light_time::{
-    geocentric_light_time, heliocentric_light_time, light_time_with_states,
-    refine_emission_rounding,
+    emission_refinement_shift, geocentric_light_time, heliocentric_light_time,
+    light_time_with_states, refine_emission_rounding,
 };
 use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 use crate::six_field_units::{
@@ -778,6 +782,16 @@ fn experimental_long_term_ecliptic<R: Read + Seek>(
         .state_with_acceleration(Body::Earth, Body::SolarSystemBarycenter, reception_epoch)
         .map_err(AberratedStateError::from)?;
     let state = experimental_aberrated_state(ephemeris, target, reception_epoch, &earth)?;
+    finish_experimental_long_term(state, target, reception_epoch, nutation, direct_obliquity)
+}
+
+fn finish_experimental_long_term(
+    state: AberratedGeocentricState,
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    nutation: bool,
+    direct_obliquity: bool,
+) -> Result<FixedSixFieldsDegreesAu, ApparentError> {
     let tt = tdb_to_tt_jd(reception_epoch.0)?;
     // ICRF to J2000 mean axes via the existing IAU-2006 frame bias.
     let bias = iau2006_bias_precession_matrix(J2000_TT_JD)?;
@@ -815,6 +829,98 @@ fn experimental_long_term_ecliptic<R: Read + Seek>(
     Ok(fixed_spherical_to_degrees_au(&project_fixed_axes(
         &cartesian, 0.0,
     )?)?)
+}
+
+/// Experimental provider contract: every state query is selected at its own
+/// TDB epoch. Coverage is the *logical*, half-open interval of the file
+/// containing the emission state, not its wider record-aligned header.
+pub trait ExperimentalLongTermStateProvider {
+    type Error;
+    fn state(&mut self, body: Body, epoch: JulianDateTdb) -> Result<StateVector, Self::Error>;
+    fn state_with_acceleration(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVectorWithAcceleration, Self::Error>;
+    fn logical_coverage(
+        &mut self,
+        epoch: JulianDateTdb,
+    ) -> Result<(JulianDateTdb, JulianDateTdb), Self::Error>;
+}
+
+#[derive(Debug)]
+pub enum ExperimentalProviderApparentError<E> {
+    Provider(E),
+    Apparent(ApparentError),
+    /// The computed sub-ULP correction crosses the selected logical interval.
+    /// No adjacent-file substitution or model fallback is performed.
+    UnsafeRefinementBoundary,
+}
+
+/// Opt-in long-term apparent experiment with explicit per-epoch provider
+/// selection. Not a default API, mobile integration, or validated product.
+pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    target: Body,
+    reception: JulianDateTdb,
+) -> Result<FixedSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
+    use ExperimentalProviderApparentError::{Apparent, Provider, UnsafeRefinementBoundary};
+    let earth = provider
+        .state_with_acceleration(Body::Earth, reception)
+        .map_err(Provider)?;
+    let mut provider_error = None;
+    let lt = {
+        let mut states = |body, epoch| {
+            provider.state(body, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })
+        };
+        light_time_with_states(Body::Earth, target, reception, &mut states)
+    };
+    if let Some(error) = provider_error.take() {
+        return Err(Provider(error));
+    }
+    let mut lt = lt.map_err(|error| Apparent(AberratedStateError::from(error).into()))?;
+    let emission = provider
+        .state_with_acceleration(target, lt.emission_epoch)
+        .map_err(Provider)?;
+    let (start, end) = provider
+        .logical_coverage(lt.emission_epoch)
+        .map_err(Provider)?;
+    let shift = emission_refinement_shift(&lt, &emission)
+        .map_err(|error| Apparent(AberratedStateError::from(error).into()))?;
+    if !start.0.is_finite()
+        || !end.0.is_finite()
+        || start.0 >= end.0
+        || (lt.emission_epoch.0 - start.0) + shift < 0.0
+        || (end.0 - lt.emission_epoch.0) - shift <= 0.0
+    {
+        return Err(UnsafeRefinementBoundary);
+    }
+    lt = refine_emission_rounding(lt, emission, earth, (start, end))
+        .map_err(|error| Apparent(AberratedStateError::from(error).into()))?;
+    let deflected = {
+        let mut states = |body, epoch| {
+            provider.state(body, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })
+        };
+        deflect_light_time_state_by_sun_with(&mut states, &lt)
+    };
+    if let Some(error) = provider_error.take() {
+        return Err(Provider(error));
+    }
+    lt = deflected.map_err(|error| Apparent(error.into()))?;
+    let mut state = aberrate_light_time_state(
+        &lt,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )
+    .map_err(|error| Apparent(error.into()))?;
+    state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+    finish_experimental_long_term(state, target, reception, true, false).map_err(Apparent)
 }
 
 /// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch,

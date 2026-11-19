@@ -5,6 +5,12 @@ independent reference (see below). NOT integrated, NOT released, NOT a complete
 MVP 1.** Branch: `integration/mvp1-apparent-pipeline-20261116` (based on
 `dev/ephemeris`, no change to `main`).
 
+**2026-11-18 correction:** the earlier "1900–2100" wording below was an
+approximation, not support for the entire calendar year 2100 or proof of
+physical accuracy. The primitive guard is TT JD `[2415020, 2488070)`, and
+the rate path also requires an interior ±0.01-day stencil. See the
+[boundary audit](STATIONS_BOUNDARY_RATE_VALIDATION_2026-11-18.md).
+
 This closes the main technical gap named in the
 [three-MVP document](THREE_MVP_SWISS_REPLACEMENT_2026-11-11.md): the aberrated
 six-field stack only produced *fixed-axis* (ICRF) coordinates. The new module
@@ -25,7 +31,7 @@ equinox of date** and converts it to the six consumer fields.
 | Units | degrees, AU, and degrees (or AU) per **TDB** day |
 | Rates | `v' = M v + (dM/dt) r`; `dM/dt` is a central finite difference (half-step 0.01 TT day) of the declared matrix |
 | TT for the matrix | `TDB − 0.001657 s · sin(g)` (leading periodic term; omitted terms < 30 µs) |
-| Validated range | 1900–2100 TT. Outside it the call returns `ApparentError::Orientation` (fail closed, no extrapolation) |
+| Numerical orientation guard | TT JD `[2415020, 2488070)`; the rate stencil needs an additional ±0.01-day interior margin. Outside it the call returns `ApparentError::Orientation`; this guard is not a physical-accuracy guarantee |
 
 Entry points: `geocentric_apparent_six_fields`,
 `geocentric_apparent_six_fields_many` (Earth read once, all-or-error), their
