@@ -16,9 +16,11 @@
 //! Constant rectilinear motion, Earth parallax, annual aberration and an
 //! explicitly selected optional point-mass solar light deflection.
 //! Not a complete apparent place or Swiss fixed-star replacement.
+// Modification 2026-11-19: allow per-epoch pack selection without changing stellar calculations.
 
 use crate::aberration::{annual_aberration_icrf, AberrationError};
-use crate::de441::{Body, De441, De441Error, JulianDateTdb};
+use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
+use crate::de441_pack_manager::{De441PackError, De441PackManager};
 use crate::earth_orientation::{
     matrix_vector_multiply, true_ecliptic_of_date_matrix, OrientationError,
 };
@@ -73,6 +75,8 @@ pub enum FixedStarError {
     InvalidGeometry,
     OccultedBySun,
     Ephemeris(De441Error),
+    Pack(De441PackError),
+    InvalidProviderState,
     Orientation(OrientationError),
     Aberration(AberrationError),
 }
@@ -84,12 +88,67 @@ impl fmt::Display for FixedStarError {
             Self::InvalidGeometry => write!(f, "invalid or singular star geometry"),
             Self::OccultedBySun => write!(f, "stellar ray intersects the adopted solar disk"),
             Self::Ephemeris(e) => write!(f, "ephemeris: {e}"),
+            Self::Pack(e) => write!(f, "ephemeris pack: {e}"),
+            Self::InvalidProviderState => {
+                write!(f, "invalid stellar observer state returned by provider")
+            }
             Self::Orientation(e) => write!(f, "orientation: {e}"),
             Self::Aberration(e) => write!(f, "aberration: {e}"),
         }
     }
 }
 impl Error for FixedStarError {}
+
+/// Barycentric geometric Earth and Sun states at each explicit TDB epoch.
+pub trait StarStateProvider {
+    fn barycentric_state(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, FixedStarError>;
+}
+
+impl<R: Read + Seek> StarStateProvider for De441<R> {
+    fn barycentric_state(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, FixedStarError> {
+        self.state(body, Body::SolarSystemBarycenter, epoch)
+            .map_err(FixedStarError::Ephemeris)
+    }
+}
+
+impl StarStateProvider for De441PackManager {
+    fn barycentric_state(
+        &mut self,
+        body: Body,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, FixedStarError> {
+        self.state(body, Body::SolarSystemBarycenter, epoch)
+            .map_err(FixedStarError::Pack)
+    }
+}
+
+fn checked_state<P: StarStateProvider + ?Sized>(
+    provider: &mut P,
+    body: Body,
+    epoch: JulianDateTdb,
+) -> Result<StateVector, FixedStarError> {
+    let state = provider.barycentric_state(body, epoch)?;
+    if state.target != body
+        || state.center != Body::SolarSystemBarycenter
+        || state.epoch != epoch
+        || state
+            .position_km
+            .iter()
+            .chain(&state.velocity_km_per_day)
+            .any(|x| !x.is_finite())
+    {
+        return Err(FixedStarError::InvalidProviderState);
+    }
+    Ok(state)
+}
 
 /// First-order point-mass solar deflection for a distant source. Both inputs
 /// are ICRS vectors: observer-to-source and Sun-to-observer, in AU. The
@@ -227,8 +286,8 @@ pub fn propagate_star_icrs_astrometric(
     })
 }
 
-fn sample<R: Read + Seek>(
-    ephemeris: &mut De441<R>,
+fn sample<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
     entry: FixedStarCatalogEntry,
     tt: f64,
     tdb: JulianDateTdb,
@@ -237,17 +296,13 @@ fn sample<R: Read + Seek>(
     if !tt.is_finite() || !tdb.0.is_finite() || (tt - tdb.0).abs() > 1.0 / 86_400.0 {
         return Err(FixedStarError::IncoherentEpoch);
     }
-    let earth = ephemeris
-        .state(Body::Earth, Body::SolarSystemBarycenter, tdb)
-        .map_err(FixedStarError::Ephemeris)?;
+    let earth = checked_state(ephemeris, Body::Earth, tdb)?;
     let relative = geometric_star_vector(entry, tdb, earth.position_km.map(|v| v / IAU_AU_KM))?;
     let distance = relative[0].hypot(relative[1]).hypot(relative[2]);
     let incoming = match solar_deflection {
         StellarSolarDeflection::Omit => relative,
         StellarSolarDeflection::PointMass => {
-            let sun = ephemeris
-                .state(Body::Sun, Body::SolarSystemBarycenter, tdb)
-                .map_err(FixedStarError::Ephemeris)?;
+            let sun = checked_state(ephemeris, Body::Sun, tdb)?;
             let earth_from_sun =
                 std::array::from_fn(|i| (earth.position_km[i] - sun.position_km[i]) / IAU_AU_KM);
             solar_deflect_distant_star(relative, earth_from_sun)?.map(|v| v * distance)
@@ -289,6 +344,17 @@ pub fn calculate_star<R: Read + Seek>(
 /// Rates are centered differences of the complete selected pipeline.
 pub fn calculate_star_with_solar_deflection<R: Read + Seek>(
     ephemeris: &mut De441<R>,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+) -> Result<ExperimentalStarPosition, FixedStarError> {
+    calculate_star_with_provider(ephemeris, entry, tt, tdb, solar_deflection)
+}
+
+/// The same stellar calculation using a state provider for each sample.
+pub fn calculate_star_with_provider<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
     entry: FixedStarCatalogEntry,
     tt: f64,
     tdb: JulianDateTdb,

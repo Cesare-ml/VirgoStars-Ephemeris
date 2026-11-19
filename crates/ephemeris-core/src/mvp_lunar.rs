@@ -7,7 +7,8 @@ use crate::explicit_delta_t::{
     ut1_to_tdb_with_explicit_delta_t, ExplicitDeltaTEpoch, ExplicitDeltaTError,
 };
 use crate::lunar_points::{
-    experimental_long_term_lunar_point, LunarPoint, LunarPointError, LunarPointState,
+    experimental_long_term_lunar_point_with_provider, LunarPoint, LunarPointError, LunarPointState,
+    LunarStateProvider,
 };
 use crate::mvp_planets::PlanetaryTime;
 use std::{
@@ -76,6 +77,15 @@ pub fn lunar_points_ut1<R: Read + Seek>(
     points: &[LunarPoint],
     time: PlanetaryTime<'_>,
 ) -> Result<LunarSet, LunarSetError> {
+    lunar_points_ut1_with_provider(ephemeris, points, time)
+}
+
+/// The same explicit UT1/ΔT calculation with per-sample provider selection.
+pub fn lunar_points_ut1_with_provider<P: LunarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    points: &[LunarPoint],
+    time: PlanetaryTime<'_>,
+) -> Result<LunarSet, LunarSetError> {
     if points.is_empty()
         || points.len() > MVP_LUNAR_POINTS.len()
         || points
@@ -97,8 +107,8 @@ pub fn lunar_points_ut1<R: Read + Seek>(
     .map_err(LunarSetError::Time)?;
     let mut positions = Vec::with_capacity(points.len());
     for &point in points {
-        let calculate = |eph: &mut De441<R>, frame| {
-            experimental_long_term_lunar_point(Some(eph), point, frame, epoch.jd_tdb.0)
+        let calculate = |eph: &mut P, frame| {
+            experimental_long_term_lunar_point_with_provider(eph, point, frame, epoch.jd_tdb.0)
                 .map_err(|source| LunarSetError::Calculation { point, source })
         };
         positions.push(LunarPosition {
