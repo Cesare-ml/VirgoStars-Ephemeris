@@ -41,7 +41,7 @@ class ContiguousCatalogTests(unittest.TestCase):
     def test_default_inventory_covers_desktop_and_all_optional_years(self):
         plan = catalog.build_plan(catalog.DEFAULT_MIN_YEAR, catalog.DEFAULT_MAX_YEAR)
         self.assertLessEqual(len(plan), 256)
-        self.assertEqual(plan[0][1], -12999)
+        self.assertEqual(plan[0][1], -13000)
         self.assertEqual(plan[-1][2], 16999)
         self.assertEqual([row for row in plan if row[3]], [
             ("desktop-core-1000-2200", 1000, 2200, True)
@@ -57,13 +57,14 @@ class ContiguousCatalogTests(unittest.TestCase):
             [(row[1], row[2]) for row in plan],
             [(600, 799), (800, 999), (1000, 2200), (2201, 2400), (2401, 2600)],
         )
-        for bad in [(1001, 2300), (0, 2199), (-20001, 2200), (1000, 20001)]:
+        for bad in [(1001, 2300), (0, 2199), (-20001, 2200), (1000, 20000)]:
             with self.assertRaises(ValueError):
                 catalog.build_plan(*bad)
         self.assertEqual(catalog.year_label(-1), "m00001")
         self.assertEqual(catalog.year_label(0), "00000")
 
-    def test_build_base_reuses_rust_export_and_preserves_release_gate(self):
+    @patch.object(catalog, "year_boundaries", return_value={1000: 2086302.5, 2201: 2524958.5})
+    def test_build_base_reuses_rust_export_and_preserves_release_gate(self, _boundaries):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             source = folder / "source.eph"
@@ -78,17 +79,17 @@ class ContiguousCatalogTests(unittest.TestCase):
                     return type("Result", (), {
                         "returncode": 0,
                         "stdout": "parity_ok records=1 epochs=3 state_pairs=42 "
-                                  "jd_tdb=[2305440, 2488440]",
+                                  "jd_tdb=[2086288.5, 2524976.5]",
                         "stderr": "",
                     })()
                 artifact = Path(command[command.index("--") + 2])
                 self.assertEqual(artifact.name, catalog.filename(pack_id))
-                fake_classic(artifact, 2305440.0, 2488440.0)
+                fake_classic(artifact, 2086288.5, 2524976.5)
                 return type("Result", (), {
                     "returncode": 0,
                     "stdout": (
-                        "requested_jd_tdb=[2305447.5, 2488434.5) "
-                        "stored_jd_tdb=[2305440, 2488440] "
+                        "requested_jd_tdb=[2086302.5, 2524958.5) "
+                        "stored_jd_tdb=[2086288.5, 2524976.5] "
                         f"records=1 bytes={artifact.stat().st_size} output={artifact}"
                     ),
                     "stderr": "",
@@ -108,6 +109,10 @@ class ContiguousCatalogTests(unittest.TestCase):
             self.assertEqual(manifest["packages"][0]["artifact"]["file"],
                              catalog.filename(pack_id))
             self.assertEqual(catalog.verify(path), 1)
+            manifest["packages"][0]["artifact"]["requested_start_jd_tdb"] += 1
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "JD boundaries"):
+                catalog.verify(path)
             with self.assertRaises(FileExistsError):
                 catalog.build(source, destination, plan, {pack_id}, None)
 
@@ -161,6 +166,35 @@ class ContiguousCatalogTests(unittest.TestCase):
             path.write_text(json.dumps(manifest), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "out-of-order, altered"):
                 catalog.verify(path)
+
+    def test_release_catalog_is_local_and_requires_a_complete_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            manifest = {
+                "source": {"sha256": "a" * 64},
+                "packages": [{
+                    "id": "desktop-core-1000-2200", "first_year": 1000,
+                    "last_year_inclusive": 2200, "required": True,
+                    "artifact": {"file": "de441-v2-desktop-core-1000-2200.eph",
+                        "requested_start_jd_tdb": 2086302.5,
+                        "requested_end_exclusive_jd_tdb": 2524958.5,
+                        "bytes": 100, "sha256": "b" * 64},
+                }],
+            }
+            path = folder / "manifest.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with patch.object(catalog, "verify", return_value=0):
+                with self.assertRaisesRegex(ValueError, "all catalog artifacts"):
+                    catalog.make_release_catalog(path, folder / "out", "data-v1")
+            with patch.object(catalog, "verify", return_value=1):
+                with self.assertRaisesRegex(ValueError, "release tag"):
+                    catalog.make_release_catalog(path, folder / "out", "../data")
+                result = catalog.make_release_catalog(path, folder / "out", "data-v1")
+            release = json.loads(result.read_text(encoding="utf-8"))
+            self.assertEqual(release["schema"], "virgostars.de441.release-catalog.v1")
+            self.assertEqual(release["packs"][0]["startJdTdb"], 2086302.5)
+            self.assertEqual(release["packs"][0]["filename"], manifest["packages"][0]["artifact"]["file"])
+            self.assertEqual(release["releaseTag"], "data-v1")
 
 
 if __name__ == "__main__":
