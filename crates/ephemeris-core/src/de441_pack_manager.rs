@@ -456,7 +456,9 @@ impl De441PackManager {
                 return Err(De441PackError::InvalidCatalog("unknown installed package"));
             };
             if present[index] {
-                return Err(De441PackError::InvalidCatalog("duplicate installed package"));
+                return Err(De441PackError::InvalidCatalog(
+                    "duplicate installed package",
+                ));
             }
             present[index] = true;
         }

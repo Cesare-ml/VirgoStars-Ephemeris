@@ -394,14 +394,10 @@ fn fresh_installation_queues_required_base_before_optional_downloads() {
     let directory = TempDirectory::create();
     let manager = De441PackManager::from_mobile_directory(&directory.0).unwrap();
     let ids: Vec<_> = manager
-        .plan_contiguous_extension(
-            &[],
-            JulianDateTdb(2232399.5),
-            JulianDateTdb(2305447.5),
-        )
+        .plan_contiguous_extension(&[], JulianDateTdb(2232399.5), JulianDateTdb(2305447.5))
         .unwrap()
-        .iter()
-        .map(|pack| pack.id.as_str())
+        .into_iter()
+        .map(|pack| pack.id)
         .collect();
     assert_eq!(ids, ["core", "history-1400-1599"]);
 }
@@ -470,19 +466,11 @@ fn planner_rejects_discontinuous_catalog_and_out_of_range_request() {
     ])
     .unwrap();
     assert!(matches!(
-        complete.plan_contiguous_extension(
-            &["base"],
-            JulianDateTdb(1000.0),
-            JulianDateTdb(1064.1)
-        ),
+        complete.plan_contiguous_extension(&["base"], JulianDateTdb(1000.0), JulianDateTdb(1064.1)),
         Err(De441PackError::NoPackForEpoch(_))
     ));
     assert!(matches!(
-        complete.plan_contiguous_extension(
-            &["base"],
-            JulianDateTdb(1032.0),
-            JulianDateTdb(1000.0)
-        ),
+        complete.plan_contiguous_extension(&["base"], JulianDateTdb(1032.0), JulianDateTdb(1000.0)),
         Err(De441PackError::InvalidCatalog(_))
     ));
 }

@@ -52,7 +52,7 @@ URLs, network calls, or kernel bytes are included in source control.
 Use --packs all for all configured intervals, or --packs PACKAGE_ID
 for selected IDs, with a **new output directory per manifest**. Configure
 --min-year and --max-year *before* the build/plan subcommand if
-the actual source covers different years. The defaults of -12999 to 16999
+the actual source covers different years. The defaults of -13000 to 16999
 are only a **proposed planning window** based on the classic data described
 in docs/DE441.md; only an actual source export can establish coverage.
 The source must remain outside the repository and may be pinned with
@@ -69,6 +69,31 @@ publication_status=local_unsigned_not_authorized. Its structure is
 *not* a signed download protocol: the app must not trust an arbitrary URL
 or promote it to an installer resource without a separate security review.
 Both the Mobile v1 and proposed Desktop v2 manifests may coexist.
+
+The builder and verifier now invoke the Rust calendar for the exact JD TDB
+boundaries of every built artifact. Rust and its offline dependencies are
+therefore required for verification too. An artifact whose logical JD
+interval does not match its declared astronomical years is rejected even
+when its header and hash are internally consistent. The manifest remains
+unsigned and this check is not catalog authentication.
+
+On Windows on 2026-11-19, the owner's 2,788,676,624-byte classic source
+reported JD TDB [-3027215.5, 7930192.5]. Its complete Gregorian years
+are -13000 through 16999; the current year-based catalog proposes 145
+packs, but leaves the partial source years at both ends unrepresented.
+Three private slices were generated and compared with that same source:
+800–999 and 2201–2400 each 18,617,184 bytes, and the 1000–2200 base
+111,662,384 bytes. This does not prove other packages were generated or
+independently validated, or that redistribution is permitted.
+
+The local file's MD5 is `4e3b924463d17b68ec9c4a18240300cd`; the
+[Astrodienst download page](https://www.astro.com/swisseph/swedownload_e.htm)
+lists `a7b2a5b8b2ebed52ea4da2304958053b` for its DE441 file. These
+fingerprints differ. The local file's origin and any right to redistribute
+its slices therefore remain unverified; MD5 alone would not authenticate
+provenance even if it matched. Do not upload these artifacts or bundle them
+in a public installer until the specific source and derived-file rights have
+been reviewed.
 
 ## Scientific contract and invariants
 
@@ -101,6 +126,14 @@ each ID to an approved asset URL, SHA-256, exact byte count and TDB coverage.
 The data catalog's version must change independently from the Tauri app
 version; clients must not silently combine incompatible source generations.
 No release may be made from the local unsigned manifest alone.
+GitHub currently allows up to 1,000 assets per release, each under 2 GiB
+([GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)).
+The 145 proposed whole-year assets fit the count limit and the three measured
+files fit the individual size limit; the other files have not been measured.
+When immutable releases are enabled, assets and their tag cannot be changed
+after publication ([GitHub release management](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)).
+Neither immutability nor a hash supplied by an unsigned catalog authenticates
+the publisher.
 
 ## Checks and remaining work
 
@@ -109,9 +142,9 @@ No release may be made from the local unsigned manifest alone.
 - Rust synthetic plan tests cover skipped historical bridges, required
   base, future boundary, missing/duplicate/noncontiguous installations,
   removal of interior packs and invalid dates. They need a Rust toolchain.
-- Still required: real 1000–2200 slice with actual source, source/slice
-  and independent JPL comparisons around every boundary; Cargo
-  format/test/Clippy; package size measurements; Windows/macOS native
+- Still required: support for partial source years, all remaining real
+  slices, and independent JPL comparisons around every boundary;
+  Windows/macOS native
   download and failed-network tests; signed catalog and legal review;
   Desktop/Mobile UI integration and Android device QA.
 
