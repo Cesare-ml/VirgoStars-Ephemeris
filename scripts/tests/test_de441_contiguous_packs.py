@@ -167,6 +167,35 @@ class ContiguousCatalogTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "out-of-order, altered"):
                 catalog.verify(path)
 
+    def test_release_catalog_is_local_and_requires_a_complete_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            manifest = {
+                "source": {"sha256": "a" * 64},
+                "packages": [{
+                    "id": "desktop-core-1000-2200", "first_year": 1000,
+                    "last_year_inclusive": 2200, "required": True,
+                    "artifact": {"file": "de441-v2-desktop-core-1000-2200.eph",
+                        "requested_start_jd_tdb": 2086302.5,
+                        "requested_end_exclusive_jd_tdb": 2524958.5,
+                        "bytes": 100, "sha256": "b" * 64},
+                }],
+            }
+            path = folder / "manifest.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with patch.object(catalog, "verify", return_value=0):
+                with self.assertRaisesRegex(ValueError, "all catalog artifacts"):
+                    catalog.make_release_catalog(path, folder / "out", "data-v1")
+            with patch.object(catalog, "verify", return_value=1):
+                with self.assertRaisesRegex(ValueError, "release tag"):
+                    catalog.make_release_catalog(path, folder / "out", "../data")
+                result = catalog.make_release_catalog(path, folder / "out", "data-v1")
+            release = json.loads(result.read_text(encoding="utf-8"))
+            self.assertEqual(release["schema"], "virgostars.de441.release-catalog.v1")
+            self.assertEqual(release["packs"][0]["startJdTdb"], 2086302.5)
+            self.assertEqual(release["packs"][0]["filename"], manifest["packages"][0]["artifact"]["file"])
+            self.assertEqual(release["releaseTag"], "data-v1")
+
 
 if __name__ == "__main__":
     unittest.main()

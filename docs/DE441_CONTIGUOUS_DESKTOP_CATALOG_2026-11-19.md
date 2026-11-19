@@ -49,6 +49,11 @@ URLs, network calls, or kernel bytes are included in source control.
     python scripts/build_de441_contiguous_packs.py verify \
       --manifest /local/virgostars-desktop-packs/de441-contiguous-manifest-v2.json
 
+    # Create unsigned, local release-shaped metadata only after all packs verify.
+    python scripts/build_de441_contiguous_packs.py release-catalog \
+      --manifest /local/virgostars-desktop-packs/de441-contiguous-manifest-v2.json \
+      --output-dir /local/virgostars-catalog --release-tag de441-v1-local-test
+
 Use --packs all for all configured intervals, or --packs PACKAGE_ID
 for selected IDs, with a **new output directory per manifest**. Configure
 --min-year and --max-year *before* the build/plan subcommand if
@@ -81,10 +86,12 @@ On Windows on 2026-11-19, the owner's 2,788,676,624-byte classic source
 reported JD TDB [-3027215.5, 7930192.5]. Its complete Gregorian years
 are -13000 through 16999; the current year-based catalog proposes 145
 packs, but leaves the partial source years at both ends unrepresented.
-Three private slices were generated and compared with that same source:
-800–999 and 2201–2400 each 18,617,184 bytes, and the 1000–2200 base
-111,662,384 bytes. This does not prove other packages were generated or
-independently validated, or that redistribution is permitted.
+All 145 whole-year slices were generated privately, hashed, checked against
+their canonical year boundaries and compared with that same source. They
+total 2,792,137,824 bytes; the 1000–2200 base is 111,662,384 bytes.
+The resulting unsigned local release-shaped catalog passed the Desktop
+catalog contract and its year-zero extension plan. This is not independent
+astronomical validation or permission to redistribute the data.
 
 The local file's MD5 is `4e3b924463d17b68ec9c4a18240300cd`; the
 [Astrodienst download page](https://www.astro.com/swisseph/swedownload_e.htm)
@@ -142,8 +149,8 @@ the publisher.
 - Rust synthetic plan tests cover skipped historical bridges, required
   base, future boundary, missing/duplicate/noncontiguous installations,
   removal of interior packs and invalid dates. They need a Rust toolchain.
-- Still required: support for partial source years, all remaining real
-  slices, and independent JPL comparisons around every boundary;
+- Still required: support for partial source years and independent JPL
+  comparisons around every boundary;
   Windows/macOS native
   download and failed-network tests; signed catalog and legal review;
   Desktop/Mobile UI integration and Android device QA.

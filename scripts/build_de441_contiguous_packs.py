@@ -38,6 +38,7 @@ import build_de441_mobile_packs as common
 
 SCHEMA = "virgostars.de441.packs.v2"
 MANIFEST_NAME = "de441-contiguous-manifest-v2.json"
+RELEASE_CATALOG_NAME = "de441-release-catalog-v1.json"
 BASE_FIRST = 1000
 BASE_LAST = 2200
 BLOCK_YEARS = 200
@@ -265,6 +266,43 @@ def verify(manifest_path: Path, cargo: str = "cargo") -> int:
     return built
 
 
+def make_release_catalog(manifest_path: Path, destination: Path, release_tag: str,
+                         cargo: str = "cargo") -> Path:
+    """Produce local unsigned metadata; this does not grant distribution rights."""
+    if (not isinstance(release_tag, str) or not 1 <= len(release_tag) <= 100
+            or release_tag.startswith(".") or ".." in release_tag
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", release_tag)):
+        raise ValueError("invalid release tag")
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    built = verify(manifest_path, cargo)
+    if built != len(data["packages"]):
+        raise ValueError("all catalog artifacts must be built and verified")
+    source_hash = data.get("source", {}).get("sha256")
+    if not isinstance(source_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", source_hash):
+        raise ValueError("invalid source fingerprint")
+    packs = []
+    for entry in data["packages"]:
+        artifact = entry["artifact"]
+        packs.append({
+            "id": entry["id"], "filename": artifact["file"],
+            "firstYear": entry["first_year"], "lastYear": entry["last_year_inclusive"],
+            "startJdTdb": artifact["requested_start_jd_tdb"],
+            "endJdTdb": artifact["requested_end_exclusive_jd_tdb"],
+            "required": entry["required"], "bytes": artifact["bytes"],
+            "sha256": artifact["sha256"],
+        })
+    document = {
+        "schema": "virgostars.de441.release-catalog.v1",
+        "releaseTag": release_tag,
+        "sourceSha256": source_hash,
+        "packs": packs,
+    }
+    destination.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        raise ValueError("destination must not be a symlink")
+    return common.create_manifest_exclusive(destination, document, RELEASE_CATALOG_NAME)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--min-year", type=int, default=DEFAULT_MIN_YEAR)
@@ -280,10 +318,18 @@ def main(argv: list[str] | None = None) -> int:
     verifier = sub.add_parser("verify", help="check a locally built manifest and files")
     verifier.add_argument("--manifest", required=True, type=Path)
     verifier.add_argument("--cargo", default="cargo")
+    release = sub.add_parser("release-catalog", help="create local unsigned release-shaped metadata")
+    release.add_argument("--manifest", required=True, type=Path)
+    release.add_argument("--output-dir", required=True, type=Path)
+    release.add_argument("--release-tag", required=True)
+    release.add_argument("--cargo", default="cargo")
     args = parser.parse_args(argv)
     try:
         if args.command == "verify":
             verify(args.manifest, args.cargo)
+        elif args.command == "release-catalog":
+            path = make_release_catalog(args.manifest, args.output_dir, args.release_tag, args.cargo)
+            print(f"{path}: sha256={common.sha256_file(path)}; unsigned, rights review pending")
         else:
             plan = build_plan(args.min_year, args.max_year)
             if args.command == "plan":
