@@ -80,6 +80,31 @@ accelerations (km/TDB day²). Outer planets are system barycenters; no
 astrological chart, house calculation, light-time or apparent correction is
 performed by this module.
 
+## Contiguous installation planning (2026-11-19)
+
+The additional `plan_contiguous_extension(installed_ids, desired_start,
+desired_end_exclusive)` method supports a Desktop-style non-removable base
+with optional extensions on either side. It accepts **only a fully verified
+installed-ID set supplied by the host**; `inventory()` alone cannot prove
+installation. It rejects missing required files, interior gaps, duplicate
+IDs, unknown IDs, inconsistent required-base positions, nonadjacent logical
+intervals, inclusive-end catalogs and invalid requested ranges.
+
+An installed core covering 1600–2100 followed by a request for 0–599 will
+queue every missing history package in descending order beginning with
+1400–1599. It cannot produce an isolated 0–599 range. On initial install,
+required packs come first. An optional installed pack is removable only if
+`can_remove_contiguous_pack()` says it is the earliest or latest edge;
+required and interior packs remain protected. Neither method downloads,
+hashes, activates, removes or changes astronomical results. Existing custom
+catalogs and the Mobile v1 profile remain supported; full original files
+with inclusive final endpoints are intentionally not treated as sliced
+catalogs by this planner.
+
+The proposed 1000–2200 Desktop profile and offline release-inventory builder
+are described in
+[DE441_CONTIGUOUS_DESKTOP_CATALOG_2026-11-19.md](DE441_CONTIGUOUS_DESKTOP_CATALOG_2026-11-19.md).
+
 ## Verification, caveats, scope
 
 - Synthetic integration tests: known mobile JD boundaries, deterministic

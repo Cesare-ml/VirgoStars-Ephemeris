@@ -10,6 +10,8 @@
 # SPDX-License-Identifier: CPAL-1.0
 # Modification (2026-11-18): offline DE441 mobile slice pack orchestration
 # and SHA-256 manifest verification, without any astronomical calculations.
+# Modification (2026-11-19): allow a separate, versioned catalog to reuse the
+# atomic manifest writer without changing the mobile v1 output filename.
 
 """Offline DE441 mobile pack builder; astronomical slicing is done by Rust.
 
@@ -125,8 +127,12 @@ def verify_artifact(folder: Path, artifact: dict) -> None:
         raise ValueError(f"coefficient record coverage mismatch for {name}")
 
 
-def create_manifest_exclusive(folder: Path, document: dict) -> Path:
-    target = folder / MANIFEST_NAME
+def create_manifest_exclusive(folder: Path, document: dict,
+                              name: str = MANIFEST_NAME) -> Path:
+    if (not isinstance(name, str) or Path(name).name != name
+            or name in (".", "..") or "\\" in name or "/" in name):
+        raise ValueError("manifest filename must be a simple basename")
+    target = folder / name
     if target.exists() or target.is_symlink():
         raise FileExistsError(f"manifest already exists: {target}")
     payload = (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode("utf-8")

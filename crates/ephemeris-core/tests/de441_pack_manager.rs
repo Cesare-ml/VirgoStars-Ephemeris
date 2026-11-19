@@ -345,3 +345,144 @@ fn complete_classic_file_uses_original_inclusive_final_endpoint() {
         .unwrap();
     assert_eq!(state, reference);
 }
+
+#[test]
+fn contiguous_extension_includes_every_missing_historical_bridge() {
+    let directory = TempDirectory::create();
+    let manager = De441PackManager::from_mobile_directory(&directory.0).unwrap();
+
+    // User has 1600–2100 but asks for the earliest 0–599 block. Every
+    // intermediate history pack is queued nearest-first: no 600–1599 gap.
+    let pending = manager
+        .plan_contiguous_extension(
+            &["core"],
+            JulianDateTdb(1721059.5),
+            JulianDateTdb(1940205.5),
+        )
+        .unwrap();
+    let ids: Vec<_> = pending.iter().map(|spec| spec.id.as_str()).collect();
+    assert_eq!(ids.len(), 8);
+    assert_eq!(ids[0], "history-1400-1599");
+    assert_eq!(ids[7], "history-0000-0199");
+
+    // A half-open end on the 2101 boundary does not download 2101–2300.
+    assert!(manager
+        .plan_contiguous_extension(
+            &["core"],
+            JulianDateTdb(2305447.5),
+            JulianDateTdb(2488434.5),
+        )
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        manager
+            .plan_contiguous_extension(
+                &["core"],
+                JulianDateTdb(2488434.5),
+                JulianDateTdb(2561482.5),
+            )
+            .unwrap()
+            .iter()
+            .map(|pack| pack.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["future-2101-2300"]
+    );
+}
+
+#[test]
+fn fresh_installation_queues_required_base_before_optional_downloads() {
+    let directory = TempDirectory::create();
+    let manager = De441PackManager::from_mobile_directory(&directory.0).unwrap();
+    let ids: Vec<_> = manager
+        .plan_contiguous_extension(
+            &[],
+            JulianDateTdb(2232399.5),
+            JulianDateTdb(2305447.5),
+        )
+        .unwrap()
+        .iter()
+        .map(|pack| pack.id.as_str())
+        .collect();
+    assert_eq!(ids, ["core", "history-1400-1599"]);
+}
+
+#[test]
+fn cannot_activate_noncontiguous_installs_or_remove_interior_packs() {
+    let directory = TempDirectory::create();
+    let manager = De441PackManager::from_mobile_directory(&directory.0).unwrap();
+
+    for invalid in [
+        vec!["history-1400-1599"],
+        vec!["core", "history-0000-0199"],
+        vec!["core", "core"],
+        vec!["core", "nonexistent"],
+    ] {
+        assert!(matches!(
+            manager.plan_contiguous_extension(
+                &invalid,
+                JulianDateTdb(2305447.5),
+                JulianDateTdb(2488434.5)
+            ),
+            Err(De441PackError::InvalidCatalog(_))
+        ));
+    }
+
+    let installed = ["history-1200-1399", "core", "history-1400-1599"];
+    assert!(manager
+        .can_remove_contiguous_pack(&installed, "history-1200-1399")
+        .unwrap());
+    assert!(!manager
+        .can_remove_contiguous_pack(&installed, "history-1400-1599")
+        .unwrap());
+    assert!(!manager
+        .can_remove_contiguous_pack(&installed, "core")
+        .unwrap());
+}
+
+#[test]
+fn planner_rejects_discontinuous_catalog_and_out_of_range_request() {
+    let path = Path::new("unused.eph");
+    let gap = De441PackManager::from_specs(vec![
+        spec("base", path, 1000.0, 1032.0),
+        De441PackSpec::new(
+            "optional",
+            path,
+            JulianDateTdb(1064.0),
+            JulianDateTdb(1096.0),
+            false,
+        ),
+    ])
+    .unwrap();
+    assert!(matches!(
+        gap.plan_contiguous_extension(&["base"], JulianDateTdb(1000.0), JulianDateTdb(1032.0)),
+        Err(De441PackError::InvalidCatalog(_))
+    ));
+
+    let complete = De441PackManager::from_specs(vec![
+        spec("base", path, 1000.0, 1032.0),
+        De441PackSpec::new(
+            "optional",
+            path,
+            JulianDateTdb(1032.0),
+            JulianDateTdb(1064.0),
+            false,
+        ),
+    ])
+    .unwrap();
+    assert!(matches!(
+        complete.plan_contiguous_extension(
+            &["base"],
+            JulianDateTdb(1000.0),
+            JulianDateTdb(1064.1)
+        ),
+        Err(De441PackError::NoPackForEpoch(_))
+    ));
+    assert!(matches!(
+        complete.plan_contiguous_extension(
+            &["base"],
+            JulianDateTdb(1032.0),
+            JulianDateTdb(1000.0)
+        ),
+        Err(De441PackError::InvalidCatalog(_))
+    ));
+}
