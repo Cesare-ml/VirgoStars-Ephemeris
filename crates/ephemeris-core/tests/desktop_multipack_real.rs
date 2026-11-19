@@ -21,10 +21,14 @@ SPDX-License-Identifier: CPAL-1.0
 
 use std::path::PathBuf;
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    experimental_long_term_apparent_ecliptic, experimental_long_term_apparent_with_provider,
+    experimental_geocentric_apparent_with_provider, experimental_long_term_apparent_ecliptic,
+    experimental_long_term_apparent_with_provider,
+    geocentric_apparent_six_fields_many_with_options, ApparentError, ApparentFrame,
+    ApparentOptions, ExperimentalProviderApparentError,
 };
 use virgostars_ephemeris_core::de441::{Body, De441, JulianDateTdb};
 use virgostars_ephemeris_core::de441_pack_manager::{De441PackManager, De441PackSpec};
+use virgostars_ephemeris_core::earth_orientation::OrientationError;
 use virgostars_ephemeris_core::six_field_units::FixedSixFieldsDegreesAu;
 
 fn fields(f: FixedSixFieldsDegreesAu) -> [f64; 6] {
@@ -94,7 +98,9 @@ fn apparent_provider_matches_source_at_desktop_boundaries() {
         Body::PlutoBarycenter,
     ];
     let limits = [1e-8, 1e-8, 1e-12, 1e-8, 1e-8, 1e-12];
-    for boundary in [2086302.5, 2524958.5] {
+    let mut supported = 0;
+    let mut unsupported = 0;
+    for boundary in [2086302.5, 2451545.0, 2524958.5] {
         for offset in [-0.08, -0.02, -1.0 / 86400.0, 0.0, 1.0 / 86400.0, 0.02, 0.08] {
             let epoch = JulianDateTdb(boundary + offset);
             for body in bodies {
@@ -116,7 +122,58 @@ fn apparent_provider_matches_source_at_desktop_boundaries() {
                         "boundary={boundary} offset={offset} body={body:?} field={i} diff={diff}"
                     );
                 }
+                for frame in [
+                    ApparentFrame::TrueEclipticOfDate,
+                    ApparentFrame::TrueEquatorOfDate,
+                ] {
+                    let result = experimental_geocentric_apparent_with_provider(
+                        &mut manager,
+                        body,
+                        epoch,
+                        frame,
+                    );
+                    let standard = geocentric_apparent_six_fields_many_with_options(
+                        &mut original,
+                        &[body],
+                        epoch,
+                        ApparentOptions {
+                            frame,
+                            ..ApparentOptions::default()
+                        },
+                    );
+                    let (result, standard) = match (result, standard) {
+                        (Ok(result), Ok(standard)) => {
+                            supported += 1;
+                            (result, standard)
+                        }
+                        (
+                            Err(ExperimentalProviderApparentError::Apparent(
+                                ApparentError::Orientation(OrientationError::UnsupportedEpoch {
+                                    ..
+                                }),
+                            )),
+                            Err(ApparentError::Orientation(OrientationError::UnsupportedEpoch {
+                                ..
+                            })),
+                        ) => {
+                            unsupported += 1;
+                            continue;
+                        }
+                        other => panic!("unexpected provider/source results: {other:?}"),
+                    };
+                    let actual = fields(result.fields);
+                    let expected = fields(standard[0].fields);
+                    for i in 0..6 {
+                        let diff = if i == 0 {
+                            ((actual[i] - expected[i] + 180.0).rem_euclid(360.0) - 180.0).abs()
+                        } else {
+                            (actual[i] - expected[i]).abs()
+                        };
+                        assert!(diff <= limits[i], "frame={frame:?} boundary={boundary} offset={offset} body={body:?} field={i} diff={diff}");
+                    }
+                }
             }
         }
     }
+    assert!(supported > 0 && unsupported > 0);
 }

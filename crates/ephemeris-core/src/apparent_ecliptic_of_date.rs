@@ -857,6 +857,59 @@ pub enum ExperimentalProviderApparentError<E> {
     UnsafeRefinementBoundary,
 }
 
+/// Geocentric apparent state using the existing standard frame pipeline and
+/// selecting each DE441 state at its own epoch. Unlike the long-term
+/// experiment, this intentionally does not add emission refinement.
+/// The provider remains experimental; unsupported dates and missing files
+/// are returned to the caller, never replaced with a lower precision model.
+pub fn experimental_geocentric_apparent_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    target: Body,
+    reception: JulianDateTdb,
+    frame: ApparentFrame,
+) -> Result<ApparentSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
+    use ExperimentalProviderApparentError::{Apparent, Provider};
+    let earth = provider
+        .state_with_acceleration(Body::Earth, reception)
+        .map_err(Provider)?;
+    let mut provider_error = None;
+    let lt = {
+        let mut states = |body, epoch| {
+            provider.state(body, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })
+        };
+        light_time_with_states(Body::Earth, target, reception, &mut states)
+    };
+    if let Some(error) = provider_error.take() {
+        return Err(Provider(error));
+    }
+    let lt = lt.map_err(|error| Apparent(AberratedStateError::from(error).into()))?;
+    let deflected = {
+        let mut states = |body, epoch| {
+            provider.state(body, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })
+        };
+        deflect_light_time_state_by_sun_with(&mut states, &lt)
+    };
+    if let Some(error) = provider_error.take() {
+        return Err(Provider(error));
+    }
+    let lt = deflected.map_err(|error| Apparent(error.into()))?;
+    let mut state = aberrate_light_time_state(
+        &lt,
+        earth.velocity_km_per_day,
+        earth.acceleration_km_per_day2,
+    )
+    .map_err(|error| Apparent(error.into()))?;
+    state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
+    let output = apparent_from_aberrated_state_in_frame(&state, frame, true).map_err(Apparent)?;
+    apparent_to_degrees_au(&output).map_err(Apparent)
+}
+
 /// Opt-in long-term apparent experiment with explicit per-epoch provider
 /// selection. Not a default API, mobile integration, or validated product.
 pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStateProvider>(

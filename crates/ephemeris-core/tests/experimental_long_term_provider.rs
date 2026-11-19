@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: CPAL-1.0
 use virgostars_ephemeris_core::apparent_ecliptic_of_date::{
-    experimental_long_term_apparent_with_provider, ExperimentalLongTermStateProvider,
-    ExperimentalProviderApparentError,
+    experimental_geocentric_apparent_with_provider, experimental_long_term_apparent_with_provider,
+    ApparentFrame, ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
 };
 use virgostars_ephemeris_core::de441::{
     Body, JulianDateTdb, StateVector, StateVectorWithAcceleration,
@@ -117,6 +117,23 @@ fn preserves_provider_error_for_reception_and_deflection_stencil() {
             &mut p,
             Body::MarsBarycenter,
             JulianDateTdb(BOUNDARY - 1.0 / 86400.0)
+        ),
+        Err(ExperimentalProviderApparentError::Provider(
+            Fault::MissingNext
+        ))
+    ));
+}
+
+#[test]
+fn standard_frame_provider_preserves_missing_file_errors() {
+    let mut missing = provider();
+    missing.fail_next = true;
+    assert!(matches!(
+        experimental_geocentric_apparent_with_provider(
+            &mut missing,
+            Body::MarsBarycenter,
+            JulianDateTdb(BOUNDARY - 1.0 / 86400.0),
+            ApparentFrame::TrueEquatorOfDate,
         ),
         Err(ExperimentalProviderApparentError::Provider(
             Fault::MissingNext

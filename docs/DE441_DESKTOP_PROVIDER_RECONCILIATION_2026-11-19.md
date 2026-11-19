@@ -15,10 +15,17 @@ cases), all six apparent ecliptic fields, with the same-source full file.
 It passed the pre-existing tolerance limits. This is **not** an independent
 JPL/NAIF validation and does not validate civil time, UI or installed Desktop.
 
-The provider only exposes an experimental ecliptic apparent path. Existing
-Desktop also uses true-equatorial coordinates, solar events, lunar points,
-stellar deflection, small-body SPK and historical snapshots through APIs that
-take a single `De441`. None is automatically multipack by this change.
+The provider now also exposes an experimental standard geocentric path for
+both true-ecliptic and true-equatorial frames with solar deflection, without
+the long-term experiment's emission refinement. Against the same local full
+file, the standard path matched at a modern epoch in both frames and rejected
+the Desktop 1000 and 2201 boundaries with the same unsupported-orientation
+error as the single-file path. The available coefficients therefore do not
+by themselves establish usable Desktop calculations across the base range.
+
+Desktop also uses solar events, lunar points, stellar deflection, small-body
+SPK and historical snapshots through APIs that take a single `De441`.
+None is automatically multipack by this change.
 Unsafe sub-ULP emission refinement crossings still produce an explicit error.
 Do not switch Desktop's provider or present optional packs as usable until
 these paths have compatible, tested provider-backed implementations.
