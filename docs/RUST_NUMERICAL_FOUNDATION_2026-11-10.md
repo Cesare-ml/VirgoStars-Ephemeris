@@ -23,3 +23,37 @@ test with the local classic DE441 binary passed. Mathematical identities and
 real-file regression are not independent JPL/Horizons accuracy validation.
 The synthetic record is **not an SPK parser**; SPK binary reading, reference
 comparisons, apparent corrections, bindings and production use remain open.
+
+## TDB ET seconds → Julian Day conversion (2026-11-13)
+
+The typed Rust `TdbSecondsPastJ2000::to_julian_day_tdb()` method
+converts an ET offset in **TDB seconds relative to J2000** to a
+single-`f64` `JulianDayTdb`. The existing
+`JulianDayTdb::to_tdb_seconds_past_j2000()` method handles the opposite
+direction. Both are **representation conversions within TDB**, not
+UTC/TAI/TT/TDB time-scale conversions; neither introduces leap-second
+handling, Earth orientation parameters or SPK support.
+
+```rust
+use virgostars_ephemeris_core::TdbSecondsPastJ2000;
+
+let et = TdbSecondsPastJ2000::new(43_200.0)?;
+let jd = et.to_julian_day_tdb()?;
+assert_eq!(jd.value(), 2_451_545.5);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The single-`f64` Julian day has an increment of roughly **40 microseconds
+near J2000**. Thus, converting a 1-microsecond ET offset to this representation
+rounds to J2000; do not use it for sub-millisecond-precision time stepping.
+A two-part JD API is the intended solution and remains separate work.
+Synthetic public-API tests exercise exact full/half days, ±1-second
+round trips and explicitly lost microsecond offsets. They are **not**
+an independent DE441/JPL accuracy test.
+
+Verification commands from the repository root:
+`cargo fmt --all -- --check`, `cargo test --workspace --locked`,
+`cargo clippy --workspace --all-targets --locked -- -D warnings`.
+No NASA kernel, new dependency or third-party source is introduced.
+This 2026-11-13 change preserves the CPAL-1.0 Exhibit A notices and the
+required Powered by VirgoStars attribution.
