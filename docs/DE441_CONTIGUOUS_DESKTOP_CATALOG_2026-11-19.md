@@ -1,9 +1,13 @@
 # DE441 contiguous catalog for Desktop — 2026-11-19
 
 **Later checkpoint, 2026-11-19:** the lossless Rust exporter and multipack
-provider have been integrated on Ephemeris main; Desktop integration and its
-data release remain separately tracked. The original statements below describe
-the earlier candidate. This offline tool has since reverified all 145 local
+provider have been integrated on Ephemeris main. The
+[Desktop data release](https://github.com/Cesare-ml/VirgoStars-Ephemeris/releases/tag/de441-desktop-v1.0.0)
+is published; its catalog describes 145 intervals, five of which refer to the
+existing Mobile release. All asset sizes and SHA-256 values were checked
+against GitHub before publication. Desktop application integration remains
+separately tracked. The original statements below describe the earlier
+candidate. This offline tool has since reverified all 145 local
 artifacts and regenerated the Desktop catalog with SHA-256
 `ad80ef75b5f3984947a6dc04d4de184c35701600ca587aff155d7228fd03667b`.
 The owner identified the exact local source as NASA/JPL and authorized
