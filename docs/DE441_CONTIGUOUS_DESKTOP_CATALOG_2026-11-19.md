@@ -135,8 +135,10 @@ version; clients must not silently combine incompatible source generations.
 No release may be made from the local unsigned manifest alone.
 GitHub currently allows up to 1,000 assets per release, each under 2 GiB
 ([GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)).
-The 145 proposed whole-year assets fit the count limit and the three measured
-files fit the individual size limit; the other files have not been measured.
+The 145 locally generated whole-year assets fit the count limit. Their measured
+sizes range from 18,519,456 to 111,662,384 bytes, below the individual limit.
+The whole-year catalog does not include the partial source years at either end
+of the underlying DE441 physical span.
 When immutable releases are enabled, assets and their tag cannot be changed
 after publication ([GitHub release management](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)).
 Neither immutability nor a hash supplied by an unsigned catalog authenticates
