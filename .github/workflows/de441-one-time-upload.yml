@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 073014fa1e97537570f0596d0d3a7b5b889ea3ac
+          ref: 4eaa6ecef388e9f575f8fa0f12975187b4a0dc5f
           persist-credentials: false
       - name: Download and authenticate the NASA JPL source
         shell: bash
