@@ -8,12 +8,19 @@
 //! House cusps remain in astrological-functions. An explicit historical local
 //! clock may be converted to UT1 without inferring a time zone or UTC.
 
+use crate::apparent_ecliptic_of_date::ExperimentalLongTermStateProvider;
 use crate::de441::De441;
 use crate::historical_civil_time::{
     local_to_ut1, CivilTimeError, HistoricalCivilEpoch, HistoricalCivilInput,
 };
-use crate::mvp_lunar::{lunar_points_ut1, LunarSet, LunarSetError, MVP_LUNAR_POINTS};
-use crate::mvp_planets::{planets_ut1, PlanetaryError, PlanetarySet, PlanetaryTime, MVP_PLANETS};
+use crate::lunar_points::LunarStateProvider;
+use crate::mvp_lunar::{
+    lunar_points_ut1, lunar_points_ut1_with_provider, LunarSet, LunarSetError, MVP_LUNAR_POINTS,
+};
+use crate::mvp_planets::{
+    planets_ut1, planets_ut1_with_provider, PlanetaryError, PlanetaryProviderError, PlanetarySet,
+    PlanetaryTime, MVP_PLANETS,
+};
 use crate::mvp_site::{
     experimental_house_angles_ut1, experimental_solar_event_ut1, house_angles_ut1, solar_event_ut1,
     ExplicitHouseAngles, SiteError, SolarEvent,
@@ -95,6 +102,48 @@ pub fn experimental_snapshot_from_civil<R: Read + Seek>(
         source: delta_t_source,
     };
     let snapshot = experimental_snapshot_ut1(ephemeris, time, site, solar)?;
+    Ok(HistoricalCivilSnapshot { civil, snapshot })
+}
+
+/// Provider-backed historical snapshot, with no solar event search.
+/// Solar requests must continue through an explicitly supported path.
+#[derive(Debug)]
+pub enum HistoricalProviderSnapshotError<E> {
+    Civil(CivilTimeError),
+    Planets(PlanetaryProviderError<E>),
+    Lunar(LunarSetError),
+}
+
+pub fn experimental_snapshot_from_civil_with_provider<
+    P: ExperimentalLongTermStateProvider + LunarStateProvider,
+>(
+    provider: &mut P,
+    civil_input: HistoricalCivilInput<'_>,
+    delta_t_seconds: f64,
+    delta_t_uncertainty_seconds: f64,
+    delta_t_source: &str,
+    site: &Site,
+) -> Result<HistoricalCivilSnapshot, HistoricalProviderSnapshotError<P::Error>> {
+    let civil = local_to_ut1(civil_input).map_err(HistoricalProviderSnapshotError::Civil)?;
+    let time = PlanetaryTime {
+        jd_ut1: civil.jd_ut1,
+        delta_t_seconds,
+        uncertainty_seconds: delta_t_uncertainty_seconds,
+        source: delta_t_source,
+    };
+    let planets = planets_ut1_with_provider(provider, &MVP_PLANETS, time)
+        .map_err(HistoricalProviderSnapshotError::Planets)?;
+    let lunar = lunar_points_ut1_with_provider(provider, &MVP_LUNAR_POINTS, time)
+        .map_err(HistoricalProviderSnapshotError::Lunar)?;
+    let house_angles =
+        experimental_house_angles_ut1(time, site.latitude_deg, site.longitude_deg_east);
+    let snapshot = MvpSnapshot {
+        planets,
+        lunar,
+        house_angles,
+        sunrise: None,
+        sunset: None,
+    };
     Ok(HistoricalCivilSnapshot { civil, snapshot })
 }
 

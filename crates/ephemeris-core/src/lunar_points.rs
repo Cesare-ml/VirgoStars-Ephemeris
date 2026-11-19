@@ -14,6 +14,7 @@
 
 // Modification 2026-11-18: add an explicit experimental long-term orientation option
 // and an empirical Swiss-reference compatibility correction for the mean elements.
+// Modification 2026-11-19: permit per-epoch DE441 pack selection without changing lunar formulae.
 
 //! Mathematical lunar points: mean and true (osculating) node, mean and
 //! osculating apogee. These are points defined by the Moon's orbit, not bodies:
@@ -54,7 +55,8 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::apparent_ecliptic_of_date::{tdb_to_tt_jd, ApparentFrame};
-use crate::de441::{Body, De441, De441Error, JulianDateTdb};
+use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
+use crate::de441_pack_manager::{De441PackError, De441PackManager};
 use crate::earth_orientation::{
     ecliptic_nutation, experimental_extrapolated_nutation, iau2000b_nutation,
     iau2006_bias_precession_matrix, matrix_multiply, matrix_vector_multiply,
@@ -127,6 +129,10 @@ pub struct LunarPointState {
 #[derive(Debug)]
 pub enum LunarPointError {
     Ephemeris(De441Error),
+    Pack(De441PackError),
+    /// The provider returned a state for a different target, center or epoch,
+    /// or supplied non-finite coordinates.
+    InvalidProviderState,
     Orientation(OrientationError),
     NonFinite,
     /// The orbital plane is parallel to the ecliptic or the state is degenerate.
@@ -141,6 +147,8 @@ impl fmt::Display for LunarPointError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Ephemeris(e) => write!(f, "lunar point ephemeris: {e}"),
+            Self::Pack(e) => write!(f, "lunar point pack: {e}"),
+            Self::InvalidProviderState => write!(f, "invalid lunar state returned by provider"),
             Self::Orientation(e) => write!(f, "lunar point orientation: {e}"),
             Self::NonFinite => write!(f, "non-finite epoch"),
             Self::UndefinedNode => write!(f, "the lunar orbital node is undefined"),
@@ -154,10 +162,59 @@ impl Error for LunarPointError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Ephemeris(e) => Some(e),
+            Self::Pack(e) => Some(e),
             Self::Orientation(e) => Some(e),
             _ => None,
         }
     }
+}
+
+/// Provides the geometric Moon relative to Earth at each requested TDB epoch.
+/// Implementations must return an error for missing or invalid data.
+pub trait LunarStateProvider {
+    fn lunar_geocentric_state(
+        &mut self,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, LunarPointError>;
+}
+
+impl<R: Read + Seek> LunarStateProvider for De441<R> {
+    fn lunar_geocentric_state(
+        &mut self,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, LunarPointError> {
+        self.state(Body::Moon, Body::Earth, epoch)
+            .map_err(LunarPointError::Ephemeris)
+    }
+}
+
+impl LunarStateProvider for De441PackManager {
+    fn lunar_geocentric_state(
+        &mut self,
+        epoch: JulianDateTdb,
+    ) -> Result<StateVector, LunarPointError> {
+        self.state(Body::Moon, Body::Earth, epoch)
+            .map_err(LunarPointError::Pack)
+    }
+}
+
+fn moon_state<P: LunarStateProvider + ?Sized>(
+    provider: &mut P,
+    epoch: JulianDateTdb,
+) -> Result<StateVector, LunarPointError> {
+    let state = provider.lunar_geocentric_state(epoch)?;
+    if state.target != Body::Moon
+        || state.center != Body::Earth
+        || state.epoch != epoch
+        || state
+            .position_km
+            .iter()
+            .chain(&state.velocity_km_per_day)
+            .any(|x| !x.is_finite())
+    {
+        return Err(LunarPointError::InvalidProviderState);
+    }
+    Ok(state)
 }
 
 impl From<De441Error> for LunarPointError {
@@ -308,8 +365,8 @@ fn from_spherical(lon_deg: f64, lat_deg: f64, distance_au: f64) -> Cartesian {
 
 /// Position of a point in the true ecliptic of date at `tdb`, as ecliptic
 /// longitude/latitude (degrees) and distance (AU).
-fn ecliptic_position<R: Read + Seek>(
-    ephemeris: Option<&mut De441<R>>,
+fn ecliptic_position<P: LunarStateProvider + ?Sized>(
+    ephemeris: Option<&mut P>,
     point: LunarPoint,
     tdb: f64,
     mode: OrientationMode,
@@ -343,13 +400,11 @@ fn ecliptic_position<R: Read + Seek>(
             // the agreement from 0.17" to 0.09" rms for the osculating apogee).
             let mut emission = tdb;
             for _ in 0..3 {
-                let r = ephemeris
-                    .state(Body::Moon, Body::Earth, JulianDateTdb(emission))?
-                    .position_km;
+                let r = moon_state(ephemeris, JulianDateTdb(emission))?.position_km;
                 let d = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
                 emission = tdb - d / SPEED_OF_LIGHT_KM_S / 86_400.0;
             }
-            let moon = ephemeris.state(Body::Moon, Body::Earth, JulianDateTdb(emission))?;
+            let moon = moon_state(ephemeris, JulianDateTdb(emission))?;
             let matrix = ecliptic_matrix(tt, mode)?;
             // The inertial geocentric state, expressed in the axes of the ecliptic of date.
             let r = matrix_vector_multiply(matrix, moon.position_km);
@@ -421,8 +476,8 @@ fn to_frame(
     }
 }
 
-fn sample<R: Read + Seek>(
-    ephemeris: &mut Option<&mut De441<R>>,
+fn sample<P: LunarStateProvider + ?Sized>(
+    ephemeris: &mut Option<&mut P>,
     point: LunarPoint,
     frame: ApparentFrame,
     tdb: f64,
@@ -465,8 +520,35 @@ pub fn experimental_long_term_lunar_point<R: Read + Seek>(
     )
 }
 
-fn lunar_point_with_mode<R: Read + Seek>(
-    mut ephemeris: Option<&mut De441<R>>,
+/// The same modern lunar calculation with a provider that selects data for
+/// each retarded and finite-difference epoch.
+pub fn lunar_point_with_provider<P: LunarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    point: LunarPoint,
+    frame: ApparentFrame,
+    tdb: f64,
+) -> Result<LunarPointState, LunarPointError> {
+    lunar_point_with_mode(Some(ephemeris), point, frame, tdb, OrientationMode::Modern)
+}
+
+/// The same explicitly experimental long-term model, with per-epoch selection.
+pub fn experimental_long_term_lunar_point_with_provider<P: LunarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    point: LunarPoint,
+    frame: ApparentFrame,
+    tdb: f64,
+) -> Result<LunarPointState, LunarPointError> {
+    lunar_point_with_mode(
+        Some(ephemeris),
+        point,
+        frame,
+        tdb,
+        OrientationMode::ExperimentalLongTerm,
+    )
+}
+
+fn lunar_point_with_mode<P: LunarStateProvider + ?Sized>(
+    mut ephemeris: Option<&mut P>,
     point: LunarPoint,
     frame: ApparentFrame,
     tdb: f64,

@@ -13,7 +13,9 @@ use std::fmt;
 use std::io::{Read, Seek};
 
 use crate::apparent_ecliptic_of_date::{
-    experimental_three_rate_candidate, ApparentError, ExperimentalThreeRateCandidate,
+    experimental_three_rate_candidate, experimental_three_rate_with_provider, ApparentError,
+    ExperimentalLongTermStateProvider, ExperimentalProviderApparentError,
+    ExperimentalThreeRateCandidate,
 };
 use crate::calendar::{Calendar, JulianDate, TimeScale};
 use crate::calendar_decimal_hours::{julday_f64, DecimalHourDateTime};
@@ -258,6 +260,58 @@ pub fn planets_ut1<R: Read + Seek>(
             epoch.jd_tt,
         )
         .map_err(PlanetaryError::Orientation)?;
+        positions.push(PlanetaryPosition {
+            body,
+            rates,
+            equatorial,
+        });
+    }
+    Ok(PlanetarySet {
+        epoch,
+        delta_t_source: source.to_owned(),
+        positions,
+    })
+}
+
+/// Explicit UT1/ΔT planetary result using a per-epoch provider. The
+/// experimental model and its limitations are the same as `planets_ut1`.
+#[derive(Debug)]
+pub enum PlanetaryProviderError<E> {
+    Request(PlanetaryError),
+    Calculation {
+        body: Body,
+        source: ExperimentalProviderApparentError<E>,
+    },
+}
+
+pub fn planets_ut1_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    targets: &[Body],
+    time: PlanetaryTime<'_>,
+) -> Result<PlanetarySet, PlanetaryProviderError<P::Error>> {
+    validate_targets(targets).map_err(PlanetaryProviderError::Request)?;
+    let source = time.source.trim();
+    if source.is_empty() || time.source.len() > 200 {
+        return Err(PlanetaryProviderError::Request(
+            PlanetaryError::InvalidSource,
+        ));
+    }
+    let epoch = ut1_to_tdb_with_explicit_delta_t(
+        time.jd_ut1,
+        time.delta_t_seconds,
+        time.uncertainty_seconds,
+    )
+    .map_err(|e| PlanetaryProviderError::Request(PlanetaryError::Time(e)))?;
+    let mut positions = Vec::with_capacity(targets.len());
+    for &body in targets {
+        let rates = experimental_three_rate_with_provider(provider, body, epoch.jd_tdb)
+            .map_err(|source| PlanetaryProviderError::Calculation { body, source })?;
+        let equatorial = experimental_equatorial_from_ecliptic(
+            rates.base.longitude_deg,
+            rates.base.latitude_deg,
+            epoch.jd_tt,
+        )
+        .map_err(|e| PlanetaryProviderError::Request(PlanetaryError::Orientation(e)))?;
         positions.push(PlanetaryPosition {
             body,
             rates,

@@ -848,6 +848,26 @@ pub trait ExperimentalLongTermStateProvider {
     ) -> Result<(JulianDateTdb, JulianDateTdb), Self::Error>;
 }
 
+fn validate_provider_acceleration(
+    state: &StateVectorWithAcceleration,
+    target: Body,
+    epoch: JulianDateTdb,
+) -> Result<(), ApparentError> {
+    if state.target != target
+        || state.center != Body::SolarSystemBarycenter
+        || state.epoch != epoch
+        || state
+            .position_km
+            .iter()
+            .chain(&state.velocity_km_per_day)
+            .chain(&state.acceleration_km_per_day2)
+            .any(|value| !value.is_finite())
+    {
+        return Err(ApparentError::InvalidIntermediate);
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub enum ExperimentalProviderApparentError<E> {
     Provider(E),
@@ -872,6 +892,7 @@ pub fn experimental_geocentric_apparent_with_provider<P: ExperimentalLongTermSta
     let earth = provider
         .state_with_acceleration(Body::Earth, reception)
         .map_err(Provider)?;
+    validate_provider_acceleration(&earth, Body::Earth, reception).map_err(Apparent)?;
     let mut provider_error = None;
     let lt = {
         let mut states = |body, epoch| {
@@ -917,10 +938,24 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     target: Body,
     reception: JulianDateTdb,
 ) -> Result<FixedSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
+    let (state, _) = experimental_aberrated_with_provider(provider, target, reception)?;
+    finish_experimental_long_term(state, target, reception, true, false)
+        .map_err(ExperimentalProviderApparentError::Apparent)
+}
+
+fn experimental_aberrated_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    target: Body,
+    reception: JulianDateTdb,
+) -> Result<
+    (AberratedGeocentricState, StateVectorWithAcceleration),
+    ExperimentalProviderApparentError<P::Error>,
+> {
     use ExperimentalProviderApparentError::{Apparent, Provider, UnsafeRefinementBoundary};
     let earth = provider
         .state_with_acceleration(Body::Earth, reception)
         .map_err(Provider)?;
+    validate_provider_acceleration(&earth, Body::Earth, reception).map_err(Apparent)?;
     let mut provider_error = None;
     let lt = {
         let mut states = |body, epoch| {
@@ -938,6 +973,7 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     let emission = provider
         .state_with_acceleration(target, lt.emission_epoch)
         .map_err(Provider)?;
+    validate_provider_acceleration(&emission, target, lt.emission_epoch).map_err(Apparent)?;
     let (start, end) = provider
         .logical_coverage(lt.emission_epoch)
         .map_err(Provider)?;
@@ -973,7 +1009,55 @@ pub fn experimental_long_term_apparent_with_provider<P: ExperimentalLongTermStat
     )
     .map_err(|error| Apparent(error.into()))?;
     state.observer_acceleration_source = ObserverAccelerationSource::AnalyticDe441Chebyshev;
-    finish_experimental_long_term(state, target, reception, true, false).map_err(Apparent)
+    Ok((state, earth))
+}
+
+/// The same explicitly experimental three-rate candidate with per-epoch
+/// selection. Results remain diagnostic candidates, not certified derivatives.
+pub fn experimental_three_rate_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    target: Body,
+    reception: JulianDateTdb,
+) -> Result<ExperimentalThreeRateCandidate, ExperimentalProviderApparentError<P::Error>> {
+    use ExperimentalProviderApparentError::Apparent;
+    let (state, earth) = experimental_aberrated_with_provider(provider, target, reception)?;
+    let base =
+        finish_experimental_long_term(state, target, reception, true, true).map_err(Apparent)?;
+    let tt = tdb_to_tt_jd(reception.0).map_err(Apparent)?;
+    let before = tt - MATRIX_RATE_HALF_STEP_DAYS;
+    let after = tt + MATRIX_RATE_HALF_STEP_DAYS;
+    let rate = (experimental_extrapolated_nutation(after)
+        .map_err(|e| Apparent(e.into()))?
+        .d_epsilon_rad
+        - experimental_extrapolated_nutation(before)
+            .map_err(|e| Apparent(e.into()))?
+            .d_epsilon_rad)
+        / (after - before);
+    let longitude = base.longitude_speed_deg_per_tdb_day
+        + longitude_rate_candidate_correction(base.longitude_deg, base.latitude_deg, rate)
+            .map_err(Apparent)?;
+    let latitude = base.latitude_speed_deg_per_tdb_day
+        + latitude_rate_candidate_correction(base.longitude_deg, rate).map_err(Apparent)?;
+    let correction = if target == Body::Sun {
+        0.0
+    } else {
+        radial_rate_candidate_correction(state.position_km, earth.acceleration_km_per_day2)
+            .map_err(Apparent)?
+    };
+    let radial = base.distance_speed_au_per_tdb_day + correction;
+    if ![longitude, latitude, radial]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return Err(Apparent(ApparentError::InvalidIntermediate));
+    }
+    Ok(ExperimentalThreeRateCandidate {
+        base,
+        longitude_deg_per_tdb_day: longitude,
+        latitude_deg_per_tdb_day: latitude,
+        radial_au_per_tdb_day: radial,
+        radial_correction_applied: target != Body::Sun,
+    })
 }
 
 /// DE441 → apparent geocentric ecliptic of date, one body, TDB epoch,
@@ -1152,11 +1236,23 @@ pub fn small_body_apparent_six_fields<R: Read + Seek>(
             other => ephemeris.state(other, Body::SolarSystemBarycenter, epoch),
         }
     };
+    small_body_from_states(target, reception_epoch, options, earth, &mut states)
+}
+
+fn small_body_from_states<F>(
+    target: Body,
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
+    earth: Option<StateVectorWithAcceleration>,
+    states: &mut F,
+) -> Result<ApparentSixFieldsDegreesAu, ApparentError>
+where
+    F: FnMut(Body, JulianDateTdb) -> Result<StateVector, De441Error>,
+{
     let result = match earth {
         None => {
-            let light_time =
-                light_time_with_states(Body::Sun, target, reception_epoch, &mut states)
-                    .map_err(AberratedStateError::from)?;
+            let light_time = light_time_with_states(Body::Sun, target, reception_epoch, states)
+                .map_err(AberratedStateError::from)?;
             finish(
                 &IcrfState {
                     target,
@@ -1175,10 +1271,10 @@ pub fn small_body_apparent_six_fields<R: Read + Seek>(
         }
         Some(earth) => {
             let mut light_time =
-                light_time_with_states(Body::Earth, target, reception_epoch, &mut states)
+                light_time_with_states(Body::Earth, target, reception_epoch, &mut *states)
                     .map_err(AberratedStateError::from)?;
             if options.solar_light_deflection {
-                light_time = deflect_light_time_state_by_sun_with(&mut states, &light_time)?;
+                light_time = deflect_light_time_state_by_sun_with(states, &light_time)?;
             }
             let mut state = aberrate_light_time_state(
                 &light_time,
@@ -1194,6 +1290,78 @@ pub fn small_body_apparent_six_fields<R: Read + Seek>(
         }
     };
     apparent_to_degrees_au(&result)
+}
+
+/// The same small-body pipeline using a provider for every DE441 state epoch.
+/// Missing or invalid package errors are preserved and never replaced.
+pub fn experimental_small_body_apparent_with_provider<P: ExperimentalLongTermStateProvider>(
+    provider: &mut P,
+    small_body: &SmallBodySpk,
+    reception_epoch: JulianDateTdb,
+    options: ApparentOptions,
+) -> Result<ApparentSixFieldsDegreesAu, ExperimentalProviderApparentError<P::Error>> {
+    use ExperimentalProviderApparentError::{Apparent, Provider};
+    if !reception_epoch.0.is_finite() || small_body.center_id() != 10 {
+        return Err(Apparent(ApparentError::InvalidIntermediate));
+    }
+    let target = Body::SmallBody(small_body.target_id());
+    let earth = if options.center == ApparentCenter::Geocentric {
+        let earth = provider
+            .state_with_acceleration(Body::Earth, reception_epoch)
+            .map_err(Provider)?;
+        validate_provider_acceleration(&earth, Body::Earth, reception_epoch).map_err(Apparent)?;
+        Some(earth)
+    } else {
+        None
+    };
+    let mut provider_error = None;
+    let mut states = |body: Body, epoch: JulianDateTdb| -> Result<StateVector, De441Error> {
+        let selected = if matches!(body, Body::SmallBody(id) if id == small_body.target_id()) {
+            let (position, velocity) = small_body.state_at(epoch).map_err(|_| {
+                let (start, end) = small_body.coverage_jd_tdb();
+                De441Error::OutsideCoverage {
+                    epoch,
+                    start: JulianDateTdb(start),
+                    end: JulianDateTdb(end),
+                }
+            })?;
+            let sun = provider.state(Body::Sun, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })?;
+            if sun.target != Body::Sun
+                || sun.center != Body::SolarSystemBarycenter
+                || sun.epoch != epoch
+                || sun
+                    .position_km
+                    .iter()
+                    .chain(&sun.velocity_km_per_day)
+                    .any(|x| !x.is_finite())
+            {
+                return Err(De441Error::InvalidFile("invalid provider Sun state"));
+            }
+            StateVector {
+                target: body,
+                center: Body::SolarSystemBarycenter,
+                epoch,
+                position_km: std::array::from_fn(|i| sun.position_km[i] + position[i]),
+                velocity_km_per_day: std::array::from_fn(|i| {
+                    sun.velocity_km_per_day[i] + velocity[i]
+                }),
+            }
+        } else {
+            provider.state(body, epoch).map_err(|error| {
+                provider_error = Some(error);
+                De441Error::Io(std::io::Error::other("experimental provider error"))
+            })?
+        };
+        Ok(selected)
+    };
+    let result = small_body_from_states(target, reception_epoch, options, earth, &mut states);
+    if let Some(error) = provider_error {
+        return Err(Provider(error));
+    }
+    result.map_err(Apparent)
 }
 
 #[cfg(test)]
