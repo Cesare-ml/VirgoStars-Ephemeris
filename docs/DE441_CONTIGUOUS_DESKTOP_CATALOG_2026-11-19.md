@@ -11,7 +11,12 @@ distribution. The source SHA-256 is
 `476096486def4e41bfceb29aa27f50784da0bce318902bcf7b88caad058cd4da`;
 its MD5 matches the current
 [Astrodienst listing of the JPL binary](https://www.astro.com/swisseph-download/jplfiles/).
-This is provenance corroboration, not an independently signed NASA checksum.
+On 2026-11-19 the exact binary downloaded directly from
+[NASA/JPL](https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de441/linux_m13000p17000.441)
+also matched the local SHA-256 in a GitHub-hosted run
+([log](https://github.com/Cesare-ml/VirgoStars-Ephemeris/actions/runs/44599499075)).
+That check independently confirms byte identity with the JPL download; it is
+not a NASA-signed checksum or a separate legal opinion.
 
 To regenerate the same release catalog from the complete verified local
 manifest, pass `release-catalog --release-tag de441-desktop-v1.0.0
