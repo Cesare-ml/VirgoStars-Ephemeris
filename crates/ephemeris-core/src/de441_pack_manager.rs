@@ -23,6 +23,8 @@ SPDX-License-Identifier: CPAL-1.0
 //! It routes caller-provided TDB Julian dates to explicitly registered
 //! half-open package intervals, not the wider record-aligned binary coverage.
 //! The selected file is read by the existing [`De441`] evaluator unchanged.
+//! Modification (2026-11-19): portable contiguous-installation planning for
+//! desktop/mobile hosts. This module still performs no download or deletion.
 
 use std::error::Error;
 use std::fmt;
@@ -334,6 +336,141 @@ impl De441PackManager {
                 spec: spec.clone(),
             })
             .collect()
+    }
+
+    /// Plan the packages needed to expand a verified, gap-free installation.
+    ///
+    /// `installed_ids` must contain only host-verified, fully activated files:
+    /// path existence alone is insufficient. Required packages form the
+    /// non-removable base, and downloaded optional packages must stay adjacent
+    /// to it. The returned specs are ordered from the existing boundaries
+    /// outward, so activating each completed optional download preserves a
+    /// contiguous interval. A fresh installation receives its base first.
+    ///
+    /// The requested interval is half-open in JD TDB; in particular, an end
+    /// exactly at a package boundary does not require the following package.
+    /// This method does not read files, verify signatures, download or install.
+    pub fn plan_contiguous_extension(
+        &self,
+        installed_ids: &[&str],
+        desired_start: JulianDateTdb,
+        desired_end_exclusive: JulianDateTdb,
+    ) -> Result<Vec<De441PackSpec>, De441PackError> {
+        let (base_first, base_last) = self.contiguous_base()?;
+        let existing = self.verified_installation(installed_ids, base_first, base_last)?;
+        if !desired_start.0.is_finite() {
+            return Err(De441PackError::InvalidEpoch(desired_start));
+        }
+        if !desired_end_exclusive.0.is_finite() {
+            return Err(De441PackError::InvalidEpoch(desired_end_exclusive));
+        }
+        if desired_start.0 >= desired_end_exclusive.0 {
+            return Err(De441PackError::InvalidCatalog(
+                "requested extension has an empty or reversed interval",
+            ));
+        }
+        let requested_first = self.select_index(desired_start)?;
+        let requested_last = self
+            .specs
+            .iter()
+            .rposition(|spec| {
+                spec.start_tdb.0 < desired_end_exclusive.0
+                    && desired_end_exclusive.0 <= spec.end_tdb.0
+            })
+            .ok_or(De441PackError::NoPackForEpoch(desired_end_exclusive))?;
+        let first = requested_first.min(base_first);
+        let last = requested_last.max(base_last);
+        let (active_first, active_last) = existing.unwrap_or((base_first, base_last));
+        let first = first.min(active_first);
+        let last = last.max(active_last);
+
+        let mut pending = Vec::new();
+        if existing.is_none() {
+            pending.extend(self.specs[base_first..=base_last].iter().cloned());
+        }
+        for index in (first..active_first).rev() {
+            pending.push(self.specs[index].clone());
+        }
+        for index in (active_last + 1)..=last {
+            pending.push(self.specs[index].clone());
+        }
+        Ok(pending)
+    }
+
+    /// Optional packs may only be removed at the outer edge of a verified
+    /// installation. Never remove a required pack or create a gap.
+    pub fn can_remove_contiguous_pack(
+        &self,
+        installed_ids: &[&str],
+        pack_id: &str,
+    ) -> Result<bool, De441PackError> {
+        let (base_first, base_last) = self.contiguous_base()?;
+        let Some((first, last)) =
+            self.verified_installation(installed_ids, base_first, base_last)?
+        else {
+            return Ok(false);
+        };
+        let Some(index) = self.specs.iter().position(|spec| spec.id == pack_id) else {
+            return Err(De441PackError::InvalidCatalog("unknown package ID"));
+        };
+        Ok(!self.specs[index].required && (index == first || index == last))
+    }
+
+    fn contiguous_base(&self) -> Result<(usize, usize), De441PackError> {
+        if self.specs.iter().any(|spec| spec.end_inclusive)
+            || self
+                .specs
+                .windows(2)
+                .any(|pair| pair[0].end_tdb.0 != pair[1].start_tdb.0)
+        {
+            return Err(De441PackError::InvalidCatalog(
+                "contiguous planning requires adjacent half-open packages",
+            ));
+        }
+        let Some(first) = self.specs.iter().position(|spec| spec.required) else {
+            return Err(De441PackError::InvalidCatalog(
+                "contiguous planning requires a non-removable base",
+            ));
+        };
+        let last = self.specs.iter().rposition(|spec| spec.required).unwrap();
+        if self.specs[first..=last].iter().any(|spec| !spec.required) {
+            return Err(De441PackError::InvalidCatalog(
+                "required base packages are not adjacent",
+            ));
+        }
+        Ok((first, last))
+    }
+
+    fn verified_installation(
+        &self,
+        installed_ids: &[&str],
+        base_first: usize,
+        base_last: usize,
+    ) -> Result<Option<(usize, usize)>, De441PackError> {
+        if installed_ids.is_empty() {
+            return Ok(None);
+        }
+        let mut present = vec![false; self.specs.len()];
+        for id in installed_ids {
+            let Some(index) = self.specs.iter().position(|spec| spec.id == *id) else {
+                return Err(De441PackError::InvalidCatalog("unknown installed package"));
+            };
+            if present[index] {
+                return Err(De441PackError::InvalidCatalog("duplicate installed package"));
+            }
+            present[index] = true;
+        }
+        let first = present.iter().position(|installed| *installed).unwrap();
+        let last = present.iter().rposition(|installed| *installed).unwrap();
+        if first > base_first
+            || last < base_last
+            || present[first..=last].iter().any(|installed| !installed)
+        {
+            return Err(De441PackError::InvalidCatalog(
+                "installed packages must include the complete base without gaps",
+            ));
+        }
+        Ok(Some((first, last)))
     }
 
     /// Release the active file handle before an app attempts to uninstall or

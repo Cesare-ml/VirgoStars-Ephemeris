@@ -28,6 +28,7 @@ Provide verifiable astronomical quantities to [Astrological Functions](https://g
 - [Contributor and AI-agent rules](AGENTS.md)
 - [Sintesi italiana della decisione architetturale](docs/ADR-0001-RUST-CORE-AND-BINDINGS.md#sintesi-italiana)
 - [Experimental DE441 reader](docs/DE441.md)
+- [Proposed Desktop 1000–2200 contiguous DE441 catalog and local exporter (not released)](docs/DE441_CONTIGUOUS_DESKTOP_CATALOG_2026-11-19.md)
 - [Experimental classic-DE441 offline slice exporter for mobile packages](docs/DE441_MOBILE_SLICE_EXPORT_2026-11-18.md)
 - [Local DE441 mobile pack builder and SHA-256 manifest helper](scripts/build_de441_mobile_packs.py)
 - [One-shot DE441 mobile pack build and verification on Windows](docs/DE441_WINDOWS_ONE_SHOT_2026-11-18.md)
