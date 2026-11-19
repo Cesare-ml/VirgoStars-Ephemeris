@@ -413,12 +413,8 @@ impl De441PackManager {
         if existing.is_none() {
             pending.extend(self.specs[base_first..=base_last].iter().cloned());
         }
-        for index in (first..active_first).rev() {
-            pending.push(self.specs[index].clone());
-        }
-        for index in (active_last + 1)..=last {
-            pending.push(self.specs[index].clone());
-        }
+        pending.extend(self.specs[first..active_first].iter().rev().cloned());
+        pending.extend(self.specs[(active_last + 1)..(last + 1)].iter().cloned());
         Ok(pending)
     }
 
