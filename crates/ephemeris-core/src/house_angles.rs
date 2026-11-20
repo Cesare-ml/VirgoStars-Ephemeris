@@ -26,10 +26,12 @@
 //! - `true_obliquity_deg`: IAU 2006 mean obliquity plus the IAU 2000B nutation
 //!   in obliquity, at the supplied TT.
 //! - Midheaven: `atan2(sin ARMC, cos ARMC · cos ε)`.
-//! - Ascendant: `atan2(cos ARMC, −(sin ARMC · cos ε + tan φ · sin ε))`, the
-//!   ecliptic longitude of the east horizon point, valid for all latitudes
-//!   with `|φ| < 90°`. Whether a *house system* is defined at that latitude is
-//!   decided by the house method, not here.
+//! - Ascendant: the eastern/**rising** ecliptic–horizon intersection. The
+//!   traditional `atan2(cos ARMC, −(sin ARMC · cos ε + tan φ · sin ε))`
+//!   chooses one of two antipodes. When that candidate is setting, add 180°;
+//!   this matters when the MC is below the horizon at polar latitudes.
+//!   The geometry is valid for `|φ| < 90°`. Whether a *house system* is defined
+//!   at that latitude is decided by the house method, not here.
 //!
 //! UT1 and TT are separate arguments; this module never converts between them.
 //! Valid for the IAU 2000B range (1900–2100 TT). No geodetic-to-geocentric
@@ -57,15 +59,17 @@ pub struct HouseAngles {
 
 /// The five points that accompany the Ascendant and Midheaven in the reference's
 /// `swe_houses` result. All are ecliptic longitudes of the true ecliptic of date,
-/// built from the same ascendant formula with another sidereal angle and latitude
-/// (`asc(a, φ)` is the ecliptic point rising at ARMC `a` for latitude `φ`):
+/// built from the *traditional, unflipped* horizon-intersection branch with
+/// another sidereal angle and latitude (`asc_raw(a, φ)` below). These
+/// reference-fitted auxiliary-point conventions are intentionally preserved
+/// even when the true eastern Ascendant needs a polar 180° branch correction:
 ///
-/// - `vertex`: `asc(ARMC + 180°, 90° − φ)`, the intersection of the ecliptic and the
+/// - `vertex`: `asc_raw(ARMC + 180°, 90° − φ)`, the intersection of the ecliptic and the
 ///   prime vertical; where two exist (|φ| ≤ obliquity) the one west of the Midheaven;
-/// - `equatorial_ascendant` (East Point): `asc(ARMC, 0)`;
-/// - `koch_co_ascendant` (W. Koch): `asc(ARMC, −φ)`;
-/// - `munkasey_co_ascendant` (M. Munkasey): `asc(ARMC, 90° − φ)`;
-/// - `munkasey_polar_ascendant`: `asc(ARMC, −φ) + 180°`.
+/// - `equatorial_ascendant` (East Point): `asc_raw(ARMC, 0)`;
+/// - `koch_co_ascendant` (W. Koch): `asc_raw(ARMC, −φ)`;
+/// - `munkasey_co_ascendant` (M. Munkasey): `asc_raw(ARMC, 90° − φ)`;
+/// - `munkasey_polar_ascendant`: `asc_raw(ARMC, −φ) + 180°`.
 ///
 /// The constructions were identified by comparison with the reference over 2,500
 /// sites and dates (no difference above 0.5 arcsecond); they are definitions of
@@ -122,13 +126,37 @@ fn wrap_360(degrees: f64) -> f64 {
     }
 }
 
-/// Ascendant and Midheaven (in that order) for a known ARMC and true obliquity.
-pub fn angles_from_armc(armc_deg: f64, true_obliquity_deg: f64, latitude_deg: f64) -> (f64, f64) {
+/// One of the two ecliptic/horizon intersections, retaining the traditional
+/// `atan2` branch used when these *auxiliary* angles were reference-fitted.
+fn traditional_horizon_intersection(
+    armc_deg: f64,
+    true_obliquity_deg: f64,
+    latitude_deg: f64,
+) -> f64 {
     let (sin_a, cos_a) = armc_deg.to_radians().sin_cos();
     let (sin_e, cos_e) = true_obliquity_deg.to_radians().sin_cos();
     let tan_phi = latitude_deg.to_radians().tan();
+    wrap_360(cos_a.atan2(-(sin_a * cos_e + tan_phi * sin_e)).to_degrees())
+}
+
+/// Eastern/rising Ascendant and Midheaven (in that order) for known ARMC and
+/// true obliquity. At a tangential crossing, rising/setting is ambiguous;
+/// the traditional branch is retained if the eastward component is exactly 0.
+pub fn angles_from_armc(armc_deg: f64, true_obliquity_deg: f64, latitude_deg: f64) -> (f64, f64) {
+    let (sin_a, cos_a) = armc_deg.to_radians().sin_cos();
+    let cos_e = true_obliquity_deg.to_radians().cos();
     let midheaven = wrap_360(sin_a.atan2(cos_a * cos_e).to_degrees());
-    let ascendant = wrap_360(cos_a.atan2(-(sin_a * cos_e + tan_phi * sin_e)).to_degrees());
+    let candidate = traditional_horizon_intersection(armc_deg, true_obliquity_deg, latitude_deg);
+    let (sin_l, cos_l) = candidate.to_radians().sin_cos();
+    // Equatorial eastward projection, cos(δ) * sin(RA - ARMC). Its sign equals
+    // the sign of the horizon altitude's derivative as sidereal time advances
+    // for every non-polar site (cos(latitude) > 0). Negative means *setting*.
+    let eastward = sin_l * cos_e * cos_a - cos_l * sin_a;
+    let ascendant = if eastward < 0.0 {
+        wrap_360(candidate + 180.0)
+    } else {
+        candidate
+    };
     (ascendant, midheaven)
 }
 
@@ -139,7 +167,10 @@ pub fn extra_angles_from_armc(
     latitude_deg: f64,
     midheaven_deg: f64,
 ) -> ExtraAngles {
-    let asc = |armc: f64, lat: f64| angles_from_armc(armc, true_obliquity_deg, lat).0;
+    // Do not silently change independently reference-fitted *extra points*:
+    // several of their auxiliary latitudes are polar even for tropical sites.
+    // Their traditional branch requires its own independent polar validation.
+    let asc = |armc: f64, lat: f64| traditional_horizon_intersection(armc, true_obliquity_deg, lat);
     let mut vertex = asc(armc_deg + 180.0, 90.0 - latitude_deg);
     // Within the tropics the ecliptic crosses the prime vertical twice: the vertex is
     // the western crossing, i.e. the one that is not east of the Midheaven.

@@ -64,6 +64,121 @@ fn the_southern_hemisphere_mirrors_the_northern_one() {
     }
 }
 
+/// In equatorial Cartesian coordinates the ecliptic point has direction
+/// (cos λ, sin λ cos ε, sin λ sin ε). Projecting it onto the local zenith gives
+/// its horizon altitude, and differentiating in sidereal angle gives the
+/// rising/setting test. This is independent of the implementation's atan2
+/// branch choice and does not compute astronomical ephemerides.
+fn horizon_altitude_sine_and_rise_rate(
+    armc_deg: f64,
+    obliquity_deg: f64,
+    latitude_deg: f64,
+    ecliptic_longitude_deg: f64,
+) -> (f64, f64) {
+    let (sin_a, cos_a) = armc_deg.to_radians().sin_cos();
+    let (sin_e, cos_e) = obliquity_deg.to_radians().sin_cos();
+    let (sin_phi, cos_phi) = latitude_deg.to_radians().sin_cos();
+    let (sin_l, cos_l) = ecliptic_longitude_deg.to_radians().sin_cos();
+    let (x, y, z) = (cos_l, sin_l * cos_e, sin_l * sin_e);
+    let altitude_sine = sin_phi * z + cos_phi * (x * cos_a + y * sin_a);
+    let rise_rate = cos_phi * (-x * sin_a + y * cos_a);
+    (altitude_sine, rise_rate)
+}
+
+#[test]
+fn polar_ascendant_is_on_eastern_rising_horizon_both_hemispheres() {
+    for obliquity in [23.44, 23.437_676_823_739_082] {
+        for latitude in [
+            -89.999, -85.0, -80.0, -67.0, -66.55, -45.0, 0.0, 45.0, 66.55, 67.0, 80.0, 85.0, 89.999,
+        ] {
+            for armc in (0..360).step_by(5) {
+                let (ascendant, _mc) = angles_from_armc(f64::from(armc), obliquity, latitude);
+                let (altitude_sine, rise_rate) = horizon_altitude_sine_and_rise_rate(
+                    f64::from(armc),
+                    obliquity,
+                    latitude,
+                    ascendant,
+                );
+                assert!(
+                    altitude_sine.abs() < 1e-10,
+                    "not on horizon: armc={armc} lat={latitude} asc={ascendant} alt_sine={altitude_sine}"
+                );
+                assert!(
+                    rise_rate >= -1e-12,
+                    "setting rather than rising: armc={armc} lat={latitude} asc={ascendant} rate={rise_rate}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn owner_j2000_north_polar_fixture_uses_the_rising_antipode() {
+    // The owner-provided real-addon latitude receipt (UT1 JD 2451545, TT JD
+    // 2451545.0008, 80°N, 12.4964°E) was setting at 164.5489205114233°.
+    // The opposite crossing is the geometrically rising Ascendant.
+    let armc = 292.953_471_863_758_47;
+    let epsilon = 23.437_676_823_739_082;
+    let (north_asc, mc) = angles_from_armc(armc, epsilon, 80.0);
+    near(north_asc, 344.548_920_511_423_3, 1e-9);
+    near(mc, 291.234_820_988_22, 1e-9);
+    let (_, north_rate) = horizon_altitude_sine_and_rise_rate(armc, epsilon, 80.0, north_asc);
+    assert!(north_rate > 0.13);
+
+    let (south_asc, _) = angles_from_armc(armc, epsilon, -80.0);
+    near(south_asc, 7.168_816_302_952_17, 1e-9);
+    let (_, south_rate) = horizon_altitude_sine_and_rise_rate(armc, epsilon, -80.0, south_asc);
+    assert!(south_rate > 0.16);
+}
+
+#[test]
+fn polar_fix_preserves_reference_fitted_extra_angle_branches() {
+    use virgostars_ephemeris_core::house_angles::extra_angles_from_armc;
+
+    let armc = 292.953_471_863_758_47;
+    let epsilon = 23.437_676_823_739_082;
+    // At 10°N the Munkasey auxiliary latitude is 80°N. At 80°S, the
+    // Koch co-Ascendant's auxiliary latitude is 80°N. They historically
+    // select 164.5489°; changing them implicitly would break a separate API.
+    let mc = angles_from_armc(armc, epsilon, 10.0).1;
+    let tropical = extra_angles_from_armc(armc, epsilon, 10.0, mc);
+    near(
+        tropical.munkasey_co_ascendant_deg,
+        164.548_920_511_423_3,
+        1e-9,
+    );
+    let polar = extra_angles_from_armc(armc, epsilon, -80.0, mc);
+    near(polar.koch_co_ascendant_deg, 164.548_920_511_423_3, 1e-9);
+    near(
+        polar.munkasey_polar_ascendant_deg,
+        344.548_920_511_423_3,
+        1e-9,
+    );
+    // The East Point remains purely equatorial and independent of latitude.
+    near(
+        tropical.equatorial_ascendant_deg,
+        polar.equatorial_ascendant_deg,
+        1e-12,
+    );
+}
+
+#[test]
+fn full_native_angle_pipeline_keeps_north_and_south_polar_ascendants_rising() {
+    let ut1 = 2_451_545.0;
+    let tt = 2_451_545.000_8;
+    for latitude in [-80.0, 80.0] {
+        let angles = house_angles(ut1, tt, latitude, 12.4964).unwrap();
+        let (altitude_sine, rise_rate) = horizon_altitude_sine_and_rise_rate(
+            angles.armc_deg,
+            angles.true_obliquity_deg,
+            latitude,
+            angles.ascendant_deg,
+        );
+        assert!(altitude_sine.abs() < 1e-10);
+        assert!(rise_rate > 0.0);
+    }
+}
+
 #[test]
 fn full_pipeline_has_sane_values_and_fails_closed() {
     // 2000-01-01 12:00 TT, with UT1 equal to TT only as a test shortcut.
