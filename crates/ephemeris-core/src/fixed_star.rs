@@ -22,8 +22,11 @@ use crate::aberration::{annual_aberration_icrf, AberrationError};
 use crate::de441::{Body, De441, De441Error, JulianDateTdb, StateVector};
 use crate::de441_pack_manager::{De441PackError, De441PackManager};
 use crate::earth_orientation::{
-    matrix_vector_multiply, true_ecliptic_of_date_matrix, OrientationError,
+    experimental_extrapolated_nutation, iau2006_bias_precession_matrix, matrix_multiply,
+    matrix_vector_multiply, true_ecliptic_of_date_matrix, x_rotation, z_rotation, OrientationError,
+    J2000_TT_JD,
 };
+use crate::long_term_precession::{experimental_direct_obliquity, mean_date_matrices};
 use crate::six_field_units::IAU_AU_KM;
 use std::error::Error;
 use std::fmt;
@@ -66,6 +69,15 @@ pub struct ExperimentalStarPosition {
     pub longitude_speed_deg_per_tdb_day: f64,
     pub latitude_speed_deg_per_tdb_day: f64,
     pub distance_speed_au_per_tdb_day: f64,
+}
+
+/// Direction and range at one epoch; unlike the rate API this never queries
+/// the neighbouring days, so it works at the edge of a downloaded pack.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StarDirection {
+    pub longitude_deg: f64,
+    pub latitude_deg: f64,
+    pub distance_au: f64,
 }
 
 #[derive(Debug)]
@@ -292,6 +304,7 @@ fn sample<P: StarStateProvider + ?Sized>(
     tt: f64,
     tdb: JulianDateTdb,
     solar_deflection: StellarSolarDeflection,
+    long_term: bool,
 ) -> Result<(f64, f64, f64), FixedStarError> {
     if !tt.is_finite() || !tdb.0.is_finite() || (tt - tdb.0).abs() > 1.0 / 86_400.0 {
         return Err(FixedStarError::IncoherentEpoch);
@@ -313,7 +326,20 @@ fn sample<P: StarStateProvider + ?Sized>(
         earth.velocity_km_per_day,
     )
     .map_err(FixedStarError::Aberration)?;
-    let matrix = true_ecliptic_of_date_matrix(tt).map_err(FixedStarError::Orientation)?;
+    let matrix = if long_term {
+        let (equator, _) = mean_date_matrices(tt).map_err(FixedStarError::Orientation)?;
+        let obliquity = experimental_direct_obliquity(tt).map_err(FixedStarError::Orientation)?;
+        let nutation =
+            experimental_extrapolated_nutation(tt).map_err(FixedStarError::Orientation)?;
+        let bias =
+            iau2006_bias_precession_matrix(J2000_TT_JD).map_err(FixedStarError::Orientation)?;
+        matrix_multiply(
+            z_rotation(-nutation.d_psi_rad),
+            matrix_multiply(matrix_multiply(x_rotation(obliquity), equator), bias),
+        )
+    } else {
+        true_ecliptic_of_date_matrix(tt).map_err(FixedStarError::Orientation)?
+    };
     let rotated = matrix_vector_multiply(matrix, direction);
     let xy = rotated[0].hypot(rotated[1]);
     if !xy.is_finite() || xy <= 32.0 * f64::EPSILON {
@@ -360,13 +386,74 @@ pub fn calculate_star_with_provider<P: StarStateProvider + ?Sized>(
     tdb: JulianDateTdb,
     solar_deflection: StellarSolarDeflection,
 ) -> Result<ExperimentalStarPosition, FixedStarError> {
-    let now = sample(ephemeris, entry, tt, tdb, solar_deflection)?;
+    calculate_star_with_orientation(ephemeris, entry, tt, tdb, solar_deflection, false)
+}
+
+/// Compute only the modern ecliptic direction at the requested TT/TDB instant.
+pub fn star_direction_with_provider<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+) -> Result<StarDirection, FixedStarError> {
+    let (longitude_deg, latitude_deg, distance_au) =
+        sample(ephemeris, entry, tt, tdb, solar_deflection, false)?;
+    Ok(StarDirection {
+        longitude_deg,
+        latitude_deg,
+        distance_au,
+    })
+}
+
+/// One-epoch long-term direction, using the same experimental orientation as
+/// the long-term planetary calculations. Accuracy is not independently certified.
+pub fn experimental_long_term_star_direction_with_provider<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+) -> Result<StarDirection, FixedStarError> {
+    let (longitude_deg, latitude_deg, distance_au) =
+        sample(ephemeris, entry, tt, tdb, solar_deflection, true)?;
+    Ok(StarDirection {
+        longitude_deg,
+        latitude_deg,
+        distance_au,
+    })
+}
+
+/// Explicit long-term approximation using the same Vondrák precession and
+/// extrapolated nutation as the experimental long-term planetary pipeline.
+/// Proper motion, annual aberration and the requested solar deflection remain
+/// enabled. Accuracy outside the modern IAU 2000B range is not certified.
+pub fn experimental_long_term_star_with_provider<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+) -> Result<ExperimentalStarPosition, FixedStarError> {
+    calculate_star_with_orientation(ephemeris, entry, tt, tdb, solar_deflection, true)
+}
+
+fn calculate_star_with_orientation<P: StarStateProvider + ?Sized>(
+    ephemeris: &mut P,
+    entry: FixedStarCatalogEntry,
+    tt: f64,
+    tdb: JulianDateTdb,
+    solar_deflection: StellarSolarDeflection,
+    long_term: bool,
+) -> Result<ExperimentalStarPosition, FixedStarError> {
+    let now = sample(ephemeris, entry, tt, tdb, solar_deflection, long_term)?;
     let before = sample(
         ephemeris,
         entry,
         tt - STEP_DAYS,
         JulianDateTdb(tdb.0 - STEP_DAYS),
         solar_deflection,
+        long_term,
     )?;
     let after = sample(
         ephemeris,
@@ -374,6 +461,7 @@ pub fn calculate_star_with_provider<P: StarStateProvider + ?Sized>(
         tt + STEP_DAYS,
         JulianDateTdb(tdb.0 + STEP_DAYS),
         solar_deflection,
+        long_term,
     )?;
     let mut delta = after.0 - before.0;
     if delta >= 180.0 {

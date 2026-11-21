@@ -2,8 +2,9 @@
 //! Synthetic provider routing; no external ephemeris or catalog.
 use virgostars_ephemeris_core::de441::{Body, JulianDateTdb, StateVector};
 use virgostars_ephemeris_core::fixed_star::{
-    calculate_star_with_provider, FixedStarCatalogEntry, FixedStarError, StarStateProvider,
-    StellarSolarDeflection,
+    calculate_star_with_provider, experimental_long_term_star_direction_with_provider,
+    experimental_long_term_star_with_provider, star_direction_with_provider, FixedStarCatalogEntry,
+    FixedStarError, StarStateProvider, StellarSolarDeflection,
 };
 
 #[derive(Default)]
@@ -11,6 +12,85 @@ struct Provider {
     epochs: Vec<f64>,
     fail_before: Option<f64>,
     wrong_center: bool,
+}
+
+#[test]
+fn long_term_stars_use_extended_orientation_and_remain_close_near_j2000() {
+    for year in [800.0, 1800.0, 2200.0] {
+        let jd = 2_451_545.0 + (year - 2000.0) * 365.25;
+        let mut provider = Provider::default();
+        let p = experimental_long_term_star_with_provider(
+            &mut provider,
+            star(),
+            jd,
+            JulianDateTdb(jd),
+            StellarSolarDeflection::PointMass,
+        )
+        .unwrap();
+        assert!((0.0..360.0).contains(&p.longitude_deg));
+        assert!((-90.0..=90.0).contains(&p.latitude_deg));
+        assert!(p.longitude_speed_deg_per_tdb_day.is_finite());
+        assert_eq!(provider.epochs.len(), 6);
+    }
+    for year in [1900.1, 2000.0, 2099.9] {
+        let jd = 2_451_545.0 + (year - 2000.0) * 365.25;
+        let modern = calculate_star_with_provider(
+            &mut Provider::default(),
+            star(),
+            jd,
+            JulianDateTdb(jd),
+            StellarSolarDeflection::PointMass,
+        )
+        .unwrap();
+        let extended = experimental_long_term_star_with_provider(
+            &mut Provider::default(),
+            star(),
+            jd,
+            JulianDateTdb(jd),
+            StellarSolarDeflection::PointMass,
+        )
+        .unwrap();
+        assert!((modern.longitude_deg - extended.longitude_deg).abs() < 0.001);
+        assert!((modern.latitude_deg - extended.latitude_deg).abs() < 0.001);
+    }
+    let jd = 2_451_545.0;
+    let modern = calculate_star_with_provider(
+        &mut Provider::default(),
+        star(),
+        jd,
+        JulianDateTdb(jd),
+        StellarSolarDeflection::PointMass,
+    )
+    .unwrap();
+    let mut one_epoch = Provider {
+        fail_before: Some(jd),
+        ..Default::default()
+    };
+    let direction = star_direction_with_provider(
+        &mut one_epoch,
+        star(),
+        jd,
+        JulianDateTdb(jd),
+        StellarSolarDeflection::PointMass,
+    )
+    .unwrap();
+    assert_eq!(one_epoch.epochs, vec![jd, jd]);
+    assert_eq!(direction.longitude_deg, modern.longitude_deg);
+    let historic_jd = 2_451_545.0 - 1200.0 * 365.25;
+    let mut historical = Provider {
+        fail_before: Some(historic_jd),
+        ..Default::default()
+    };
+    let direction = experimental_long_term_star_direction_with_provider(
+        &mut historical,
+        star(),
+        historic_jd,
+        JulianDateTdb(historic_jd),
+        StellarSolarDeflection::PointMass,
+    )
+    .unwrap();
+    assert_eq!(historical.epochs, vec![historic_jd, historic_jd]);
+    assert!((0.0..360.0).contains(&direction.longitude_deg));
 }
 
 impl StarStateProvider for Provider {
